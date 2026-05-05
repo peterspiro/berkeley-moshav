@@ -78,7 +78,7 @@ Algorithm:
   3. Validate: all members of a cluster should share the same Unit #.
      Flag mismatches as warnings.
   4. Derive the household name. Convention: alphabetically sorted unique last
-     names joined with a hyphen, e.g. "Rosenblum-Spiro". Truncate to 32 chars
+     names joined with a hyphen, e.g. "Jones-Smith". Truncate to 32 chars
      (Gather's max).
 ```
 
@@ -98,22 +98,22 @@ The preprocessing step should produce a data structure like:
 ```python
 [
     {
-        "household_name": "Rosenblum-Spiro",
-        "unit_num": 411,
+        "household_name": "Jones-Smith",
+        "unit_num": 444,
         "unit_suffix": None,
         "members": [
             {
                 "first_name": "Peter",
-                "last_name": "Spiro",
-                "email": "paspiro@gmail.com",
-                "phone": "510-501-7441",
+                "last_name": "Smith",
+                "email": "smith@smith.com",
+                "phone": "510-123-4567",
                 "child": False,
             },
             {
                 "first_name": "Sandra",
-                "last_name": "Rosenblum",
-                "email": "sandrarosenblum@yahoo.com",
-                "phone": "510-684-0794",
+                "last_name": "Jones",
+                "email": "sandrajones@sandra.com",
+                "phone": "510-666-7777",
                 "child": False,
             },
         ],
@@ -245,8 +245,8 @@ python gather_import.py \
 
 Run against the local Gather dev server with the sample TSV:
 
-- [ ] Peter Spiro and Sandra Rosenblum are grouped into one household
-- [ ] Household is named "Rosenblum-Spiro" (alphabetical) with unit_num 411
+- [ ] Peter Smith and Sandra Jones are grouped into one household
+- [ ] Household is named "Jones-Smith" (alphabetical) with unit_num 444
 - [ ] Both users are created as adults with correct emails and phones
 - [ ] Running the script a second time creates no duplicates
 - [ ] A partial run (interrupted mid-way) can be resumed without duplicates
