@@ -371,12 +371,12 @@ def main(tsv_path: str, base_url: str, email: str, password: str, dry_run: bool 
 
 def cli():
     parser = argparse.ArgumentParser(description="Bulk-import members into Gather via browser automation")
-    parser.add_argument("--tsv", required=True, help="Path to input TSV file")
-    parser.add_argument("--base-url", required=True,
+    parser.add_argument("-t", "--tsv", required=True, help="Path to input TSV file")
+    parser.add_argument("-u", "--base-url", required=True,
                         help="Gather base URL, e.g. http://foo.gatherdev.org:3000")
-    parser.add_argument("--email", required=True, help="Admin login email")
-    parser.add_argument("--password", required=True, help="Admin login password")
-    parser.add_argument("--dry-run", action="store_true",
+    parser.add_argument("-e", "--email", required=True, help="Admin login email")
+    parser.add_argument("-p", "--password", required=True, help="Admin login password")
+    parser.add_argument("-n", "--dry-run", action="store_true",
                         help="Log what would happen without making any changes")
     args = parser.parse_args()
     main(args.tsv, args.base_url, args.email, args.password, args.dry_run)
