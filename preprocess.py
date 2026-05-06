@@ -103,6 +103,12 @@ def preprocess(tsv_path: str) -> list[dict]:
     if not rows:
         return []
 
+    # Filter to Member status only
+    rows = [r for r in rows if r.get("Status", "").lower() == "member"]
+
+    if not rows:
+        return []
+
     # Build full-name → row mapping (normalized)
     name_to_row: dict[str, dict] = {}
     for row in rows:

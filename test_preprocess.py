@@ -108,11 +108,13 @@ class TestPreprocess(unittest.TestCase):
                 "First Name": "Peter", "Last Name": "Spiro",
                 "Email Address": "paspiro@gmail.com", "Phone": "510-501-7441",
                 "Unit #": "411", "Others in the Household": "Sandra Rosenblum",
+                "Status": "Member",
             },
             {
                 "First Name": "Sandra", "Last Name": "Rosenblum",
                 "Email Address": "sandrarosenblum@yahoo.com", "Phone": "510-684-0794",
                 "Unit #": "411", "Others in the Household": "Peter Spiro",
+                "Status": "Member",
             },
         ])
         result = preprocess(path)
@@ -133,11 +135,13 @@ class TestPreprocess(unittest.TestCase):
                 "First Name": "Peter", "Last Name": "Spiro",
                 "Email Address": "paspiro@gmail.com", "Phone": "510-501-7441",
                 "Unit #": "411", "Others in the Household": "Sandra Rosenblum",
+                "Status": "Member",
             },
             {
                 "First Name": "Sandra", "Last Name": "Rosenblum",
                 "Email Address": "sandrarosenblum@yahoo.com", "Phone": "510-684-0794",
                 "Unit #": "411", "Others in the Household": "Peter Spiro",
+                "Status": "Member",
             },
         ]
         path = self._tsv_file(rows)
@@ -152,11 +156,13 @@ class TestPreprocess(unittest.TestCase):
                 "Email Address": "paspiro@gmail.com", "Phone": "510-501-7441",
                 "Unit #": "411", "Kids": "Timmy Spiro, Jane Spiro",
                 "Others in the Household": "Sandra Rosenblum",
+                "Status": "Member",
             },
             {
                 "First Name": "Sandra", "Last Name": "Rosenblum",
                 "Email Address": "sandrarosenblum@yahoo.com", "Phone": "510-684-0794",
                 "Unit #": "411", "Others in the Household": "Peter Spiro",
+                "Status": "Member",
             },
         ])
         result = preprocess(path)
@@ -180,12 +186,14 @@ class TestPreprocess(unittest.TestCase):
                 "Email Address": "p@example.com", "Phone": "555-1111",
                 "Unit #": "411", "Kids": "Timmy Spiro",
                 "Others in the Household": "Sandra Rosenblum",
+                "Status": "Member",
             },
             {
                 "First Name": "Sandra", "Last Name": "Rosenblum",
                 "Email Address": "s@example.com", "Phone": "555-2222",
                 "Unit #": "411", "Kids": "Timmy Spiro",
                 "Others in the Household": "Peter Spiro",
+                "Status": "Member",
             },
         ])
         result = preprocess(path)
@@ -199,16 +207,19 @@ class TestPreprocess(unittest.TestCase):
                 "First Name": "Alice", "Last Name": "A",
                 "Email Address": "a@example.com", "Phone": "",
                 "Unit #": "1", "Others in the Household": "Bob B",
+                "Status": "Member",
             },
             {
                 "First Name": "Bob", "Last Name": "B",
                 "Email Address": "b@example.com", "Phone": "",
                 "Unit #": "1", "Others in the Household": "Carol C",
+                "Status": "Member",
             },
             {
                 "First Name": "Carol", "Last Name": "C",
                 "Email Address": "c@example.com", "Phone": "",
                 "Unit #": "1", "Others in the Household": "",
+                "Status": "Member",
             },
         ])
         result = preprocess(path)
@@ -221,11 +232,13 @@ class TestPreprocess(unittest.TestCase):
                 "First Name": "Alice", "Last Name": "Smith",
                 "Email Address": "alice@example.com", "Phone": "",
                 "Unit #": "101", "Others in the Household": "",
+                "Status": "Member",
             },
             {
                 "First Name": "Bob", "Last Name": "Jones",
                 "Email Address": "bob@example.com", "Phone": "",
                 "Unit #": "202", "Others in the Household": "",
+                "Status": "Member",
             },
         ])
         result = preprocess(path)
@@ -240,6 +253,7 @@ class TestPreprocess(unittest.TestCase):
                 "First Name": "Alice", "Last Name": "Smith",
                 "Email Address": "alice@example.com", "Phone": "",
                 "Unit #": "20-2A", "Others in the Household": "",
+                "Status": "Member",
             },
         ])
         result = preprocess(path)
@@ -252,12 +266,56 @@ class TestPreprocess(unittest.TestCase):
                 "First Name": "Alice", "Last Name": "Smith",
                 "Email Address": "alice@example.com", "Phone": "555-1234",
                 "Unit #": "101", "Others in the Household": "",
+                "Status": "Member",
             },
         ])
         result = preprocess(path)
         adult = result[0]["members"][0]
         self.assertFalse(adult["child"])
         self.assertTrue(adult["full_access"])
+
+    def test_status_filter_excludes_non_members(self):
+        path = self._tsv_file([
+            {
+                "First Name": "Alice", "Last Name": "Smith",
+                "Email Address": "alice@example.com", "Phone": "",
+                "Unit #": "101", "Others in the Household": "",
+                "Status": "Member",
+            },
+            {
+                "First Name": "Bob", "Last Name": "Jones",
+                "Email Address": "bob@example.com", "Phone": "",
+                "Unit #": "202", "Others in the Household": "",
+                "Status": "Applicant",
+            },
+        ])
+        result = preprocess(path)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["household_name"], "Smith")
+
+    def test_status_filter_case_insensitive(self):
+        path = self._tsv_file([
+            {
+                "First Name": "Alice", "Last Name": "Smith",
+                "Email Address": "alice@example.com", "Phone": "",
+                "Unit #": "101", "Others in the Household": "",
+                "Status": "MEMBER",
+            },
+        ])
+        result = preprocess(path)
+        self.assertEqual(len(result), 1)
+
+    def test_status_filter_empty_returns_nothing(self):
+        path = self._tsv_file([
+            {
+                "First Name": "Alice", "Last Name": "Smith",
+                "Email Address": "alice@example.com", "Phone": "",
+                "Unit #": "101", "Others in the Household": "",
+                "Status": "",
+            },
+        ])
+        result = preprocess(path)
+        self.assertEqual(result, [])
 
 
 if __name__ == "__main__":
