@@ -196,6 +196,10 @@ def to_csv_export_url(url: str) -> str:
 
 
 def fetch_sheet(url: str) -> str:
+    if url.startswith("/") or url.startswith("file://"):
+        path = url[7:] if url.startswith("file://") else url
+        with open(path, encoding="utf-8-sig") as f:
+            return f.read()
     export_url = to_csv_export_url(url)
     req = urllib.request.Request(export_url, headers={"User-Agent": "Mozilla/5.0"})
     with urllib.request.urlopen(req, timeout=30) as resp:
@@ -626,7 +630,8 @@ def find_matching_group(
 
 
 def _fetch_group_detail(page: Page, base_url: str, group: GatherGroup) -> GatherGroup:
-    """Load the group edit page and membership list to get full current state."""
+    """Load the group edit page to read current kind, availability, description,
+    and inline membership rows."""
     page.goto(f"{base_url}/groups/{group.group_id}/edit", wait_until="networkidle")
 
     def get_select(name: str) -> str:
@@ -637,24 +642,20 @@ def _fetch_group_detail(page: Page, base_url: str, group: GatherGroup) -> Gather
         el = page.locator(f'textarea[name="{name}"]')
         return el.input_value() if el.count() > 0 else ""
 
-    kind = get_select("group[kind]")
-    availability = get_select("group[availability]")
-    description = get_textarea("group[description]")
+    kind = get_select("groups_group[kind]")
+    availability = get_select("groups_group[availability]")
+    description = get_textarea("groups_group[description]")
 
-    # Fetch memberships from the group memberships page
-    page.goto(f"{base_url}/groups/{group.group_id}/memberships", wait_until="networkidle")
+    # Read inline memberships from the edit form
     members: list[GatherGroupMember] = []
-    for row in page.locator("table tbody tr").all():
-        user_link = row.locator('a[href*="/users/"]').first
-        if user_link.count() == 0:
+    for sel in page.locator('select[name*="[user_id]"]').all():
+        uid = sel.input_value()
+        if not uid:
             continue
-        href = user_link.get_attribute("href") or ""
-        uid_m = re.search(r"/users/(\d+)", href)
-        if not uid_m:
-            continue
-        row_text = row.inner_text().lower()
-        is_manager = "manager" in row_text
-        members.append(GatherGroupMember(user_id=uid_m.group(1), is_manager=is_manager))
+        name_attr = sel.get_attribute("name") or ""
+        kind_name = name_attr.replace("[user_id]", "[kind]")
+        member_kind = page.locator(f'select[name="{kind_name}"]').input_value()
+        members.append(GatherGroupMember(user_id=uid, is_manager=(member_kind == "manager")))
 
     return GatherGroup(group_id=group.group_id, name=group.name,
                        kind=kind, availability=availability,
@@ -681,124 +682,81 @@ def _group_needs_update(
 
 # ── Gather: group operations ──────────────────────────────────────────────────
 
-def _fill_group_form(
+def _fill_group_basics(
     page: Page, name: str, kind: str, availability: str, description: str
 ):
-    name_el = page.locator('input[name="group[name]"]')
-    if name_el.count() > 0:
-        name_el.fill(name)
-
-    kind_sel = page.locator('select[name="group[kind]"]')
-    if kind_sel.count() > 0:
-        kind_sel.select_option(kind)
-
-    avail_sel = page.locator('select[name="group[availability]"]')
-    if avail_sel.count() > 0:
-        avail_sel.select_option(availability)
-
-    desc_el = page.locator('textarea[name="group[description]"]')
+    """Fill the basic (non-member) fields of the group create/edit form."""
+    page.locator('input[name="groups_group[name]"]').fill(name)
+    page.locator('select[name="groups_group[kind]"]').select_option(kind)
+    page.locator('select[name="groups_group[availability]"]').select_option(availability)
+    desc_el = page.locator('textarea[name="groups_group[description]"]')
     if desc_el.count() > 0:
         desc_el.fill(description)
 
 
-def _add_group_member(
-    page: Page, base_url: str, group_id: str, user_id: str, is_manager: bool
-):
-    try:
-        page.goto(
-            f"{base_url}/groups/{group_id}/memberships/new", wait_until="networkidle"
-        )
-        user_sel = page.locator('select[name="group_membership[user_id]"]')
-        if user_sel.count() > 0:
-            select2_choose(page, 'select[name="group_membership[user_id]"]', user_id)
+def _add_inline_member(page: Page, user: GatherUser, is_manager: bool):
+    """Click '+ Add Member', then fill in the user and kind for the new row."""
+    page.locator('a:has-text("Add Member")').first.click()
+    page.wait_for_timeout(400)
 
-        if is_manager:
-            role_sel = page.locator('select[name="group_membership[role]"]')
-            if role_sel.count() > 0:
-                role_sel.select_option("manager")
-            else:
-                cb = page.locator('#group_membership_manager')
-                if cb.count() > 0 and not cb.is_checked():
-                    cb.click()
+    # The new row's user_id select is the last one with no value
+    user_sel = page.locator('select[name*="[user_id]"]').last
+    uid_name = user_sel.get_attribute("name") or ""
+    select2_choose(page, f'select[name="{uid_name}"]', user.full_name)
 
-        page.click('button[type="submit"], input[type="submit"]')
-        page.wait_for_load_state("networkidle")
-        err = _check_submit_errors(page)
-        if err:
-            log("ERROR", "add_member", f"group={group_id} user={user_id}", err[:200])
-    except Exception as e:
-        log("ERROR", "add_member", f"group={group_id} user={user_id}", str(e))
-
-
-def _remove_group_member(page: Page, base_url: str, group_id: str, user_id: str):
-    try:
-        page.goto(
-            f"{base_url}/groups/{group_id}/memberships", wait_until="networkidle"
-        )
-        row = page.locator(f'tr:has(a[href*="/users/{user_id}"])').first
-        if row.count() == 0:
-            return
-        delete_link = row.locator('a[data-method="delete"], a:has-text("Remove")').first
-        if delete_link.count() > 0:
-            delete_link.click()
-            page.wait_for_load_state("networkidle")
-    except Exception as e:
-        log("ERROR", "remove_member", f"group={group_id} user={user_id}", str(e))
-
-
-def _update_member_role(
-    page: Page, base_url: str, group_id: str, user_id: str, is_manager: bool
-):
-    try:
-        page.goto(
-            f"{base_url}/groups/{group_id}/memberships", wait_until="networkidle"
-        )
-        row = page.locator(f'tr:has(a[href*="/users/{user_id}"])').first
-        if row.count() == 0:
-            return
-        edit_link = row.locator('a:has-text("Edit"), a[href*="/edit"]').first
-        if edit_link.count() == 0:
-            return
-        edit_link.click()
-        page.wait_for_load_state("networkidle")
-
-        role_sel = page.locator('select[name="group_membership[role]"]')
-        if role_sel.count() > 0:
-            role_sel.select_option("manager" if is_manager else "member")
-        else:
-            cb = page.locator('#group_membership_manager')
-            if cb.count() > 0 and is_manager != cb.is_checked():
-                cb.click()
-
-        page.click('button[type="submit"], input[type="submit"]')
-        page.wait_for_load_state("networkidle")
-    except Exception as e:
-        log("ERROR", "update_role", f"group={group_id} user={user_id}", str(e))
-
-
-def _sync_group_members(
-    page: Page,
-    base_url: str,
-    group_id: str,
-    desired: list[tuple[GatherUser, bool]],
-    existing_detail: Optional[GatherGroup],
-):
-    existing_map = (
-        {m.user_id: m.is_manager for m in existing_detail.members}
-        if existing_detail
-        else {}
+    kind_name = uid_name.replace("[user_id]", "[kind]")
+    page.locator(f'select[name="{kind_name}"]').select_option(
+        "manager" if is_manager else "joiner"
     )
-    desired_map = {u.user_id: is_mgr for u, is_mgr in desired}
 
-    for uid in set(existing_map) - set(desired_map):
-        _remove_group_member(page, base_url, group_id, uid)
 
-    for uid, is_mgr in desired_map.items():
-        if uid in existing_map:
-            if existing_map[uid] != is_mgr:
-                _update_member_role(page, base_url, group_id, uid, is_mgr)
-        else:
-            _add_group_member(page, base_url, group_id, uid, is_mgr)
+def _remove_inline_member(page: Page, user_id: str):
+    """Mark an existing membership row for destruction on the edit form."""
+    # Find the select whose current value matches this user_id, then set _destroy
+    for sel in page.locator('select[name*="[user_id]"]').all():
+        if sel.input_value() == user_id:
+            name_attr = sel.get_attribute("name") or ""
+            destroy_name = name_attr.replace("[user_id]", "[_destroy]")
+            destroy_el = page.locator(f'input[name="{destroy_name}"]')
+            if destroy_el.count() > 0:
+                page.evaluate(
+                    f'document.querySelector(\'input[name="{destroy_name}"]\').value = "1"'
+                )
+            # Also try clicking a visible Remove link in the same fieldset/row
+            else:
+                m = re.search(r'\[memberships_attributes\]\[(\w+)\]', name_attr)
+                if m:
+                    key = m.group(1)
+                    remove_link = page.locator(
+                        f'[data-key="{key}"] a:has-text("Remove"), '
+                        f'a[data-remove-fields][data-key="{key}"]'
+                    ).first
+                    if remove_link.count() > 0:
+                        remove_link.click()
+                        page.wait_for_timeout(200)
+            break
+
+
+def _find_group_in_list(page: Page, base_url: str, name: str) -> Optional[str]:
+    """Scan the groups list page for a group matching `name`; return its ID."""
+    page.goto(f"{base_url}/groups", wait_until="networkidle")
+    for link in page.locator('a[href*="/groups/"]').all():
+        href = link.get_attribute("href") or ""
+        m = re.search(r"/groups/(\d+)$", href)
+        if m and group_names_match(link.inner_text().strip(), name):
+            return m.group(1)
+    return None
+
+
+def _submit_group_form(page: Page, circle_name: str) -> bool:
+    page.locator('input[name="commit"]').click()
+    page.wait_for_load_state("networkidle")
+    err = _check_submit_errors(page)
+    if err:
+        screenshot(page, f"group_form_err_{circle_name[:20]}")
+        log("ERROR", "group_form", circle_name, err[:200])
+        return False
+    return True
 
 
 def create_or_update_group(
@@ -813,7 +771,6 @@ def create_or_update_group(
     """Create or update a Gather group; return its group_id (str) or None on failure."""
     kind = GROUP_KINDS[circle.col_index]
     availability = "closed"
-    existing_detail: Optional[GatherGroup] = None
 
     if existing is not None:
         existing_detail = _fetch_group_detail(page, base_url, existing)
@@ -829,16 +786,34 @@ def create_or_update_group(
             page.goto(
                 f"{base_url}/groups/{existing.group_id}/edit", wait_until="networkidle"
             )
-            _fill_group_form(page, circle.name, kind, availability, description)
-            page.click('button[type="submit"], input[type="submit"]')
-            page.wait_for_load_state("networkidle")
-            err = _check_submit_errors(page)
-            if err:
-                screenshot(page, f"group_update_err_{circle.name[:20]}")
-                log("ERROR", "update_group", circle.name, err[:200])
+            _fill_group_basics(page, circle.name, kind, availability, description)
+
+            # Sync members on the edit form
+            existing_by_uid = {m.user_id: m.is_manager for m in existing_detail.members}
+            desired_map = {u.user_id: (u, is_mgr) for u, is_mgr in members}
+
+            for uid in set(existing_by_uid) - set(desired_map):
+                _remove_inline_member(page, uid)
+            for uid, (user, is_mgr) in desired_map.items():
+                if uid not in existing_by_uid:
+                    _add_inline_member(page, user, is_mgr)
+                elif existing_by_uid[uid] != is_mgr:
+                    # Update kind for existing row
+                    for sel in page.locator('select[name*="[user_id]"]').all():
+                        if sel.input_value() == uid:
+                            kind_name = (sel.get_attribute("name") or "").replace(
+                                "[user_id]", "[kind]"
+                            )
+                            page.locator(f'select[name="{kind_name}"]').select_option(
+                                "manager" if is_mgr else "joiner"
+                            )
+                            break
+
+            if not _submit_group_form(page, circle.name):
                 return None
             log("INFO", "update_group", f"Updated: {circle.name}")
-            group_id = existing.group_id
+            return existing.group_id
+
         except Exception as e:
             screenshot(page, f"group_update_exc_{circle.name[:20]}")
             log("ERROR", "update_group", circle.name, str(e))
@@ -850,101 +825,105 @@ def create_or_update_group(
 
         try:
             page.goto(f"{base_url}/groups/new", wait_until="networkidle")
-            _fill_group_form(page, circle.name, kind, availability, description)
-            page.click('button[type="submit"], input[type="submit"]')
-            page.wait_for_load_state("networkidle")
-            err = _check_submit_errors(page)
-            if err:
-                screenshot(page, f"group_create_err_{circle.name[:20]}")
-                log("ERROR", "create_group", circle.name, err[:200])
+            _fill_group_basics(page, circle.name, kind, availability, description)
+            for user, is_mgr in members:
+                _add_inline_member(page, user, is_mgr)
+            if not _submit_group_form(page, circle.name):
                 return None
-            m = re.search(r"/groups/(\d+)", page.url)
-            if not m:
-                log("ERROR", "create_group", circle.name, f"No ID in URL {page.url}")
+
+            # After creation Gather redirects to /groups; find the new group by name
+            group_id = _find_group_in_list(page, base_url, circle.name)
+            if not group_id:
+                log("ERROR", "create_group", circle.name, "Group not found in list after creation")
                 return None
-            group_id = m.group(1)
             log("INFO", "create_group", f"Created: {circle.name} (id={group_id})")
+            return group_id
+
         except Exception as e:
             screenshot(page, f"group_create_exc_{circle.name[:20]}")
             log("ERROR", "create_group", circle.name, str(e))
             return None
 
-    _sync_group_members(page, base_url, group_id, members, existing_detail)
-    return group_id
-
 
 # ── Gather: wiki page ─────────────────────────────────────────────────────────
+
+def _codemirror_get(page: Page) -> str:
+    """Return current value from the first CodeMirror editor on the page."""
+    return page.evaluate(
+        "() => { const cm = document.querySelector('.CodeMirror')?.CodeMirror;"
+        " return cm ? cm.getValue() : ''; }"
+    )
+
+
+def _codemirror_set(page: Page, text: str):
+    """Set value on the first CodeMirror editor, then trigger change event."""
+    page.evaluate(
+        "(text) => { const cm = document.querySelector('.CodeMirror')?.CodeMirror;"
+        " if (cm) { cm.setValue(text); cm.save(); } }",
+        text,
+    )
 
 def create_or_update_wiki_page(
     page: Page, base_url: str, content: str, dry_run: bool
 ) -> bool:
     """Create or update the Circle Hierarchy wiki page."""
-    # Check whether the page already exists
+    # Check whether the page already exists by navigating to its slug.
+    # Gather throws an exception page (not a 404) for missing slugs, so we
+    # detect existence by checking the title for known error strings.
     page.goto(f"{base_url}/wiki/{WIKI_SLUG}", wait_until="networkidle")
+    title = page.title()
     page_exists = (
-        WIKI_SLUG in page.url
-        and "404" not in page.title()
+        "Exception" not in title
+        and "Error" not in title
+        and "404" not in title
         and page.locator('h1').count() > 0
     )
 
     if page_exists:
-        # Navigate to edit form
-        edit_link = page.locator(f'a[href*="/{WIKI_SLUG}/edit"], a:has-text("Edit")').first
-        if edit_link.count() > 0:
-            edit_link.click()
-        else:
-            page.goto(f"{base_url}/wiki/{WIKI_SLUG}/edit", wait_until="networkidle")
+        page.goto(f"{base_url}/wiki/{WIKI_SLUG}/edit", wait_until="networkidle")
 
-        content_el = page.locator(
-            'textarea[name="wiki_page[content]"], #wiki_page_content'
-        )
-        if content_el.count() > 0:
-            current = content_el.input_value()
-            if current.strip() == content.strip():
-                log("INFO", "wiki", f"'{WIKI_TITLE}' up to date, skipping")
-                return True
-            if dry_run:
-                log("DRY-RUN", "update_wiki", WIKI_TITLE)
-                return True
-            content_el.fill(content)
-            page.click('button[type="submit"], input[type="submit"]')
-            page.wait_for_load_state("networkidle")
-            err = _check_submit_errors(page)
-            if err:
-                screenshot(page, "wiki_update_err")
-                log("ERROR", "update_wiki", WIKI_TITLE, err[:200])
-                return False
-            log("INFO", "update_wiki", f"Updated: '{WIKI_TITLE}'")
+        if page.locator(".CodeMirror").count() == 0:
+            log("ERROR", "update_wiki", WIKI_TITLE, "Editor not found on edit page")
+            return False
+
+        current = _codemirror_get(page)
+        if current.strip() == content.strip():
+            log("INFO", "wiki", f"'{WIKI_TITLE}' up to date, skipping")
             return True
+        if dry_run:
+            log("DRY-RUN", "update_wiki", WIKI_TITLE)
+            return True
+        _codemirror_set(page, content)
+        page.locator('input[name="commit"]').click()
+        page.wait_for_load_state("networkidle")
+        err = _check_submit_errors(page)
+        if err:
+            screenshot(page, "wiki_update_err")
+            log("ERROR", "update_wiki", WIKI_TITLE, err[:200])
+            return False
+        log("INFO", "update_wiki", f"Updated: '{WIKI_TITLE}'")
+        return True
     else:
-        # Try the new-page form (Gather wiki routes may vary)
-        for new_url in [
-            f"{base_url}/wiki/pages/new",
-            f"{base_url}/wiki/new",
-        ]:
-            page.goto(new_url, wait_until="networkidle")
-            if page.locator("form").count() > 0:
-                break
+        page.goto(f"{base_url}/wiki/new", wait_until="networkidle")
 
         if dry_run:
             log("DRY-RUN", "create_wiki", WIKI_TITLE)
             return True
 
-        title_el = page.locator(
-            'input[name="wiki_page[title]"], #wiki_page_title'
-        )
+        if page.locator("form").count() == 0:
+            log("ERROR", "create_wiki", WIKI_TITLE, "New wiki page form not found")
+            return False
+
+        title_el = page.locator('input[name="wiki_page[title]"], #wiki_page_title')
         if title_el.count() > 0:
             title_el.fill(WIKI_TITLE)
 
-        content_el = page.locator(
-            'textarea[name="wiki_page[content]"], #wiki_page_content'
-        )
-        if content_el.count() == 0:
-            log("ERROR", "create_wiki", WIKI_TITLE, "Content textarea not found")
+        if page.locator(".CodeMirror").count() == 0:
+            log("ERROR", "create_wiki", WIKI_TITLE, "Editor not found on new page form")
             return False
 
-        content_el.fill(content)
-        page.click('button[type="submit"], input[type="submit"]')
+        _codemirror_set(page, content)
+        page.locator('input[name="commit"]').click()
         page.wait_for_load_state("networkidle")
         err = _check_submit_errors(page)
         if err:
@@ -953,8 +932,6 @@ def create_or_update_wiki_page(
             return False
         log("INFO", "create_wiki", f"Created: '{WIKI_TITLE}'")
         return True
-
-    return False
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
