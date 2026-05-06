@@ -89,6 +89,19 @@ def parse_unit(unit_str: str) -> tuple[Optional[int], Optional[str]]:
     return num, suffix
 
 
+def is_international_phone(phone: str) -> bool:
+    """Return True if the phone number is non-US international.
+
+    Numbers starting with '+' are international unless they are US +1 numbers
+    (11 digits starting with 1).
+    """
+    s = phone.strip()
+    if not s.startswith("+"):
+        return False
+    digits = "".join(c for c in s if c.isdigit())
+    return not (len(digits) == 11 and digits.startswith("1"))
+
+
 # ── "Others in the Household" parsing ────────────────────────────────────────
 
 def _parse_others_entry(entry: str) -> tuple[str, Optional[str]]:
@@ -255,6 +268,8 @@ def preprocess(tsv_path: str) -> list[dict]:
             last = row.get("Last Name", "").strip()
             email = row.get("Email Address", "").strip()
             phone = row.get("Phone", "").strip()
+            if is_international_phone(phone):
+                phone = ""
             if last:
                 last_names.append(last)
             adult_members.append({

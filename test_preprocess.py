@@ -11,6 +11,7 @@ import unittest
 from preprocess import (
     UnionFind,
     derive_household_name,
+    is_international_phone,
     normalize_name,
     parse_others,
     parse_unit,
@@ -60,6 +61,13 @@ class TestHelpers(unittest.TestCase):
 
     def test_parse_unit_blank(self):
         self.assertEqual(parse_unit(""), (None, None))
+
+    def test_is_international_phone(self):
+        self.assertTrue(is_international_phone("+44 079 616 86029"))
+        self.assertTrue(is_international_phone("+33 1 23 45 67"))
+        self.assertFalse(is_international_phone("+1 510-501-7441"))   # US with +1
+        self.assertFalse(is_international_phone("510-501-7441"))      # US domestic
+        self.assertFalse(is_international_phone(""))
 
     def test_strip_pronunciation(self):
         self.assertEqual(strip_pronunciation("Ayala (a-ya-LA)"), "Ayala")
@@ -541,6 +549,19 @@ class TestPreprocess(unittest.TestCase):
         adult = result[0]["members"][0]
         self.assertFalse(adult["child"])
         self.assertTrue(adult["full_access"])
+
+    def test_international_phone_omitted_from_member(self):
+        path = self._tsv_file([
+            {
+                "First Name": "Eliana", "Last Name": "Lorch",
+                "Email Address": "eliana@example.com",
+                "Phone": "+44 079 616 86029",
+                "Unit #": "406", "Others in the Household": "",
+                "Status": "Member",
+            },
+        ])
+        result = preprocess(path)
+        self.assertEqual(result[0]["members"][0]["phone"], "")
 
     def test_kids_column_ignored(self):
         """The Kids column should have no effect on child detection."""
