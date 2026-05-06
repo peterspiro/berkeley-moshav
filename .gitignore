@@ -1,5 +1,6 @@
 __pycache__/
 *.py[cod]
 import_log.csv
+groups_log.csv
 import_screenshots/
 *.tsv
