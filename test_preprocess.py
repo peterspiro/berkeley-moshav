@@ -44,7 +44,7 @@ class TestUnionFind(unittest.TestCase):
 
 class TestHelpers(unittest.TestCase):
     def test_derive_household_name_alphabetical(self):
-        self.assertEqual(derive_household_name(["Spiro", "Rosenblum"]), "Rosenblum-Spiro")
+        self.assertEqual(derive_household_name(["Beta", "Alpha"]), "Alpha-Beta")
 
     def test_derive_household_name_deduplicates(self):
         self.assertEqual(derive_household_name(["Smith", "Smith"]), "Smith")
@@ -54,7 +54,7 @@ class TestHelpers(unittest.TestCase):
         self.assertLessEqual(len(name), 32)
 
     def test_parse_unit_integer(self):
-        self.assertEqual(parse_unit("411"), (411, None))
+        self.assertEqual(parse_unit("100"), (100, None))
 
     def test_parse_unit_with_suffix(self):
         self.assertEqual(parse_unit("20-2A"), (20, "2A"))
@@ -63,38 +63,38 @@ class TestHelpers(unittest.TestCase):
         self.assertEqual(parse_unit(""), (None, None))
 
     def test_is_international_phone(self):
-        self.assertTrue(is_international_phone("+44 079 616 86029"))
+        self.assertTrue(is_international_phone("+44 20 7946 0958"))
         self.assertTrue(is_international_phone("+33 1 23 45 67"))
-        self.assertFalse(is_international_phone("+1 510-501-7441"))   # US with +1
-        self.assertFalse(is_international_phone("510-501-7441"))      # US domestic
+        self.assertFalse(is_international_phone("+1 510-555-0101"))  # US with +1
+        self.assertFalse(is_international_phone("510-555-0101"))     # US domestic
         self.assertFalse(is_international_phone(""))
 
     def test_strip_pronunciation(self):
-        self.assertEqual(strip_pronunciation("Ayala (a-ya-LA)"), "Ayala")
-        self.assertEqual(strip_pronunciation("Peter"), "Peter")
+        self.assertEqual(strip_pronunciation("Aria (ar-EE-uh)"), "Aria")
+        self.assertEqual(strip_pronunciation("Robin"), "Robin")
         self.assertEqual(strip_pronunciation("Estee Solomon Gray"), "Estee Solomon Gray")
 
     def test_parse_others_child_by_age(self):
-        entries = parse_others("Noah (12), Aviva (10)")
-        self.assertEqual(entries, [("Noah", "12"), ("Aviva", "10")])
+        entries = parse_others("Kael (12), Wren (10)")
+        self.assertEqual(entries, [("Kael", "12"), ("Wren", "10")])
 
     def test_parse_others_child_by_infant(self):
-        entries = parse_others("Julian (infant)")
-        self.assertEqual(entries, [("Julian", "infant")])
+        entries = parse_others("River (infant)")
+        self.assertEqual(entries, [("River", "infant")])
 
     def test_parse_others_adult_with_relation(self):
-        entries = parse_others("Michael (son); Julie (DIL); Sam (20s)")
+        entries = parse_others("Mark (son); Jane (DIL); Sam (20s)")
         self.assertEqual(entries, [
-            ("Michael", "son"),
-            ("Julie", "DIL"),
+            ("Mark", "son"),
+            ("Jane", "DIL"),
             ("Sam", "20s"),
         ])
 
     def test_parse_others_adult_no_qualifier(self):
-        entries = parse_others("Sandra Rosenblum, Peter Spiro")
+        entries = parse_others("Robin Blue, Alex Green")
         self.assertEqual(entries, [
-            ("Sandra Rosenblum", None),
-            ("Peter Spiro", None),
+            ("Robin Blue", None),
+            ("Alex Green", None),
         ])
 
     def test_parse_others_child_multi_given_name(self):
@@ -103,41 +103,41 @@ class TestHelpers(unittest.TestCase):
 
     def test_parse_others_inter_household_qualifier(self):
         # Multi-word proper-name qualifier — name still returned, qualifier preserved
-        entries = parse_others("Laura Nelson (parents of Josh Abrams)")
-        self.assertEqual(entries, [("Laura Nelson", "parents of Josh Abrams")])
+        entries = parse_others("Dana Mills (parents of Chris Daly)")
+        self.assertEqual(entries, [("Dana Mills", "parents of Chris Daly")])
 
     def test_resolve_adult_two_names(self):
-        name_to_row = {"Sandra Rosenblum": {}, "Peter Spiro": {}}
-        result = resolve_adult_name("Sandra Rosenblum", "Spiro", name_to_row, [])
-        self.assertEqual(result, "Sandra Rosenblum")
+        name_to_row = {"Robin Blue": {}, "Alex Green": {}}
+        result = resolve_adult_name("Robin Blue", "Green", name_to_row, [])
+        self.assertEqual(result, "Robin Blue")
 
     def test_resolve_adult_three_names_ignores_middle(self):
-        name_to_row = {"Anita Hersh": {}}
-        result = resolve_adult_name("Anita Tanay Hersh", "Hersh", name_to_row, [])
-        self.assertEqual(result, "Anita Hersh")
+        name_to_row = {"Grace Hardy": {}}
+        result = resolve_adult_name("Grace Ann Hardy", "Hardy", name_to_row, [])
+        self.assertEqual(result, "Grace Hardy")
 
     def test_resolve_adult_first_name_only_matches_same_last(self):
-        name_to_row = {"Yona Abrams": {}, "Josh Abrams": {}}
-        result = resolve_adult_name("Yona", "Abrams", name_to_row, [])
-        self.assertEqual(result, "Yona Abrams")
+        name_to_row = {"Quinn Norris": {}, "Pat Norris": {}}
+        result = resolve_adult_name("Quinn", "Norris", name_to_row, [])
+        self.assertEqual(result, "Quinn Norris")
 
     def test_resolve_adult_first_name_only_unique_match(self):
-        name_to_row = {"Michael Saxe-Taller": {}, "Sandra Rosenblum": {}}
-        result = resolve_adult_name("Michael", "Taller", name_to_row, [])
-        self.assertEqual(result, "Michael Saxe-Taller")
+        name_to_row = {"Mark Elder-Young": {}, "Robin Blue": {}}
+        result = resolve_adult_name("Mark", "Elder", name_to_row, [])
+        self.assertEqual(result, "Mark Elder-Young")
 
     def test_resolve_adult_not_found_returns_none(self):
-        name_to_row = {"Sandra Rosenblum": {}}
-        result = resolve_adult_name("Garith", "Reznick", name_to_row, [])
+        name_to_row = {"Robin Blue": {}}
+        result = resolve_adult_name("Morgan", "Wells", name_to_row, [])
         self.assertIsNone(result)
 
     def test_resolve_adult_ambiguous_warns_and_returns_none(self):
-        name_to_row = {"Julie Smith": {}, "Julie Jones": {}}
+        name_to_row = {"Alex Smith": {}, "Alex Jones": {}}
         warnings = []
-        result = resolve_adult_name("Julie", "Brown", name_to_row, warnings)
+        result = resolve_adult_name("Alex", "Brown", name_to_row, warnings)
         self.assertIsNone(result)
         self.assertEqual(len(warnings), 1)
-        self.assertIn("Julie", warnings[0])
+        self.assertIn("Alex", warnings[0])
 
 
 def _make_tsv(rows: list[dict], fieldnames: list[str] | None = None) -> str:
@@ -181,41 +181,41 @@ class TestPreprocess(unittest.TestCase):
     def test_single_household_two_adults(self):
         path = self._tsv_file([
             {
-                "First Name": "Peter", "Last Name": "Spiro",
-                "Email Address": "paspiro@gmail.com", "Phone": "510-501-7441",
-                "Unit #": "411", "Others in the Household": "Sandra Rosenblum",
+                "First Name": "Alex", "Last Name": "Green",
+                "Email Address": "alex@example.com", "Phone": "510-555-0101",
+                "Unit #": "101", "Others in the Household": "Robin Blue",
                 "Status": "Member",
             },
             {
-                "First Name": "Sandra", "Last Name": "Rosenblum",
-                "Email Address": "sandrarosenblum@yahoo.com", "Phone": "510-684-0794",
-                "Unit #": "411", "Others in the Household": "Peter Spiro",
+                "First Name": "Robin", "Last Name": "Blue",
+                "Email Address": "robin@example.com", "Phone": "510-555-0102",
+                "Unit #": "101", "Others in the Household": "Alex Green",
                 "Status": "Member",
             },
         ])
         result = preprocess(path)
         self.assertEqual(len(result), 1)
         hh = result[0]
-        self.assertEqual(hh["household_name"], "Rosenblum-Spiro")
-        self.assertEqual(hh["unit_num"], 411)
+        self.assertEqual(hh["household_name"], "Blue-Green")
+        self.assertEqual(hh["unit_num"], 101)
         self.assertIsNone(hh["unit_suffix"])
         self.assertEqual(len(hh["members"]), 2)
         emails = {m["email"] for m in hh["members"]}
-        self.assertIn("paspiro@gmail.com", emails)
-        self.assertIn("sandrarosenblum@yahoo.com", emails)
+        self.assertIn("alex@example.com", emails)
+        self.assertIn("robin@example.com", emails)
 
     def test_no_duplicates_on_second_run(self):
         rows = [
             {
-                "First Name": "Peter", "Last Name": "Spiro",
-                "Email Address": "paspiro@gmail.com", "Phone": "510-501-7441",
-                "Unit #": "411", "Others in the Household": "Sandra Rosenblum",
+                "First Name": "Alex", "Last Name": "Green",
+                "Email Address": "alex@example.com", "Phone": "510-555-0101",
+                "Unit #": "101", "Others in the Household": "Robin Blue",
                 "Status": "Member",
             },
             {
-                "First Name": "Sandra", "Last Name": "Rosenblum",
-                "Email Address": "sandrarosenblum@yahoo.com", "Phone": "510-684-0794",
-                "Unit #": "411", "Others in the Household": "Peter Spiro",
+                "First Name": "Robin", "Last Name": "Blue",
+                "Email Address": "robin@example.com", "Phone": "510-555-0102",
+                "Unit #": "101", "Others in the Household": "Alex Green",
                 "Status": "Member",
             },
         ]
@@ -227,47 +227,49 @@ class TestPreprocess(unittest.TestCase):
     def test_children_from_others_column_by_age(self):
         path = self._tsv_file([
             {
-                "First Name": "Josh", "Last Name": "Abrams",
-                "Email Address": "josh@example.com", "Phone": "",
-                "Unit #": "211", "Others in the Household": "Yona (spouse), Noah (12), Aviva (10)",
+                "First Name": "Pat", "Last Name": "Norris",
+                "Email Address": "pat@example.com", "Phone": "",
+                "Unit #": "201",
+                "Others in the Household": "Quinn (spouse), Kael (12), Wren (10)",
                 "Status": "Member",
             },
             {
-                "First Name": "Yona", "Last Name": "Abrams",
-                "Email Address": "yona@example.com", "Phone": "",
-                "Unit #": "211", "Others in the Household": "Josh (spouse), Noah (12), Aviva (10)",
+                "First Name": "Quinn", "Last Name": "Norris",
+                "Email Address": "quinn@example.com", "Phone": "",
+                "Unit #": "201",
+                "Others in the Household": "Pat (spouse), Kael (12), Wren (10)",
                 "Status": "Member",
             },
         ])
         result = preprocess(path)
         self.assertEqual(len(result), 1)
         hh = result[0]
-        # 2 adults + 2 children (Noah and Aviva deduped across both parents)
+        # 2 adults + 2 children (Kael and Wren deduped across both parents)
         self.assertEqual(len(hh["members"]), 4)
         children = [m for m in hh["members"] if m["child"]]
         self.assertEqual(len(children), 2)
         child_names = {m["first_name"] for m in children}
-        self.assertIn("Noah", child_names)
-        self.assertIn("Aviva", child_names)
+        self.assertIn("Kael", child_names)
+        self.assertIn("Wren", child_names)
         for child in children:
             self.assertFalse(child["full_access"])
             self.assertEqual(child["email"], "")
-            self.assertEqual(child["last_name"], "Abrams")
+            self.assertEqual(child["last_name"], "Norris")
 
     def test_children_from_others_column_infant(self):
         path = self._tsv_file([
             {
-                "First Name": "Hilary", "Last Name": "Jacobsen",
-                "Email Address": "h@example.com", "Phone": "",
-                "Unit #": "410",
-                "Others in the Household": "Noah Brod, Julian (infant)",
+                "First Name": "Casey", "Last Name": "Brown",
+                "Email Address": "casey@example.com", "Phone": "",
+                "Unit #": "301",
+                "Others in the Household": "Taylor Gray, River (infant)",
                 "Status": "Member",
             },
             {
-                "First Name": "Noah", "Last Name": "Brod",
-                "Email Address": "n@example.com", "Phone": "",
-                "Unit #": "410",
-                "Others in the Household": "Hilary Jacobsen, Julian (infant)",
+                "First Name": "Taylor", "Last Name": "Gray",
+                "Email Address": "taylor@example.com", "Phone": "",
+                "Unit #": "301",
+                "Others in the Household": "Casey Brown, River (infant)",
                 "Status": "Member",
             },
         ])
@@ -275,41 +277,41 @@ class TestPreprocess(unittest.TestCase):
         self.assertEqual(len(result), 1)
         children = [m for m in result[0]["members"] if m["child"]]
         self.assertEqual(len(children), 1)
-        self.assertEqual(children[0]["first_name"], "Julian")
-        self.assertEqual(children[0]["last_name"], "Brod-Jacobsen")
+        self.assertEqual(children[0]["first_name"], "River")
+        self.assertEqual(children[0]["last_name"], "Brown-Gray")
 
     def test_child_last_name_equals_household_name(self):
         path = self._tsv_file([
             {
-                "First Name": "Kalvin", "Last Name": "Wang",
-                "Email Address": "k@example.com", "Phone": "",
-                "Unit #": "110",
-                "Others in the Household": "Monica Lee (spouse), Pax (2), Ocean (0)",
+                "First Name": "Kim", "Last Name": "East",
+                "Email Address": "kim@example.com", "Phone": "",
+                "Unit #": "401",
+                "Others in the Household": "Lee West (spouse), Pax (2), Ocean (0)",
                 "Status": "Member",
             },
             {
-                "First Name": "Monica", "Last Name": "Lee",
-                "Email Address": "m@example.com", "Phone": "",
-                "Unit #": "110",
-                "Others in the Household": "Kalvin (spouse), Pax (2), Ocean (0)",
+                "First Name": "Lee", "Last Name": "West",
+                "Email Address": "lee@example.com", "Phone": "",
+                "Unit #": "401",
+                "Others in the Household": "Kim (spouse), Pax (2), Ocean (0)",
                 "Status": "Member",
             },
         ])
         result = preprocess(path)
         self.assertEqual(len(result), 1)
         hh = result[0]
-        self.assertEqual(hh["household_name"], "Lee-Wang")
+        self.assertEqual(hh["household_name"], "East-West")
         children = [m for m in hh["members"] if m["child"]]
         self.assertEqual(len(children), 2)
         for child in children:
-            self.assertEqual(child["last_name"], "Lee-Wang")
+            self.assertEqual(child["last_name"], "East-West")
 
     def test_child_multi_given_name(self):
         path = self._tsv_file([
             {
-                "First Name": "Cosmin", "Last Name": "Radoi",
-                "Email Address": "c@example.com", "Phone": "",
-                "Unit #": "311",
+                "First Name": "Sam", "Last Name": "Radley",
+                "Email Address": "sam@example.com", "Phone": "",
+                "Unit #": "501",
                 "Others in the Household": "Luna Liliana (2), Ash (0)",
                 "Status": "Member",
             },
@@ -323,15 +325,15 @@ class TestPreprocess(unittest.TestCase):
     def test_adults_with_relation_qualifier_grouped(self):
         path = self._tsv_file([
             {
-                "First Name": "Dolores", "Last Name": "Taller",
-                "Email Address": "d@example.com", "Phone": "",
-                "Unit #": "207", "Others in the Household": "Michael (son)",
+                "First Name": "Jane", "Last Name": "Elder",
+                "Email Address": "jane@example.com", "Phone": "",
+                "Unit #": "601", "Others in the Household": "Mark (son)",
                 "Status": "Member",
             },
             {
-                "First Name": "Michael", "Last Name": "Saxe-Taller",
-                "Email Address": "m@example.com", "Phone": "",
-                "Unit #": "207", "Others in the Household": "Dolores (mother)",
+                "First Name": "Mark", "Last Name": "Elder-Young",
+                "Email Address": "mark@example.com", "Phone": "",
+                "Unit #": "601", "Others in the Household": "Jane (mother)",
                 "Status": "Member",
             },
         ])
@@ -342,15 +344,15 @@ class TestPreprocess(unittest.TestCase):
     def test_adult_three_names_ignores_middle(self):
         path = self._tsv_file([
             {
-                "First Name": "Stephen", "Last Name": "Hersh",
-                "Email Address": "s@example.com", "Phone": "",
-                "Unit #": "303", "Others in the Household": "Anita Tanay Hersh",
+                "First Name": "Frank", "Last Name": "Hardy",
+                "Email Address": "frank@example.com", "Phone": "",
+                "Unit #": "701", "Others in the Household": "Grace Ann Hardy",
                 "Status": "Member",
             },
             {
-                "First Name": "Anita", "Last Name": "Hersh",
-                "Email Address": "a@example.com", "Phone": "",
-                "Unit #": "303", "Others in the Household": "Stephen Hersh",
+                "First Name": "Grace", "Last Name": "Hardy",
+                "Email Address": "grace@example.com", "Phone": "",
+                "Unit #": "701", "Others in the Household": "Frank Hardy",
                 "Status": "Member",
             },
         ])
@@ -362,52 +364,52 @@ class TestPreprocess(unittest.TestCase):
         """'Name (parents of X)' — the named person is still in the same household."""
         path = self._tsv_file([
             {
-                "First Name": "Dan", "Last Name": "Alpert",
-                "Email Address": "d@example.com", "Phone": "",
-                "Unit #": "301",
-                "Others in the Household": "Laura Nelson (parents of Josh Abrams)",
+                "First Name": "Ben", "Last Name": "Cooper",
+                "Email Address": "ben@example.com", "Phone": "",
+                "Unit #": "801",
+                "Others in the Household": "Dana Mills (parents of Chris Daly)",
                 "Status": "Member",
             },
             {
-                "First Name": "Laura", "Last Name": "Nelson",
-                "Email Address": "l@example.com", "Phone": "",
-                "Unit #": "301",
-                "Others in the Household": "Dan Alpert (parents of Josh Abrams)",
+                "First Name": "Dana", "Last Name": "Mills",
+                "Email Address": "dana@example.com", "Phone": "",
+                "Unit #": "801",
+                "Others in the Household": "Ben Cooper (parents of Chris Daly)",
                 "Status": "Member",
             },
         ])
         result = preprocess(path)
         self.assertEqual(len(result), 1)
         self.assertEqual(len(result[0]["members"]), 2)
-        self.assertEqual(result[0]["household_name"], "Alpert-Nelson")
+        self.assertEqual(result[0]["household_name"], "Cooper-Mills")
 
     def test_unresolved_adult_not_created(self):
         """A name in Others that matches no row is silently skipped."""
         path = self._tsv_file([
             {
-                "First Name": "Olga", "Last Name": "Reznick",
-                "Email Address": "o@example.com", "Phone": "",
-                "Unit #": "401", "Others in the Household": "Garith",
+                "First Name": "Nina", "Last Name": "Wells",
+                "Email Address": "nina@example.com", "Phone": "",
+                "Unit #": "901", "Others in the Household": "Morgan",
                 "Status": "Member",
             },
         ])
         result = preprocess(path)
         self.assertEqual(len(result), 1)
-        # Only Olga — no phantom entry for Garith
+        # Only Nina — no phantom entry for Morgan
         self.assertEqual(len(result[0]["members"]), 1)
 
     def test_pronunciation_guide_stripped_from_first_name(self):
         path = self._tsv_file([
             {
-                "First Name": "Ayala (a-ya-LA)", "Last Name": "Jonas",
-                "Email Address": "a@example.com", "Phone": "",
-                "Unit #": "304", "Others in the Household": "Yacov Ovadya",
+                "First Name": "Aria (ar-EE-uh)", "Last Name": "Vale",
+                "Email Address": "aria@example.com", "Phone": "",
+                "Unit #": "102", "Others in the Household": "Noa Stern",
                 "Status": "Member",
             },
             {
-                "First Name": "Yacov", "Last Name": "Ovadya",
-                "Email Address": "y@example.com", "Phone": "",
-                "Unit #": "304", "Others in the Household": "Ayala Jonas",
+                "First Name": "Noa", "Last Name": "Stern",
+                "Email Address": "noa@example.com", "Phone": "",
+                "Unit #": "102", "Others in the Household": "Aria Vale",
                 "Status": "Member",
             },
         ])
@@ -415,20 +417,20 @@ class TestPreprocess(unittest.TestCase):
         self.assertEqual(len(result), 1)
         adults = [m for m in result[0]["members"] if not m["child"]]
         first_names = {m["first_name"] for m in adults}
-        self.assertIn("Ayala", first_names)  # pronunciation guide stripped
+        self.assertIn("Aria", first_names)  # pronunciation guide stripped
 
     def test_status_member_and_consultant_included(self):
         path = self._tsv_file([
             {
-                "First Name": "Roger", "Last Name": "Studley",
-                "Email Address": "r@example.com", "Phone": "",
+                "First Name": "Chris", "Last Name": "Daly",
+                "Email Address": "chris@example.com", "Phone": "",
                 "Unit #": "202", "Others in the Household": "Ezra (15)",
                 "Status": "Member & Consultant",
             },
         ])
         result = preprocess(path)
         self.assertEqual(len(result), 1)
-        self.assertEqual(result[0]["household_name"], "Studley")
+        self.assertEqual(result[0]["household_name"], "Daly")
         children = [m for m in result[0]["members"] if m["child"]]
         self.assertEqual(len(children), 1)
         self.assertEqual(children[0]["first_name"], "Ezra")
@@ -475,6 +477,19 @@ class TestPreprocess(unittest.TestCase):
         ])
         result = preprocess(path)
         self.assertEqual(result, [])
+
+    def test_international_phone_omitted_from_member(self):
+        path = self._tsv_file([
+            {
+                "First Name": "Alex", "Last Name": "Green",
+                "Email Address": "alex@example.com",
+                "Phone": "+44 20 7946 0958",
+                "Unit #": "101", "Others in the Household": "",
+                "Status": "Member",
+            },
+        ])
+        result = preprocess(path)
+        self.assertEqual(result[0]["members"][0]["phone"], "")
 
     def test_transitive_household_grouping(self):
         """A→B, B→C should put all three in one household."""
@@ -549,19 +564,6 @@ class TestPreprocess(unittest.TestCase):
         adult = result[0]["members"][0]
         self.assertFalse(adult["child"])
         self.assertTrue(adult["full_access"])
-
-    def test_international_phone_omitted_from_member(self):
-        path = self._tsv_file([
-            {
-                "First Name": "Eliana", "Last Name": "Lorch",
-                "Email Address": "eliana@example.com",
-                "Phone": "+44 079 616 86029",
-                "Unit #": "406", "Others in the Household": "",
-                "Status": "Member",
-            },
-        ])
-        result = preprocess(path)
-        self.assertEqual(result[0]["members"][0]["phone"], "")
 
     def test_kids_column_ignored(self):
         """The Kids column should have no effect on child detection."""
