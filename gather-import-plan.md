@@ -98,22 +98,22 @@ The preprocessing step should produce a data structure like:
 ```python
 [
     {
-        "household_name": "Jones-Smith",
-        "unit_num": 444,
+        "household_name": "Blue-Green",
+        "unit_num": 101,
         "unit_suffix": None,
         "members": [
             {
-                "first_name": "Peter",
-                "last_name": "Smith",
-                "email": "smith@smith.com",
-                "phone": "510-123-4567",
+                "first_name": "Alex",
+                "last_name": "Green",
+                "email": "alex@example.com",
+                "phone": "510-555-0101",
                 "child": False,
             },
             {
-                "first_name": "Sandra",
-                "last_name": "Jones",
-                "email": "sandrajones@sandra.com",
-                "phone": "510-666-7777",
+                "first_name": "Robin",
+                "last_name": "Blue",
+                "email": "robin@example.com",
+                "phone": "510-555-0102",
                 "child": False,
             },
         ],
@@ -245,8 +245,8 @@ python gather_import.py \
 
 Run against the local Gather dev server with the sample TSV:
 
-- [ ] Peter Smith and Sandra Jones are grouped into one household
-- [ ] Household is named "Jones-Smith" (alphabetical) with unit_num 444
+- [ ] Alex Green and Robin Blue are grouped into one household
+- [ ] Household is named "Blue-Green" (alphabetical) with unit_num 101
 - [ ] Both users are created as adults with correct emails and phones
 - [ ] Running the script a second time creates no duplicates
 - [ ] A partial run (interrupted mid-way) can be resumed without duplicates
