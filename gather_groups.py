@@ -55,7 +55,7 @@ FIRST_NAME_ALIASES: list[frozenset] = [
 ]
 
 # col_index → Gather group kind value
-GROUP_KINDS: dict[int, str] = {0: "circle", 1: "circle", 2: "subcommittee"}
+GROUP_KINDS: dict[int, str] = {0: "circle", 1: "circle", 2: "circle"}
 
 
 # ── Data classes ──────────────────────────────────────────────────────────────
@@ -1017,9 +1017,6 @@ def process(
                 group_urls[circle.name] = f"/groups/{group_id}"
                 # distinguish updated vs skipped via log (already logged inside)
                 stats["skipped"] += 1  # conservative; update logged separately
-
-        wiki_content = build_wiki_markdown(circles, group_urls)
-        create_or_update_wiki_page(page, base_url, wiki_content, dry_run)
 
         browser.close()
 
