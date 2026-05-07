@@ -314,7 +314,7 @@ def parse_member_line(line: str) -> list[tuple[str, Optional[str]]]:
             continue
         first = words[0]
         if len(words) > 1:
-            last: Optional[str] = words[-1]
+            last: Optional[str] = " ".join(words[1:])
         elif shared_last is not None and i < len(fragments) - 1:
             last = shared_last
         else:
