@@ -1026,7 +1026,8 @@ def process(
 
 def cli():
     parser = argparse.ArgumentParser(
-        description="Populate Gather groups from a Google Sheets circle hierarchy"
+        description="Populate Gather groups from a Google Sheets circle hierarchy",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
         "-u", "--base-url", required=True,
