@@ -461,10 +461,14 @@ def build_wiki_markdown(
 
 # ── Gather: fetch users ───────────────────────────────────────────────────────
 
+_JUNK_NAMES = {"profile", "edit", "delete", "members", "new", "sign in", "sign out"}
+
+
 def fetch_all_gather_users(page: Page, base_url: str) -> list[GatherUser]:
     """Scrape all users from the Gather directory, following pagination."""
-    users: list[GatherUser] = []
-    seen_ids: set[str] = set()
+    # Collect all candidate names per uid; the same uid may appear multiple
+    # times (e.g. as "Profile" link and as the user's actual name).
+    names_by_uid: dict[str, list[str]] = {}
     url: Optional[str] = f"{base_url}/users"
 
     while url:
@@ -475,22 +479,23 @@ def fetch_all_gather_users(page: Page, base_url: str) -> list[GatherUser]:
             if not m:
                 continue
             uid = m.group(1)
-            if uid in seen_ids:
-                continue
             name = link.inner_text().strip()
-            if not name:
-                continue
-            parts = name.split(None, 1)
-            first = parts[0]
-            last = parts[1] if len(parts) > 1 else ""
-            seen_ids.add(uid)
-            users.append(GatherUser(user_id=uid, first_name=first,
-                                    last_name=last, full_name=name))
+            if name and name.lower() not in _JUNK_NAMES:
+                names_by_uid.setdefault(uid, []).append(name)
 
         next_link = page.locator('a[rel="next"]')
         next_href = next_link.get_attribute("href") if next_link.count() > 0 else None
         url = f"{base_url}{next_href}" if next_href else None
 
+    users: list[GatherUser] = []
+    for uid, names in names_by_uid.items():
+        # Prefer the name with the most words (full name over nav labels)
+        name = max(names, key=lambda n: len(n.split()))
+        parts = name.split(None, 1)
+        first = parts[0]
+        last = parts[1] if len(parts) > 1 else ""
+        users.append(GatherUser(user_id=uid, first_name=first,
+                                last_name=last, full_name=name))
     return users
 
 
