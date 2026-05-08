@@ -172,10 +172,13 @@ class TestGroupNamesMatch:
         assert group_names_match("P & G", "Process & Governance")
 
     def test_parenthetical_suffix_ignored_in_match(self):
-        # Existing group "Coordinating Circle (General Circle)" should match
-        # the stripped name "Coordinating Circle"
         assert group_names_match("Coordinating Circle (General Circle)", "Coordinating Circle")
         assert group_names_match("Coordinating Circle", "Coordinating Circle (General Circle)")
+
+    def test_truncated_parenthetical_ignored_in_match(self):
+        # Gather may truncate the group name, leaving an unclosed paren
+        assert group_names_match("Coordinating Circle (General Circle ", "Coordinating Circle")
+        assert group_names_match("Coordinating Circle", "Coordinating Circle (General Circle ")
 
     def test_mid_name_parens_preserved(self):
         # Only trailing parentheticals are stripped, not mid-name ones
