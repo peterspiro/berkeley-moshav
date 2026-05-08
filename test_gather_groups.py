@@ -237,9 +237,13 @@ class TestParseMemberLine:
     def test_dash_only(self):
         assert parse_member_line("- ") == []
 
-    def test_three_words_uses_first_and_last(self):
-        # Middle name ignored; last word is last name
-        assert parse_member_line("- Alex Middle Green") == [("Alex", "Green")]
+    def test_three_words_compound_last_name(self):
+        # All words after first are treated as last name (supports compound last names)
+        assert parse_member_line("- Alex Middle Green") == [("Alex", "Middle Green")]
+
+    def test_mid_string_paren_stripped(self):
+        # Paren mid-string (role annotation) truncates at the paren
+        assert parse_member_line("- Laura(Lead-CLC) Facilitator") == [("Laura", None)]
 
 
 # ── find_header_row_index ─────────────────────────────────────────────────────

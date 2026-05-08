@@ -298,7 +298,7 @@ def parse_member_line(line: str) -> list[tuple[str, Optional[str]]]:
       "- Alex Blue (note)"  -> [("Alex", "Blue")]
     """
     text = strip_leading_dash(line)
-    text = re.sub(r"\s*\([^)]*\)\s*$", "", text).strip()
+    text = re.sub(r"\s*\(.*", "", text).strip()
     if not text:
         return []
 
