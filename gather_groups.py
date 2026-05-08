@@ -134,12 +134,13 @@ def close_log():
 # ── Browser helpers ───────────────────────────────────────────────────────────
 
 def screenshot(page: Page, name: str):
+    SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
     path = SCREENSHOT_DIR / f"{name}_{int(time.time())}.png"
     try:
         page.screenshot(path=str(path))
         log("DEBUG", "screenshot", str(path))
-    except Exception:
-        pass
+    except Exception as e:
+        log("WARN", "screenshot", f"Failed to save {path}: {e}")
 
 
 def _check_submit_errors(page: Page) -> str | None:
