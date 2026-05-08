@@ -534,12 +534,29 @@ class TestResolveGroupMembers:
         assert members == []
 
     def test_ambiguous_member_raises(self):
-        # Two users named Sam Norris and Taylor Norris; matching "Sam" + None
-        # would be fine for Sam, but if we search just first name without last
-        # and two users share first name:
         users_with_two_sams = USERS + [make_user("99", "Sam", "Vale")]
         c = make_circle(member_lines=["- Sam"])
-        # "Sam" with no last name matches both Sam Norris and Sam Vale
+        with pytest.raises(ValueError, match="Ambiguous"):
+            resolve_group_members(c, users_with_two_sams)
+
+    def test_ambiguous_member_resolved_by_lead_cell(self):
+        # "Sam" alone is ambiguous (Norris vs Vale), but lead cell names Sam Norris
+        users_with_two_sams = USERS + [make_user("99", "Sam", "Vale")]
+        c = make_circle(
+            member_lines=["- Sam"],
+            lead_lines=["- Sam Norris"],
+        )
+        members, _ = resolve_group_members(c, users_with_two_sams)
+        assert len(members) == 1
+        assert members[0][0].last_name == "Norris"
+
+    def test_ambiguous_member_still_raises_when_lead_cell_ambiguous_too(self):
+        # Both Sams appear in lead lines — can't disambiguate
+        users_with_two_sams = USERS + [make_user("99", "Sam", "Vale")]
+        c = make_circle(
+            member_lines=["- Sam"],
+            lead_lines=["- Sam Norris", "- Sam Vale"],
+        )
         with pytest.raises(ValueError, match="Ambiguous"):
             resolve_group_members(c, users_with_two_sams)
 

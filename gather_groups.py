@@ -543,6 +543,30 @@ def match_member(
     return results
 
 
+def _disambiguate_by_cross_cell(
+    candidates: list[GatherUser],
+    cross_lines: list[str],
+) -> list[GatherUser]:
+    """Narrow candidates using last-name evidence from another cell's lines.
+
+    If exactly one candidate has a first+last match in cross_lines, return it.
+    Otherwise return the original candidates unchanged.
+    """
+    confirmed: set[str] = set()
+    for line in cross_lines:
+        for lf, ll in parse_member_line(line):
+            if ll is None:
+                continue
+            for u in candidates:
+                if (first_name_matches(u.first_name, lf)
+                        and u.last_name.strip().lower() == ll.strip().lower()):
+                    confirmed.add(u.user_id)
+    if len(confirmed) == 1:
+        uid = next(iter(confirmed))
+        return [u for u in candidates if u.user_id == uid]
+    return candidates
+
+
 def resolve_group_members(
     circle: Circle,
     gather_users: list[GatherUser],
@@ -561,6 +585,8 @@ def resolve_group_members(
     for line in circle.member_lines:
         for first, last in parse_member_line(line):
             hits = match_member(first, last, gather_users)
+            if len(hits) > 1 and last is None:
+                hits = _disambiguate_by_cross_cell(hits, circle.lead_lines)
             if len(hits) > 1:
                 raise ValueError(
                     f"Ambiguous member '{first} {last or ''}' in '{circle.name}': "
