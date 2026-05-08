@@ -582,7 +582,7 @@ def resolve_group_members(
       members: list of (GatherUser, is_manager)
       remaining_consultants: comma-joined names of consultants not in Gather
 
-    Raises ValueError on ambiguous member matches or leads missing from Members.
+    Raises ValueError on leads missing from Members.
     """
     adults = [u for u in gather_users if not u.child]
     resolved: list[tuple[GatherUser, bool]] = []
@@ -594,18 +594,17 @@ def resolve_group_members(
             if len(hits) > 1 and last is None:
                 hits = _disambiguate_by_cross_cell(hits, circle.lead_lines)
             if len(hits) > 1:
-                raise ValueError(
+                log("WARN", "member_match",
                     f"Ambiguous member '{first} {last or ''}' in '{circle.name}': "
-                    f"matches {[u.full_name for u in hits]}"
-                )
+                    f"matches {[u.full_name for u in hits]}, adding all")
             if not hits:
                 log("WARN", "member_match",
                     f"No user for '{first} {last or ''}' in '{circle.name}', skipping")
                 continue
-            u = hits[0]
-            if u.user_id not in user_by_id:
-                user_by_id[u.user_id] = u
-                resolved.append((u, False))
+            for u in hits:
+                if u.user_id not in user_by_id:
+                    user_by_id[u.user_id] = u
+                    resolved.append((u, False))
 
     # Mark leads as managers; if a lead isn't already a member, add them
     manager_ids: set[str] = set()

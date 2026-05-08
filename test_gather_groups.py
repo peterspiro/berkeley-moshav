@@ -555,11 +555,15 @@ class TestResolveGroupMembers:
         members, _ = resolve_group_members(c, USERS)
         assert members == []
 
-    def test_ambiguous_member_raises(self):
+    def test_ambiguous_member_adds_all_and_warns(self):
+        # "Sam" with no last name matches both Sam Norris and Sam Vale;
+        # both should be added rather than raising an error.
         users_with_two_sams = USERS + [make_user("99", "Sam", "Vale")]
         c = make_circle(member_lines=["- Sam"])
-        with pytest.raises(ValueError, match="Ambiguous"):
-            resolve_group_members(c, users_with_two_sams)
+        members, _ = resolve_group_members(c, users_with_two_sams)
+        member_ids = {u.user_id for u, _ in members}
+        assert "3" in member_ids   # Sam Norris
+        assert "99" in member_ids  # Sam Vale
 
     def test_ambiguous_member_resolved_by_lead_cell(self):
         # "Sam" alone is ambiguous (Norris vs Vale), but lead cell names Sam Norris
@@ -572,15 +576,17 @@ class TestResolveGroupMembers:
         assert len(members) == 1
         assert members[0][0].last_name == "Norris"
 
-    def test_ambiguous_member_still_raises_when_lead_cell_ambiguous_too(self):
-        # Both Sams appear in lead lines — can't disambiguate
+    def test_ambiguous_after_failed_disambiguation_adds_all(self):
+        # Both Sams appear in lead lines — can't disambiguate, so both are added
         users_with_two_sams = USERS + [make_user("99", "Sam", "Vale")]
         c = make_circle(
             member_lines=["- Sam"],
             lead_lines=["- Sam Norris", "- Sam Vale"],
         )
-        with pytest.raises(ValueError, match="Ambiguous"):
-            resolve_group_members(c, users_with_two_sams)
+        members, _ = resolve_group_members(c, users_with_two_sams)
+        member_ids = {u.user_id for u, _ in members}
+        assert "3" in member_ids
+        assert "99" in member_ids
 
     def test_child_users_excluded_from_matching(self):
         child_user = GatherUser(
