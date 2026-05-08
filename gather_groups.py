@@ -351,17 +351,25 @@ def parse_sheet(csv_text: str) -> list[Circle]:
     recent: list[Optional[str]] = [None, None, None]
     circles: list[Circle] = []
 
+    seen_col0 = False
     for row in rows[header_idx + 1:]:
-        col_index = None
-        raw_name = ""
-        for c in range(3):
-            v = row[c].strip() if c < len(row) else ""
-            if v:
-                col_index = c
-                raw_name = v
-                break
-        if col_index is None:
+        populated = [(c, row[c].strip()) for c in range(3)
+                     if c < len(row) and row[c].strip()]
+
+        # Skip rows with multiple circle-name columns populated (malformed)
+        if len(populated) > 1:
             continue
+
+        if not populated:
+            continue
+
+        col_index, raw_name = populated[0]
+
+        # Only the first col-0 row is valid (single top-level circle)
+        if col_index == 0:
+            if seen_col0:
+                continue
+            seen_col0 = True
 
         name = expand_acronym(raw_name)
         parent = recent[col_index - 1] if col_index > 0 else None
