@@ -502,6 +502,23 @@ class TestMatchMember:
         assert len(result) == 1
         assert result[0].user_id == "5"
 
+    def test_accented_last_name_matches_unaccented(self):
+        # Spreadsheet has "Codruta Girlea"; directory has "Codruța Gîrlea"
+        users = [make_user("42", "Codruța", "Gîrlea")]
+        result = match_member("Codruta", "Girlea", users)
+        assert len(result) == 1
+        assert result[0].user_id == "42"
+
+    def test_accented_first_name_matches_unaccented(self):
+        users = [make_user("43", "Codruța", "Girlea")]
+        result = match_member("Codruta", "Girlea", users)
+        assert len(result) == 1
+
+    def test_both_accented_match(self):
+        users = [make_user("44", "Codruța", "Gîrlea")]
+        result = match_member("Codruța", "Gîrlea", users)
+        assert len(result) == 1
+
     def test_kathryn_matches_kathryn(self):
         result = match_member("Kathryn", "Smith", USERS)
         assert len(result) == 1

@@ -17,6 +17,7 @@ import os
 import re
 import sys
 import time
+import unicodedata
 import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -242,8 +243,24 @@ def group_names_match(a: str, b: str) -> bool:
     return _normalize_group_name(a) == _normalize_group_name(b)
 
 
+def _fold_accents(s: str) -> str:
+    """Strip diacritical marks so accented characters match their base letter.
+
+    E.g. 'Codruța' -> 'Codruta', 'Gîrlea' -> 'Girlea'.
+    """
+    return "".join(
+        c for c in unicodedata.normalize("NFD", s)
+        if unicodedata.category(c) != "Mn"
+    )
+
+
+def _cmp(s: str) -> str:
+    """Canonical form for accent- and case-insensitive comparison."""
+    return _fold_accents(s).strip().lower()
+
+
 def first_name_matches(a: str, b: str) -> bool:
-    a_l, b_l = a.strip().lower(), b.strip().lower()
+    a_l, b_l = _cmp(a), _cmp(b)
     if a_l == b_l:
         return True
     for alias_set in FIRST_NAME_ALIASES:
@@ -522,10 +539,10 @@ def match_member(
         if last_or_initial is None:
             results.append(user)
         elif last_or_initial.endswith("."):
-            initial = last_or_initial.rstrip(".").lower()
-            if user.last_name.lower().startswith(initial):
+            initial = _cmp(last_or_initial.rstrip("."))
+            if _cmp(user.last_name).startswith(initial):
                 results.append(user)
-        elif user.last_name.strip().lower() == last_or_initial.strip().lower():
+        elif _cmp(user.last_name) == _cmp(last_or_initial):
             results.append(user)
     return results
 
@@ -546,7 +563,7 @@ def _disambiguate_by_cross_cell(
                 continue
             for u in candidates:
                 if (first_name_matches(u.first_name, lf)
-                        and u.last_name.strip().lower() == ll.strip().lower()):
+                        and _cmp(u.last_name) == _cmp(ll)):
                     confirmed.add(u.user_id)
     if len(confirmed) == 1:
         uid = next(iter(confirmed))
