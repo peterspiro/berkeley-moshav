@@ -748,7 +748,10 @@ def _group_needs_update(
     availability: str,
     description: str,
     members: list[tuple[GatherUser, bool]],
+    desired_name: str,
 ) -> bool:
+    if existing.name != desired_name:
+        return True
     if existing.kind != kind:
         return True
     if existing.availability != availability:
@@ -854,7 +857,7 @@ def create_or_update_group(
 
     if existing is not None:
         existing_detail = _fetch_group_detail(page, base_url, existing)
-        if not _group_needs_update(existing_detail, kind, availability, description, members):
+        if not _group_needs_update(existing_detail, kind, availability, description, members, circle.name):
             log("INFO", "group", f"Up to date, skipping: {circle.name}")
             return existing.group_id
 

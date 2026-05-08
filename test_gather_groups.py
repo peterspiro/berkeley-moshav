@@ -14,6 +14,7 @@ from gather_groups import (
     GatherGroup,
     GatherGroupMember,
     GatherUser,
+    _group_needs_update,
     best_column_match,
     build_description,
     build_wiki_markdown,
@@ -201,6 +202,34 @@ class TestParseSheetParenStrip:
         """)
         circles = parse_sheet(csv_text)
         assert circles[0].name == "Alpha Circle"
+
+
+# ── _group_needs_update ───────────────────────────────────────────────────────
+
+class TestGroupNeedsUpdate:
+    def _make_group(self, name="Alpha Circle", kind="circle",
+                    availability="closed", description="", members=None):
+        return GatherGroup(
+            group_id="1", name=name, kind=kind,
+            availability=availability, description=description,
+            members=members or [],
+        )
+
+    def test_up_to_date(self):
+        g = self._make_group()
+        assert not _group_needs_update(g, "circle", "closed", "", [], "Alpha Circle")
+
+    def test_stale_name_triggers_update(self):
+        g = self._make_group(name="Alpha Circle (Old Name)")
+        assert _group_needs_update(g, "circle", "closed", "", [], "Alpha Circle")
+
+    def test_truncated_paren_name_triggers_update(self):
+        g = self._make_group(name="Alpha Circle (Old Name ")
+        assert _group_needs_update(g, "circle", "closed", "", [], "Alpha Circle")
+
+    def test_stale_kind_triggers_update(self):
+        g = self._make_group(kind="committee")
+        assert _group_needs_update(g, "circle", "closed", "", [], "Alpha Circle")
 
 
 # ── first_name_matches ────────────────────────────────────────────────────────
