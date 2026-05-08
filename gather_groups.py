@@ -54,6 +54,7 @@ GROUP_NAME_ALIASES: list[frozenset] = [
 FIRST_NAME_ALIASES: list[frozenset] = [
     frozenset({"katie", "kathryn"}),
     frozenset({"ann", "annie"}),
+    frozenset({"yocab", "yacov"}),
 ]
 
 # col_index → Gather group kind value

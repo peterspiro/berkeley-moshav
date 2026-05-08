@@ -285,6 +285,11 @@ class TestFirstNameAliases:
         from gather_groups import first_name_matches
         assert not first_name_matches("Annie", "Alex")
 
+    def test_yocab_matches_yacov(self):
+        from gather_groups import first_name_matches
+        assert first_name_matches("Yocab", "Yacov")
+        assert first_name_matches("Yacov", "Yocab")
+
 
 # ── find_header_row_index ─────────────────────────────────────────────────────
 
