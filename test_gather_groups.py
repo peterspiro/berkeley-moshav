@@ -640,6 +640,16 @@ class TestResolveGroupMembers:
         members, remaining = resolve_group_members(c, USERS)
         assert "Jordan Unknown" in remaining
 
+    def test_lead_slash_separated_roles_ignored(self):
+        # "Alex-Facilitator/Feedback Link" should resolve to first name "Alex"
+        c = make_circle(
+            member_lines=["- Alex Green"],
+            lead_lines=["Alex-Facilitator/Feedback Link"],
+        )
+        members, _ = resolve_group_members(c, USERS)
+        manager_ids = {u.user_id for u, mgr in members if mgr}
+        assert "1" in manager_ids
+
     def test_slash_members_both_added(self):
         c = make_circle(member_lines=["- Alex/Robin Blue"])
         # Robin Blue is user 2; Alex Blue doesn't exist → only Robin matched

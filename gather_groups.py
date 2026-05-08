@@ -611,6 +611,10 @@ def resolve_group_members(
     manager_ids: set[str] = set()
     for line in circle.lead_lines:
         lead_name = _strip_roles(strip_leading_dash(line)).strip()
+        # In lead lines, slash separates roles (e.g. "Facilitator/Feedback Link"),
+        # not names, so discard everything from the first slash onward.
+        lead_name = lead_name.split("/")[0].strip()
+        lead_name = re.sub(r"[-\s]+$", "", lead_name)
         if not lead_name:
             continue
         words = lead_name.split()
