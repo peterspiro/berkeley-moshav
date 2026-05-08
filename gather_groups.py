@@ -36,8 +36,8 @@ DEFAULT_SHEET_URL = (
 MAX_DESC = 255
 WIKI_TITLE = "Circle Hierarchy"
 WIKI_SLUG = "circle-hierarchy"
-LOG_FILE = "groups_log.csv"
-SCREENSHOT_DIR = Path("import_screenshots")
+LOG_FILE = Path(__file__).parent / "groups_log.csv"
+SCREENSHOT_DIR = Path(__file__).parent / "import_screenshots"
 
 ACRONYM_EXPANSIONS: dict[str, str] = {
     "P & G": "Process & Governance",
