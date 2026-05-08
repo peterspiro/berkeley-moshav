@@ -573,18 +573,33 @@ def resolve_group_members(
                 user_by_id[u.user_id] = u
                 resolved.append((u, False))
 
-    # Mark leads as managers; raise if a lead name has no member match
+    # Mark leads as managers; if a lead isn't already a member, add them
     manager_ids: set[str] = set()
     for line in circle.lead_lines:
         lead_name = _strip_roles(strip_leading_dash(line)).strip()
         if not lead_name:
             continue
-        first = lead_name.split()[0].split("-")[0]
+        words = lead_name.split()
+        first = words[0].split("-")[0]
+        last = " ".join(words[1:]) if len(words) > 1 else None
         matches = [u for u, _ in resolved if first_name_matches(first, u.first_name)]
         if not matches:
-            raise ValueError(
-                f"Lead '{lead_name}' in '{circle.name}' not found in Members list"
-            )
+            # Lead not in members list — try to find them in all Gather users
+            hits = match_member(first, last, gather_users)
+            if len(hits) > 1:
+                raise ValueError(
+                    f"Lead '{lead_name}' in '{circle.name}' is ambiguous: "
+                    f"matches {[u.full_name for u in hits]}"
+                )
+            if not hits:
+                raise ValueError(
+                    f"Lead '{lead_name}' in '{circle.name}' not found in Members list or Gather users"
+                )
+            u = hits[0]
+            if u.user_id not in user_by_id:
+                user_by_id[u.user_id] = u
+                resolved.append((u, False))
+            matches = [u]
         for u in matches:
             manager_ids.add(u.user_id)
 

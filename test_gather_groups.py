@@ -510,13 +510,25 @@ class TestResolveGroupMembers:
         with pytest.raises(ValueError, match="Ambiguous"):
             resolve_group_members(c, users_with_two_sams)
 
-    def test_lead_not_in_members_raises(self):
+    def test_lead_not_in_members_or_gather_raises(self):
         c = make_circle(
             member_lines=["- Alex Green"],
-            lead_lines=["- Robin"],
+            lead_lines=["- Zara Unknown"],
         )
-        with pytest.raises(ValueError, match="not found in Members"):
+        with pytest.raises(ValueError, match="not found"):
             resolve_group_members(c, USERS)
+
+    def test_lead_not_in_members_but_in_gather_added(self):
+        # Robin Blue is in Gather but not in the Members cell; should be added as manager
+        c = make_circle(
+            member_lines=["- Alex Green"],
+            lead_lines=["- Robin Blue"],
+        )
+        members, _ = resolve_group_members(c, USERS)
+        manager_ids = {u.user_id for u, mgr in members if mgr}
+        all_ids = {u.user_id for u, _ in members}
+        assert "2" in manager_ids   # Robin Blue is manager
+        assert "1" in all_ids       # Alex Green still present
 
     def test_consultant_found_in_gather_added_to_group(self):
         c = make_circle(
