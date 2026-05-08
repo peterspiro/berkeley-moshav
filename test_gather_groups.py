@@ -539,6 +539,24 @@ class TestBuildDescription:
         result = build_description(c, "C" * 50)
         assert len(result) <= 255
 
+    def test_post_length_never_exceeds_255(self):
+        # Description with many newlines: browser \n->\r\n adds extra chars
+        c = make_circle(
+            description="D" * 100,
+            meetings="M" * 80,
+            parent_name="P" * 50,
+        )
+        result = build_description(c, "C" * 40)
+        post_len = len(result) + result.count("\n")
+        assert post_len <= 255
+
+    def test_post_length_with_newlines_in_description(self):
+        # Base description itself contains newlines
+        c = make_circle(description="\n".join(["line"] * 60))  # ~299 chars with newlines
+        result = build_description(c, "")
+        post_len = len(result) + result.count("\n")
+        assert post_len <= 255
+
 
 # ── match_member ──────────────────────────────────────────────────────────────
 

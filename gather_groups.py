@@ -437,12 +437,21 @@ def parse_sheet(csv_text: str) -> list[Circle]:
 
 # ── Description building ──────────────────────────────────────────────────────
 
+def _post_len(s: str) -> int:
+    """Length of s after browser \n -> \r\n normalisation during form POST."""
+    return len(s) + s.count("\n")
+
+
 def build_description(circle: Circle, remaining_consultant_text: str) -> str:
     """Build the Gather group description, capped at MAX_DESC chars.
 
     Appends Consultants, Meetings, and Parent lines in order, truncating
     the description column content to make room.  Lines that still don't fit
     with an empty description are omitted entirely.
+
+    All length checks use POST length (_post_len) because the browser
+    normalises bare \\n to \\r\\n before submitting, adding one byte per
+    newline.  PostgreSQL's VARCHAR(255) counts those extra bytes.
     """
     extra_lines: list[str] = []
     if remaining_consultant_text:
@@ -455,11 +464,19 @@ def build_description(circle: Circle, remaining_consultant_text: str) -> str:
     # Greedily include extra lines that fit even with an empty base description
     extra = ""
     for line in extra_lines:
-        if len(extra) + len(line) <= MAX_DESC:
+        if _post_len(extra) + _post_len(line) <= MAX_DESC:
             extra += line
 
-    desc = circle.description[: MAX_DESC - len(extra)]
-    return (desc + extra)[:MAX_DESC]
+    # Trim base description so that POST length of (desc + extra) <= MAX_DESC
+    budget = MAX_DESC - _post_len(extra)
+    desc = circle.description
+    while _post_len(desc) > budget:
+        desc = desc[:-1]
+    result = desc + extra
+    # Final safety: trim trailing chars until POST length fits
+    while _post_len(result) > MAX_DESC:
+        result = result[:-1]
+    return result
 
 
 # ── Wiki markdown ─────────────────────────────────────────────────────────────
