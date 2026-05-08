@@ -1030,8 +1030,8 @@ def cli():
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
-        "-u", "--base-url", required=True,
-        help="Gather base URL, e.g. https://sub.gather.coop",
+        "-u", "--base-url", default="https://berkeley-moshav.gather.coop",
+        help="Gather base URL",
     )
     parser.add_argument("-e", "--email", required=True, help="Admin login email")
     parser.add_argument("-p", "--password", required=True, help="Admin login password")
