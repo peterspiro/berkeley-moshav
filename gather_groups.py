@@ -143,8 +143,9 @@ def screenshot(page: Page, name: str):
 
 
 def _check_submit_errors(page: Page) -> str | None:
-    if page.locator(".error, #error_explanation, .alert-danger").count() > 0:
-        return page.locator(".error, #error_explanation, .alert-danger").first.inner_text()
+    sel = ".error, #error_explanation, .alert-danger, .alert-warning"
+    if page.locator(sel).count() > 0:
+        return page.locator(sel).first.inner_text()
     return None
 
 
@@ -917,7 +918,9 @@ def create_or_update_group(
             # After creation Gather redirects to /groups; find the new group by name
             group_id = _find_group_in_list(page, base_url, circle.name)
             if not group_id:
-                log("ERROR", "create_group", circle.name, "Group not found in list after creation")
+                log("ERROR", "create_group", circle.name,
+                    f"Group not found in list after creation (page URL: {page.url})")
+                screenshot(page, f"group_create_notfound_{circle.name[:20]}")
                 return None
             log("INFO", "create_group", f"Created: {circle.name} (id={group_id})")
             return group_id
