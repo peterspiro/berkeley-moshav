@@ -459,7 +459,7 @@ def build_description(circle: Circle, remaining_consultant_text: str) -> str:
             extra += line
 
     desc = circle.description[: MAX_DESC - len(extra)]
-    return desc + extra
+    return (desc + extra)[:MAX_DESC]
 
 
 # ── Wiki markdown ─────────────────────────────────────────────────────────────
@@ -1094,6 +1094,7 @@ def process(
                 continue
 
             description = build_description(circle, remaining_consultants)
+            log("DEBUG", "description", f"{circle.name}: {len(description)} chars")
 
             try:
                 existing = find_matching_group(circle, gather_groups)
