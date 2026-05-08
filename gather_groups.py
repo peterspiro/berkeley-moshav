@@ -82,6 +82,7 @@ class GatherUser:
     first_name: str
     last_name: str
     full_name: str
+    child: bool = False
 
 
 @dataclass
@@ -483,41 +484,27 @@ def build_wiki_markdown(
 
 # ── Gather: fetch users ───────────────────────────────────────────────────────
 
-_JUNK_NAMES = {"profile", "edit", "delete", "members", "new", "sign in", "sign out"}
 
 
 def fetch_all_gather_users(page: Page, base_url: str) -> list[GatherUser]:
-    """Scrape all users from the Gather directory, following pagination."""
-    # Collect all candidate names per uid; the same uid may appear multiple
-    # times (e.g. as "Profile" link and as the user's actual name).
-    names_by_uid: dict[str, list[str]] = {}
-    url: Optional[str] = f"{base_url}/users"
-
-    while url:
-        page.goto(url, wait_until="networkidle")
-        for link in page.locator('a[href*="/users/"]').all():
-            href = link.get_attribute("href") or ""
-            m = re.search(r"/users/(\d+)$", href)
-            if not m:
-                continue
-            uid = m.group(1)
-            name = link.inner_text().strip()
-            if name and name.lower() not in _JUNK_NAMES:
-                names_by_uid.setdefault(uid, []).append(name)
-
-        next_link = page.locator('a[rel="next"]')
-        next_href = next_link.get_attribute("href") if next_link.count() > 0 else None
-        url = f"{base_url}{next_href}" if next_href else None
-
+    """Download all users from the Gather directory CSV export."""
+    response = page.request.get(f"{base_url}/users.csv")
+    reader = csv.DictReader(io.StringIO(response.text()))
     users: list[GatherUser] = []
-    for uid, names in names_by_uid.items():
-        # Prefer the name with the most words (full name over nav labels)
-        name = max(names, key=lambda n: len(n.split()))
-        parts = name.split(None, 1)
-        first = parts[0]
-        last = parts[1] if len(parts) > 1 else ""
-        users.append(GatherUser(user_id=uid, first_name=first,
-                                last_name=last, full_name=name))
+    for row in reader:
+        uid = row.get("ID", "").strip()
+        first = row.get("First Name", "").strip()
+        last = row.get("Last Name", "").strip()
+        is_child = row.get("Is Child", "").strip().lower() == "true"
+        if not uid:
+            continue
+        users.append(GatherUser(
+            user_id=uid,
+            first_name=first,
+            last_name=last,
+            full_name=f"{first} {last}".strip(),
+            child=is_child,
+        ))
     return users
 
 
@@ -579,12 +566,13 @@ def resolve_group_members(
 
     Raises ValueError on ambiguous member matches or leads missing from Members.
     """
+    adults = [u for u in gather_users if not u.child]
     resolved: list[tuple[GatherUser, bool]] = []
     user_by_id: dict[str, GatherUser] = {}
 
     for line in circle.member_lines:
         for first, last in parse_member_line(line):
-            hits = match_member(first, last, gather_users)
+            hits = match_member(first, last, adults)
             if len(hits) > 1 and last is None:
                 hits = _disambiguate_by_cross_cell(hits, circle.lead_lines)
             if len(hits) > 1:
@@ -613,7 +601,7 @@ def resolve_group_members(
         matches = [u for u, _ in resolved if first_name_matches(first, u.first_name)]
         if not matches:
             # Lead not in members list — try to find them in all Gather users
-            hits = match_member(first, last, gather_users)
+            hits = match_member(first, last, adults)
             if len(hits) > 1:
                 raise ValueError(
                     f"Lead '{lead_name}' in '{circle.name}' is ambiguous: "
@@ -642,7 +630,7 @@ def resolve_group_members(
             remaining.append(cname)
             continue
         first, last = pairs[0]
-        hits = match_member(first, last, gather_users)
+        hits = match_member(first, last, adults)
         if hits:
             for u in hits:
                 if u.user_id not in user_by_id:

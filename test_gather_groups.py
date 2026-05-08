@@ -560,6 +560,26 @@ class TestResolveGroupMembers:
         with pytest.raises(ValueError, match="Ambiguous"):
             resolve_group_members(c, users_with_two_sams)
 
+    def test_child_users_excluded_from_matching(self):
+        child_user = GatherUser(
+            user_id="77", first_name="Luna", last_name="Green",
+            full_name="Luna Green", child=True,
+        )
+        c = make_circle(member_lines=["- Luna Green"])
+        members, _ = resolve_group_members(c, USERS + [child_user])
+        assert not any(u.user_id == "77" for u, _ in members)
+
+    def test_child_not_matched_even_by_first_name(self):
+        child_user = GatherUser(
+            user_id="77", first_name="Alex", last_name="Green",
+            full_name="Alex Green", child=True,
+        )
+        # With child excluded, "Alex Green" should still match the adult user "1"
+        c = make_circle(member_lines=["- Alex Green"])
+        members, _ = resolve_group_members(c, [child_user, make_user("1", "Alex", "Green")])
+        assert len(members) == 1
+        assert members[0][0].user_id == "1"
+
     def test_lead_not_in_members_or_gather_raises(self):
         c = make_circle(
             member_lines=["- Alex Green"],
