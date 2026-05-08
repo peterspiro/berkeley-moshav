@@ -171,6 +171,34 @@ class TestGroupNamesMatch:
     def test_acronym_vs_alias(self):
         assert group_names_match("P & G", "Process & Governance")
 
+    def test_parenthetical_suffix_ignored_in_match(self):
+        # Existing group "Coordinating Circle (General Circle)" should match
+        # the stripped name "Coordinating Circle"
+        assert group_names_match("Coordinating Circle (General Circle)", "Coordinating Circle")
+        assert group_names_match("Coordinating Circle", "Coordinating Circle (General Circle)")
+
+    def test_mid_name_parens_preserved(self):
+        # Only trailing parentheticals are stripped, not mid-name ones
+        assert not group_names_match("Circle (A) Extra", "Circle Extra")
+
+
+class TestParseSheetParenStrip:
+    def test_trailing_paren_stripped_from_name(self):
+        csv_text = textwrap.dedent("""\
+            Circle,,Sub-circle,Consultants,Members,Lead Facilitator Sec.,Meetings,Desc,Aim,Qual
+            Coordinating Circle (General Circle),,,,,,,,
+        """)
+        circles = parse_sheet(csv_text)
+        assert circles[0].name == "Coordinating Circle"
+
+    def test_name_without_paren_unchanged(self):
+        csv_text = textwrap.dedent("""\
+            Circle,,Sub-circle,Consultants,Members,Lead Facilitator Sec.,Meetings,Desc,Aim,Qual
+            Alpha Circle,,,,,,,,
+        """)
+        circles = parse_sheet(csv_text)
+        assert circles[0].name == "Alpha Circle"
+
 
 # ── first_name_matches ────────────────────────────────────────────────────────
 

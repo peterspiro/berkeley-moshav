@@ -231,8 +231,8 @@ def expand_acronym(name: str) -> str:
 
 
 def _normalize_group_name(name: str) -> str:
-    """Expand acronym, lowercase, and apply group name aliases."""
-    n = expand_acronym(name).strip().lower()
+    """Expand acronym, strip trailing parenthetical, lowercase, and apply aliases."""
+    n = re.sub(r"\s*\(.*?\)\s*$", "", expand_acronym(name).strip()).strip().lower()
     for alias_set in GROUP_NAME_ALIASES:
         if n in alias_set:
             n = min(alias_set)  # canonical form is alphabetically first
@@ -404,7 +404,10 @@ def parse_sheet(csv_text: str) -> list[Circle]:
                 continue
             seen_col0 = True
 
-        name = expand_acronym(re.sub(r"^[\W_]+|[\W_]+$", "", raw_name).strip())
+        name = expand_acronym(
+            re.sub(r"^[\W_]+|[\W_]+$", "",
+                   re.sub(r"\s*\(.*?\)\s*$", "", raw_name.strip()).strip()).strip()
+        )
         parent = recent[col_index - 1] if col_index > 0 else None
         recent[col_index] = name
         for deeper in range(col_index + 1, 3):
