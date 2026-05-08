@@ -263,6 +263,28 @@ class TestParseMemberLine:
     def test_lead_role_after_name_and_space(self):
         assert parse_member_line("- Anita -Lead") == [("Anita", None)]
 
+    def test_trailing_hyphen_stripped(self):
+        assert parse_member_line("- Hilary- ") == [("Hilary", None)]
+
+    def test_trailing_dash_space_stripped(self):
+        assert parse_member_line("- Anita -") == [("Anita", None)]
+
+    def test_trailing_space_stripped(self):
+        assert parse_member_line("- Annie ") == [("Annie", None)]
+
+
+# ── first_name_matches ────────────────────────────────────────────────────────
+
+class TestFirstNameAliases:
+    def test_annie_matches_ann(self):
+        from gather_groups import first_name_matches
+        assert first_name_matches("Annie", "Ann")
+        assert first_name_matches("Ann", "Annie")
+
+    def test_annie_does_not_match_unrelated(self):
+        from gather_groups import first_name_matches
+        assert not first_name_matches("Annie", "Alex")
+
 
 # ── find_header_row_index ─────────────────────────────────────────────────────
 

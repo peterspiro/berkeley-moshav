@@ -52,6 +52,7 @@ GROUP_NAME_ALIASES: list[frozenset] = [
 # Each frozenset is a group of equivalent first names (case-insensitive)
 FIRST_NAME_ALIASES: list[frozenset] = [
     frozenset({"katie", "kathryn"}),
+    frozenset({"ann", "annie"}),
 ]
 
 # col_index → Gather group kind value
@@ -311,6 +312,7 @@ def parse_member_line(line: str) -> list[tuple[str, Optional[str]]]:
     text = strip_leading_dash(line)
     text = re.sub(r"\s*\(.*", "", text).strip()
     text = _strip_roles(text)
+    text = re.sub(r"[-\s]+$", "", text)  # strip trailing hyphens/spaces
     if not text:
         return []
 
