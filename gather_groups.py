@@ -282,6 +282,17 @@ def strip_leading_dash(s: str) -> str:
     return re.sub(r"^-\s*", "", s).strip()
 
 
+_ROLE_RE = re.compile(
+    r"\s*-?\s*\b(?:lead|facilitator|sec(?:retary)?\.?|feedback\s+link)\b[^/]*",
+    re.IGNORECASE,
+)
+
+
+def _strip_roles(s: str) -> str:
+    """Remove role-indicator words/phrases (Lead, Facilitator, Secretary, Feedback link)."""
+    return " ".join(_ROLE_RE.sub("", s).split())
+
+
 def parse_member_line(line: str) -> list[tuple[str, Optional[str]]]:
     """Parse one member cell line into (first_name, last_or_initial) pairs.
 
@@ -299,6 +310,7 @@ def parse_member_line(line: str) -> list[tuple[str, Optional[str]]]:
     """
     text = strip_leading_dash(line)
     text = re.sub(r"\s*\(.*", "", text).strip()
+    text = _strip_roles(text)
     if not text:
         return []
 
@@ -564,7 +576,7 @@ def resolve_group_members(
     # Mark leads as managers; raise if a lead name has no member match
     manager_ids: set[str] = set()
     for line in circle.lead_lines:
-        lead_name = strip_leading_dash(line).strip()
+        lead_name = _strip_roles(strip_leading_dash(line)).strip()
         if not lead_name:
             continue
         first = lead_name.split()[0].split("-")[0]

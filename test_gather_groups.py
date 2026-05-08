@@ -245,6 +245,24 @@ class TestParseMemberLine:
         # Paren mid-string (role annotation) truncates at the paren
         assert parse_member_line("- Laura(Lead-CLC) Facilitator") == [("Laura", None)]
 
+    def test_role_lead_stripped(self):
+        assert parse_member_line("- Henry -lead") == [("Henry", None)]
+
+    def test_role_facilitator_stripped(self):
+        assert parse_member_line("- Stephen-facilitator") == [("Stephen", None)]
+
+    def test_role_secretary_stripped(self):
+        assert parse_member_line("- Melissa-Secretary") == [("Melissa", None)]
+
+    def test_role_feedback_link_stripped(self):
+        assert parse_member_line("- Sharon-Feedback link") == [("Sharon", None)]
+
+    def test_role_with_last_name(self):
+        assert parse_member_line("- Henry Hirschel-lead") == [("Henry", "Hirschel")]
+
+    def test_lead_role_after_name_and_space(self):
+        assert parse_member_line("- Anita -Lead") == [("Anita", None)]
+
 
 # ── find_header_row_index ─────────────────────────────────────────────────────
 
