@@ -407,6 +407,17 @@ class TestParseSheet:
         assert by_name["Delta"].parent_name == "Alpha"
         assert by_name["Epsilon"].parent_name == "Delta"
 
+    def test_leading_punctuation_stripped_from_name(self):
+        csv_text = textwrap.dedent("""\
+            Circle,,Sub-circle,Consultants,Members,Lead Facilitator Sec.,Meetings,Desc,Aim,Qual
+            Alpha,,,,,,,,
+            ,-Rental and Resale,,,,,,,
+        """)
+        circles = parse_sheet(csv_text)
+        names = [c.name for c in circles]
+        assert "Rental and Resale" in names
+        assert not any(n.startswith("-") for n in names)
+
 
 # ── build_description ─────────────────────────────────────────────────────────
 

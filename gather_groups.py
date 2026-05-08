@@ -385,7 +385,7 @@ def parse_sheet(csv_text: str) -> list[Circle]:
                 continue
             seen_col0 = True
 
-        name = expand_acronym(raw_name)
+        name = expand_acronym(re.sub(r"^[\W_]+|[\W_]+$", "", raw_name).strip())
         parent = recent[col_index - 1] if col_index > 0 else None
         recent[col_index] = name
         for deeper in range(col_index + 1, 3):
