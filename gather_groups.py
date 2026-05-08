@@ -559,7 +559,7 @@ def resolve_group_members(
         lead_name = strip_leading_dash(line).strip()
         if not lead_name:
             continue
-        first = lead_name.split()[0]
+        first = lead_name.split()[0].split("-")[0]
         matches = [u for u, _ in resolved if first_name_matches(first, u.first_name)]
         if not matches:
             raise ValueError(
