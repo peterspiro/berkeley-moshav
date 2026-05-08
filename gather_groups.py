@@ -202,9 +202,12 @@ def to_csv_export_url(url: str) -> str:
 
 
 def fetch_sheet(url: str) -> str:
-    if url.startswith("/") or url.startswith("file://"):
-        path = url[7:] if url.startswith("file://") else url
+    if url.startswith("file://"):
+        path = url[7:]
         with open(path, encoding="utf-8-sig") as f:
+            return f.read()
+    if not url.startswith("http://") and not url.startswith("https://"):
+        with open(url, encoding="utf-8-sig") as f:
             return f.read()
     export_url = to_csv_export_url(url)
     req = urllib.request.Request(export_url, headers={"User-Agent": "Mozilla/5.0"})
