@@ -826,13 +826,24 @@ def _remove_inline_member(page: Page, user_id: str):
 
 
 def _find_group_in_list(page: Page, base_url: str, name: str) -> Optional[str]:
-    """Scan the groups list page for a group matching `name`; return its ID."""
-    page.goto(f"{base_url}/groups", wait_until="networkidle")
-    for link in page.locator('a[href*="/groups/"]').all():
-        href = link.get_attribute("href") or ""
-        m = re.search(r"/groups/(\d+)$", href)
-        if m and group_names_match(link.inner_text().strip(), name):
-            return m.group(1)
+    """Scan the groups list page (all pages) for a group matching `name`; return its ID."""
+    url: Optional[str] = f"{base_url}/groups"
+    found_names: list[str] = []
+    while url:
+        page.goto(url, wait_until="networkidle")
+        for link in page.locator('a[href*="/groups/"]').all():
+            href = link.get_attribute("href") or ""
+            m = re.search(r"/groups/(\d+)$", href)
+            if not m:
+                continue
+            text = link.inner_text().strip()
+            found_names.append(text)
+            if group_names_match(text, name):
+                return m.group(1)
+        next_link = page.locator('a[rel="next"]')
+        next_href = next_link.get_attribute("href") if next_link.count() > 0 else None
+        url = f"{base_url}{next_href}" if next_href else None
+    log("DEBUG", "group_list", f"Looking for {name!r}; found: {found_names}")
     return None
 
 
@@ -919,11 +930,15 @@ def create_or_update_group(
             if not _submit_group_form(page, circle.name):
                 return None
 
+            post_submit_url = page.url
+            log("DEBUG", "create_group", f"Post-submit URL: {post_submit_url}")
+            screenshot(page, f"group_create_postsubmit_{circle.name[:20]}")
+
             # After creation Gather redirects to /groups; find the new group by name
             group_id = _find_group_in_list(page, base_url, circle.name)
             if not group_id:
                 log("ERROR", "create_group", circle.name,
-                    f"Group not found in list after creation (page URL: {page.url})")
+                    f"Group not found in list after creation (post-submit URL: {post_submit_url})")
                 screenshot(page, f"group_create_notfound_{circle.name[:20]}")
                 return None
             log("INFO", "create_group", f"Created: {circle.name} (id={group_id})")
