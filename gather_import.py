@@ -3,9 +3,9 @@
 Bulk-imports community members into a Gather instance via browser automation.
 
 Usage:
-    python gather_import.py -e admin@example.com -p adminpassword
-    python gather_import.py -s members.tsv -u http://foo.gatherdev.org:3000 \
-        -e admin@example.com -p adminpassword [-n]
+    python gather_import.py -e admin@example.com -p secret
+    python gather_import.py -s members.tsv -u https://example.gather.coop \
+        -e admin@example.com -p secret [-n]
 """
 
 import argparse
