@@ -268,7 +268,9 @@ def preprocess(tsv_path: str) -> list[dict]:
             last = row.get("Last Name", "").strip()
             email = row.get("Email Address", "").strip()
             phone = row.get("Phone", "").strip()
+            pronouns = ""
             if is_international_phone(phone):
+                pronouns = phone
                 phone = ""
             if last:
                 last_names.append(last)
@@ -277,6 +279,7 @@ def preprocess(tsv_path: str) -> list[dict]:
                 "last_name": last,
                 "email": email,
                 "phone": phone,
+                "pronouns": pronouns,
                 "child": False,
                 "full_access": True,
             })

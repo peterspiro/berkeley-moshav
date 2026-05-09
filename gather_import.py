@@ -304,6 +304,8 @@ def create_user(page: Page, base_url: str, member: dict,
             page.fill('input[name="user[email]"]', member["email"])
         if member.get("phone"):
             page.fill('input[name="user[mobile_phone]"]', member["phone"])
+        if member.get("pronouns"):
+            page.fill('input[name="user[pronouns]"]', member["pronouns"])
 
         if is_child:
             child_cb = page.locator('input[type="checkbox"]#user_child')
@@ -364,6 +366,7 @@ def update_user(page: Page, edit_url: str, member: dict, dry_run: bool) -> str:
         "user[first_name]": member.get("first_name", "").strip(),
         "user[last_name]": member.get("last_name", "").strip(),
         "user[mobile_phone]": member.get("phone", "").strip(),
+        "user[pronouns]": member.get("pronouns", "").strip(),
     }
 
     try:

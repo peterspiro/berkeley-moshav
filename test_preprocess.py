@@ -478,7 +478,7 @@ class TestPreprocess(unittest.TestCase):
         result = preprocess(path)
         self.assertEqual(result, [])
 
-    def test_international_phone_omitted_from_member(self):
+    def test_international_phone_stored_in_pronouns(self):
         path = self._tsv_file([
             {
                 "First Name": "Alex", "Last Name": "Green",
@@ -489,7 +489,9 @@ class TestPreprocess(unittest.TestCase):
             },
         ])
         result = preprocess(path)
-        self.assertEqual(result[0]["members"][0]["phone"], "")
+        member = result[0]["members"][0]
+        self.assertEqual(member["phone"], "")
+        self.assertEqual(member["pronouns"], "+44 20 7946 0958")
 
     def test_transitive_household_grouping(self):
         """A→B, B→C should put all three in one household."""
