@@ -380,6 +380,10 @@ def upload_photo(
             return False
 
         file_input.set_input_files(tmp_path)
+        # Wait for any Active Storage direct-upload XHR triggered by the file
+        # selection to complete before submitting the form.
+        page.wait_for_load_state("networkidle")
+
         page.click('button[type="submit"], input[type="submit"]')
         page.wait_for_load_state("networkidle")
 
@@ -388,6 +392,14 @@ def upload_photo(
             err = err_el.first.inner_text()
             screenshot(page, f"photo_error_{member_name[:20].replace(' ', '_')}")
             log("ERROR", "upload_photo", member_name, err[:200])
+            return False
+
+        # Verify the photo actually saved by re-checking the profile page.
+        profile_url = re.sub(r"/edit$", "", edit_url)
+        if not has_custom_photo(page, profile_url):
+            screenshot(page, f"photo_verify_{member_name[:20].replace(' ', '_')}")
+            log("ERROR", "upload_photo", member_name,
+                "Form submitted without error but photo not visible on profile")
             return False
 
         log("INFO", "upload_photo", f"Uploaded photo for {member_name}")
