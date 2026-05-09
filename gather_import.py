@@ -198,6 +198,22 @@ def _household_unit_str(household: dict) -> str:
     return s
 
 
+def _get_member_type_label(page: Page) -> str:
+    """Return the label of the currently selected member type, or '' if not set/absent."""
+    sel = page.locator('select[name="household[member_type_id]"]')
+    if sel.count() == 0:
+        return ""
+    text = sel.evaluate("el => el.options[el.selectedIndex]?.text || ''").strip()
+    return "" if text == "[None]" else text
+
+
+def _set_member_type(page: Page, label: str = "Member"):
+    """Select the named member type if the field is present."""
+    sel = page.locator('select[name="household[member_type_id]"]')
+    if sel.count() > 0:
+        sel.select_option(label=label)
+
+
 def create_household(page: Page, base_url: str, household: dict, dry_run: bool) -> bool:
     name = household["household_name"]
     unit = _household_unit_str(household)
@@ -211,6 +227,7 @@ def create_household(page: Page, base_url: str, household: dict, dry_run: bool) 
         page.fill('input[name="household[name]"]', name)
         if unit:
             page.fill('input[name="household[unit_num_and_suffix]"]', unit)
+        _set_member_type(page)
         page.click('button[type="submit"], input[type="submit"]')
         page.wait_for_load_state("networkidle")
 
@@ -238,17 +255,26 @@ def update_household(page: Page, edit_url: str, household: dict, dry_run: bool) 
     try:
         page.goto(edit_url, wait_until="networkidle")
         current_unit = page.locator('input[name="household[unit_num_and_suffix]"]').input_value().strip()
+        current_member_type = _get_member_type_label(page)
 
-        if current_unit == desired_unit:
+        changes = []
+        if current_unit != desired_unit:
+            changes.append(f"unit: {current_unit!r} → {desired_unit!r}")
+        if current_member_type != "Member":
+            changes.append(f"member_type: {current_member_type!r} → 'Member'")
+
+        if not changes:
             log("INFO", "household", f"Up to date, skipping: {name}")
             return "skipped"
 
+        change_desc = ", ".join(changes)
+
         if dry_run:
-            log("DRY-RUN", "update_household",
-                f"{name}: unit {current_unit!r} → {desired_unit!r}")
+            log("DRY-RUN", "update_household", f"{name}: {change_desc}")
             return "skipped"
 
         page.fill('input[name="household[unit_num_and_suffix]"]', desired_unit)
+        _set_member_type(page)
         page.click('button[type="submit"], input[type="submit"]')
         page.wait_for_load_state("networkidle")
 
@@ -258,7 +284,7 @@ def update_household(page: Page, edit_url: str, household: dict, dry_run: bool) 
             log("ERROR", "update_household", name, err[:200])
             return "failed"
 
-        log("INFO", "update_household", f"Updated: {name} unit {current_unit!r} → {desired_unit!r}")
+        log("INFO", "update_household", f"Updated: {name} — {change_desc}")
         return "updated"
 
     except Exception as e:
