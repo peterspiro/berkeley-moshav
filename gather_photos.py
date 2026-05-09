@@ -19,7 +19,6 @@ import datetime
 import os
 import re
 import sys
-import tempfile
 import time
 import urllib.parse
 import urllib.request
@@ -347,68 +346,71 @@ def has_custom_photo(page: Page, profile_url: str) -> bool:
 
 
 def upload_photo(
-    page: Page, edit_url: str, img_url: str, member_name: str, dry_run: bool
+    page: Page, base_url: str, edit_url: str, img_url: str, member_name: str, dry_run: bool
 ) -> bool:
     if dry_run:
         log("DRY-RUN", "upload_photo", f"{member_name}: {img_url}")
         return True
 
-    tmp_path = None
     try:
+        # Download the community website photo into memory.
         req = urllib.request.Request(img_url, headers={"User-Agent": "Mozilla/5.0"})
         with urllib.request.urlopen(req, timeout=30) as resp:
-            content_type = resp.headers.get("Content-Type", "image/jpeg")
+            content_type = resp.headers.get("Content-Type", "image/jpeg").split(";")[0].strip()
             img_data = resp.read()
 
-        ext = ".jpg"
-        if "png" in content_type:
-            ext = ".png"
-        elif "gif" in content_type:
-            ext = ".gif"
-        elif "webp" in content_type:
-            ext = ".webp"
+        ext = {
+            "image/png": ".png", "image/gif": ".gif", "image/webp": ".webp"
+        }.get(content_type, ".jpg")
 
-        with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as f:
-            f.write(img_data)
-            tmp_path = f.name
-
+        # Navigate to the edit page to establish session context and read the CSRF token.
         page.goto(edit_url, wait_until="networkidle")
+        csrf = page.locator('meta[name="csrf-token"]').get_attribute("content") or ""
 
-        # Dropzone.js initializes after page load and inserts a hidden
-        # <input class="dz-hidden-input"> into the dropzone form.
-        # Wait for it so we know Dropzone is ready to receive a file.
-        try:
-            page.wait_for_selector(".dz-hidden-input", state="attached", timeout=5000)
-        except Exception:
-            log("WARN", "upload_photo", member_name, "Dropzone not initialized on edit page")
+        # POST the file directly to /uploads using the browser's authenticated session.
+        # This replicates what Dropzone.js does server-side without relying on JS
+        # event dispatch (which proved unreliable with set_input_files).
+        response = page.context.request.post(
+            f"{base_url}/uploads",
+            headers={"X-CSRF-Token": csrf},
+            multipart={
+                "class_name": "User",
+                "attrib": "photo",
+                "file": {
+                    "name": f"photo{ext}",
+                    "mimeType": content_type,
+                    "buffer": img_data,
+                },
+            },
+        )
+
+        if not response.ok:
+            log("ERROR", "upload_photo", member_name,
+                f"/uploads returned {response.status}: {response.text()[:200]}")
             return False
 
-        file_input = page.locator(".dz-hidden-input").first
-        if file_input.count() == 0:
-            log("WARN", "upload_photo", member_name, "Dropzone file input not found")
-            return False
+        blob_id = response.json()["blob_id"]
+        log("DEBUG", "upload_photo", f"{member_name}: blob uploaded, signed_id obtained")
 
-        # set_input_files fires the change event → Dropzone picks up the file,
-        # shows a preview, and POSTs it to /uploads via XHR.
-        # On success the JS sets photo_new_signed_id in the main form.
-        file_input.set_input_files(tmp_path)
-        page.wait_for_load_state("networkidle")
+        # Inject the signed_id into the hidden field — the same thing Dropzone's
+        # fileUploaded callback does via setSignedId().
+        page.evaluate(
+            "(id) => { const el = document.querySelector('[id$=_photo_new_signed_id]');"
+            " if (el) el.value = id; }",
+            blob_id,
+        )
 
         # Click the main form's Save (not the Dropzone form's submit).
-        # The main form is any form without the "dropzone" class; it holds
-        # the photo_new_signed_id hidden field and the user fields.
         main_save = page.locator(
             "form:not(.dropzone) button[type='submit'], "
             "form:not(.dropzone) input[type='submit']"
         ).first
         if main_save.count() == 0:
-            log("WARN", "upload_photo", member_name,
-                "Main form save button not found after Dropzone upload")
+            log("WARN", "upload_photo", member_name, "Main form save button not found")
             return False
 
         main_save.click()
         page.wait_for_load_state("networkidle")
-        log("DEBUG", "upload_photo", f"{member_name}: post-submit URL: {page.url}")
 
         err_el = page.locator(".error, #error_explanation, .alert-danger")
         if err_el.count() > 0:
@@ -417,12 +419,12 @@ def upload_photo(
             log("ERROR", "upload_photo", member_name, err[:200])
             return False
 
-        # Verify the photo actually saved by re-checking the profile page.
+        # Verify the photo actually saved.
         profile_url = re.sub(r"/edit$", "", edit_url)
         if not has_custom_photo(page, profile_url):
             screenshot(page, f"photo_verify_{member_name[:20].replace(' ', '_')}")
             log("ERROR", "upload_photo", member_name,
-                "Form submitted without error but photo not visible on profile")
+                "Form submitted but photo not visible on profile")
             return False
 
         log("INFO", "upload_photo", f"Uploaded photo for {member_name}")
@@ -432,12 +434,6 @@ def upload_photo(
         screenshot(page, f"photo_exc_{member_name[:20].replace(' ', '_')}")
         log("ERROR", "upload_photo", member_name, str(e))
         return False
-    finally:
-        if tmp_path:
-            try:
-                os.unlink(tmp_path)
-            except Exception:
-                pass
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -511,7 +507,7 @@ def main(
                     stats["skipped"] += 1
                     continue
 
-                ok = upload_photo(page, edit_url, img_url, full_name, dry_run)
+                ok = upload_photo(page, base_url, edit_url, img_url, full_name, dry_run)
                 stats["uploaded" if ok else "failed"] += 1
 
         browser.close()
