@@ -218,34 +218,58 @@ def get_first_names_from_page(url: str) -> list[str]:
 
 # ── Spreadsheet member lookup ─────────────────────────────────────────────────
 
+# Each tuple is a group of interchangeable first-name forms.
+_NAME_ALIAS_GROUPS: list[tuple[str, ...]] = [
+    ("ann", "annie"),
+]
+
+def _name_aliases(name: str) -> frozenset[str]:
+    """Return the set of lowercase aliases for a first name (always includes itself)."""
+    n = name.lower()
+    for group in _NAME_ALIAS_GROUPS:
+        if n in group:
+            return frozenset(group)
+    return frozenset({n})
+
+
+def _names_match(a: str, b: str) -> bool:
+    """Return True if two first names are equal or known aliases of each other."""
+    return bool(_name_aliases(a) & _name_aliases(b))
+
+
 def find_members_for_names(households: list[dict], first_names: list[str]) -> list[dict]:
     """Return members matching first_names.
 
     With one name, returns the unique member across all households with that first name.
     With two or more names, finds the household containing all of them and returns
     only the members whose first name appears in the list.
+    Name matching is alias-aware (e.g. Ann matches Annie).
     """
-    names_lower = {n.lower() for n in first_names}
-
     if len(first_names) == 1:
-        fname = first_names[0].lower()
+        fname = first_names[0]
         matches = [
             m for hh in households for m in hh["members"]
-            if m["first_name"].lower() == fname
+            if _names_match(m["first_name"], fname)
         ]
         if len(matches) == 1:
             return matches
         if not matches:
-            log("WARN", "match", f"No member found with first name {first_names[0]!r}")
+            log("WARN", "match", f"No member found with first name {fname!r}")
         else:
             full_names = [f"{m['first_name']} {m['last_name']}" for m in matches]
-            log("WARN", "match", f"Ambiguous first name {first_names[0]!r}: {full_names}")
+            log("WARN", "match", f"Ambiguous first name {fname!r}: {full_names}")
         return []
 
     for hh in households:
-        member_firsts = {m["first_name"].lower() for m in hh["members"]}
-        if names_lower.issubset(member_firsts):
-            return [m for m in hh["members"] if m["first_name"].lower() in names_lower]
+        # Check that every requested name matches some member in the household
+        if all(
+            any(_names_match(m["first_name"], req) for m in hh["members"])
+            for req in first_names
+        ):
+            return [
+                m for m in hh["members"]
+                if any(_names_match(m["first_name"], req) for req in first_names)
+            ]
 
     log("WARN", "match", f"No household found containing all names: {first_names}")
     return []

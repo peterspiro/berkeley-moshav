@@ -168,6 +168,8 @@ HOUSEHOLDS = [
     _make_household([("Alice", "Brown", "alice@example.com"),
                      ("Bob", "Brown", "bob@example.com"),
                      ("Charlie", "Brown", "charlie@example.com")]),
+    _make_household([("Ann", "Taylor", "ann@example.com"),
+                     ("Dave", "Taylor", "dave@example.com")]),
 ]
 
 
@@ -216,3 +218,19 @@ class TestFindMembersForNames:
     def test_case_insensitive(self):
         members = find_members_for_names(HOUSEHOLDS, ["hilary", "noah"])
         assert len(members) == 2
+
+    def test_annie_matches_ann(self):
+        members = find_members_for_names(HOUSEHOLDS, ["Annie"])
+        assert len(members) == 1
+        assert members[0]["first_name"] == "Ann"
+
+    def test_ann_matches_ann(self):
+        members = find_members_for_names(HOUSEHOLDS, ["Ann"])
+        assert len(members) == 1
+        assert members[0]["first_name"] == "Ann"
+
+    def test_alias_in_multi_name_household(self):
+        members = find_members_for_names(HOUSEHOLDS, ["Annie", "Dave"])
+        assert len(members) == 2
+        firsts = {m["first_name"] for m in members}
+        assert firsts == {"Ann", "Dave"}
