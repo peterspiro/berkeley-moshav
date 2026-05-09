@@ -379,11 +379,11 @@ def upload_photo(
             log("WARN", "upload_photo", member_name, "No file input found on edit page")
             return False
 
+        # Strip data-direct-upload-url so Active Storage JS doesn't intercept the
+        # submit. Without it the file travels as a plain multipart field, which
+        # Rails Active Storage also accepts.
+        file_input.evaluate("el => el.removeAttribute('data-direct-upload-url')")
         file_input.set_input_files(tmp_path)
-        # Wait for any Active Storage direct-upload XHR triggered by the file
-        # selection to complete before submitting the form.
-        page.wait_for_load_state("networkidle")
-
         page.click('button[type="submit"], input[type="submit"]')
         page.wait_for_load_state("networkidle")
 
