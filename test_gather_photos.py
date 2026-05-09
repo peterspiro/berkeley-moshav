@@ -52,7 +52,7 @@ class TestGetFirstNamesFromPage:
         p.feed(html)
         if not p.h2_text:
             return []
-        parts = re.split(r"\s*&\s*|\s+AND\s+", p.h2_text, flags=re.IGNORECASE)
+        parts = re.split(r"\s*[,&]\s*|\s+AND\s+", p.h2_text, flags=re.IGNORECASE)
         names = []
         for part in parts:
             words = part.strip().split()
@@ -70,6 +70,11 @@ class TestGetFirstNamesFromPage:
 
     def test_two_names_and_word(self):
         assert self._names("<h2>JOHN AND JANE</h2>") == ["John", "Jane"]
+
+    def test_comma_and_ampersand(self):
+        assert self._names("<h2>JOSH, YONA, AVIVA &amp; NOAH</h2>") == [
+            "Josh", "Yona", "Aviva", "Noah"
+        ]
 
     def test_name_with_last_name(self):
         # "HILARY SMITH & NOAH JONES" — only first names extracted

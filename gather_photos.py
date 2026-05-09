@@ -204,7 +204,7 @@ def get_first_names_from_page(url: str) -> list[str]:
     parser.feed(html)
     if not parser.h2_text:
         return []
-    parts = re.split(r"\s*&\s*|\s+AND\s+", parser.h2_text, flags=re.IGNORECASE)
+    parts = re.split(r"\s*[,&]\s*|\s+AND\s+", parser.h2_text, flags=re.IGNORECASE)
     names = []
     for part in parts:
         words = part.strip().split()
