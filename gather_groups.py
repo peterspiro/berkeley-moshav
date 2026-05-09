@@ -252,7 +252,7 @@ def group_names_match(a: str, b: str) -> bool:
 def _fold_accents(s: str) -> str:
     """Strip diacritical marks so accented characters match their base letter.
 
-    E.g. 'Codruța' -> 'Codruta', 'Gîrlea' -> 'Girlea'.
+    E.g. 'Zoë' -> 'Zoe', 'Müller' -> 'Muller'.
     """
     return "".join(
         c for c in unicodedata.normalize("NFD", s)

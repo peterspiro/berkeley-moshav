@@ -67,7 +67,7 @@ def normalize_name(name: str) -> str:
 def strip_pronunciation(name: str) -> str:
     """Remove trailing parenthetical annotations from a First Name cell.
 
-    E.g. 'Ayala (a-ya-LA)' -> 'Ayala'
+    E.g. 'Jane (jay-N)' -> 'Jane'
     """
     return re.sub(r"\s*\([^)]*\)\s*$", "", name).strip()
 
@@ -110,9 +110,9 @@ def _parse_others_entry(entry: str) -> tuple[str, Optional[str]]:
 
     Returns (name, qualifier) where qualifier is the text inside the trailing
     parentheses, or None if there are no parentheses.
-    E.g. 'Luna Liliana (2)' -> ('Luna Liliana', '2')
-         'Sandra Rosenblum'  -> ('Sandra Rosenblum', None)
-         'Justin Radick (uncle)' -> ('Justin Radick', 'uncle')
+    E.g. 'Alex Smith (2)' -> ('Alex Smith', '2')
+         'Pat Jones'        -> ('Pat Jones', None)
+         'Robin Lee (uncle)' -> ('Robin Lee', 'uncle')
     """
     m = re.match(r"^(.+?)\s*\(([^)]+)\)\s*$", entry.strip())
     if m:
@@ -207,7 +207,7 @@ def preprocess_text(tsv_text: str) -> list[dict]:
     if not rows:
         return []
 
-    # Strip pronunciation guides from First Name cells, e.g. "Ayala (a-ya-LA)"
+    # Strip pronunciation guides from First Name cells, e.g. "Jane (jay-N)"
     for row in rows:
         if "First Name" in row:
             row["First Name"] = strip_pronunciation(row["First Name"])
