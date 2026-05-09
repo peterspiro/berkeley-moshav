@@ -3,12 +3,9 @@
 Bulk-imports community members into a Gather instance via browser automation.
 
 Usage:
-    python gather_import.py \
-        -t members.tsv \
-        -u http://foo.gatherdev.org:3000 \
-        -e admin@example.com \
-        -p adminpassword \
-        [-n]
+    python gather_import.py -e admin@example.com -p adminpassword
+    python gather_import.py -s members.tsv -u http://foo.gatherdev.org:3000 \
+        -e admin@example.com -p adminpassword [-n]
 """
 
 import argparse
@@ -17,15 +14,34 @@ import datetime
 import os
 import sys
 import time
+import urllib.request
 from pathlib import Path
 
 from playwright.sync_api import Page, sync_playwright
 
-from preprocess import preprocess
+from preprocess import preprocess_text
 
+
+DEFAULT_SHEET_URL = (
+    "https://docs.google.com/spreadsheets/d/"
+    "1h0f4Dq242kpuqpN7OiVoCnwEm6FDlMHaRlSS4HWiSNY/export?format=tsv"
+)
 
 LOG_FILE = "import_log.csv"
 SCREENSHOT_DIR = Path("import_screenshots")
+
+
+def fetch_sheet(url: str) -> str:
+    """Fetch TSV content from a URL or local file path."""
+    if url.startswith("file://"):
+        with open(url[7:], encoding="utf-8-sig") as f:
+            return f.read()
+    if not url.startswith("http://") and not url.startswith("https://"):
+        with open(url, encoding="utf-8-sig") as f:
+            return f.read()
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        return resp.read().decode("utf-8-sig")
 
 
 # ── Logging ───────────────────────────────────────────────────────────────────
@@ -444,13 +460,14 @@ def update_user(page: Page, edit_url: str, member: dict, dry_run: bool) -> str:
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
-def main(tsv_path: str, base_url: str, email: str, password: str, dry_run: bool = False):
+def main(sheet_url: str, base_url: str, email: str, password: str, dry_run: bool = False):
     base_url = base_url.rstrip("/")
     init_log()
 
-    log("INFO", "start", f"tsv={tsv_path} base_url={base_url} dry_run={dry_run}")
+    log("INFO", "start", f"sheet_url={sheet_url} base_url={base_url} dry_run={dry_run}")
 
-    households = preprocess(tsv_path)
+    tsv_text = fetch_sheet(sheet_url)
+    households = preprocess_text(tsv_text)
     log("INFO", "preprocess", f"{len(households)} households parsed")
 
     with sync_playwright() as pw:
@@ -512,7 +529,8 @@ def main(tsv_path: str, base_url: str, email: str, password: str, dry_run: bool 
 
 def cli():
     parser = argparse.ArgumentParser(description="Bulk-import members into Gather via browser automation")
-    parser.add_argument("-t", "--tsv", required=True, help="Path to input TSV file")
+    parser.add_argument("-s", "--sheet-url", default=DEFAULT_SHEET_URL,
+                        help="Google Sheets TSV export URL or local file path")
     parser.add_argument("-u", "--base-url", default="https://berkeley-moshav.gather.coop",
                         help="Gather base URL")
     parser.add_argument("-e", "--email", required=True, help="Admin login email")
@@ -520,7 +538,7 @@ def cli():
     parser.add_argument("-n", "--dry-run", action="store_true",
                         help="Log what would happen without making any changes")
     args = parser.parse_args()
-    main(args.tsv, args.base_url, args.email, args.password, args.dry_run)
+    main(args.sheet_url, args.base_url, args.email, args.password, args.dry_run)
 
 
 if __name__ == "__main__":

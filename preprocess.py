@@ -9,6 +9,7 @@ Usage:
 
 import argparse
 import csv
+import io
 import json
 import re
 import sys
@@ -189,13 +190,13 @@ def resolve_adult_name(
 
 # ── Main parsing logic ────────────────────────────────────────────────────────
 
-def preprocess(tsv_path: str) -> list[dict]:
+def preprocess_text(tsv_text: str) -> list[dict]:
+    """Parse TSV text (already loaded as a string) into household dicts."""
     rows = []
-    with open(tsv_path, newline="", encoding="utf-8-sig") as f:
-        reader = csv.DictReader(f, delimiter="\t")
-        for row in reader:
-            row = {k.strip(): v.strip() for k, v in row.items() if k}
-            rows.append(row)
+    reader = csv.DictReader(io.StringIO(tsv_text), delimiter="\t")
+    for row in reader:
+        row = {k.strip(): v.strip() for k, v in row.items() if k}
+        rows.append(row)
 
     if not rows:
         return []
@@ -326,6 +327,12 @@ def preprocess(tsv_path: str) -> list[dict]:
             print(f"  {w}", file=sys.stderr)
 
     return households
+
+
+def preprocess(tsv_path: str) -> list[dict]:
+    """Read a TSV file from disk and return household dicts."""
+    with open(tsv_path, newline="", encoding="utf-8-sig") as f:
+        return preprocess_text(f.read())
 
 
 def main():
