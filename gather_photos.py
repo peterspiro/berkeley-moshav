@@ -406,10 +406,12 @@ def upload_photo(
         # Rails Active Storage also accepts.
         file_input.evaluate("el => el.removeAttribute('data-direct-upload-url')")
         file_input.set_input_files(tmp_path)
-        page.click('button[type="submit"], input[type="submit"]')
+        # The photo widget is JS-driven: selecting a file triggers an XHR upload
+        # to /uploads. Don't click any submit button — that submits an unrelated
+        # form and sends no file (the input is unnamed). Just wait for the XHR.
         page.wait_for_load_state("networkidle")
-        screenshot(page, f"photo_postsubmit_{member_name[:20].replace(' ', '_')}")
-        log("DEBUG", "upload_photo", f"{member_name}: post-submit URL: {page.url}")
+        screenshot(page, f"photo_postupload_{member_name[:20].replace(' ', '_')}")
+        log("DEBUG", "upload_photo", f"{member_name}: URL after upload: {page.url}")
 
         err_el = page.locator(".error, #error_explanation, .alert-danger")
         if err_el.count() > 0:
