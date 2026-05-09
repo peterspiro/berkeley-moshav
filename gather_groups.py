@@ -34,6 +34,8 @@ DEFAULT_SHEET_URL = (
 )
 
 MAX_DESC = 255
+FOLDER_URL = "https://drive.google.com/drive/u/0/folders/0AFqC2xo9aTgPUk9PVA"
+FOLDER_LINK = f'<a href="{FOLDER_URL}">Folder</a>'
 WIKI_TITLE = "Circle Hierarchy"
 WIKI_SLUG = "circle-hierarchy"
 LOG_FILE = Path(__file__).parent / "groups_log.csv"
@@ -445,9 +447,8 @@ def _post_len(s: str) -> int:
 def build_description(circle: Circle, remaining_consultant_text: str) -> str:
     """Build the Gather group description, capped at MAX_DESC chars.
 
-    Appends Consultants, Meetings, and Parent lines in order, truncating
-    the description column content to make room.  Lines that still don't fit
-    with an empty description are omitted entirely.
+    Always ends with a Folder link line.  Appends Consultants, Meetings,
+    and Parent lines before it, truncating the base description to fit.
 
     All length checks use POST length (_post_len) because the browser
     normalises bare \\n to \\r\\n before submitting, adding one byte per
@@ -461,22 +462,27 @@ def build_description(circle: Circle, remaining_consultant_text: str) -> str:
     if circle.parent_name:
         extra_lines.append(f"\nParent: {circle.parent_name}")
 
-    # Greedily include extra lines that fit even with an empty base description
+    # Reserve budget for the mandatory folder link (with its leading newline).
+    # The newline is omitted when the body ends up empty, but using the larger
+    # post_len here keeps the budget calculation conservative and correct.
+    folder_suffix = f"\n{FOLDER_LINK}"
+    folder_budget = _post_len(folder_suffix)
+    budget = MAX_DESC - folder_budget
+
+    # Greedily include optional extra lines within the remaining budget
     extra = ""
     for line in extra_lines:
-        if _post_len(extra) + _post_len(line) <= MAX_DESC:
+        if _post_len(extra) + _post_len(line) <= budget:
             extra += line
 
-    # Trim base description so that POST length of (desc + extra) <= MAX_DESC
-    budget = MAX_DESC - _post_len(extra)
+    # Trim base description so everything fits
+    desc_budget = budget - _post_len(extra)
     desc = circle.description
-    while _post_len(desc) > budget:
+    while _post_len(desc) > desc_budget:
         desc = desc[:-1]
-    result = desc + extra
-    # Final safety: trim trailing chars until POST length fits
-    while _post_len(result) > MAX_DESC:
-        result = result[:-1]
-    return result
+
+    body = desc + extra
+    return body + (f"\n{FOLDER_LINK}" if body else FOLDER_LINK)
 
 
 # ── Wiki markdown ─────────────────────────────────────────────────────────────

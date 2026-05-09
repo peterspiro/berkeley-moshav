@@ -28,6 +28,7 @@ from gather_groups import (
     parse_sheet,
     resolve_group_members,
     to_csv_export_url,
+    FOLDER_LINK,
 )
 
 
@@ -487,75 +488,80 @@ class TestParseSheet:
 # ── build_description ─────────────────────────────────────────────────────────
 
 class TestBuildDescription:
-    def test_description_only(self):
-        c = make_circle(description="Some text")
-        assert build_description(c, "") == "Some text"
+    def _post_len(self, s: str) -> int:
+        return len(s) + s.count("\n")
 
-    def test_appends_meetings(self):
+    def test_always_ends_with_folder_link(self):
+        c = make_circle(description="Some text")
+        result = build_description(c, "")
+        assert result.endswith(FOLDER_LINK)
+
+    def test_folder_link_only_when_no_other_content(self):
+        c = make_circle(description="")
+        result = build_description(c, "")
+        assert result == FOLDER_LINK
+        assert not result.startswith("\n")
+
+    def test_folder_link_preceded_by_newline(self):
+        c = make_circle(description="Some text")
+        result = build_description(c, "")
+        assert f"\n{FOLDER_LINK}" in result
+
+    def test_appends_meetings_before_folder(self):
         c = make_circle(description="Desc", meetings="Tuesdays")
         result = build_description(c, "")
-        assert result == "Desc\nMeetings: Tuesdays"
+        assert "Meetings: Tuesdays" in result
+        assert result.index("Meetings:") < result.index(FOLDER_LINK)
 
-    def test_appends_parent(self):
+    def test_appends_parent_before_folder(self):
         c = make_circle(description="Desc", parent_name="Alpha Circle")
         result = build_description(c, "")
         assert "Parent: Alpha Circle" in result
+        assert result.endswith(FOLDER_LINK)
 
-    def test_appends_consultants(self):
+    def test_appends_consultants_before_folder(self):
         c = make_circle(description="Desc")
         result = build_description(c, "Morgan Vale")
         assert "Consultants: Morgan Vale" in result
+        assert result.endswith(FOLDER_LINK)
 
-    def test_order_consultants_meetings_parent(self):
+    def test_order_consultants_meetings_parent_folder(self):
         c = make_circle(description="D", meetings="Mon", parent_name="Alpha")
         result = build_description(c, "Morgan Vale")
         ci = result.index("Consultants:")
         mi = result.index("Meetings:")
         pi = result.index("Parent:")
-        assert ci < mi < pi
+        fi = result.index(FOLDER_LINK)
+        assert ci < mi < pi < fi
 
     def test_truncates_description_to_fit(self):
         c = make_circle(description="A" * 250, meetings="Tuesdays")
         result = build_description(c, "")
-        assert len(result) <= 255
+        assert self._post_len(result) <= 255
         assert "Meetings: Tuesdays" in result
+        assert result.endswith(FOLDER_LINK)
 
     def test_skips_line_that_exceeds_limit_even_empty_desc(self):
         c = make_circle(description="", meetings="T" * 300)
         result = build_description(c, "")
-        # "\nMeetings: " + 300 chars > 255, so line is omitted
         assert "Meetings:" not in result
-
-    def test_empty_description_no_extras(self):
-        c = make_circle(description="")
-        assert build_description(c, "") == ""
-
-    def test_max_255_chars(self):
-        c = make_circle(
-            description="D" * 200,
-            meetings="M" * 50,
-            parent_name="Alpha",
-        )
-        result = build_description(c, "C" * 50)
-        assert len(result) <= 255
+        assert result.endswith(FOLDER_LINK)
 
     def test_post_length_never_exceeds_255(self):
-        # Description with many newlines: browser \n->\r\n adds extra chars
         c = make_circle(
             description="D" * 100,
             meetings="M" * 80,
             parent_name="P" * 50,
         )
         result = build_description(c, "C" * 40)
-        post_len = len(result) + result.count("\n")
-        assert post_len <= 255
+        assert self._post_len(result) <= 255
+        assert result.endswith(FOLDER_LINK)
 
     def test_post_length_with_newlines_in_description(self):
-        # Base description itself contains newlines
-        c = make_circle(description="\n".join(["line"] * 60))  # ~299 chars with newlines
+        c = make_circle(description="\n".join(["line"] * 60))
         result = build_description(c, "")
-        post_len = len(result) + result.count("\n")
-        assert post_len <= 255
+        assert self._post_len(result) <= 255
+        assert result.endswith(FOLDER_LINK)
 
 
 # ── match_member ──────────────────────────────────────────────────────────────
