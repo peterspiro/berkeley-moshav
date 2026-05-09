@@ -58,6 +58,16 @@ class UnionFind:
         return list(groups.values())
 
 
+# ── Sheet helpers ─────────────────────────────────────────────────────────────
+
+def find_header_row_index(rows: list[list[str]]) -> int:
+    """Return index of the first row containing 'First Name' as a cell value."""
+    for i, row in enumerate(rows):
+        if any(cell.strip() == "First Name" for cell in row):
+            return i
+    raise ValueError("Header row not found: no cell with exact text 'First Name'")
+
+
 # ── Name helpers ──────────────────────────────────────────────────────────────
 
 def normalize_name(name: str) -> str:
@@ -192,10 +202,12 @@ def resolve_adult_name(
 
 def preprocess_text(tsv_text: str) -> list[dict]:
     """Parse TSV text (already loaded as a string) into household dicts."""
+    all_rows = list(csv.reader(io.StringIO(tsv_text), delimiter="\t"))
+    header_idx = find_header_row_index(all_rows)
+    fieldnames = [cell.strip() for cell in all_rows[header_idx]]
     rows = []
-    reader = csv.DictReader(io.StringIO(tsv_text), delimiter="\t")
-    for row in reader:
-        row = {k.strip(): v.strip() for k, v in row.items() if k}
+    for raw in all_rows[header_idx + 1:]:
+        row = {k: v.strip() for k, v in zip(fieldnames, raw) if k}
         rows.append(row)
 
     if not rows:

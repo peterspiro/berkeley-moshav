@@ -493,6 +493,22 @@ class TestPreprocess(unittest.TestCase):
         self.assertEqual(member["phone"], "")
         self.assertEqual(member["pronouns"], "+44 20 7946 0958")
 
+    def test_preamble_rows_skipped(self):
+        tsv = (
+            "Community Roster\t\t\t\n"
+            "Exported 2024-01-01\t\t\t\n"
+            + _make_tsv([{
+                "First Name": "Alex", "Last Name": "Green",
+                "Email Address": "alex@example.com", "Phone": "",
+                "Unit #": "101", "Others in the Household": "",
+                "Status": "Member",
+            }])
+        )
+        from preprocess import preprocess_text
+        result = preprocess_text(tsv)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["members"][0]["first_name"], "Alex")
+
     def test_transitive_household_grouping(self):
         """A→B, B→C should put all three in one household."""
         path = self._tsv_file([
