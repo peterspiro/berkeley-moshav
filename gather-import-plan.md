@@ -161,7 +161,7 @@ Key facts from `app/models/household.rb` and `app/models/user.rb`:
 ### 3.3 Script Structure
 
 ```
-gather_import.py
+gather_directory.py
 ├── login(page, base_url, email, password)
 ├── get_csrf_token(page)
 ├── find_existing_household(page, name) -> id or None
@@ -227,7 +227,7 @@ The exact HTML field names need to be confirmed against the running instance (Ph
 ### 3.7 CLI Interface
 
 ```
-python gather_import.py \
+python gather_directory.py \
     --tsv members.tsv \
     --base-url https://gatherdev.org:3000 \
     --email admin@example.com \
@@ -261,7 +261,7 @@ Run against the local Gather dev server with the sample TSV:
 | File                  | Purpose                                      |
 |-----------------------|----------------------------------------------|
 | `preprocess.py`       | TSV parsing and household grouping logic      |
-| `gather_import.py`    | Playwright browser automation script          |
+| `gather_directory.py`    | Playwright browser automation script          |
 | `test_preprocess.py`  | Unit tests for the preprocessing module       |
 | `requirements.txt`    | `playwright`, `pytest`                        |
 | `docker-compose.yml`  | (Optional) Containerized Gather test server   |
