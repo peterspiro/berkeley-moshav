@@ -4,4 +4,5 @@ import_log.csv
 groups_log.csv
 photos_log.csv
 import_screenshots/
+photo_screenshots/
 *.tsv
