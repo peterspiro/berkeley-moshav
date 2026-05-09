@@ -528,7 +528,8 @@ def main(sheet_url: str, base_url: str, email: str, password: str, dry_run: bool
 
 
 def cli():
-    parser = argparse.ArgumentParser(description="Bulk-import members into Gather via browser automation")
+    parser = argparse.ArgumentParser(description="Bulk-import members into Gather via browser automation",
+                                     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("-s", "--sheet-url", default=DEFAULT_SHEET_URL,
                         help="Google Sheets TSV export URL or local file path")
     parser.add_argument("-u", "--base-url", default="https://berkeley-moshav.gather.coop",
