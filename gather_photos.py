@@ -335,16 +335,15 @@ def find_user_edit_url(page: Page, base_url: str, member: dict) -> Optional[str]
 # ── Photo operations ──────────────────────────────────────────────────────────
 
 def has_custom_photo(page: Page, profile_url: str) -> bool:
-    """Return True if the user has a custom (non-Gravatar) photo on their profile."""
+    """Return True if the user has an uploaded photo (not the missing-photo placeholder)."""
     page.goto(profile_url, wait_until="networkidle")
-    avatar = page.locator(
-        "img.avatar, img[class*='avatar'], .avatar img, "
-        ".profile-photo img, figure.avatar img"
-    ).first
-    if avatar.count() == 0:
+    # Gather renders the photo as <img class="photo">; falls back to
+    # missing/users/<format>.png when no photo is attached.
+    photo = page.locator("img.photo").first
+    if photo.count() == 0:
         return False
-    src = avatar.get_attribute("src") or ""
-    return bool(src) and "gravatar.com" not in src
+    src = photo.get_attribute("src") or ""
+    return bool(src) and "missing" not in src
 
 
 def upload_photo(
@@ -374,44 +373,42 @@ def upload_photo(
             tmp_path = f.name
 
         page.goto(edit_url, wait_until="networkidle")
-        screenshot(page, f"photo_edit_{member_name[:20].replace(' ', '_')}")
 
-        # Log every file input on the page so we can see what we're working with.
-        all_inputs = page.locator('input[type="file"]').all()
-        input_names = [fi.get_attribute("name") or "(unnamed)" for fi in all_inputs]
-        log("DEBUG", "upload_photo",
-            f"{member_name}: {len(all_inputs)} file input(s): {input_names}")
-
-        # Log the form action so we know which endpoint will receive the POST.
-        form = page.locator("form").first
-        if form.count() > 0:
-            log("DEBUG", "upload_photo",
-                f"{member_name}: form action={form.get_attribute('action')!r}")
-
-        # Prefer a file input explicitly named for photo or avatar; fall back to first.
-        file_input = page.locator(
-            'input[type="file"][name*="photo"], input[type="file"][name*="avatar"]'
-        ).first
-        if file_input.count() == 0:
-            file_input = page.locator('input[type="file"]').first
-        if file_input.count() == 0:
-            log("WARN", "upload_photo", member_name, "No file input found on edit page")
+        # Dropzone.js initializes after page load and inserts a hidden
+        # <input class="dz-hidden-input"> into the dropzone form.
+        # Wait for it so we know Dropzone is ready to receive a file.
+        try:
+            page.wait_for_selector(".dz-hidden-input", state="attached", timeout=5000)
+        except Exception:
+            log("WARN", "upload_photo", member_name, "Dropzone not initialized on edit page")
             return False
 
-        input_name = file_input.get_attribute("name") or "(unnamed)"
-        log("DEBUG", "upload_photo", f"{member_name}: using file input {input_name!r}")
+        file_input = page.locator(".dz-hidden-input").first
+        if file_input.count() == 0:
+            log("WARN", "upload_photo", member_name, "Dropzone file input not found")
+            return False
 
-        # Strip data-direct-upload-url so Active Storage JS doesn't intercept the
-        # submit. Without it the file travels as a plain multipart field, which
-        # Rails Active Storage also accepts.
-        file_input.evaluate("el => el.removeAttribute('data-direct-upload-url')")
+        # set_input_files fires the change event → Dropzone picks up the file,
+        # shows a preview, and POSTs it to /uploads via XHR.
+        # On success the JS sets photo_new_signed_id in the main form.
         file_input.set_input_files(tmp_path)
-        # The photo widget is JS-driven: selecting a file triggers an XHR upload
-        # to /uploads. Don't click any submit button — that submits an unrelated
-        # form and sends no file (the input is unnamed). Just wait for the XHR.
         page.wait_for_load_state("networkidle")
-        screenshot(page, f"photo_postupload_{member_name[:20].replace(' ', '_')}")
-        log("DEBUG", "upload_photo", f"{member_name}: URL after upload: {page.url}")
+
+        # Click the main form's Save (not the Dropzone form's submit).
+        # The main form is any form without the "dropzone" class; it holds
+        # the photo_new_signed_id hidden field and the user fields.
+        main_save = page.locator(
+            "form:not(.dropzone) button[type='submit'], "
+            "form:not(.dropzone) input[type='submit']"
+        ).first
+        if main_save.count() == 0:
+            log("WARN", "upload_photo", member_name,
+                "Main form save button not found after Dropzone upload")
+            return False
+
+        main_save.click()
+        page.wait_for_load_state("networkidle")
+        log("DEBUG", "upload_photo", f"{member_name}: post-submit URL: {page.url}")
 
         err_el = page.locator(".error, #error_explanation, .alert-danger")
         if err_el.count() > 0:
