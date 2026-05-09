@@ -374,10 +374,32 @@ def upload_photo(
             tmp_path = f.name
 
         page.goto(edit_url, wait_until="networkidle")
-        file_input = page.locator('input[type="file"]').first
+        screenshot(page, f"photo_edit_{member_name[:20].replace(' ', '_')}")
+
+        # Log every file input on the page so we can see what we're working with.
+        all_inputs = page.locator('input[type="file"]').all()
+        input_names = [fi.get_attribute("name") or "(unnamed)" for fi in all_inputs]
+        log("DEBUG", "upload_photo",
+            f"{member_name}: {len(all_inputs)} file input(s): {input_names}")
+
+        # Log the form action so we know which endpoint will receive the POST.
+        form = page.locator("form").first
+        if form.count() > 0:
+            log("DEBUG", "upload_photo",
+                f"{member_name}: form action={form.get_attribute('action')!r}")
+
+        # Prefer a file input explicitly named for photo or avatar; fall back to first.
+        file_input = page.locator(
+            'input[type="file"][name*="photo"], input[type="file"][name*="avatar"]'
+        ).first
+        if file_input.count() == 0:
+            file_input = page.locator('input[type="file"]').first
         if file_input.count() == 0:
             log("WARN", "upload_photo", member_name, "No file input found on edit page")
             return False
+
+        input_name = file_input.get_attribute("name") or "(unnamed)"
+        log("DEBUG", "upload_photo", f"{member_name}: using file input {input_name!r}")
 
         # Strip data-direct-upload-url so Active Storage JS doesn't intercept the
         # submit. Without it the file travels as a plain multipart field, which
@@ -386,6 +408,8 @@ def upload_photo(
         file_input.set_input_files(tmp_path)
         page.click('button[type="submit"], input[type="submit"]')
         page.wait_for_load_state("networkidle")
+        screenshot(page, f"photo_postsubmit_{member_name[:20].replace(' ', '_')}")
+        log("DEBUG", "upload_photo", f"{member_name}: post-submit URL: {page.url}")
 
         err_el = page.locator(".error, #error_explanation, .alert-danger")
         if err_el.count() > 0:
