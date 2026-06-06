@@ -803,18 +803,23 @@ def _group_needs_update(
     description: str,
     members: list[tuple[GatherUser, bool]],
     desired_name: str,
-) -> bool:
+) -> str | None:
+    """Return a human-readable reason string if the group needs updating, else None."""
     if not group_names_match(existing.name, desired_name):
-        return True
+        return f"name: {existing.name!r} → {desired_name!r}"
     if existing.kind != kind:
-        return True
+        return f"kind: {existing.kind!r} → {kind!r}"
     if existing.availability != availability:
-        return True
+        return f"availability: {existing.availability!r} → {availability!r}"
     if existing.description.strip() != description.strip():
-        return True
+        return "description changed"
     existing_set = {(m.user_id, m.is_manager) for m in existing.members}
     desired_set = {(u.user_id, mgr) for u, mgr in members}
-    return existing_set != desired_set
+    if existing_set != desired_set:
+        added = desired_set - existing_set
+        removed = existing_set - desired_set
+        return f"members changed (added={added}, removed={removed})"
+    return None
 
 
 # ── Gather: group operations ──────────────────────────────────────────────────
@@ -1005,10 +1010,12 @@ def create_or_update_group(
 
     if existing is not None:
         existing_detail = _fetch_group_detail(page, base_url, existing)
-        if not _group_needs_update(existing_detail, kind, availability, description, members, circle.name):
+        update_reason = _group_needs_update(existing_detail, kind, availability, description, members, circle.name)
+        if not update_reason:
             log("INFO", "group", f"Up to date, skipping: {circle.name}")
             return existing.group_id
 
+        log("DEBUG", "update_reason", f"{circle.name}: {update_reason}")
         if dry_run:
             log("DRY-RUN", "update_group", circle.name)
             return existing.group_id
