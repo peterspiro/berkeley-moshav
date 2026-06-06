@@ -19,6 +19,7 @@ from pathlib import Path
 
 from playwright.sync_api import Page, sync_playwright
 
+from credentials import load_credentials
 from preprocess import preprocess_text
 
 
@@ -534,12 +535,11 @@ def cli():
                         help="Google Sheets TSV export URL or local file path")
     parser.add_argument("-u", "--base-url", default="https://berkeley-moshav.gather.coop",
                         help="Gather base URL")
-    parser.add_argument("-e", "--email", required=True, help="Admin login email")
-    parser.add_argument("-p", "--password", required=True, help="Admin login password")
     parser.add_argument("-n", "--dry-run", action="store_true",
                         help="Log what would happen without making any changes")
     args = parser.parse_args()
-    main(args.sheet_url, args.base_url, args.email, args.password, args.dry_run)
+    email, password = load_credentials()
+    main(args.sheet_url, args.base_url, email, password, args.dry_run)
 
 
 if __name__ == "__main__":

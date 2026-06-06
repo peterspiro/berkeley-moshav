@@ -25,6 +25,8 @@ from typing import Optional
 
 from playwright.sync_api import Page, sync_playwright
 
+from credentials import load_credentials
+
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -1286,8 +1288,7 @@ def cli():
         "-u", "--base-url", default="https://berkeley-moshav.gather.coop",
         help="Gather base URL",
     )
-    parser.add_argument("-e", "--email", required=True, help="Admin login email")
-    parser.add_argument("-p", "--password", required=True, help="Admin login password")
+
     parser.add_argument(
         "-s", "--sheet-url", default=DEFAULT_SHEET_URL,
         help="Google Sheets URL (edit or export format)",
@@ -1297,7 +1298,8 @@ def cli():
         help="Log what would happen without making any changes",
     )
     args = parser.parse_args()
-    process(args.base_url, args.email, args.password, args.sheet_url, args.dry_run)
+    email, password = load_credentials()
+    process(args.base_url, email, password, args.sheet_url, args.dry_run)
 
 
 if __name__ == "__main__":

@@ -28,6 +28,7 @@ from typing import Optional
 
 from playwright.sync_api import Page, sync_playwright
 
+from credentials import load_credentials
 from preprocess import preprocess_text
 
 
@@ -533,16 +534,16 @@ def cli():
         "-c", "--community-url", default=COMMUNITY_PAGE_URL,
         help="Community website page with member photos",
     )
-    parser.add_argument("-e", "--email", required=True, help="Admin login email")
-    parser.add_argument("-p", "--password", required=True, help="Admin login password")
+
     parser.add_argument(
         "-n", "--dry-run", action="store_true",
         help="Log what would happen without making any changes",
     )
     args = parser.parse_args()
+    email, password = load_credentials()
     main(
         args.sheet_url, args.base_url, args.community_url,
-        args.email, args.password, args.dry_run,
+        email, password, args.dry_run,
     )
 
 
