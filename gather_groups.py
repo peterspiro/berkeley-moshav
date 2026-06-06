@@ -1262,12 +1262,12 @@ def _ensure_circle_wiki_page(
         return False
 
 
-def _build_wiki_index_content(circle_names: list[str], base_url: str) -> str:
+def _build_wiki_index_content(circle_names: list[str]) -> str:
     """Build the markdown content for the 'Circle Wiki Pages' index page."""
-    lines = [f"# {WIKI_INDEX_TITLE}", ""]
+    lines = []
     for name in sorted(circle_names, key=str.casefold):
         slug = _circle_wiki_slug(name)
-        lines.append(f"- [{name}]({base_url}/wiki/{slug})")
+        lines.append(f"- [{name}](/wiki/{slug})")
     return "\n".join(lines) + "\n"
 
 
@@ -1275,7 +1275,7 @@ def _ensure_wiki_index(
     page: Page, base_url: str, circle_names: list[str], dry_run: bool
 ) -> bool:
     """Create or update the 'Circle Wiki Pages' index wiki page."""
-    desired = _build_wiki_index_content(circle_names, base_url)
+    desired = _build_wiki_index_content(circle_names)
     try:
         page.goto(f"{base_url}/wiki/{WIKI_INDEX_SLUG}", wait_until="networkidle")
         page_title = page.title()
@@ -1382,6 +1382,8 @@ def process(
         log("INFO", "fetch_groups", f"{len(gather_groups)} groups found")
 
         group_urls: dict[str, str] = {}
+        # Maps circle.name → the actual Gather group name (may differ via suffix/alias rules).
+        gather_name_map: dict[str, str] = {}
         stats = {
             "created": 0, "updated": 0, "skipped": 0, "failed": 0, "errors": 0,
             "list_created": 0, "list_failed": 0,
@@ -1398,19 +1400,24 @@ def process(
                 stats["errors"] += 1
                 continue
 
-            wiki_url = (
-                f"{base_url}/wiki/{_circle_wiki_slug(circle.name)}"
-                if _group_kind(circle) != "committee" else ""
-            )
-            description = build_description(circle, remaining_consultants, wiki_url)
-            log("DEBUG", "description", f"{circle.name}: {len(description)} chars")
-
             try:
                 existing = find_matching_group(circle, gather_groups)
             except ValueError as e:
                 log("ERROR", "find_group", circle.name, str(e))
                 stats["errors"] += 1
                 continue
+
+            # Wiki pages are named after the Gather group (which may differ from
+            # the spreadsheet name, e.g. "Technology Circle" vs "Technology").
+            gather_name = existing.name if existing is not None else circle.name
+            gather_name_map[circle.name] = gather_name
+
+            wiki_url = (
+                f"/wiki/{_circle_wiki_slug(gather_name)}"
+                if _group_kind(circle) != "committee" else ""
+            )
+            description = build_description(circle, remaining_consultants, wiki_url)
+            log("DEBUG", "description", f"{circle.name}: {len(description)} chars")
 
             group_id = create_or_update_group(
                 page, base_url, circle, existing, members, description, dry_run
@@ -1442,8 +1449,9 @@ def process(
         for circle in circles:
             if _group_kind(circle) == "committee":
                 continue
-            wiki_circle_names.append(circle.name)
-            ok = _ensure_circle_wiki_page(page, base_url, circle.name, dry_run)
+            gather_name = gather_name_map.get(circle.name, circle.name)
+            wiki_circle_names.append(gather_name)
+            ok = _ensure_circle_wiki_page(page, base_url, gather_name, dry_run)
             stats["wiki_created" if ok else "wiki_failed"] += 1
 
         stats["wiki_index_ok"] = _ensure_wiki_index(

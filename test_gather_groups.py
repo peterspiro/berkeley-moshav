@@ -997,19 +997,21 @@ class TestGroupKind:
 # ── _build_wiki_index_content ─────────────────────────────────────────────────
 
 class TestBuildWikiIndexContent:
-    BASE = "https://host.gather.coop"
+    def test_no_title_header(self):
+        content = _build_wiki_index_content(["Alpha Circle"])
+        assert "# Circle Wiki Pages" not in content
 
-    def test_contains_header(self):
-        content = _build_wiki_index_content(["Alpha Circle"], self.BASE)
-        assert "# Circle Wiki Pages" in content
+    def test_link_format_relative(self):
+        content = _build_wiki_index_content(["Alpha Circle"])
+        assert "- [Alpha Circle](/wiki/alpha-circle-wiki)" in content
 
-    def test_link_format(self):
-        content = _build_wiki_index_content(["Alpha Circle"], self.BASE)
-        assert "- [Alpha Circle](https://host.gather.coop/wiki/alpha-circle-wiki)" in content
+    def test_link_does_not_contain_host(self):
+        content = _build_wiki_index_content(["Alpha Circle"])
+        assert "http" not in content
 
     def test_alphabetical_order(self):
         content = _build_wiki_index_content(
-            ["Membership", "Alpha Circle", "Technology"], self.BASE
+            ["Membership", "Alpha Circle", "Technology"]
         )
         lines = [l for l in content.splitlines() if l.startswith("- ")]
         assert lines[0].startswith("- [Alpha")
@@ -1017,15 +1019,20 @@ class TestBuildWikiIndexContent:
         assert lines[2].startswith("- [Technology")
 
     def test_case_insensitive_sort(self):
-        content = _build_wiki_index_content(["beta", "Alpha"], self.BASE)
+        content = _build_wiki_index_content(["beta", "Alpha"])
         lines = [l for l in content.splitlines() if l.startswith("- ")]
         assert lines[0].startswith("- [Alpha")
         assert lines[1].startswith("- [beta")
 
     def test_empty_list(self):
-        content = _build_wiki_index_content([], self.BASE)
-        assert "# Circle Wiki Pages" in content
+        content = _build_wiki_index_content([])
         assert "- [" not in content
+
+    def test_gather_name_used_for_slug(self):
+        # When the Gather group is named "Technology Circle" (not "Technology"),
+        # the link should use the Gather name's slug.
+        content = _build_wiki_index_content(["Technology Circle"])
+        assert "- [Technology Circle](/wiki/technology-circle-wiki)" in content
 
 
 # ── Work Group → committee kind ───────────────────────────────────────────────
