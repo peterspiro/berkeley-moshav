@@ -1353,6 +1353,7 @@ def process(
     password: str,
     sheet_url: str = DEFAULT_SHEET_URL,
     dry_run: bool = False,
+    circle_prefix: Optional[str] = None,
 ):
     base_url = base_url.rstrip("/")
     init_log()
@@ -1362,6 +1363,10 @@ def process(
     csv_text = fetch_sheet(sheet_url)
     circles = parse_sheet(csv_text)
     log("INFO", "parse_sheet", f"{len(circles)} circles parsed")
+
+    if circle_prefix is not None:
+        circles = _filter_circles(circles, circle_prefix)
+        log("INFO", "filter", f"Processing 1 circle: {circles[0].name!r}")
 
     chrome_path = "/opt/pw-browsers/chromium-1194/chrome-linux/chrome"
     launch_kwargs: dict = {"args": ["--no-sandbox"]}
@@ -1469,6 +1474,27 @@ def process(
     close_log()
 
 
+def _filter_circles(circles: list[Circle], prefix: str) -> list[Circle]:
+    """Return the subset of circles whose name starts with prefix (case-insensitive).
+
+    Exits with an error message if the prefix matches zero or more than one circle.
+    """
+    prefix_lower = prefix.strip().lower()
+    matches = [c for c in circles if c.name.lower().startswith(prefix_lower)]
+    if len(matches) == 1:
+        return matches
+    if not matches:
+        names = ", ".join(repr(c.name) for c in circles)
+        sys.exit(
+            f"Error: --circle {prefix!r} does not match any circle name.\n"
+            f"Available: {names}"
+        )
+    names = ", ".join(repr(c.name) for c in matches)
+    sys.exit(
+        f"Error: --circle {prefix!r} is ambiguous; matches: {names}"
+    )
+
+
 def cli():
     parser = argparse.ArgumentParser(
         description="Populate Gather groups from a Google Sheets circle hierarchy",
@@ -1487,9 +1513,13 @@ def cli():
         "-n", "--dry-run", action="store_true",
         help="Log what would happen without making any changes",
     )
+    parser.add_argument(
+        "-c", "--circle", default=None, metavar="PREFIX",
+        help="Process only the circle whose name starts with PREFIX (must match exactly one)",
+    )
     args = parser.parse_args()
     email, password = load_credentials()
-    process(args.base_url, email, password, args.sheet_url, args.dry_run)
+    process(args.base_url, email, password, args.sheet_url, args.dry_run, args.circle)
 
 
 if __name__ == "__main__":

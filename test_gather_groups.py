@@ -19,6 +19,7 @@ from gather_groups import (
     GROUP_KINDS,
     _build_wiki_index_content,
     _circle_name_to_list_name,
+    _filter_circles,
     _circle_wiki_slug,
     _group_kind,
     _group_needs_update,
@@ -1088,3 +1089,40 @@ class TestWorkGroupKind:
             availability="closed", description="", members=[],
         )
         assert _group_needs_update(g, "committee", "closed", "", [], "Landscape Work Group")
+
+
+# ── _filter_circles ───────────────────────────────────────────────────────────
+
+class TestFilterCircles:
+    def _circles(self):
+        return [
+            make_circle(name="Alpha Circle"),
+            make_circle(name="Beta Circle"),
+            make_circle(name="Gamma Sub"),
+        ]
+
+    def test_exact_prefix_match(self):
+        result = _filter_circles(self._circles(), "Alpha")
+        assert len(result) == 1
+        assert result[0].name == "Alpha Circle"
+
+    def test_partial_prefix_match(self):
+        result = _filter_circles(self._circles(), "Al")
+        assert result[0].name == "Alpha Circle"
+
+    def test_case_insensitive(self):
+        result = _filter_circles(self._circles(), "alpha")
+        assert result[0].name == "Alpha Circle"
+
+    def test_full_name_prefix(self):
+        result = _filter_circles(self._circles(), "Alpha Circle")
+        assert result[0].name == "Alpha Circle"
+
+    def test_no_match_exits(self):
+        with pytest.raises(SystemExit):
+            _filter_circles(self._circles(), "Zeta")
+
+    def test_ambiguous_exits(self):
+        circles = [make_circle(name="Alpha One"), make_circle(name="Alpha Two")]
+        with pytest.raises(SystemExit):
+            _filter_circles(circles, "Alpha")
