@@ -804,7 +804,7 @@ def _group_needs_update(
     members: list[tuple[GatherUser, bool]],
     desired_name: str,
 ) -> bool:
-    if existing.name != desired_name:
+    if not group_names_match(existing.name, desired_name):
         return True
     if existing.kind != kind:
         return True
@@ -1017,7 +1017,7 @@ def create_or_update_group(
             page.goto(
                 f"{base_url}/groups/{existing.group_id}/edit", wait_until="networkidle"
             )
-            _fill_group_basics(page, circle.name, kind, availability, description)
+            _fill_group_basics(page, existing_detail.name, kind, availability, description)
 
             # Sync members on the edit form
             existing_by_uid = {m.user_id: m.is_manager for m in existing_detail.members}

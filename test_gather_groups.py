@@ -231,13 +231,24 @@ class TestGroupNeedsUpdate:
         g = self._make_group()
         assert not _group_needs_update(g, "circle", "closed", "", [], "Alpha Circle")
 
-    def test_stale_name_triggers_update(self):
+    def test_parenthetical_suffix_not_stale(self):
+        # Parenthetical suffixes are stripped by group_names_match, so the
+        # name alone does not trigger an update.
         g = self._make_group(name="Alpha Circle (Old Name)")
+        assert not _group_needs_update(g, "circle", "closed", "", [], "Alpha Circle")
+
+    def test_truncated_paren_not_stale(self):
+        g = self._make_group(name="Alpha Circle (Old Name ")
+        assert not _group_needs_update(g, "circle", "closed", "", [], "Alpha Circle")
+
+    def test_genuinely_different_name_triggers_update(self):
+        g = self._make_group(name="Beta Circle")
         assert _group_needs_update(g, "circle", "closed", "", [], "Alpha Circle")
 
-    def test_truncated_paren_name_triggers_update(self):
-        g = self._make_group(name="Alpha Circle (Old Name ")
-        assert _group_needs_update(g, "circle", "closed", "", [], "Alpha Circle")
+    def test_circle_suffix_not_stale(self):
+        # "Technology Circle" in Gather matches spreadsheet circle "Technology"
+        g = self._make_group(name="Technology Circle")
+        assert not _group_needs_update(g, "circle", "closed", "", [], "Technology")
 
     def test_stale_kind_triggers_update(self):
         g = self._make_group(kind="committee")
