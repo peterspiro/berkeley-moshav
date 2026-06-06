@@ -254,13 +254,18 @@ def group_names_match(a: str, b: str) -> bool:
     na, nb = _normalize_group_name(a), _normalize_group_name(b)
     if na == nb:
         return True
-    # Allow "Foo" to match "Foo Circle": strip trailing " circle" from the raw
-    # inputs and re-normalize (so alias expansion applies correctly) then compare.
-    def _strip_circle(s: str) -> str:
-        return re.sub(r"\s+circle$", "", s.strip(), flags=re.IGNORECASE)
+    # Allow "Foo" to match "Foo Circle" or "Foo Team": strip the trailing
+    # suffix from the raw inputs and re-normalize (so alias expansion applies
+    # correctly) then compare.  At least one input must have been stripped to
+    # avoid false positives.
+    def _strip_suffix(s: str) -> str:
+        # Strip any trailing parenthetical first so that "Foo Team (desc)"
+        # becomes "Foo Team" before the team/circle suffix is removed.
+        s = re.sub(r"\s*\([^)]*\)?\s*$", "", s.strip()).strip()
+        return re.sub(r"\s+(circle|team)$", "", s, flags=re.IGNORECASE)
 
-    na2 = _normalize_group_name(_strip_circle(a))
-    nb2 = _normalize_group_name(_strip_circle(b))
+    na2 = _normalize_group_name(_strip_suffix(a))
+    nb2 = _normalize_group_name(_strip_suffix(b))
     return na2 == nb2 and (na2 != na or nb2 != nb)
 
 

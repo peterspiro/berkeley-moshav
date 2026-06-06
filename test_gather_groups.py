@@ -203,6 +203,23 @@ class TestGroupNamesMatch:
     def test_circle_suffix_no_false_match(self):
         assert not group_names_match("Technology", "Finance Circle")
 
+    def test_team_suffix_matches(self):
+        assert group_names_match("Membership", "Membership Team")
+        assert group_names_match("Membership Team", "Membership")
+
+    def test_team_suffix_case_insensitive(self):
+        assert group_names_match("membership", "Membership Team")
+        assert group_names_match("Membership Team", "membership")
+
+    def test_team_suffix_no_false_match(self):
+        assert not group_names_match("Technology", "Finance Team")
+
+    def test_team_and_parenthetical_matches(self):
+        # "Foo Team (description)" should match "Foo": normalization strips the
+        # paren, suffix-stripping removes " Team", leaving the same base name.
+        assert group_names_match("Membership", "Membership Team (All Members)")
+        assert group_names_match("Membership Team (All Members)", "Membership")
+
 
 class TestParseSheetParenStrip:
     def test_trailing_paren_stripped_from_name(self):
