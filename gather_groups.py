@@ -1046,13 +1046,14 @@ def create_or_update_group(
     members: list[tuple[GatherUser, bool]],
     description: str,
     dry_run: bool,
+    prefetched_detail: Optional[GatherGroup] = None,
 ) -> Optional[str]:
     """Create or update a Gather group; return its group_id (str) or None on failure."""
     kind = _group_kind(circle)
     availability = "closed"
 
     if existing is not None:
-        existing_detail = _fetch_group_detail(page, base_url, existing)
+        existing_detail = prefetched_detail or _fetch_group_detail(page, base_url, existing)
         update_reason = _group_needs_update(existing_detail, kind, availability, description, members, circle.name)
         if not update_reason:
             log("INFO", "group", f"Up to date, skipping: {circle.name}")
@@ -1220,6 +1221,19 @@ def create_or_update_wiki_page(
         return True
 
 
+def _extract_wiki_url(description: str) -> str:
+    """Return the href from a trailing <a href="...">Wiki</a> link in description.
+
+    Returns "" if the description does not end with such a link.
+    """
+    m = re.search(
+        r'<a\s+href="([^"]+)">\s*Wiki\s*</a>\s*$',
+        description.strip(),
+        re.IGNORECASE,
+    )
+    return m.group(1) if m else ""
+
+
 def _ensure_circle_wiki_page(
     page: Page, base_url: str, circle_name: str, dry_run: bool
 ) -> bool:
@@ -1267,20 +1281,22 @@ def _ensure_circle_wiki_page(
         return False
 
 
-def _build_wiki_index_content(circle_names: list[str]) -> str:
-    """Build the markdown content for the 'Circle Wiki Pages' index page."""
+def _build_wiki_index_content(circle_wikis: list[tuple[str, str]]) -> str:
+    """Build the markdown content for the 'Circle Wiki Pages' index page.
+
+    circle_wikis: list of (display_name, wiki_url) pairs.
+    """
     lines = []
-    for name in sorted(circle_names, key=str.casefold):
-        slug = _circle_wiki_slug(name)
-        lines.append(f"- [{name}](/wiki/{slug})")
+    for name, url in sorted(circle_wikis, key=lambda t: t[0].casefold()):
+        lines.append(f"- [{name}]({url})")
     return "\n".join(lines) + "\n"
 
 
 def _ensure_wiki_index(
-    page: Page, base_url: str, circle_names: list[str], dry_run: bool
+    page: Page, base_url: str, circle_wikis: list[tuple[str, str]], dry_run: bool
 ) -> bool:
     """Create or update the 'Circle Wiki Pages' index wiki page."""
-    desired = _build_wiki_index_content(circle_names)
+    desired = _build_wiki_index_content(circle_wikis)
     try:
         page.goto(f"{base_url}/wiki/{WIKI_INDEX_SLUG}", wait_until="networkidle")
         page_title = page.title()
@@ -1394,6 +1410,11 @@ def process(
         group_urls: dict[str, str] = {}
         # Maps circle.name → the actual Gather group name (may differ via suffix/alias rules).
         gather_name_map: dict[str, str] = {}
+        # Maps circle.name → the wiki URL to use (derived or extracted from existing desc).
+        wiki_url_map: dict[str, str] = {}
+        # circle.names for which the wiki URL was taken from an existing description
+        # (so we must not create a new page at the derived slug).
+        circles_with_existing_wiki: set[str] = set()
         stats = {
             "created": 0, "updated": 0, "skipped": 0, "failed": 0, "errors": 0,
             "list_created": 0, "list_failed": 0,
@@ -1422,15 +1443,31 @@ def process(
             gather_name = existing.name if existing is not None else circle.name
             gather_name_map[circle.name] = gather_name
 
-            wiki_url = (
-                f"/wiki/{_circle_wiki_slug(gather_name)}"
-                if _group_kind(circle) != "committee" else ""
-            )
+            # Pre-fetch the group detail for existing groups so we can (a) detect
+            # any existing wiki link in the description and (b) avoid a second page
+            # load inside create_or_update_group.
+            prefetched_detail: Optional[GatherGroup] = None
+            if existing is not None:
+                prefetched_detail = _fetch_group_detail(page, base_url, existing)
+
+            wiki_url = ""
+            if _group_kind(circle) != "committee":
+                if prefetched_detail is not None:
+                    existing_wiki_url = _extract_wiki_url(prefetched_detail.description)
+                    if existing_wiki_url:
+                        wiki_url = existing_wiki_url
+                        circles_with_existing_wiki.add(circle.name)
+                        log("INFO", "wiki_url", f"{circle.name}: using existing link {wiki_url!r}")
+                if not wiki_url:
+                    wiki_url = f"/wiki/{_circle_wiki_slug(gather_name)}"
+            wiki_url_map[circle.name] = wiki_url
+
             description = build_description(circle, remaining_consultants, wiki_url)
             log("DEBUG", "description", f"{circle.name}: {len(description)} chars")
 
             group_id = create_or_update_group(
-                page, base_url, circle, existing, members, description, dry_run
+                page, base_url, circle, existing, members, description, dry_run,
+                prefetched_detail=prefetched_detail,
             )
 
             if group_id is None:
@@ -1455,17 +1492,21 @@ def process(
                 stats["list_created" if ok else "list_failed"] += 1
 
         # Create a blank wiki page for each circle (not committee), then update index.
-        wiki_circle_names: list[str] = []
+        # If the description already links to an existing wiki page, skip creation and
+        # use that URL in the index instead of the derived one.
+        wiki_circle_entries: list[tuple[str, str]] = []
         for circle in circles:
             if _group_kind(circle) == "committee":
                 continue
             gather_name = gather_name_map.get(circle.name, circle.name)
-            wiki_circle_names.append(gather_name)
-            ok = _ensure_circle_wiki_page(page, base_url, gather_name, dry_run)
-            stats["wiki_created" if ok else "wiki_failed"] += 1
+            wiki_url = wiki_url_map.get(circle.name, f"/wiki/{_circle_wiki_slug(gather_name)}")
+            wiki_circle_entries.append((gather_name, wiki_url))
+            if circle.name not in circles_with_existing_wiki:
+                ok = _ensure_circle_wiki_page(page, base_url, gather_name, dry_run)
+                stats["wiki_created" if ok else "wiki_failed"] += 1
 
         stats["wiki_index_ok"] = _ensure_wiki_index(
-            page, base_url, wiki_circle_names, dry_run
+            page, base_url, wiki_circle_entries, dry_run
         )
 
         browser.close()

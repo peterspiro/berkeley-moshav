@@ -19,6 +19,7 @@ from gather_groups import (
     GROUP_KINDS,
     _build_wiki_index_content,
     _circle_name_to_list_name,
+    _extract_wiki_url,
     _filter_circles,
     _circle_wiki_slug,
     _group_kind,
@@ -1012,32 +1013,64 @@ class TestGroupKind:
         assert _group_kind(c) == "circle"
 
 
+# ── _extract_wiki_url ────────────────────────────────────────────────────────
+
+class TestExtractWikiUrl:
+    def test_extracts_relative_url(self):
+        desc = 'Some text\n<a href="/wiki/membership-wiki">Wiki</a>'
+        assert _extract_wiki_url(desc) == "/wiki/membership-wiki"
+
+    def test_extracts_with_trailing_whitespace(self):
+        desc = 'Text\n<a href="/wiki/foo-wiki">Wiki</a>  \n'
+        assert _extract_wiki_url(desc) == "/wiki/foo-wiki"
+
+    def test_case_insensitive_tag(self):
+        desc = 'Text\n<A HREF="/wiki/foo-wiki">Wiki</A>'
+        assert _extract_wiki_url(desc) == "/wiki/foo-wiki"
+
+    def test_returns_empty_when_no_link(self):
+        assert _extract_wiki_url("Some text with no link") == ""
+
+    def test_returns_empty_when_link_not_at_end(self):
+        desc = '<a href="/wiki/foo-wiki">Wiki</a>\nMore text'
+        assert _extract_wiki_url(desc) == ""
+
+    def test_returns_empty_for_non_wiki_link(self):
+        desc = 'Text\n<a href="/groups/42">Groups</a>'
+        assert _extract_wiki_url(desc) == ""
+
+
 # ── _build_wiki_index_content ─────────────────────────────────────────────────
 
 class TestBuildWikiIndexContent:
     def test_no_title_header(self):
-        content = _build_wiki_index_content(["Alpha Circle"])
+        content = _build_wiki_index_content([("Alpha Circle", "/wiki/alpha-circle-wiki")])
         assert "# Circle Wiki Pages" not in content
 
     def test_link_format_relative(self):
-        content = _build_wiki_index_content(["Alpha Circle"])
+        content = _build_wiki_index_content([("Alpha Circle", "/wiki/alpha-circle-wiki")])
         assert "- [Alpha Circle](/wiki/alpha-circle-wiki)" in content
 
-    def test_link_does_not_contain_host(self):
-        content = _build_wiki_index_content(["Alpha Circle"])
-        assert "http" not in content
+    def test_custom_url_used_verbatim(self):
+        content = _build_wiki_index_content([("Alpha Circle", "/wiki/custom-page")])
+        assert "- [Alpha Circle](/wiki/custom-page)" in content
 
     def test_alphabetical_order(self):
-        content = _build_wiki_index_content(
-            ["Membership", "Alpha Circle", "Technology"]
-        )
+        content = _build_wiki_index_content([
+            ("Membership", "/wiki/membership-wiki"),
+            ("Alpha Circle", "/wiki/alpha-circle-wiki"),
+            ("Technology", "/wiki/technology-wiki"),
+        ])
         lines = [l for l in content.splitlines() if l.startswith("- ")]
         assert lines[0].startswith("- [Alpha")
         assert lines[1].startswith("- [Membership")
         assert lines[2].startswith("- [Technology")
 
     def test_case_insensitive_sort(self):
-        content = _build_wiki_index_content(["beta", "Alpha"])
+        content = _build_wiki_index_content([
+            ("beta", "/wiki/beta-wiki"),
+            ("Alpha", "/wiki/alpha-wiki"),
+        ])
         lines = [l for l in content.splitlines() if l.startswith("- ")]
         assert lines[0].startswith("- [Alpha")
         assert lines[1].startswith("- [beta")
@@ -1045,12 +1078,6 @@ class TestBuildWikiIndexContent:
     def test_empty_list(self):
         content = _build_wiki_index_content([])
         assert "- [" not in content
-
-    def test_gather_name_used_for_slug(self):
-        # When the Gather group is named "Technology Circle" (not "Technology"),
-        # the link should use the Gather name's slug.
-        content = _build_wiki_index_content(["Technology Circle"])
-        assert "- [Technology Circle](/wiki/technology-circle-wiki)" in content
 
 
 # ── Work Group → committee kind ───────────────────────────────────────────────
