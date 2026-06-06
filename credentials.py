@@ -21,6 +21,13 @@ def load_credentials(path: Path = CREDENTIALS_FILE) -> tuple[str, str]:
             f"    password = secret"
         )
 
+    mode = path.stat().st_mode & 0o777
+    if mode & 0o077:
+        sys.exit(
+            f"Error: {path} must not be readable by group or others.\n"
+            f"Fix with: chmod 600 {path}"
+        )
+
     data = {}
     for line in text.splitlines():
         line = line.strip()
