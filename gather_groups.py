@@ -38,6 +38,8 @@ DEFAULT_SHEET_URL = (
 MAX_DESC = 255
 WIKI_TITLE = "Circle Hierarchy"
 WIKI_SLUG = "circle-hierarchy"
+WIKI_INDEX_TITLE = "Circle Wiki Pages"
+WIKI_INDEX_SLUG = "circle-wiki-pages"
 LOG_FILE = Path(__file__).parent / "groups_log.csv"
 SCREENSHOT_DIR = Path(__file__).parent / "import_screenshots"
 
@@ -291,6 +293,24 @@ def _circle_name_to_list_name(name: str) -> str:
     return s[:50]
 
 
+def _circle_wiki_slug(name: str) -> str:
+    """Convert a circle name to a wiki page slug, appending '-wiki'.
+
+    E.g. 'Landscape Work Group' → 'landscape-work-group-wiki'.
+    """
+    s = _fold_accents(name).lower()
+    s = re.sub(r"[^a-z0-9]+", "-", s)
+    return s.strip("-") + "-wiki"
+
+
+def _group_kind(circle: Circle) -> str:
+    """Return the Gather group kind for a circle."""
+    kind = GROUP_KINDS[circle.col_index]
+    if re.search(r"\bwork\s+group$", circle.name, flags=re.IGNORECASE):
+        kind = "committee"
+    return kind
+
+
 def first_name_matches(a: str, b: str) -> bool:
     a_l, b_l = _cmp(a), _cmp(b)
     if a_l == b_l:
@@ -468,12 +488,15 @@ def _post_len(s: str) -> int:
     return len(s) + s.count("\n")
 
 
-def build_description(circle: Circle, remaining_consultant_text: str) -> str:
+def build_description(
+    circle: Circle, remaining_consultant_text: str, wiki_url: str = ""
+) -> str:
     """Build the Gather group description, capped at MAX_DESC chars.
 
-    Appends Consultants, Meetings, and Parent lines in order, truncating
-    the description column content to make room.  Lines that still don't fit
-    with an empty description are omitted entirely.
+    Appends Consultants, Meetings, Parent lines, and (if wiki_url is given) an
+    HTML wiki link in that order, truncating the description column content to
+    make room.  Lines that still don't fit with an empty base description are
+    omitted entirely.  The wiki link is always the last line.
 
     All length checks use POST length (_post_len) because the browser
     normalises bare \\n to \\r\\n before submitting, adding one byte per
@@ -487,11 +510,22 @@ def build_description(circle: Circle, remaining_consultant_text: str) -> str:
     if circle.parent_name:
         extra_lines.append(f"\nParent: {circle.parent_name}")
 
-    # Greedily include extra lines that fit even with an empty base description
+    wiki_line = f'\n<a href="{wiki_url}">Wiki</a>' if wiki_url else ""
+
+    # Greedily include extra lines that fit even with an empty base description,
+    # reserving space for the wiki link at the end.
+    wiki_len = _post_len(wiki_line)
     extra = ""
     for line in extra_lines:
-        if _post_len(extra) + _post_len(line) <= MAX_DESC:
+        if _post_len(extra) + _post_len(line) + wiki_len <= MAX_DESC:
             extra += line
+
+    # Append wiki link if it fits (even with an empty base description).
+    if wiki_line and _post_len(extra) + wiki_len <= MAX_DESC:
+        extra += wiki_line
+    elif wiki_line:
+        log("WARN", "description", circle.name,
+            "wiki link does not fit in description even with empty base")
 
     # Trim base description so that POST length of (desc + extra) <= MAX_DESC
     budget = MAX_DESC - _post_len(extra)
@@ -1009,9 +1043,7 @@ def create_or_update_group(
     dry_run: bool,
 ) -> Optional[str]:
     """Create or update a Gather group; return its group_id (str) or None on failure."""
-    kind = GROUP_KINDS[circle.col_index]
-    if re.search(r"\bwork\s+group$", circle.name, flags=re.IGNORECASE):
-        kind = "committee"
+    kind = _group_kind(circle)
     availability = "closed"
 
     if existing is not None:
@@ -1183,6 +1215,131 @@ def create_or_update_wiki_page(
         return True
 
 
+def _ensure_circle_wiki_page(
+    page: Page, base_url: str, circle_name: str, dry_run: bool
+) -> bool:
+    """Create a blank wiki page for a circle if one does not already exist."""
+    slug = _circle_wiki_slug(circle_name)
+    title = f"{circle_name} Wiki"
+    try:
+        page.goto(f"{base_url}/wiki/{slug}", wait_until="networkidle")
+        page_title = page.title()
+        page_exists = (
+            "Exception" not in page_title
+            and "Error" not in page_title
+            and "404" not in page_title
+            and page.locator("h1").count() > 0
+        )
+        if page_exists:
+            log("INFO", "circle_wiki", f"'{title}' already exists, skipping")
+            return True
+        if dry_run:
+            log("DRY-RUN", "create_circle_wiki", title)
+            return True
+        page.goto(f"{base_url}/wiki/new", wait_until="networkidle")
+        if page.locator("form").count() == 0:
+            log("ERROR", "create_circle_wiki", title, "New wiki page form not found")
+            return False
+        title_el = page.locator('input[name="wiki_page[title]"], #wiki_page_title')
+        if title_el.count() > 0:
+            title_el.fill(title)
+        if page.locator(".CodeMirror").count() == 0:
+            log("ERROR", "create_circle_wiki", title, "Editor not found on new page form")
+            return False
+        _codemirror_set(page, "")
+        page.locator('input[name="commit"]').click()
+        page.wait_for_load_state("networkidle")
+        err = _check_submit_errors(page)
+        if err:
+            screenshot(page, f"wiki_circle_err_{slug[:20]}")
+            log("ERROR", "create_circle_wiki", title, err[:200])
+            return False
+        log("INFO", "create_circle_wiki", f"Created: '{title}'")
+        return True
+    except Exception as e:
+        screenshot(page, f"wiki_circle_exc_{slug[:20]}")
+        log("ERROR", "create_circle_wiki", title, str(e))
+        return False
+
+
+def _build_wiki_index_content(circle_names: list[str], base_url: str) -> str:
+    """Build the markdown content for the 'Circle Wiki Pages' index page."""
+    lines = [f"# {WIKI_INDEX_TITLE}", ""]
+    for name in sorted(circle_names, key=str.casefold):
+        slug = _circle_wiki_slug(name)
+        lines.append(f"- [{name}]({base_url}/wiki/{slug})")
+    return "\n".join(lines) + "\n"
+
+
+def _ensure_wiki_index(
+    page: Page, base_url: str, circle_names: list[str], dry_run: bool
+) -> bool:
+    """Create or update the 'Circle Wiki Pages' index wiki page."""
+    desired = _build_wiki_index_content(circle_names, base_url)
+    try:
+        page.goto(f"{base_url}/wiki/{WIKI_INDEX_SLUG}", wait_until="networkidle")
+        page_title = page.title()
+        page_exists = (
+            "Exception" not in page_title
+            and "Error" not in page_title
+            and "404" not in page_title
+            and page.locator("h1").count() > 0
+        )
+        if page_exists:
+            page.goto(f"{base_url}/wiki/{WIKI_INDEX_SLUG}/edit", wait_until="networkidle")
+            if page.locator(".CodeMirror").count() == 0:
+                log("ERROR", "update_wiki_index", WIKI_INDEX_TITLE,
+                    "Editor not found on edit page")
+                return False
+            current = _codemirror_get(page)
+            if current.strip() == desired.strip():
+                log("INFO", "wiki_index", f"'{WIKI_INDEX_TITLE}' up to date, skipping")
+                return True
+            if dry_run:
+                log("DRY-RUN", "update_wiki_index", WIKI_INDEX_TITLE)
+                return True
+            _codemirror_set(page, desired)
+            page.locator('input[name="commit"]').click()
+            page.wait_for_load_state("networkidle")
+            err = _check_submit_errors(page)
+            if err:
+                screenshot(page, "wiki_index_update_err")
+                log("ERROR", "update_wiki_index", WIKI_INDEX_TITLE, err[:200])
+                return False
+            log("INFO", "update_wiki_index", f"Updated: '{WIKI_INDEX_TITLE}'")
+            return True
+        else:
+            if dry_run:
+                log("DRY-RUN", "create_wiki_index", WIKI_INDEX_TITLE)
+                return True
+            page.goto(f"{base_url}/wiki/new", wait_until="networkidle")
+            if page.locator("form").count() == 0:
+                log("ERROR", "create_wiki_index", WIKI_INDEX_TITLE,
+                    "New wiki page form not found")
+                return False
+            title_el = page.locator('input[name="wiki_page[title]"], #wiki_page_title')
+            if title_el.count() > 0:
+                title_el.fill(WIKI_INDEX_TITLE)
+            if page.locator(".CodeMirror").count() == 0:
+                log("ERROR", "create_wiki_index", WIKI_INDEX_TITLE,
+                    "Editor not found on new page form")
+                return False
+            _codemirror_set(page, desired)
+            page.locator('input[name="commit"]').click()
+            page.wait_for_load_state("networkidle")
+            err = _check_submit_errors(page)
+            if err:
+                screenshot(page, "wiki_index_create_err")
+                log("ERROR", "create_wiki_index", WIKI_INDEX_TITLE, err[:200])
+                return False
+            log("INFO", "create_wiki_index", f"Created: '{WIKI_INDEX_TITLE}'")
+            return True
+    except Exception as e:
+        screenshot(page, "wiki_index_exc")
+        log("ERROR", "wiki_index", WIKI_INDEX_TITLE, str(e))
+        return False
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def process(
@@ -1228,6 +1385,7 @@ def process(
         stats = {
             "created": 0, "updated": 0, "skipped": 0, "failed": 0, "errors": 0,
             "list_created": 0, "list_failed": 0,
+            "wiki_created": 0, "wiki_failed": 0, "wiki_index_ok": False,
         }
 
         for circle in circles:
@@ -1240,7 +1398,11 @@ def process(
                 stats["errors"] += 1
                 continue
 
-            description = build_description(circle, remaining_consultants)
+            wiki_url = (
+                f"{base_url}/wiki/{_circle_wiki_slug(circle.name)}"
+                if _group_kind(circle) != "committee" else ""
+            )
+            description = build_description(circle, remaining_consultants, wiki_url)
             log("DEBUG", "description", f"{circle.name}: {len(description)} chars")
 
             try:
@@ -1274,6 +1436,19 @@ def process(
                 list_name = _circle_name_to_list_name(circle.name)
                 ok = _ensure_mailman_list(page, base_url, group_id, list_name, dry_run)
                 stats["list_created" if ok else "list_failed"] += 1
+
+        # Create a blank wiki page for each circle (not committee), then update index.
+        wiki_circle_names: list[str] = []
+        for circle in circles:
+            if _group_kind(circle) == "committee":
+                continue
+            wiki_circle_names.append(circle.name)
+            ok = _ensure_circle_wiki_page(page, base_url, circle.name, dry_run)
+            stats["wiki_created" if ok else "wiki_failed"] += 1
+
+        stats["wiki_index_ok"] = _ensure_wiki_index(
+            page, base_url, wiki_circle_names, dry_run
+        )
 
         browser.close()
 

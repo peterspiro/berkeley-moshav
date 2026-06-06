@@ -16,8 +16,11 @@ from gather_groups import (
     GatherGroup,
     GatherGroupMember,
     GatherUser,
-    _circle_name_to_list_name,
     GROUP_KINDS,
+    _build_wiki_index_content,
+    _circle_name_to_list_name,
+    _circle_wiki_slug,
+    _group_kind,
     _group_needs_update,
     best_column_match,
     build_description,
@@ -583,6 +586,42 @@ class TestBuildDescription:
         post_len = len(result) + result.count("\n")
         assert post_len <= 255
 
+    def test_wiki_link_appended(self):
+        c = make_circle(description="Desc")
+        result = build_description(c, "", wiki_url="https://host/wiki/alpha-circle-wiki")
+        assert result.endswith('\n<a href="https://host/wiki/alpha-circle-wiki">Wiki</a>')
+
+    def test_wiki_link_is_last(self):
+        c = make_circle(description="Desc", meetings="Mondays")
+        result = build_description(c, "", wiki_url="https://host/wiki/alpha-circle-wiki")
+        assert result.endswith(">Wiki</a>")
+        assert result.index("Meetings:") < result.index("Wiki</a>")
+
+    def test_wiki_link_absent_when_url_empty(self):
+        c = make_circle(description="Desc")
+        result = build_description(c, "", wiki_url="")
+        assert "Wiki" not in result
+
+    def test_wiki_link_truncates_base_description(self):
+        wiki_url = "https://host/wiki/alpha-circle-wiki"
+        wiki_line = f'\n<a href="{wiki_url}">Wiki</a>'
+        c = make_circle(description="A" * 255)
+        result = build_description(c, "", wiki_url=wiki_url)
+        post_len = len(result) + result.count("\n")
+        assert post_len <= 255
+        assert result.endswith(wiki_line)
+
+    def test_wiki_link_post_length_never_exceeds_255(self):
+        c = make_circle(description="D" * 100, meetings="M" * 50)
+        result = build_description(c, "", wiki_url="https://host/wiki/alpha-wiki")
+        post_len = len(result) + result.count("\n")
+        assert post_len <= 255
+
+    def test_wiki_link_fits_with_empty_description(self):
+        c = make_circle(description="")
+        result = build_description(c, "", wiki_url="https://host/wiki/alpha-wiki")
+        assert "Wiki</a>" in result
+
 
 # ── match_member ──────────────────────────────────────────────────────────────
 
@@ -913,6 +952,80 @@ class TestCircleNameToListName:
 
     def test_all_punctuation_becomes_empty(self):
         assert _circle_name_to_list_name("&&&") == ""
+
+
+# ── _circle_wiki_slug ─────────────────────────────────────────────────────────
+
+class TestCircleWikiSlug:
+    def test_basic(self):
+        assert _circle_wiki_slug("Membership") == "membership-wiki"
+
+    def test_multi_word(self):
+        assert _circle_wiki_slug("Landscape Work Group") == "landscape-work-group-wiki"
+
+    def test_accents_folded(self):
+        assert _circle_wiki_slug("Café") == "cafe-wiki"
+
+    def test_ampersand_becomes_dash(self):
+        assert _circle_wiki_slug("Process & Governance") == "process-governance-wiki"
+
+    def test_always_ends_in_wiki(self):
+        slug = _circle_wiki_slug("Alpha Circle")
+        assert slug.endswith("-wiki")
+
+
+# ── _group_kind ───────────────────────────────────────────────────────────────
+
+class TestGroupKind:
+    def test_circle_by_default(self):
+        c = make_circle(name="Membership", col_index=0)
+        assert _group_kind(c) == "circle"
+
+    def test_work_group_is_committee(self):
+        c = make_circle(name="Landscape Work Group", col_index=0)
+        assert _group_kind(c) == "committee"
+
+    def test_sub_circle_is_circle(self):
+        c = make_circle(name="Jewish Life Circle", col_index=1)
+        assert _group_kind(c) == "circle"
+
+    def test_work_group_not_at_end_is_circle(self):
+        c = make_circle(name="Work Group Liaison", col_index=0)
+        assert _group_kind(c) == "circle"
+
+
+# ── _build_wiki_index_content ─────────────────────────────────────────────────
+
+class TestBuildWikiIndexContent:
+    BASE = "https://host.gather.coop"
+
+    def test_contains_header(self):
+        content = _build_wiki_index_content(["Alpha Circle"], self.BASE)
+        assert "# Circle Wiki Pages" in content
+
+    def test_link_format(self):
+        content = _build_wiki_index_content(["Alpha Circle"], self.BASE)
+        assert "- [Alpha Circle](https://host.gather.coop/wiki/alpha-circle-wiki)" in content
+
+    def test_alphabetical_order(self):
+        content = _build_wiki_index_content(
+            ["Membership", "Alpha Circle", "Technology"], self.BASE
+        )
+        lines = [l for l in content.splitlines() if l.startswith("- ")]
+        assert lines[0].startswith("- [Alpha")
+        assert lines[1].startswith("- [Membership")
+        assert lines[2].startswith("- [Technology")
+
+    def test_case_insensitive_sort(self):
+        content = _build_wiki_index_content(["beta", "Alpha"], self.BASE)
+        lines = [l for l in content.splitlines() if l.startswith("- ")]
+        assert lines[0].startswith("- [Alpha")
+        assert lines[1].startswith("- [beta")
+
+    def test_empty_list(self):
+        content = _build_wiki_index_content([], self.BASE)
+        assert "# Circle Wiki Pages" in content
+        assert "- [" not in content
 
 
 # ── Work Group → committee kind ───────────────────────────────────────────────
