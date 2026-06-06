@@ -1292,10 +1292,23 @@ def _build_wiki_index_content(circle_wikis: list[tuple[str, str]]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _parse_wiki_index_entries(content: str) -> list[tuple[str, str]]:
+    """Extract (name, url) pairs from wiki index markdown content.
+
+    Parses lines of the form ``- [Name](URL)``.
+    """
+    return re.findall(r"^\- \[([^\]]+)\]\(([^)]+)\)", content, re.MULTILINE)
+
+
 def _ensure_wiki_index(
-    page: Page, base_url: str, circle_wikis: list[tuple[str, str]], dry_run: bool
+    page: Page, base_url: str, circle_wikis: list[tuple[str, str]], dry_run: bool,
+    partial: bool = False,
 ) -> bool:
-    """Create or update the 'Circle Wiki Pages' index wiki page."""
+    """Create or update the 'Circle Wiki Pages' index wiki page.
+
+    When partial=True (single-circle run), existing entries for other circles
+    are preserved; only the entries in circle_wikis are added/updated.
+    """
     desired = _build_wiki_index_content(circle_wikis)
     try:
         page.goto(f"{base_url}/wiki/{WIKI_INDEX_SLUG}", wait_until="networkidle")
@@ -1313,6 +1326,13 @@ def _ensure_wiki_index(
                     "Editor not found on edit page")
                 return False
             current = _codemirror_get(page)
+            if partial:
+                # Preserve entries for circles that aren't being processed.
+                existing = dict(_parse_wiki_index_entries(current))
+                existing.update(circle_wikis)
+                desired = _build_wiki_index_content(list(existing.items()))
+            else:
+                desired = _build_wiki_index_content(circle_wikis)
             if current.strip() == desired.strip():
                 log("INFO", "wiki_index", f"'{WIKI_INDEX_TITLE}' up to date, skipping")
                 return True
@@ -1506,7 +1526,8 @@ def process(
                 stats["wiki_created" if ok else "wiki_failed"] += 1
 
         stats["wiki_index_ok"] = _ensure_wiki_index(
-            page, base_url, wiki_circle_entries, dry_run
+            page, base_url, wiki_circle_entries, dry_run,
+            partial=(circle_prefix is not None),
         )
 
         browser.close()

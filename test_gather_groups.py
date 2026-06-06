@@ -21,6 +21,7 @@ from gather_groups import (
     _circle_name_to_list_name,
     _extract_wiki_url,
     _filter_circles,
+    _parse_wiki_index_entries,
     _circle_wiki_slug,
     _group_kind,
     _group_needs_update,
@@ -1078,6 +1079,60 @@ class TestBuildWikiIndexContent:
     def test_empty_list(self):
         content = _build_wiki_index_content([])
         assert "- [" not in content
+
+
+# ── _parse_wiki_index_entries ─────────────────────────────────────────────────
+
+class TestParseWikiIndexEntries:
+    def test_parses_single_entry(self):
+        content = "- [Alpha Circle](/wiki/alpha-circle-wiki)\n"
+        assert _parse_wiki_index_entries(content) == [("Alpha Circle", "/wiki/alpha-circle-wiki")]
+
+    def test_parses_multiple_entries(self):
+        content = (
+            "- [Alpha Circle](/wiki/alpha-circle-wiki)\n"
+            "- [Membership](/wiki/membership-wiki)\n"
+        )
+        entries = _parse_wiki_index_entries(content)
+        assert len(entries) == 2
+        assert ("Alpha Circle", "/wiki/alpha-circle-wiki") in entries
+        assert ("Membership", "/wiki/membership-wiki") in entries
+
+    def test_ignores_non_bullet_lines(self):
+        content = "Some header\n- [Alpha Circle](/wiki/alpha-circle-wiki)\n"
+        entries = _parse_wiki_index_entries(content)
+        assert entries == [("Alpha Circle", "/wiki/alpha-circle-wiki")]
+
+    def test_empty_content(self):
+        assert _parse_wiki_index_entries("") == []
+
+    def test_roundtrip(self):
+        pairs = [("Alpha Circle", "/wiki/alpha-circle-wiki"), ("Membership", "/wiki/membership-wiki")]
+        content = _build_wiki_index_content(pairs)
+        assert set(_parse_wiki_index_entries(content)) == set(pairs)
+
+    def test_partial_merge_preserves_existing(self):
+        # Simulate the merge logic used in _ensure_wiki_index when partial=True.
+        existing_content = (
+            "- [Alpha Circle](/wiki/alpha-circle-wiki)\n"
+            "- [Membership](/wiki/membership-wiki)\n"
+        )
+        new_entry = [("Beta Circle", "/wiki/beta-circle-wiki")]
+        existing = dict(_parse_wiki_index_entries(existing_content))
+        existing.update(new_entry)
+        merged = _build_wiki_index_content(list(existing.items()))
+        assert "Alpha Circle" in merged
+        assert "Membership" in merged
+        assert "Beta Circle" in merged
+
+    def test_partial_merge_updates_existing_url(self):
+        existing_content = "- [Alpha Circle](/wiki/alpha-circle-wiki)\n"
+        updated_entry = [("Alpha Circle", "/wiki/custom-page")]
+        existing = dict(_parse_wiki_index_entries(existing_content))
+        existing.update(updated_entry)
+        merged = _build_wiki_index_content(list(existing.items()))
+        assert "- [Alpha Circle](/wiki/custom-page)" in merged
+        assert "alpha-circle-wiki" not in merged
 
 
 # ── Work Group → committee kind ───────────────────────────────────────────────
