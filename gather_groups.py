@@ -959,7 +959,7 @@ def _ensure_mailman_list(
                 f'input[type="checkbox"][name*="mailman_list_attributes"][name*="{checkbox_field}"]'
             )
             if cb.count() > 0 and not cb.first.is_checked():
-                cb.first.check()
+                cb.first.check(force=True)
 
         if not _submit_group_form(page, f"mailman:{group_id}"):
             return False
