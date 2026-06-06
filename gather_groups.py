@@ -815,10 +815,9 @@ def _group_needs_update(
         return "description changed"
     existing_set = {(m.user_id, m.is_manager) for m in existing.members}
     desired_set = {(u.user_id, mgr) for u, mgr in members}
-    if existing_set != desired_set:
-        added = desired_set - existing_set
-        removed = existing_set - desired_set
-        return f"members changed (added={added}, removed={removed})"
+    if not desired_set.issubset(existing_set):
+        missing = desired_set - existing_set
+        return f"members changed (missing={missing})"
     return None
 
 
@@ -1026,12 +1025,11 @@ def create_or_update_group(
             )
             _fill_group_basics(page, existing_detail.name, kind, availability, description)
 
-            # Sync members on the edit form
+            # Sync members: add missing and fix manager status; never remove
+            # manually-added members who aren't in the spreadsheet.
             existing_by_uid = {m.user_id: m.is_manager for m in existing_detail.members}
             desired_map = {u.user_id: (u, is_mgr) for u, is_mgr in members}
 
-            for uid in set(existing_by_uid) - set(desired_map):
-                _remove_inline_member(page, uid)
             for uid, (user, is_mgr) in desired_map.items():
                 if uid not in existing_by_uid:
                     _add_inline_member(page, user, is_mgr)
