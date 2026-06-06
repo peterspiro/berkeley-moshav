@@ -250,8 +250,14 @@ def group_names_match(a: str, b: str) -> bool:
     na, nb = _normalize_group_name(a), _normalize_group_name(b)
     if na == nb:
         return True
-    # Allow spreadsheet name "Foo" to match Gather group "Foo Circle" and vice versa
-    return na + " circle" == nb or nb + " circle" == na
+    # Allow "Foo" to match "Foo Circle": strip trailing " circle" from the raw
+    # inputs and re-normalize (so alias expansion applies correctly) then compare.
+    def _strip_circle(s: str) -> str:
+        return re.sub(r"\s+circle$", "", s.strip(), flags=re.IGNORECASE)
+
+    na2 = _normalize_group_name(_strip_circle(a))
+    nb2 = _normalize_group_name(_strip_circle(b))
+    return na2 == nb2 and (na2 != na or nb2 != nb)
 
 
 def _fold_accents(s: str) -> str:
