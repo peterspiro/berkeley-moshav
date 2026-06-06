@@ -956,7 +956,7 @@ def _ensure_mailman_list(
             "[managers_can_moderate]",
         ):
             cb = page.locator(
-                f'input[name*="mailman_list_attributes"][name*="{checkbox_field}"]'
+                f'input[type="checkbox"][name*="mailman_list_attributes"][name*="{checkbox_field}"]'
             )
             if cb.count() > 0 and not cb.first.is_checked():
                 cb.first.check()
