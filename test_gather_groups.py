@@ -14,6 +14,7 @@ from gather_groups import (
     GatherGroup,
     GatherGroupMember,
     GatherUser,
+    _circle_name_to_list_name,
     _group_needs_update,
     best_column_match,
     build_description,
@@ -848,3 +849,42 @@ class TestToCsvExportUrl:
         url = "https://docs.google.com/spreadsheets/d/ABC/edit#gid=42"
         result = to_csv_export_url(url)
         assert "gid=42" in result
+
+
+# ── _circle_name_to_list_name ─────────────────────────────────────────────────
+
+class TestCircleNameToListName:
+    def test_basic_multi_word(self):
+        assert _circle_name_to_list_name("Community Life Circle") == "community-life-circle"
+
+    def test_ampersand_becomes_dash(self):
+        assert _circle_name_to_list_name("Process & Governance") == "process-governance"
+
+    def test_comma_and_ampersand(self):
+        assert _circle_name_to_list_name("Development, Finance, & Legal") == \
+            "development-finance-legal"
+
+    def test_already_lowercase(self):
+        assert _circle_name_to_list_name("alpha circle") == "alpha-circle"
+
+    def test_single_word(self):
+        assert _circle_name_to_list_name("Technology") == "technology"
+
+    def test_numbers_preserved(self):
+        assert _circle_name_to_list_name("Circle 42") == "circle-42"
+
+    def test_truncation_at_50_chars(self):
+        result = _circle_name_to_list_name("a" * 60)
+        assert result == "a" * 50
+
+    def test_leading_trailing_dash_stripped(self):
+        result = _circle_name_to_list_name("& Tech &")
+        assert not result.startswith("-")
+        assert not result.endswith("-")
+        assert result == "tech"
+
+    def test_accented_characters_folded(self):
+        assert _circle_name_to_list_name("Café Société") == "cafe-societe"
+
+    def test_all_punctuation_becomes_empty(self):
+        assert _circle_name_to_list_name("&&&") == ""

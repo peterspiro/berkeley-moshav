@@ -101,6 +101,7 @@ class GatherGroup:
     availability: str
     description: str
     members: list[GatherGroupMember] = field(default_factory=list)
+    list_name: Optional[str] = None
 
 
 # ── Logging ───────────────────────────────────────────────────────────────────
@@ -263,6 +264,19 @@ def _fold_accents(s: str) -> str:
 def _cmp(s: str) -> str:
     """Canonical form for accent- and case-insensitive comparison."""
     return _fold_accents(s).strip().lower()
+
+
+def _circle_name_to_list_name(name: str) -> str:
+    """Convert a circle name to a Mailman-safe list name.
+
+    Folds accents, lowercases, replaces runs of non-alphanumeric characters
+    with a single hyphen, strips leading/trailing hyphens, and truncates to
+    50 characters.
+    """
+    s = _fold_accents(name).lower()
+    s = re.sub(r"[^a-z0-9]+", "-", s)
+    s = s.strip("-")
+    return s[:50]
 
 
 def first_name_matches(a: str, b: str) -> bool:
@@ -759,9 +773,17 @@ def _fetch_group_detail(page: Page, base_url: str, group: GatherGroup) -> Gather
         member_kind = page.locator(f'select[name="{kind_name}"]').input_value()
         members.append(GatherGroupMember(user_id=uid, is_manager=(member_kind == "manager")))
 
+    mailman_name_el = page.locator(
+        'input[name*="mailman_list_attributes"][name*="[name]"]'
+    )
+    list_name: Optional[str] = None
+    if mailman_name_el.count() > 0:
+        list_name = mailman_name_el.first.input_value().strip() or None
+
     return GatherGroup(group_id=group.group_id, name=group.name,
                        kind=kind, availability=availability,
-                       description=description, members=members)
+                       description=description, members=members,
+                       list_name=list_name)
 
 
 def _group_needs_update(
@@ -873,6 +895,79 @@ def _submit_group_form(page: Page, circle_name: str) -> bool:
         log("ERROR", "group_form", circle_name, err[:200])
         return False
     return True
+
+
+def _ensure_mailman_list(
+    page: Page,
+    base_url: str,
+    group_id: str,
+    list_name: str,
+    dry_run: bool,
+) -> bool:
+    """Create a Mailman email list for the group if one does not already exist.
+
+    Returns True if a list exists or was successfully created, False on error
+    or if Mailman is not configured for this Gather instance.
+    """
+    try:
+        page.goto(f"{base_url}/groups/{group_id}/edit", wait_until="networkidle")
+
+        name_el = page.locator(
+            'input[name*="mailman_list_attributes"][name*="[name]"]'
+        )
+        if name_el.count() == 0:
+            log("WARN", "mailman_list", f"group_id={group_id}",
+                "Mailman list field not found — Mailman may not be configured")
+            return False
+
+        current = name_el.first.input_value().strip()
+        if current:
+            log("INFO", "mailman_list",
+                f"group_id={group_id}: list '{current}' already exists, skipping")
+            return True
+
+        if dry_run:
+            log("DRY-RUN", "create_mailman_list",
+                f"group_id={group_id} list_name={list_name}")
+            return True
+
+        name_el.first.fill(list_name)
+
+        domain_el = page.locator(
+            'select[name*="mailman_list_attributes"][name*="[domain_id]"]'
+        )
+        if domain_el.count() > 0:
+            options = domain_el.first.locator("option").all()
+            selected = False
+            for opt in options:
+                val = opt.get_attribute("value") or ""
+                if val.strip():
+                    domain_el.first.select_option(val)
+                    selected = True
+                    break
+            if not selected:
+                log("WARN", "mailman_list", f"group_id={group_id}",
+                    "No non-blank domain option found")
+                return False
+
+        cb = page.locator(
+            'input[name*="mailman_list_attributes"]'
+            '[name*="[all_cmty_members_can_send]"]'
+        )
+        if cb.count() > 0 and not cb.first.is_checked():
+            cb.first.check()
+
+        if not _submit_group_form(page, f"mailman:{group_id}"):
+            return False
+
+        log("INFO", "create_mailman_list",
+            f"group_id={group_id}: created list '{list_name}'")
+        return True
+
+    except Exception as e:
+        screenshot(page, f"mailman_exc_{group_id[:20]}")
+        log("ERROR", "create_mailman_list", f"group_id={group_id}", str(e))
+        return False
 
 
 def create_or_update_group(
@@ -1098,7 +1193,10 @@ def process(
         log("INFO", "fetch_groups", f"{len(gather_groups)} groups found")
 
         group_urls: dict[str, str] = {}
-        stats = {"created": 0, "updated": 0, "skipped": 0, "failed": 0, "errors": 0}
+        stats = {
+            "created": 0, "updated": 0, "skipped": 0, "failed": 0, "errors": 0,
+            "list_created": 0, "list_failed": 0,
+        }
 
         for circle in circles:
             try:
@@ -1126,7 +1224,9 @@ def process(
 
             if group_id is None:
                 stats["failed"] += 1
-            elif group_id == "dry-run":
+                continue
+
+            if group_id == "dry-run":
                 stats["created"] += 1
             elif existing is None:
                 stats["created"] += 1
@@ -1135,6 +1235,13 @@ def process(
                 group_urls[circle.name] = f"/groups/{group_id}"
                 # distinguish updated vs skipped via log (already logged inside)
                 stats["skipped"] += 1  # conservative; update logged separately
+
+            # Ensure a Mailman list exists for every confirmed-existing group.
+            # Skipped for dry-run placeholders (no real group_id to navigate to).
+            if group_id != "dry-run":
+                list_name = _circle_name_to_list_name(circle.name)
+                ok = _ensure_mailman_list(page, base_url, group_id, list_name, dry_run)
+                stats["list_created" if ok else "list_failed"] += 1
 
         browser.close()
 
