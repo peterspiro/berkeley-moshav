@@ -955,11 +955,17 @@ def _ensure_mailman_list(
             "[managers_can_administer]",
             "[managers_can_moderate]",
         ):
-            cb = page.locator(
-                f'input[type="checkbox"][name*="mailman_list_attributes"][name*="{checkbox_field}"]'
+            selector = (
+                f'input[type="checkbox"][name*="mailman_list_attributes"]'
+                f'[name*="{checkbox_field}"]'
             )
+            cb = page.locator(selector)
             if cb.count() > 0 and not cb.first.is_checked():
-                cb.first.check(force=True)
+                page.evaluate(
+                    "(sel) => { const el = document.querySelector(sel);"
+                    " if (el) el.checked = true; }",
+                    selector,
+                )
 
         if not _submit_group_form(page, f"mailman:{group_id}"):
             return False
