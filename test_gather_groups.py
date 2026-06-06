@@ -9,12 +9,15 @@ from typing import Optional
 
 import pytest
 
+import re
+
 from gather_groups import (
     Circle,
     GatherGroup,
     GatherGroupMember,
     GatherUser,
     _circle_name_to_list_name,
+    GROUP_KINDS,
     _group_needs_update,
     best_column_match,
     build_description,
@@ -910,3 +913,41 @@ class TestCircleNameToListName:
 
     def test_all_punctuation_becomes_empty(self):
         assert _circle_name_to_list_name("&&&") == ""
+
+
+# ── Work Group → committee kind ───────────────────────────────────────────────
+
+def _kind_for_name(name: str) -> str:
+    """Mirror the inline kind-assignment logic from _ensure_group."""
+    kind = GROUP_KINDS[0]
+    if re.search(r"\bwork\s+group$", name, flags=re.IGNORECASE):
+        kind = "committee"
+    return kind
+
+
+class TestWorkGroupKind:
+    def test_landscape_work_group_is_committee(self):
+        assert _kind_for_name("Landscape Work Group") == "committee"
+
+    def test_furnishings_work_group_is_committee(self):
+        assert _kind_for_name("Furnishings Work Group") == "committee"
+
+    def test_case_insensitive(self):
+        assert _kind_for_name("landscape work group") == "committee"
+        assert _kind_for_name("LANDSCAPE WORK GROUP") == "committee"
+
+    def test_regular_circle_is_circle(self):
+        assert _kind_for_name("Technology") == "circle"
+
+    def test_membership_circle_is_circle(self):
+        assert _kind_for_name("Membership") == "circle"
+
+    def test_work_group_not_at_end_is_circle(self):
+        assert _kind_for_name("Work Group Liaison") == "circle"
+
+    def test_group_needs_update_detects_wrong_kind_for_work_group(self):
+        g = GatherGroup(
+            group_id="1", name="Landscape Work Group", kind="circle",
+            availability="closed", description="", members=[],
+        )
+        assert _group_needs_update(g, "committee", "closed", "", [], "Landscape Work Group")

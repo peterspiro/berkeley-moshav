@@ -1010,6 +1010,8 @@ def create_or_update_group(
 ) -> Optional[str]:
     """Create or update a Gather group; return its group_id (str) or None on failure."""
     kind = GROUP_KINDS[circle.col_index]
+    if re.search(r"\bwork\s+group$", circle.name, flags=re.IGNORECASE):
+        kind = "committee"
     availability = "closed"
 
     if existing is not None:
