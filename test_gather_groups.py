@@ -186,6 +186,17 @@ class TestGroupNamesMatch:
         # Only trailing parentheticals are stripped, not mid-name ones
         assert not group_names_match("Circle (A) Extra", "Circle Extra")
 
+    def test_circle_suffix_matches(self):
+        assert group_names_match("Technology", "Technology Circle")
+        assert group_names_match("Technology Circle", "Technology")
+
+    def test_circle_suffix_case_insensitive(self):
+        assert group_names_match("technology", "Technology Circle")
+        assert group_names_match("Technology Circle", "technology")
+
+    def test_circle_suffix_no_false_match(self):
+        assert not group_names_match("Technology", "Finance Circle")
+
 
 class TestParseSheetParenStrip:
     def test_trailing_paren_stripped_from_name(self):

@@ -247,7 +247,11 @@ def _normalize_group_name(name: str) -> str:
 
 
 def group_names_match(a: str, b: str) -> bool:
-    return _normalize_group_name(a) == _normalize_group_name(b)
+    na, nb = _normalize_group_name(a), _normalize_group_name(b)
+    if na == nb:
+        return True
+    # Allow spreadsheet name "Foo" to match Gather group "Foo Circle" and vice versa
+    return na + " circle" == nb or nb + " circle" == na
 
 
 def _fold_accents(s: str) -> str:
