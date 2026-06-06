@@ -813,10 +813,13 @@ def _group_needs_update(
         return f"availability: {existing.availability!r} → {availability!r}"
     if existing.description.strip() != description.strip():
         return "description changed"
-    existing_set = {(m.user_id, m.is_manager) for m in existing.members}
-    desired_set = {(u.user_id, mgr) for u, mgr in members}
-    if not desired_set.issubset(existing_set):
-        missing = desired_set - existing_set
+    existing_by_uid = {m.user_id: m.is_manager for m in existing.members}
+    missing = [
+        (u.user_id, mgr) for u, mgr in members
+        if u.user_id not in existing_by_uid          # absent entirely
+        or (mgr and not existing_by_uid[u.user_id])  # needs promotion to manager
+    ]
+    if missing:
         return f"members changed (missing={missing})"
     return None
 
@@ -1033,8 +1036,8 @@ def create_or_update_group(
             for uid, (user, is_mgr) in desired_map.items():
                 if uid not in existing_by_uid:
                     _add_inline_member(page, user, is_mgr)
-                elif existing_by_uid[uid] != is_mgr:
-                    # Update kind for existing row
+                elif is_mgr and not existing_by_uid[uid]:
+                    # Promote to manager (never demote — preserve manual changes)
                     for sel in page.locator('select[name*="[user_id]"]').all():
                         if sel.input_value() == uid:
                             kind_name = (sel.get_attribute("name") or "").replace(
