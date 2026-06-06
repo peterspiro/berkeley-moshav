@@ -950,12 +950,16 @@ def _ensure_mailman_list(
                     "No non-blank domain option found")
                 return False
 
-        cb = page.locator(
-            'input[name*="mailman_list_attributes"]'
-            '[name*="[all_cmty_members_can_send]"]'
-        )
-        if cb.count() > 0 and not cb.first.is_checked():
-            cb.first.check()
+        for checkbox_field in (
+            "[all_cmty_members_can_send]",
+            "[managers_can_administer]",
+            "[managers_can_moderate]",
+        ):
+            cb = page.locator(
+                f'input[name*="mailman_list_attributes"][name*="{checkbox_field}"]'
+            )
+            if cb.count() > 0 and not cb.first.is_checked():
+                cb.first.check()
 
         if not _submit_group_form(page, f"mailman:{group_id}"):
             return False
