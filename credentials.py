@@ -1,3 +1,4 @@
+import sys
 from pathlib import Path
 
 CREDENTIALS_FILE = Path.home() / ".gather"
@@ -10,13 +11,30 @@ def load_credentials(path: Path = CREDENTIALS_FILE) -> tuple[str, str]:
         email = admin@example.com
         password = secret
     """
+    try:
+        text = path.read_text()
+    except FileNotFoundError:
+        sys.exit(
+            f"Error: credentials file not found: {path}\n"
+            f"Create it with:\n"
+            f"    email = admin@example.com\n"
+            f"    password = secret"
+        )
+
     data = {}
-    for line in path.read_text().splitlines():
+    for line in text.splitlines():
         line = line.strip()
         if line and "=" in line:
             k, _, v = line.partition("=")
             data[k.strip()] = v.strip()
-    try:
-        return data["email"], data["password"]
-    except KeyError as e:
-        raise KeyError(f"Missing key {e} in {path}")
+
+    missing = [k for k in ("email", "password") if not data.get(k)]
+    if missing:
+        sys.exit(
+            f"Error: {path} is missing required key(s): {', '.join(missing)}\n"
+            f"Expected format:\n"
+            f"    email = admin@example.com\n"
+            f"    password = secret"
+        )
+
+    return data["email"], data["password"]
