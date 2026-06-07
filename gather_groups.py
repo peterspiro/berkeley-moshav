@@ -624,7 +624,10 @@ def _build_hierarchy_content(
     by_parent: dict[str, list[Circle]] = {}
     orphans: list[Circle] = []
 
+    log("DEBUG", "hierarchy", f"Building hierarchy from {len(circles)} circles:")
     for c in circles:
+        log("DEBUG", "hierarchy",
+            f"  col={c.col_index} name={c.name!r:40} parent={c.parent_name!r}")
         if group_names_match(c.name, _HIERARCHY_ROOT):
             root_circle = c
         elif c.parent_name:
