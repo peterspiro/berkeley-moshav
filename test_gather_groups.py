@@ -971,13 +971,11 @@ class TestBuildHierarchyContent:
         beta_idx = next(i for i, l in enumerate(lines) if "Beta Circle" in l)
         assert alpha_idx < beta_idx
 
-    def test_orphan_becomes_child_of_root(self):
-        root = make_circle(self.ROOT, col_index=0)
-        orphan = make_circle("Lone Circle", col_index=0)  # parent_name=None
-        md = self._build([root, orphan])
-        lines = md.splitlines()
-        orphan_line = next(l for l in lines if "Lone Circle" in l)
-        assert orphan_line.startswith("  ")  # indented under root
+    def test_no_root_returns_empty_content(self):
+        # When no circle has parent_name=None, the result is empty (just a newline)
+        orphan = make_circle("Lone Circle", col_index=0, parent_name="Unknown Parent")
+        md = self._build([orphan])
+        assert md.strip() == ""
 
     def test_members_link_included(self):
         root = make_circle(self.ROOT, col_index=0)
@@ -1014,17 +1012,6 @@ class TestBuildHierarchyContent:
         md = self._build([root], group_urls={self.ROOT: "/groups/1"})
         assert f"[{self.ROOT}]" not in md
 
-    def test_no_root_circle_produces_synthetic_root(self):
-        circles = [make_circle("Alpha Circle", col_index=0)]
-        md = self._build(circles)
-        assert self.ROOT in md
-        assert "Alpha Circle" in md
-
-    def test_synthetic_root_has_no_links(self):
-        circles = [make_circle("Alpha Circle", col_index=0)]
-        md = self._build(circles, group_urls={"Alpha Circle": "/groups/1"})
-        root_line = md.splitlines()[0]
-        assert "[Members]" not in root_line
 
 
 # ── to_csv_export_url ─────────────────────────────────────────────────────────

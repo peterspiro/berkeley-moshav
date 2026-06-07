@@ -618,38 +618,25 @@ def _build_hierarchy_content(
 ) -> str:
     """Build markdown for the Circle Hierarchy wiki page.
 
-    "Top Circle / HOA" is the sole root item.  All circles whose parent_name
-    is None (other than Top Circle / HOA itself) are treated as its children.
-    If no circle named "Top Circle / HOA" exists in the spreadsheet, a
-    synthetic root entry (name only, no links) is rendered.
+    The sole circle with parent_name=None (guaranteed unique by parse_sheet) is
+    the root item.  All other circles are keyed under their parent_name.
     """
     root_circle: Optional[Circle] = None
     by_parent: dict[str, list[Circle]] = {}
     for c in circles:
-        if group_names_match(c.name, _HIERARCHY_ROOT):
+        if c.parent_name is None:
             root_circle = c
         else:
-            parent = c.parent_name if c.parent_name else _HIERARCHY_ROOT
-            by_parent.setdefault(parent, []).append(c)
+            by_parent.setdefault(c.parent_name, []).append(c)
 
-    if root_circle is not None:
-        lines = _render_hierarchy_entry(
-            root_circle, by_parent, gather_name_map,
-            group_urls, wiki_url_map, gdrive_url_map, depth=0,
-        )
-    else:
-        # No matching circle found — render a synthetic root with no links.
-        log("WARN", "hierarchy", f"No circle matching {_HIERARCHY_ROOT!r} found; "
-            "root entry will have no links")
-        lines = [f"- {_HIERARCHY_ROOT}"]
-        for child in sorted(
-            by_parent.get(_HIERARCHY_ROOT, []),
-            key=lambda c: gather_name_map.get(c.name, c.name).casefold(),
-        ):
-            lines.extend(_render_hierarchy_entry(
-                child, by_parent, gather_name_map,
-                group_urls, wiki_url_map, gdrive_url_map, depth=1,
-            ))
+    if root_circle is None:
+        log("WARN", "hierarchy", "No root circle (parent_name=None) found in circles")
+        return "\n"
+
+    lines = _render_hierarchy_entry(
+        root_circle, by_parent, gather_name_map,
+        group_urls, wiki_url_map, gdrive_url_map, depth=0,
+    )
     return "\n".join(lines) + "\n"
 
 
