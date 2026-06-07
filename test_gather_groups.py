@@ -1416,7 +1416,7 @@ class TestApplyGdriveLink:
     HREF = "/gdrive/membership-folder"
     NAME = "Membership"
     GROUP_URL = "/groups/42"
-    BLOCK = "Membership: [Members](/groups/42) | [Google Drive documents](/gdrive/membership-folder)"
+    BLOCK = "Membership: [Members](/groups/42) | [Documents](/gdrive/membership-folder)"
     BLOCK_NO_GDRIVE = "Membership: [Members](/groups/42)"
 
     def _call(self, content, gdrive_href=None):

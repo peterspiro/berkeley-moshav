@@ -1700,7 +1700,7 @@ def fetch_gdrive_links(page: Page, base_url: str) -> list[tuple[str, str]]:
 def _links_block(circle_name: str, group_url: str, gdrive_href: str = "") -> str:
     links = [f"[Members]({group_url})"]
     if gdrive_href:
-        links.append(f"[Google Drive documents]({gdrive_href})")
+        links.append(f"[Documents]({gdrive_href})")
     return f"{circle_name}: {' | '.join(links)}"
 
 
