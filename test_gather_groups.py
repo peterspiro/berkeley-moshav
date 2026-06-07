@@ -19,6 +19,7 @@ from gather_groups import (
     GROUP_KINDS,
     _build_wiki_index_content,
     _circle_name_to_list_name,
+    _apply_gdrive_link,
     _extract_wiki_url,
     _filter_circles,
     _parse_wiki_index_entries,
@@ -1209,6 +1210,50 @@ class TestFilterCircles:
         circles = [make_circle(name="Alpha One"), make_circle(name="Alpha Two")]
         with pytest.raises(SystemExit):
             _filter_circles(circles, "Alpha")
+
+
+# ── _apply_gdrive_link ───────────────────────────────────────────────────────
+
+class TestApplyGdriveLink:
+    HREF = "/gdrive/membership-folder"
+    NAME = "Membership"
+
+    def test_add_to_blank_page(self):
+        new_content, action = _apply_gdrive_link("", self.NAME, self.HREF)
+        assert action == "add"
+        assert new_content == "[Membership Google Drive documents](/gdrive/membership-folder)\n"
+
+    def test_add_appends_after_existing_content(self):
+        new_content, action = _apply_gdrive_link("Some content.", self.NAME, self.HREF)
+        assert action == "add"
+        assert new_content.startswith("Some content.\n\n")
+        assert "[Membership Google Drive documents]" in new_content
+
+    def test_skip_when_text_already_correct(self):
+        content = "[Membership Google Drive documents](/gdrive/membership-folder)"
+        new_content, action = _apply_gdrive_link(content, self.NAME, self.HREF)
+        assert action == "skip"
+        assert new_content is None
+
+    def test_update_wrong_link_text(self):
+        content = "Some text\n\n[Google Drive documents](/gdrive/membership-folder)"
+        new_content, action = _apply_gdrive_link(content, self.NAME, self.HREF)
+        assert action == "update"
+        assert "[Membership Google Drive documents](/gdrive/membership-folder)" in new_content
+        assert "[Google Drive documents]" not in new_content
+
+    def test_update_preserves_existing_href(self):
+        content = "[Old Text](/gdrive/custom-path)"
+        new_content, action = _apply_gdrive_link(content, self.NAME, self.HREF)
+        assert action == "update"
+        assert "/gdrive/custom-path" in new_content
+
+    def test_update_preserves_surrounding_content(self):
+        content = "Before\n\n[Old Text](/gdrive/foo)\n\nAfter"
+        new_content, action = _apply_gdrive_link(content, self.NAME, self.HREF)
+        assert action == "update"
+        assert "Before" in new_content
+        assert "After" in new_content
 
 
 # ── find_gdrive_link ──────────────────────────────────────────────────────────

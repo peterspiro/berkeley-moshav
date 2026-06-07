@@ -1581,25 +1581,46 @@ def fetch_gdrive_links(page: Page, base_url: str) -> list[tuple[str, str]]:
         return []
 
 
+def _apply_gdrive_link(content: str, circle_name: str, gdrive_href: str) -> tuple[Optional[str], str]:
+    """Compute the updated wiki content after applying the Google Drive link.
+
+    Returns (new_content, action) where action is one of:
+      "skip"   — link already exists with correct text; no change needed
+      "update" — link exists but text is wrong; new_content has the corrected text
+      "add"    — no gdrive link yet; new_content has the link appended
+
+    When action is "update", the existing href is preserved (only the text changes).
+    """
+    link_text = f"{circle_name} Google Drive documents"
+    m = re.search(r"\[([^\]]*)\]\((/gdrive/[^)]+)\)", content)
+    if m:
+        current_text, current_href = m.group(1), m.group(2)
+        if current_text == link_text:
+            return None, "skip"
+        new_content = content[: m.start()] + f"[{link_text}]({current_href})" + content[m.end() :]
+        return new_content, "update"
+    base = content.strip()
+    new_content = (base + "\n\n" if base else "") + f"[{link_text}]({gdrive_href})\n"
+    return new_content, "add"
+
+
 def _ensure_gdrive_link_on_wiki(
     page: Page, base_url: str, wiki_slug: str, gdrive_href: str,
     circle_name: str, dry_run: bool,
 ) -> bool:
-    """Append a Google Drive link to the circle's wiki page if not already present."""
+    """Add or correct the Google Drive link on the circle's wiki page."""
     try:
         page.goto(f"{base_url}/wiki/{wiki_slug}/edit", wait_until="networkidle")
         if page.locator(".CodeMirror").count() == 0:
             log("ERROR", "gdrive_wiki", wiki_slug, "Editor not found on wiki edit page")
             return False
         content = _codemirror_get(page)
-        if "/gdrive/" in content:
-            log("INFO", "gdrive_wiki", f"{wiki_slug}: gdrive link already present, skipping")
+        new_content, action = _apply_gdrive_link(content, circle_name, gdrive_href)
+        if action == "skip":
+            log("INFO", "gdrive_wiki", f"{wiki_slug}: gdrive link up to date, skipping")
             return True
-        base = content.strip()
-        link_text = f"{circle_name} Google Drive documents"
-        new_content = (base + "\n\n" if base else "") + f"[{link_text}]({gdrive_href})\n"
         if dry_run:
-            log("DRY-RUN", "add_gdrive_link", f"{wiki_slug} → {gdrive_href}")
+            log("DRY-RUN", f"{action}_gdrive_link", f"{wiki_slug} → {gdrive_href}")
             return True
         _codemirror_set(page, new_content)
         page.locator('input[name="commit"]').click()
@@ -1607,13 +1628,13 @@ def _ensure_gdrive_link_on_wiki(
         err = _check_submit_errors(page)
         if err:
             screenshot(page, f"gdrive_wiki_err_{wiki_slug[:20]}")
-            log("ERROR", "add_gdrive_link", wiki_slug, err[:200])
+            log("ERROR", f"{action}_gdrive_link", wiki_slug, err[:200])
             return False
-        log("INFO", "add_gdrive_link", f"{wiki_slug}: added link to {gdrive_href}")
+        log("INFO", f"{action}_gdrive_link", f"{wiki_slug}: {action}d link to {gdrive_href}")
         return True
     except Exception as e:
         screenshot(page, f"gdrive_wiki_exc_{wiki_slug[:20]}")
-        log("ERROR", "add_gdrive_link", wiki_slug, str(e))
+        log("ERROR", "gdrive_wiki", wiki_slug, str(e))
         return False
 
 
