@@ -1592,9 +1592,10 @@ def process(
                 stats["wiki_created" if ok else "wiki_failed"] += 1
 
             wiki_slug = wiki_url.removeprefix("/wiki/")
+            group_url = group_urls.get(circle.name, "")
             gdrive_href = find_gdrive_link(gather_name, gdrive_links)
             if gdrive_href:
-                ok = _ensure_gdrive_link_on_wiki(page, base_url, wiki_slug, gdrive_href, gather_name, dry_run)
+                ok = _ensure_gdrive_link_on_wiki(page, base_url, wiki_slug, gdrive_href, gather_name, group_url, dry_run)
                 stats["gdrive_linked" if ok else "gdrive_failed"] += 1
             else:
                 stats["gdrive_not_found"] += 1
@@ -1627,41 +1628,61 @@ def fetch_gdrive_links(page: Page, base_url: str) -> list[tuple[str, str]]:
         return []
 
 
-def _apply_gdrive_link(content: str, circle_name: str, gdrive_href: str) -> tuple[Optional[str], str]:
-    """Compute the updated wiki content after applying the Google Drive link.
+def _links_block(circle_name: str, group_url: str, gdrive_href: str) -> str:
+    return (
+        f"{circle_name}'s:\n"
+        f"* [Members]({group_url})\n"
+        f"* [Google Drive documents]({gdrive_href})"
+    )
+
+
+# Matches the two-item links block written by this script.
+_LINKS_BLOCK_RE = re.compile(
+    r"[^\n]*'s:\n\* \[Members\]\([^)]+\)\n\* \[[^\]]*\]\(/gdrive/[^)]+\)"
+)
+# Matches the old single-line bare gdrive markdown link.
+_OLD_GDRIVE_RE = re.compile(r"\[([^\]]*)\]\((/gdrive/[^)]+)\)")
+
+
+def _apply_gdrive_link(content: str, circle_name: str, gdrive_href: str, group_url: str) -> tuple[Optional[str], str]:
+    """Compute the updated wiki content after applying the Members + Google Drive links block.
 
     Returns (new_content, action) where action is one of:
-      "skip"   — link already exists with correct text; no change needed
-      "update" — link exists but text is wrong; new_content has the corrected text
-      "add"    — no gdrive link yet; new_content has the link appended
-
-    When action is "update", the existing href is preserved (only the text changes).
+      "skip"   — block already exists with correct content; no change needed
+      "update" — block (or old bare link) exists but is wrong; new_content corrects it
+      "add"    — no block yet; new_content has the block appended
     """
-    link_text = f"{circle_name} Google Drive documents"
-    m = re.search(r"\[([^\]]*)\]\((/gdrive/[^)]+)\)", content)
+    expected = _links_block(circle_name, group_url, gdrive_href)
+
+    m = _LINKS_BLOCK_RE.search(content)
     if m:
-        current_text, current_href = m.group(1), m.group(2)
-        if current_text == link_text:
+        if m.group(0) == expected:
             return None, "skip"
-        new_content = content[: m.start()] + f"[{link_text}]({current_href})" + content[m.end() :]
+        new_content = content[: m.start()] + expected + content[m.end() :]
         return new_content, "update"
+
+    m_old = _OLD_GDRIVE_RE.search(content)
+    if m_old:
+        new_content = content[: m_old.start()] + expected + content[m_old.end() :]
+        return new_content, "update"
+
     base = content.strip()
-    new_content = (base + "\n\n" if base else "") + f"[{link_text}]({gdrive_href})\n"
+    new_content = (base + "\n\n" if base else "") + expected + "\n"
     return new_content, "add"
 
 
 def _ensure_gdrive_link_on_wiki(
     page: Page, base_url: str, wiki_slug: str, gdrive_href: str,
-    circle_name: str, dry_run: bool,
+    circle_name: str, group_url: str, dry_run: bool,
 ) -> bool:
-    """Add or correct the Google Drive link on the circle's wiki page."""
+    """Add or correct the Members + Google Drive links block on the circle's wiki page."""
     try:
         page.goto(f"{base_url}/wiki/{wiki_slug}/edit", wait_until="networkidle")
         if page.locator(".CodeMirror").count() == 0:
             log("ERROR", "gdrive_wiki", wiki_slug, "Editor not found on wiki edit page")
             return False
         content = _codemirror_get(page)
-        new_content, action = _apply_gdrive_link(content, circle_name, gdrive_href)
+        new_content, action = _apply_gdrive_link(content, circle_name, gdrive_href, group_url)
         if action == "skip":
             log("INFO", "gdrive_wiki", f"{wiki_slug}: gdrive link up to date, skipping")
             return True

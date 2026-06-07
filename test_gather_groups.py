@@ -1316,40 +1316,63 @@ class TestFilterCircles:
 class TestApplyGdriveLink:
     HREF = "/gdrive/membership-folder"
     NAME = "Membership"
+    GROUP_URL = "/groups/42"
+    BLOCK = (
+        "Membership's:\n"
+        "* [Members](/groups/42)\n"
+        "* [Google Drive documents](/gdrive/membership-folder)"
+    )
+
+    def _call(self, content):
+        return _apply_gdrive_link(content, self.NAME, self.HREF, self.GROUP_URL)
 
     def test_add_to_blank_page(self):
-        new_content, action = _apply_gdrive_link("", self.NAME, self.HREF)
+        new_content, action = self._call("")
         assert action == "add"
-        assert new_content == "[Membership Google Drive documents](/gdrive/membership-folder)\n"
+        assert new_content == self.BLOCK + "\n"
 
     def test_add_appends_after_existing_content(self):
-        new_content, action = _apply_gdrive_link("Some content.", self.NAME, self.HREF)
+        new_content, action = self._call("Some content.")
         assert action == "add"
         assert new_content.startswith("Some content.\n\n")
-        assert "[Membership Google Drive documents]" in new_content
+        assert self.BLOCK in new_content
 
-    def test_skip_when_text_already_correct(self):
-        content = "[Membership Google Drive documents](/gdrive/membership-folder)"
-        new_content, action = _apply_gdrive_link(content, self.NAME, self.HREF)
+    def test_skip_when_block_already_correct(self):
+        new_content, action = self._call(self.BLOCK)
         assert action == "skip"
         assert new_content is None
 
-    def test_update_wrong_link_text(self):
-        content = "Some text\n\n[Google Drive documents](/gdrive/membership-folder)"
-        new_content, action = _apply_gdrive_link(content, self.NAME, self.HREF)
+    def test_update_block_wrong_name(self):
+        old_block = (
+            "Old Name's:\n"
+            "* [Members](/groups/42)\n"
+            "* [Google Drive documents](/gdrive/membership-folder)"
+        )
+        new_content, action = self._call(old_block)
         assert action == "update"
-        assert "[Membership Google Drive documents](/gdrive/membership-folder)" in new_content
-        assert "[Google Drive documents]" not in new_content
+        assert self.BLOCK in new_content
+        assert "Old Name" not in new_content
 
-    def test_update_preserves_existing_href(self):
-        content = "[Old Text](/gdrive/custom-path)"
-        new_content, action = _apply_gdrive_link(content, self.NAME, self.HREF)
+    def test_update_block_wrong_group_url(self):
+        old_block = (
+            "Membership's:\n"
+            "* [Members](/groups/99)\n"
+            "* [Google Drive documents](/gdrive/membership-folder)"
+        )
+        new_content, action = self._call(old_block)
         assert action == "update"
-        assert "/gdrive/custom-path" in new_content
+        assert "* [Members](/groups/42)" in new_content
 
-    def test_update_preserves_surrounding_content(self):
+    def test_upgrade_old_bare_gdrive_link(self):
+        content = "[Membership Google Drive documents](/gdrive/membership-folder)"
+        new_content, action = self._call(content)
+        assert action == "update"
+        assert self.BLOCK in new_content
+        assert "[Membership Google Drive documents]" not in new_content
+
+    def test_upgrade_preserves_surrounding_content(self):
         content = "Before\n\n[Old Text](/gdrive/foo)\n\nAfter"
-        new_content, action = _apply_gdrive_link(content, self.NAME, self.HREF)
+        new_content, action = self._call(content)
         assert action == "update"
         assert "Before" in new_content
         assert "After" in new_content
