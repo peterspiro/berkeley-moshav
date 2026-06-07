@@ -1011,7 +1011,7 @@ class TestBuildHierarchyContent:
         md = self._build([orphan])
         lines = md.splitlines()
         orphan_line = next(l for l in lines if "Lone Circle" in l)
-        assert orphan_line.startswith("  ")  # indented under synthetic root
+        assert orphan_line.startswith("    ")  # indented under synthetic root
 
     def test_members_link_included(self):
         root = make_circle(self.ROOT, col_index=0)
