@@ -560,6 +560,26 @@ class TestParseSheet:
         assert by_name["Delta"].parent_name == "Alpha"
         assert by_name["Epsilon"].parent_name == "Delta"
 
+    def test_multiple_col0_circles_all_parsed(self):
+        # Multiple col_index=0 circles should all be parsed (no seen_col0 guard).
+        # Their col_index=1 sub-circles must inherit the nearest preceding col_index=0
+        # as parent, not always the first col_index=0 circle.
+        csv_text = textwrap.dedent("""\
+            Circle,,Sub-circle,Consultants,Members,Lead Facilitator Sec.,Meetings,Desc,Aim,Qual
+            Root,,,,,,,,
+            Level1A,,,,,,,,
+            ,Sub-of-A,,,,,,,
+            Level1B,,,,,,,,
+            ,Sub-of-B,,,,,,,
+        """)
+        circles = parse_sheet(csv_text)
+        by_name = {c.name: c for c in circles}
+        assert "Root" in by_name
+        assert "Level1A" in by_name
+        assert "Level1B" in by_name
+        assert by_name["Sub-of-A"].parent_name == "Level1A"
+        assert by_name["Sub-of-B"].parent_name == "Level1B"
+
     def test_leading_punctuation_stripped_from_name(self):
         csv_text = textwrap.dedent("""\
             Circle,,Sub-circle,Consultants,Members,Lead Facilitator Sec.,Meetings,Desc,Aim,Qual
@@ -935,9 +955,11 @@ class TestBuildHierarchyContent:
         )
 
     def _make_tree(self):
+        # Reflects parse_sheet output: col_index=0 circles have parent_name=None;
+        # col_index=1 circles have parent_name=their nearest col_index=0 parent.
         root = make_circle(self.ROOT, col_index=0)
-        alpha = make_circle("Alpha Circle", col_index=0, parent_name=self.ROOT)
-        beta = make_circle("Beta Circle", col_index=0, parent_name=self.ROOT)
+        alpha = make_circle("Alpha Circle", col_index=0)  # parent_name=None
+        beta = make_circle("Beta Circle", col_index=0)    # parent_name=None
         child = make_circle("Alpha Child", col_index=1, parent_name="Alpha Circle")
         return [root, alpha, beta, child]
 
