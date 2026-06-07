@@ -594,6 +594,7 @@ def _render_hierarchy_entry(
         text = parts[0] + ": " + " | ".join(parts[1:])
     else:
         text = parts[0]
+        log("DEBUG", "hierarchy_no_links", f"{circle.name}: no links (group={bool(group_url)} wiki={bool(wiki_url)} gdrive={bool(gdrive_url)})")
     lines = [f"{pad}- {text}"]
     children = sorted(
         by_parent.get(circle.name, []),
@@ -1447,6 +1448,7 @@ def _ensure_hierarchy_page(
                 return False
             current = _codemirror_get(page)
             new_page, action = _apply_hierarchy_content(current, content)
+            log("DEBUG", "hierarchy_action", f"action={action!r}  current_len={len(current)}  new_len={len(content)}")
             if action == "skip":
                 log("INFO", "hierarchy_wiki", f"'{WIKI_TITLE}' up to date, skipping")
                 return True
@@ -1678,6 +1680,14 @@ def process(
             stats["gdrive_linked" if ok else "gdrive_failed"] += 1
 
         if circle_prefix is None:
+            # Log any circles whose wiki or gdrive entries are missing before building hierarchy.
+            for _c in circles:
+                _wu = wiki_url_map.get(_c.name, "")
+                _gu = gdrive_url_map.get(_c.name, "")
+                _gurl = group_urls.get(_c.name, "")
+                if not _wu or not _gu:
+                    log("INFO", "hierarchy_links",
+                        f"{_c.name}: wiki={_wu!r} gdrive={_gu!r} group={_gurl!r}")
             hierarchy_content = _build_hierarchy_content(
                 circles, gather_name_map, group_urls, wiki_url_map, gdrive_url_map
             )
