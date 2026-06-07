@@ -1552,14 +1552,19 @@ def process(
 
             wiki_url = ""
             if _needs_wiki(circle):
+                derived_wiki_url = f"/wiki/{_circle_wiki_slug(gather_name)}"
                 if prefetched_detail is not None:
                     existing_wiki_url = _extract_wiki_url(prefetched_detail.description)
-                    if existing_wiki_url:
+                    if existing_wiki_url == derived_wiki_url:
                         wiki_url = existing_wiki_url
                         circles_with_existing_wiki.add(circle.name)
-                        log("INFO", "wiki_url", f"{circle.name}: using existing link {wiki_url!r}")
+                        log("INFO", "wiki_url", f"{circle.name}: existing link matches {wiki_url!r}")
+                    elif existing_wiki_url:
+                        log("INFO", "wiki_url",
+                            f"{circle.name}: existing link {existing_wiki_url!r} "
+                            f"differs from derived {derived_wiki_url!r}, using derived")
                 if not wiki_url:
-                    wiki_url = f"/wiki/{_circle_wiki_slug(gather_name)}"
+                    wiki_url = derived_wiki_url
             wiki_url_map[circle.name] = wiki_url
 
             description = build_description(circle, remaining_consultants, wiki_url)
