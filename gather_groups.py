@@ -1555,6 +1555,15 @@ def process(
         }
 
         for circle in circles:
+            # Populate maps with derived-from-spreadsheet fallbacks so the
+            # hierarchy and wiki loop always have values even when group lookup
+            # or member resolution fails and we hit an early `continue`.
+            _fallback_name = _canonical_group_name(circle.name)
+            gather_name_map[circle.name] = _fallback_name
+            wiki_url_map[circle.name] = (
+                f"/wiki/{_circle_wiki_slug(_fallback_name)}" if _needs_wiki(circle) else ""
+            )
+
             try:
                 existing = find_matching_group(circle, gather_groups)
             except ValueError as e:
@@ -1562,8 +1571,8 @@ def process(
                 stats["errors"] += 1
                 continue
 
-            # Wiki pages are named after the Gather group (which may differ from
-            # the spreadsheet name, e.g. "Technology Circle" vs "Technology").
+            # Override with the actual Gather group name (may differ from the
+            # spreadsheet name, e.g. "Technology Circle" vs "Technology").
             # "Work Group" is canonicalized to "Working Group".
             gather_name = _canonical_group_name(
                 existing.name if existing is not None else circle.name
@@ -1583,15 +1592,7 @@ def process(
                 if prefetched_detail is not None else None
             )
 
-            try:
-                members, remaining_consultants = resolve_group_members(
-                    circle, gather_users, existing_member_ids
-                )
-            except ValueError as e:
-                log("ERROR", "resolve_members", circle.name, str(e))
-                stats["errors"] += 1
-                continue
-
+            # Refine wiki_url using the actual Gather name and any existing description link.
             wiki_url = ""
             if _needs_wiki(circle):
                 derived_wiki_url = f"/wiki/{_circle_wiki_slug(gather_name)}"
@@ -1608,6 +1609,15 @@ def process(
                 if not wiki_url:
                     wiki_url = derived_wiki_url
             wiki_url_map[circle.name] = wiki_url
+
+            try:
+                members, remaining_consultants = resolve_group_members(
+                    circle, gather_users, existing_member_ids
+                )
+            except ValueError as e:
+                log("ERROR", "resolve_members", circle.name, str(e))
+                stats["errors"] += 1
+                continue
 
             description = build_description(circle, remaining_consultants, wiki_url)
             log("DEBUG", "description", f"{circle.name}: {len(description)} chars")
