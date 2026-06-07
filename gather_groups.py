@@ -796,6 +796,24 @@ def find_matching_group(
     return matches[0] if matches else None
 
 
+def find_gdrive_link(
+    gather_name: str, gdrive_links: list[tuple[str, str]]
+) -> Optional[str]:
+    """Return the href of the /gdrive link whose text matches gather_name, or None.
+
+    Uses group_names_match for flexible matching (circle/team suffix, aliases,
+    parentheticals).  Returns None if zero or multiple links match.
+    """
+    matches = [(text, href) for text, href in gdrive_links
+               if group_names_match(gather_name, text)]
+    if len(matches) == 1:
+        return matches[0][1]
+    if len(matches) > 1:
+        log("WARN", "gdrive_match", gather_name,
+            f"ambiguous — matches: {[t for t, _ in matches]}")
+    return None
+
+
 def _fetch_group_detail(page: Page, base_url: str, group: GatherGroup) -> GatherGroup:
     """Load the group edit page to read current kind, availability, description,
     and inline membership rows."""
@@ -1439,6 +1457,7 @@ def process(
             "created": 0, "updated": 0, "skipped": 0, "failed": 0, "errors": 0,
             "list_created": 0, "list_failed": 0,
             "wiki_created": 0, "wiki_failed": 0, "wiki_index_ok": False,
+            "gdrive_linked": 0, "gdrive_failed": 0, "gdrive_not_found": 0,
         }
 
         for circle in circles:
@@ -1514,6 +1533,7 @@ def process(
         # Create a blank wiki page for each circle (not committee), then update index.
         # If the description already links to an existing wiki page, skip creation and
         # use that URL in the index instead of the derived one.
+        gdrive_links = fetch_gdrive_links(page, base_url)
         wiki_circle_entries: list[tuple[str, str]] = []
         for circle in circles:
             if _group_kind(circle) == "committee":
@@ -1525,6 +1545,14 @@ def process(
                 ok = _ensure_circle_wiki_page(page, base_url, gather_name, dry_run)
                 stats["wiki_created" if ok else "wiki_failed"] += 1
 
+            wiki_slug = wiki_url.removeprefix("/wiki/")
+            gdrive_href = find_gdrive_link(gather_name, gdrive_links)
+            if gdrive_href:
+                ok = _ensure_gdrive_link_on_wiki(page, base_url, wiki_slug, gdrive_href, dry_run)
+                stats["gdrive_linked" if ok else "gdrive_failed"] += 1
+            else:
+                stats["gdrive_not_found"] += 1
+
         stats["wiki_index_ok"] = _ensure_wiki_index(
             page, base_url, wiki_circle_entries, dry_run,
             partial=(circle_prefix is not None),
@@ -1534,6 +1562,57 @@ def process(
 
     log("INFO", "done", str(stats))
     close_log()
+
+
+def fetch_gdrive_links(page: Page, base_url: str) -> list[tuple[str, str]]:
+    """Scrape the /gdrive page and return (link_text, href) pairs for all links."""
+    try:
+        page.goto(f"{base_url}/gdrive", wait_until="networkidle")
+        links: list[tuple[str, str]] = []
+        for link in page.locator("a[href]").all():
+            href = link.get_attribute("href") or ""
+            text = link.inner_text().strip()
+            if text and href:
+                links.append((text, href))
+        log("INFO", "fetch_gdrive", f"{len(links)} links found")
+        return links
+    except Exception as e:
+        log("ERROR", "fetch_gdrive", "", str(e))
+        return []
+
+
+def _ensure_gdrive_link_on_wiki(
+    page: Page, base_url: str, wiki_slug: str, gdrive_href: str, dry_run: bool
+) -> bool:
+    """Append a Google Drive link to the circle's wiki page if not already present."""
+    try:
+        page.goto(f"{base_url}/wiki/{wiki_slug}/edit", wait_until="networkidle")
+        if page.locator(".CodeMirror").count() == 0:
+            log("ERROR", "gdrive_wiki", wiki_slug, "Editor not found on wiki edit page")
+            return False
+        content = _codemirror_get(page)
+        if "/gdrive/" in content:
+            log("INFO", "gdrive_wiki", f"{wiki_slug}: gdrive link already present, skipping")
+            return True
+        base = content.strip()
+        new_content = (base + "\n\n" if base else "") + f"[Google Drive documents]({gdrive_href})\n"
+        if dry_run:
+            log("DRY-RUN", "add_gdrive_link", f"{wiki_slug} → {gdrive_href}")
+            return True
+        _codemirror_set(page, new_content)
+        page.locator('input[name="commit"]').click()
+        page.wait_for_load_state("networkidle")
+        err = _check_submit_errors(page)
+        if err:
+            screenshot(page, f"gdrive_wiki_err_{wiki_slug[:20]}")
+            log("ERROR", "add_gdrive_link", wiki_slug, err[:200])
+            return False
+        log("INFO", "add_gdrive_link", f"{wiki_slug}: added link to {gdrive_href}")
+        return True
+    except Exception as e:
+        screenshot(page, f"gdrive_wiki_exc_{wiki_slug[:20]}")
+        log("ERROR", "add_gdrive_link", wiki_slug, str(e))
+        return False
 
 
 def _filter_circles(circles: list[Circle], prefix: str) -> list[Circle]:

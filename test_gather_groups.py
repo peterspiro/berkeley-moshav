@@ -22,6 +22,7 @@ from gather_groups import (
     _extract_wiki_url,
     _filter_circles,
     _parse_wiki_index_entries,
+    find_gdrive_link,
     _circle_wiki_slug,
     _group_kind,
     _group_needs_update,
@@ -1208,3 +1209,41 @@ class TestFilterCircles:
         circles = [make_circle(name="Alpha One"), make_circle(name="Alpha Two")]
         with pytest.raises(SystemExit):
             _filter_circles(circles, "Alpha")
+
+
+# ── find_gdrive_link ──────────────────────────────────────────────────────────
+
+class TestFindGdriveLink:
+    GDRIVE = [
+        ("Technology Circle", "/gdrive/tech-folder"),
+        ("Membership", "/gdrive/membership-folder"),
+        ("Community Life Circle", "/gdrive/clc-folder"),
+        ("Process & Governance", "/gdrive/pg-folder"),
+    ]
+
+    def test_exact_match(self):
+        assert find_gdrive_link("Membership", self.GDRIVE) == "/gdrive/membership-folder"
+
+    def test_circle_suffix_match(self):
+        # Gather group "Technology Circle" → spreadsheet name "Technology"
+        assert find_gdrive_link("Technology", self.GDRIVE) == "/gdrive/tech-folder"
+
+    def test_alias_match(self):
+        # CLC expands to "Community Life Circle"
+        assert find_gdrive_link("CLC", self.GDRIVE) == "/gdrive/clc-folder"
+
+    def test_acronym_match(self):
+        assert find_gdrive_link("P & G", self.GDRIVE) == "/gdrive/pg-folder"
+
+    def test_no_match_returns_none(self):
+        assert find_gdrive_link("Finance", self.GDRIVE) is None
+
+    def test_ambiguous_returns_none(self):
+        links = [
+            ("Alpha Circle", "/gdrive/alpha1"),
+            ("Alpha Circle (old)", "/gdrive/alpha2"),
+        ]
+        assert find_gdrive_link("Alpha", links) is None
+
+    def test_empty_list_returns_none(self):
+        assert find_gdrive_link("Membership", []) is None
