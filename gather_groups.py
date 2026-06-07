@@ -1548,7 +1548,7 @@ def process(
             wiki_slug = wiki_url.removeprefix("/wiki/")
             gdrive_href = find_gdrive_link(gather_name, gdrive_links)
             if gdrive_href:
-                ok = _ensure_gdrive_link_on_wiki(page, base_url, wiki_slug, gdrive_href, dry_run)
+                ok = _ensure_gdrive_link_on_wiki(page, base_url, wiki_slug, gdrive_href, gather_name, dry_run)
                 stats["gdrive_linked" if ok else "gdrive_failed"] += 1
             else:
                 stats["gdrive_not_found"] += 1
@@ -1582,7 +1582,8 @@ def fetch_gdrive_links(page: Page, base_url: str) -> list[tuple[str, str]]:
 
 
 def _ensure_gdrive_link_on_wiki(
-    page: Page, base_url: str, wiki_slug: str, gdrive_href: str, dry_run: bool
+    page: Page, base_url: str, wiki_slug: str, gdrive_href: str,
+    circle_name: str, dry_run: bool,
 ) -> bool:
     """Append a Google Drive link to the circle's wiki page if not already present."""
     try:
@@ -1595,7 +1596,8 @@ def _ensure_gdrive_link_on_wiki(
             log("INFO", "gdrive_wiki", f"{wiki_slug}: gdrive link already present, skipping")
             return True
         base = content.strip()
-        new_content = (base + "\n\n" if base else "") + f"[Google Drive documents]({gdrive_href})\n"
+        link_text = f"{circle_name} Google Drive documents"
+        new_content = (base + "\n\n" if base else "") + f"[{link_text}]({gdrive_href})\n"
         if dry_run:
             log("DRY-RUN", "add_gdrive_link", f"{wiki_slug} → {gdrive_href}")
             return True
