@@ -241,8 +241,21 @@ def expand_acronym(name: str) -> str:
 
 
 def _normalize_group_name(name: str) -> str:
-    """Expand acronym, strip trailing parenthetical, lowercase, and apply aliases."""
+    """Normalize a group name for comparison.
+
+    Steps (in order):
+    - Expand known acronyms
+    - Strip trailing parenthetical (including unclosed)
+    - Lowercase
+    - Replace & with 'and' (with surrounding space normalization)
+    - Remove commas
+    - Collapse runs of whitespace
+    - Apply name aliases
+    """
     n = re.sub(r"\s*\([^)]*\)?\s*$", "", expand_acronym(name).strip()).strip().lower()
+    n = re.sub(r"\s*&\s*", " and ", n)
+    n = n.replace(",", "")
+    n = re.sub(r"\s+", " ", n).strip()
     for alias_set in GROUP_NAME_ALIASES:
         if n in alias_set:
             n = min(alias_set)  # canonical form is alphabetically first

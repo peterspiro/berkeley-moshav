@@ -225,6 +225,24 @@ class TestGroupNamesMatch:
         assert group_names_match("Membership", "Membership Team (All Members)")
         assert group_names_match("Membership Team (All Members)", "Membership")
 
+    def test_ampersand_equals_and(self):
+        assert group_names_match("Finance & Legal", "Finance and Legal")
+        assert group_names_match("Finance and Legal", "Finance & Legal")
+
+    def test_commas_ignored(self):
+        assert group_names_match("Development Finance Legal", "Development, Finance, Legal")
+
+    def test_ampersand_and_commas_together(self):
+        # The motivating example: Gather group vs spreadsheet name
+        assert group_names_match(
+            "Development, Finance, and Legal Circle (DF&L)",
+            "Development, Finance, & Legal",
+        )
+        assert group_names_match(
+            "Development, Finance, & Legal",
+            "Development, Finance, and Legal Circle (DF&L)",
+        )
+
 
 class TestParseSheetParenStrip:
     def test_trailing_paren_stripped_from_name(self):
