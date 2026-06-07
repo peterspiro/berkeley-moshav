@@ -17,21 +17,19 @@ from gather_groups import (
     GatherGroupMember,
     GatherUser,
     GROUP_KINDS,
-    _build_wiki_index_content,
+    _build_hierarchy_content,
     _circle_name_to_list_name,
     _apply_gdrive_link,
     _canonical_group_name,
     _extract_wiki_url,
     _filter_circles,
     _needs_wiki,
-    _parse_wiki_index_entries,
     find_gdrive_link,
     _circle_wiki_slug,
     _group_kind,
     _group_needs_update,
     best_column_match,
     build_description,
-    build_wiki_markdown,
     edit_distance,
     expand_acronym,
     find_header_row_index,
@@ -586,23 +584,22 @@ class TestBuildDescription:
         result = build_description(c, "")
         assert result == "Desc\nMeetings: Tuesdays"
 
-    def test_appends_parent(self):
-        c = make_circle(description="Desc", parent_name="Alpha Circle")
-        result = build_description(c, "")
-        assert "Parent: Alpha Circle" in result
-
     def test_appends_consultants(self):
         c = make_circle(description="Desc")
         result = build_description(c, "Morgan Vale")
         assert "Consultants: Morgan Vale" in result
 
-    def test_order_consultants_meetings_parent(self):
-        c = make_circle(description="D", meetings="Mon", parent_name="Alpha")
+    def test_order_consultants_then_meetings(self):
+        c = make_circle(description="D", meetings="Mon")
         result = build_description(c, "Morgan Vale")
         ci = result.index("Consultants:")
         mi = result.index("Meetings:")
-        pi = result.index("Parent:")
-        assert ci < mi < pi
+        assert ci < mi
+
+    def test_parent_not_included(self):
+        c = make_circle(description="Desc", parent_name="Alpha Circle")
+        result = build_description(c, "")
+        assert "Parent:" not in result
 
     def test_truncates_description_to_fit(self):
         c = make_circle(description="A" * 250, meetings="Tuesdays")
@@ -621,21 +618,13 @@ class TestBuildDescription:
         assert build_description(c, "") == ""
 
     def test_max_255_chars(self):
-        c = make_circle(
-            description="D" * 200,
-            meetings="M" * 50,
-            parent_name="Alpha",
-        )
+        c = make_circle(description="D" * 200, meetings="M" * 50)
         result = build_description(c, "C" * 50)
         assert len(result) <= 255
 
     def test_post_length_never_exceeds_255(self):
         # Description with many newlines: browser \n->\r\n adds extra chars
-        c = make_circle(
-            description="D" * 100,
-            meetings="M" * 80,
-            parent_name="P" * 50,
-        )
+        c = make_circle(description="D" * 100, meetings="M" * 80)
         result = build_description(c, "C" * 40)
         post_len = len(result) + result.count("\n")
         assert post_len <= 255
@@ -929,75 +918,106 @@ class TestResolveGroupMembers:
         assert ids.count("1") == 1
 
 
-# ── build_wiki_markdown ───────────────────────────────────────────────────────
+# ── _build_hierarchy_content ──────────────────────────────────────────────────
 
-class TestBuildWikiMarkdown:
-    def _circles(self):
-        alpha = make_circle(
-            "Alpha Circle", col_index=0,
-            description="Governs", aim="Flourish", qualifications="Care",
+class TestBuildHierarchyContent:
+    ROOT = "Top Circle / HOA"
+
+    def _build(self, circles, group_urls=None, wiki_url_map=None, gdrive_url_map=None):
+        names = [c.name for c in circles]
+        gather_name_map = {n: n for n in names}
+        return _build_hierarchy_content(
+            circles,
+            gather_name_map,
+            group_urls or {},
+            wiki_url_map or {},
+            gdrive_url_map or {},
         )
-        beta = make_circle(
-            "Beta Circle", col_index=1, parent_name="Alpha Circle",
-            description="Handles sub", aim="Sub aim", qualifications="",
-        )
-        gamma = make_circle(
-            "Gamma", col_index=2, parent_name="Beta Circle",
-        )
-        return [alpha, beta, gamma]
 
-    def test_title_present(self):
-        md = build_wiki_markdown(self._circles(), {})
-        assert "# Circle Hierarchy" in md
+    def _make_tree(self):
+        root = make_circle(self.ROOT, col_index=0)
+        alpha = make_circle("Alpha Circle", col_index=0, parent_name=self.ROOT)
+        beta = make_circle("Beta Circle", col_index=0, parent_name=self.ROOT)
+        child = make_circle("Alpha Child", col_index=1, parent_name="Alpha Circle")
+        return [root, alpha, beta, child]
 
-    def test_root_circle_at_top_level(self):
-        md = build_wiki_markdown(self._circles(), {"Alpha Circle": "/groups/1"})
-        assert "- [Alpha Circle](/groups/1)" in md
+    def test_root_is_sole_top_level(self):
+        md = self._build(self._make_tree())
+        lines = [l for l in md.splitlines() if l.strip().startswith("-")]
+        top = [l for l in lines if not l.startswith(" ")]
+        assert len(top) == 1
+        assert self.ROOT in top[0]
 
-    def test_circle_without_url(self):
-        md = build_wiki_markdown(self._circles(), {})
-        assert "- Alpha Circle\n" in md or "- Alpha Circle" in md
-
-    def test_domain_aim_qualifications(self):
-        md = build_wiki_markdown(self._circles(), {})
-        assert "Domain: Governs" in md
-        assert "Aim: Flourish" in md
-        assert "Qualifications: Care" in md
-
-    def test_empty_qualifications_omitted(self):
-        md = build_wiki_markdown(self._circles(), {})
-        # Beta Circle has no qualifications
+    def test_children_indented_under_root(self):
+        md = self._build(self._make_tree())
         lines = md.splitlines()
-        beta_idx = next(i for i, l in enumerate(lines) if "Beta Circle" in l)
-        beta_section = "\n".join(lines[beta_idx:beta_idx + 10])
-        assert "Qualifications:" not in beta_section.split("Gamma")[0]
+        root_line = next(l for l in lines if self.ROOT in l)
+        alpha_line = next(l for l in lines if "Alpha Circle" in l)
+        root_indent = len(root_line) - len(root_line.lstrip())
+        alpha_indent = len(alpha_line) - len(alpha_line.lstrip())
+        assert alpha_indent > root_indent
 
-    def test_sub_circles_label(self):
-        md = build_wiki_markdown(self._circles(), {})
-        assert "Sub-circles:" in md
-
-    def test_hierarchy_indentation(self):
-        md = build_wiki_markdown(self._circles(), {})
+    def test_grandchild_deeper_than_child(self):
+        md = self._build(self._make_tree())
         lines = md.splitlines()
         alpha_line = next(l for l in lines if "Alpha Circle" in l)
-        beta_line = next(l for l in lines if "Beta Circle" in l)
-        gamma_line = next(l for l in lines if "Gamma" in l and "Sub-circles" not in l)
-        alpha_indent = len(alpha_line) - len(alpha_line.lstrip())
-        beta_indent = len(beta_line) - len(beta_line.lstrip())
-        gamma_indent = len(gamma_line) - len(gamma_line.lstrip())
-        assert alpha_indent < beta_indent < gamma_indent
+        child_line = next(l for l in lines if "Alpha Child" in l)
+        assert len(child_line) - len(child_line.lstrip()) > len(alpha_line) - len(alpha_line.lstrip())
 
-    def test_multiple_roots(self):
-        a = make_circle("Alpha", col_index=0)
-        b = make_circle("Beta", col_index=0)
-        md = build_wiki_markdown([a, b], {})
-        assert "Alpha" in md
-        assert "Beta" in md
+    def test_children_alphabetical(self):
+        md = self._build(self._make_tree())
+        lines = md.splitlines()
+        alpha_idx = next(i for i, l in enumerate(lines) if "Alpha Circle" in l)
+        beta_idx = next(i for i, l in enumerate(lines) if "Beta Circle" in l)
+        assert alpha_idx < beta_idx
 
-    def test_circle_with_no_children_has_no_sub_circles_label(self):
-        circles = [make_circle("Lone Circle", col_index=0)]
-        md = build_wiki_markdown(circles, {})
-        assert "Sub-circles:" not in md
+    def test_orphan_becomes_child_of_root(self):
+        root = make_circle(self.ROOT, col_index=0)
+        orphan = make_circle("Lone Circle", col_index=0)  # parent_name=None
+        md = self._build([root, orphan])
+        lines = md.splitlines()
+        orphan_line = next(l for l in lines if "Lone Circle" in l)
+        assert orphan_line.startswith("  ")  # indented under root
+
+    def test_members_link_included(self):
+        root = make_circle(self.ROOT, col_index=0)
+        md = self._build([root], group_urls={self.ROOT: "/groups/1"})
+        assert "[Members](/groups/1)" in md
+
+    def test_wiki_link_included(self):
+        root = make_circle(self.ROOT, col_index=0)
+        md = self._build([root], wiki_url_map={self.ROOT: "/wiki/top-circle-hoa-wiki"})
+        assert "[Wiki](/wiki/top-circle-hoa-wiki)" in md
+
+    def test_documents_link_included_when_present(self):
+        root = make_circle(self.ROOT, col_index=0)
+        md = self._build([root], gdrive_url_map={self.ROOT: "/gdrive/hoa"})
+        assert "[Documents](/gdrive/hoa)" in md
+
+    def test_documents_link_omitted_when_absent(self):
+        root = make_circle(self.ROOT, col_index=0)
+        md = self._build([root])
+        assert "Documents" not in md
+
+    def test_pipe_separators(self):
+        root = make_circle(self.ROOT, col_index=0)
+        md = self._build(
+            [root],
+            group_urls={self.ROOT: "/groups/1"},
+            wiki_url_map={self.ROOT: "/wiki/top-wiki"},
+        )
+        assert f"{self.ROOT} | [Members]" in md
+        assert "[Members](/groups/1) | [Wiki]" in md
+
+    def test_name_not_a_link(self):
+        root = make_circle(self.ROOT, col_index=0)
+        md = self._build([root], group_urls={self.ROOT: "/groups/1"})
+        assert f"[{self.ROOT}]" not in md
+
+    def test_no_root_circle_produces_empty(self):
+        circles = [make_circle("Alpha Circle", col_index=0)]
+        md = self._build(circles)
+        assert md.strip() == ""
 
 
 # ── to_csv_export_url ─────────────────────────────────────────────────────────
@@ -1152,100 +1172,6 @@ class TestExtractWikiUrl:
     def test_returns_empty_for_non_wiki_link(self):
         desc = 'Text\n<a href="/groups/42">Groups</a>'
         assert _extract_wiki_url(desc) == ""
-
-
-# ── _build_wiki_index_content ─────────────────────────────────────────────────
-
-class TestBuildWikiIndexContent:
-    def test_no_title_header(self):
-        content = _build_wiki_index_content([("Alpha Circle", "/wiki/alpha-circle-wiki")])
-        assert "# Circle Wiki Pages" not in content
-
-    def test_link_format_relative(self):
-        content = _build_wiki_index_content([("Alpha Circle", "/wiki/alpha-circle-wiki")])
-        assert "- [Alpha Circle](/wiki/alpha-circle-wiki)" in content
-
-    def test_custom_url_used_verbatim(self):
-        content = _build_wiki_index_content([("Alpha Circle", "/wiki/custom-page")])
-        assert "- [Alpha Circle](/wiki/custom-page)" in content
-
-    def test_alphabetical_order(self):
-        content = _build_wiki_index_content([
-            ("Membership", "/wiki/membership-wiki"),
-            ("Alpha Circle", "/wiki/alpha-circle-wiki"),
-            ("Technology", "/wiki/technology-wiki"),
-        ])
-        lines = [l for l in content.splitlines() if l.startswith("- ")]
-        assert lines[0].startswith("- [Alpha")
-        assert lines[1].startswith("- [Membership")
-        assert lines[2].startswith("- [Technology")
-
-    def test_case_insensitive_sort(self):
-        content = _build_wiki_index_content([
-            ("beta", "/wiki/beta-wiki"),
-            ("Alpha", "/wiki/alpha-wiki"),
-        ])
-        lines = [l for l in content.splitlines() if l.startswith("- ")]
-        assert lines[0].startswith("- [Alpha")
-        assert lines[1].startswith("- [beta")
-
-    def test_empty_list(self):
-        content = _build_wiki_index_content([])
-        assert "- [" not in content
-
-
-# ── _parse_wiki_index_entries ─────────────────────────────────────────────────
-
-class TestParseWikiIndexEntries:
-    def test_parses_single_entry(self):
-        content = "- [Alpha Circle](/wiki/alpha-circle-wiki)\n"
-        assert _parse_wiki_index_entries(content) == [("Alpha Circle", "/wiki/alpha-circle-wiki")]
-
-    def test_parses_multiple_entries(self):
-        content = (
-            "- [Alpha Circle](/wiki/alpha-circle-wiki)\n"
-            "- [Membership](/wiki/membership-wiki)\n"
-        )
-        entries = _parse_wiki_index_entries(content)
-        assert len(entries) == 2
-        assert ("Alpha Circle", "/wiki/alpha-circle-wiki") in entries
-        assert ("Membership", "/wiki/membership-wiki") in entries
-
-    def test_ignores_non_bullet_lines(self):
-        content = "Some header\n- [Alpha Circle](/wiki/alpha-circle-wiki)\n"
-        entries = _parse_wiki_index_entries(content)
-        assert entries == [("Alpha Circle", "/wiki/alpha-circle-wiki")]
-
-    def test_empty_content(self):
-        assert _parse_wiki_index_entries("") == []
-
-    def test_roundtrip(self):
-        pairs = [("Alpha Circle", "/wiki/alpha-circle-wiki"), ("Membership", "/wiki/membership-wiki")]
-        content = _build_wiki_index_content(pairs)
-        assert set(_parse_wiki_index_entries(content)) == set(pairs)
-
-    def test_partial_merge_preserves_existing(self):
-        # Simulate the merge logic used in _ensure_wiki_index when partial=True.
-        existing_content = (
-            "- [Alpha Circle](/wiki/alpha-circle-wiki)\n"
-            "- [Membership](/wiki/membership-wiki)\n"
-        )
-        new_entry = [("Beta Circle", "/wiki/beta-circle-wiki")]
-        existing = dict(_parse_wiki_index_entries(existing_content))
-        existing.update(new_entry)
-        merged = _build_wiki_index_content(list(existing.items()))
-        assert "Alpha Circle" in merged
-        assert "Membership" in merged
-        assert "Beta Circle" in merged
-
-    def test_partial_merge_updates_existing_url(self):
-        existing_content = "- [Alpha Circle](/wiki/alpha-circle-wiki)\n"
-        updated_entry = [("Alpha Circle", "/wiki/custom-page")]
-        existing = dict(_parse_wiki_index_entries(existing_content))
-        existing.update(updated_entry)
-        merged = _build_wiki_index_content(list(existing.items()))
-        assert "- [Alpha Circle](/wiki/custom-page)" in merged
-        assert "alpha-circle-wiki" not in merged
 
 
 # ── _canonical_group_name ─────────────────────────────────────────────────────

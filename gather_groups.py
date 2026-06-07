@@ -38,8 +38,7 @@ DEFAULT_SHEET_URL = (
 MAX_DESC = 255
 WIKI_TITLE = "Circle Hierarchy"
 WIKI_SLUG = "circle-hierarchy"
-WIKI_INDEX_TITLE = "Circle Wiki Pages"
-WIKI_INDEX_SLUG = "circle-wiki-pages"
+_HIERARCHY_ROOT = "Top Circle / HOA"
 LOG_FILE = Path(__file__).parent / "groups_log.csv"
 SCREENSHOT_DIR = Path(__file__).parent / "import_screenshots"
 
@@ -545,8 +544,6 @@ def build_description(
         extra_lines.append(f"\nConsultants: {remaining_consultant_text}")
     if circle.meetings:
         extra_lines.append(f"\nMeetings: {circle.meetings}")
-    if circle.parent_name:
-        extra_lines.append(f"\nParent: {circle.parent_name}")
 
     wiki_line = f'\n.\n<a href="{wiki_url}">Wiki</a>' if wiki_url else ""
 
@@ -577,50 +574,69 @@ def build_description(
     return result
 
 
-# ── Wiki markdown ─────────────────────────────────────────────────────────────
+# ── Circle hierarchy wiki page ─────────────────────────────────────────────────
 
-def _render_entry(
+def _render_hierarchy_entry(
     circle: Circle,
-    by_parent: dict[Optional[str], list["Circle"]],
+    by_parent: dict[str, list[Circle]],
+    gather_name_map: dict[str, str],
     group_urls: dict[str, str],
+    wiki_url_map: dict[str, str],
+    gdrive_url_map: dict[str, str],
     depth: int,
 ) -> list[str]:
     pad = "  " * depth
-    child_pad = "  " * (depth + 1)
-
-    url = group_urls.get(circle.name, "")
-    root_text = f"[{circle.name}]({url})" if url else circle.name
-    lines = [f"{pad}- {root_text}"]
-
-    if circle.description:
-        lines.append(f"{child_pad}- Domain: {circle.description}")
-    if circle.aim:
-        lines.append(f"{child_pad}- Aim: {circle.aim}")
-    if circle.qualifications:
-        lines.append(f"{child_pad}- Qualifications: {circle.qualifications}")
-
-    children = by_parent.get(circle.name, [])
-    if children:
-        lines.append(f"{child_pad}- Sub-circles:")
-        for child in children:
-            lines.extend(_render_entry(child, by_parent, group_urls, depth + 2))
-
+    gather_name = gather_name_map.get(circle.name, circle.name)
+    parts: list[str] = [gather_name]
+    group_url = group_urls.get(circle.name, "")
+    wiki_url = wiki_url_map.get(circle.name, "")
+    gdrive_url = gdrive_url_map.get(circle.name, "")
+    if group_url:
+        parts.append(f"[Members]({group_url})")
+    if wiki_url:
+        parts.append(f"[Wiki]({wiki_url})")
+    if gdrive_url:
+        parts.append(f"[Documents]({gdrive_url})")
+    lines = [f"{pad}- {' | '.join(parts)}"]
+    children = sorted(
+        by_parent.get(circle.name, []),
+        key=lambda c: gather_name_map.get(c.name, c.name).casefold(),
+    )
+    for child in children:
+        lines.extend(_render_hierarchy_entry(
+            child, by_parent, gather_name_map, group_urls, wiki_url_map, gdrive_url_map, depth + 1
+        ))
     return lines
 
 
-def build_wiki_markdown(
-    circles: list[Circle], group_urls: dict[str, str]
+def _build_hierarchy_content(
+    circles: list[Circle],
+    gather_name_map: dict[str, str],
+    group_urls: dict[str, str],
+    wiki_url_map: dict[str, str],
+    gdrive_url_map: dict[str, str],
 ) -> str:
-    by_parent: dict[Optional[str], list[Circle]] = {}
+    """Build markdown for the Circle Hierarchy wiki page.
+
+    "Top Circle / HOA" is the sole root item.  All circles whose parent_name
+    is None (other than Top Circle / HOA itself) are treated as its children.
+    """
+    root_circle: Optional[Circle] = None
+    by_parent: dict[str, list[Circle]] = {}
     for c in circles:
-        by_parent.setdefault(c.parent_name, []).append(c)
+        if group_names_match(c.name, _HIERARCHY_ROOT):
+            root_circle = c
+        else:
+            parent = c.parent_name if c.parent_name else _HIERARCHY_ROOT
+            by_parent.setdefault(parent, []).append(c)
 
-    lines: list[str] = [f"# {WIKI_TITLE}", ""]
-    for root in by_parent.get(None, []):
-        lines.extend(_render_entry(root, by_parent, group_urls, 0))
-        lines.append("")
-
-    return "\n".join(lines).rstrip() + "\n"
+    lines: list[str] = []
+    if root_circle is not None:
+        lines.extend(_render_hierarchy_entry(
+            root_circle, by_parent, gather_name_map,
+            group_urls, wiki_url_map, gdrive_url_map, depth=0,
+        ))
+    return "\n".join(lines) + "\n"
 
 
 # ── Gather: fetch users ───────────────────────────────────────────────────────
@@ -1351,37 +1367,12 @@ def _ensure_circle_wiki_page(
         return False
 
 
-def _build_wiki_index_content(circle_wikis: list[tuple[str, str]]) -> str:
-    """Build the markdown content for the 'Circle Wiki Pages' index page.
-
-    circle_wikis: list of (display_name, wiki_url) pairs.
-    """
-    lines = []
-    for name, url in sorted(circle_wikis, key=lambda t: t[0].casefold()):
-        lines.append(f"- [{name}]({url})")
-    return "\n".join(lines) + "\n"
-
-
-def _parse_wiki_index_entries(content: str) -> list[tuple[str, str]]:
-    """Extract (name, url) pairs from wiki index markdown content.
-
-    Parses lines of the form ``- [Name](URL)``.
-    """
-    return re.findall(r"^\- \[([^\]]+)\]\(([^)]+)\)", content, re.MULTILINE)
-
-
-def _ensure_wiki_index(
-    page: Page, base_url: str, circle_wikis: list[tuple[str, str]], dry_run: bool,
-    partial: bool = False,
+def _ensure_hierarchy_page(
+    page: Page, base_url: str, content: str, dry_run: bool
 ) -> bool:
-    """Create or update the 'Circle Wiki Pages' index wiki page.
-
-    When partial=True (single-circle run), existing entries for other circles
-    are preserved; only the entries in circle_wikis are added/updated.
-    """
-    desired = _build_wiki_index_content(circle_wikis)
+    """Create or update the Circle Hierarchy wiki page."""
     try:
-        page.goto(f"{base_url}/wiki/{WIKI_INDEX_SLUG}", wait_until="networkidle")
+        page.goto(f"{base_url}/wiki/{WIKI_SLUG}", wait_until="networkidle")
         page_title = page.title()
         page_exists = (
             "Exception" not in page_title
@@ -1390,64 +1381,54 @@ def _ensure_wiki_index(
             and page.locator("h1").count() > 0
         )
         if page_exists:
-            page.goto(f"{base_url}/wiki/{WIKI_INDEX_SLUG}/edit", wait_until="networkidle")
+            page.goto(f"{base_url}/wiki/{WIKI_SLUG}/edit", wait_until="networkidle")
             if page.locator(".CodeMirror").count() == 0:
-                log("ERROR", "update_wiki_index", WIKI_INDEX_TITLE,
-                    "Editor not found on edit page")
+                log("ERROR", "update_hierarchy", WIKI_TITLE, "Editor not found on edit page")
                 return False
             current = _codemirror_get(page)
-            if partial:
-                # Preserve entries for circles that aren't being processed.
-                existing = dict(_parse_wiki_index_entries(current))
-                existing.update(circle_wikis)
-                desired = _build_wiki_index_content(list(existing.items()))
-            else:
-                desired = _build_wiki_index_content(circle_wikis)
-            if current.strip() == desired.strip():
-                log("INFO", "wiki_index", f"'{WIKI_INDEX_TITLE}' up to date, skipping")
+            if current.strip() == content.strip():
+                log("INFO", "hierarchy_wiki", f"'{WIKI_TITLE}' up to date, skipping")
                 return True
             if dry_run:
-                log("DRY-RUN", "update_wiki_index", WIKI_INDEX_TITLE)
+                log("DRY-RUN", "update_hierarchy", WIKI_TITLE)
                 return True
-            _codemirror_set(page, desired)
+            _codemirror_set(page, content)
             page.locator('input[name="commit"]').click()
             page.wait_for_load_state("networkidle")
             err = _check_submit_errors(page)
             if err:
-                screenshot(page, "wiki_index_update_err")
-                log("ERROR", "update_wiki_index", WIKI_INDEX_TITLE, err[:200])
+                screenshot(page, "hierarchy_update_err")
+                log("ERROR", "update_hierarchy", WIKI_TITLE, err[:200])
                 return False
-            log("INFO", "update_wiki_index", f"Updated: '{WIKI_INDEX_TITLE}'")
+            log("INFO", "update_hierarchy", f"Updated: '{WIKI_TITLE}'")
             return True
         else:
             if dry_run:
-                log("DRY-RUN", "create_wiki_index", WIKI_INDEX_TITLE)
+                log("DRY-RUN", "create_hierarchy", WIKI_TITLE)
                 return True
             page.goto(f"{base_url}/wiki/new", wait_until="networkidle")
             if page.locator("form").count() == 0:
-                log("ERROR", "create_wiki_index", WIKI_INDEX_TITLE,
-                    "New wiki page form not found")
+                log("ERROR", "create_hierarchy", WIKI_TITLE, "New wiki page form not found")
                 return False
             title_el = page.locator('input[name="wiki_page[title]"], #wiki_page_title')
             if title_el.count() > 0:
-                title_el.fill(WIKI_INDEX_TITLE)
+                title_el.fill(WIKI_TITLE)
             if page.locator(".CodeMirror").count() == 0:
-                log("ERROR", "create_wiki_index", WIKI_INDEX_TITLE,
-                    "Editor not found on new page form")
+                log("ERROR", "create_hierarchy", WIKI_TITLE, "Editor not found on new page form")
                 return False
-            _codemirror_set(page, desired)
+            _codemirror_set(page, content)
             page.locator('input[name="commit"]').click()
             page.wait_for_load_state("networkidle")
             err = _check_submit_errors(page)
             if err:
-                screenshot(page, "wiki_index_create_err")
-                log("ERROR", "create_wiki_index", WIKI_INDEX_TITLE, err[:200])
+                screenshot(page, "hierarchy_create_err")
+                log("ERROR", "create_hierarchy", WIKI_TITLE, err[:200])
                 return False
-            log("INFO", "create_wiki_index", f"Created: '{WIKI_INDEX_TITLE}'")
+            log("INFO", "create_hierarchy", f"Created: '{WIKI_TITLE}'")
             return True
     except Exception as e:
-        screenshot(page, "wiki_index_exc")
-        log("ERROR", "wiki_index", WIKI_INDEX_TITLE, str(e))
+        screenshot(page, "hierarchy_exc")
+        log("ERROR", "hierarchy_wiki", WIKI_TITLE, str(e))
         return False
 
 
@@ -1597,33 +1578,40 @@ def process(
                 ok = _ensure_mailman_list(page, base_url, group_id, list_name, dry_run)
                 stats["list_created" if ok else "list_failed"] += 1
 
-        # Create a blank wiki page for each circle (not committee), then update index.
-        # If the description already links to an existing wiki page, skip creation and
-        # use that URL in the index instead of the derived one.
+        # Build gdrive URL map for all circles (used both for wiki pages and hierarchy).
         gdrive_links = fetch_gdrive_links(page, base_url)
-        wiki_circle_entries: list[tuple[str, str]] = []
+        gdrive_url_map: dict[str, str] = {}
+        for circle in circles:
+            gather_name = gather_name_map.get(circle.name, circle.name)
+            gdrive_url_map[circle.name] = find_gdrive_link(gather_name, gdrive_links) or ""
+
+        # Create a blank wiki page for each circle/working-group, then update their content.
         for circle in circles:
             if not _needs_wiki(circle):
                 continue
             gather_name = gather_name_map.get(circle.name, circle.name)
             wiki_url = wiki_url_map.get(circle.name, f"/wiki/{_circle_wiki_slug(gather_name)}")
-            wiki_circle_entries.append((gather_name, wiki_url))
             if circle.name not in circles_with_existing_wiki:
                 ok = _ensure_circle_wiki_page(page, base_url, gather_name, dry_run)
                 stats["wiki_created" if ok else "wiki_failed"] += 1
 
             wiki_slug = wiki_url.removeprefix("/wiki/")
             group_url = group_urls.get(circle.name, "")
-            gdrive_href = find_gdrive_link(gather_name, gdrive_links) or ""
+            gdrive_href = gdrive_url_map[circle.name]
             if not gdrive_href:
                 stats["gdrive_not_found"] += 1
             ok = _ensure_gdrive_link_on_wiki(page, base_url, wiki_slug, gdrive_href, gather_name, group_url, dry_run)
             stats["gdrive_linked" if ok else "gdrive_failed"] += 1
 
-        stats["wiki_index_ok"] = _ensure_wiki_index(
-            page, base_url, wiki_circle_entries, dry_run,
-            partial=(circle_prefix is not None),
-        )
+        if circle_prefix is None:
+            hierarchy_content = _build_hierarchy_content(
+                circles, gather_name_map, group_urls, wiki_url_map, gdrive_url_map
+            )
+            stats["wiki_index_ok"] = _ensure_hierarchy_page(
+                page, base_url, hierarchy_content, dry_run
+            )
+        else:
+            stats["wiki_index_ok"] = True
 
         browser.close()
 
