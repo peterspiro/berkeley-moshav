@@ -1685,7 +1685,7 @@ def fetch_gdrive_links(page: Page, base_url: str) -> list[tuple[str, str]]:
     try:
         page.goto(f"{base_url}/gdrive", wait_until="networkidle")
         links: list[tuple[str, str]] = []
-        for link in page.locator("a[href]").all():
+        for link in page.locator("a[href^='/gdrive/']").all():
             href = link.get_attribute("href") or ""
             text = link.inner_text().strip()
             if text and href:
