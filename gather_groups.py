@@ -52,6 +52,7 @@ ACRONYM_EXPANSIONS: dict[str, str] = {
 # Each frozenset is a group of equivalent names (case-insensitive)
 GROUP_NAME_ALIASES: list[frozenset] = [
     frozenset({"tech", "technology"}),
+    frozenset({"landscape", "landscaping"}),
 ]
 
 # Each frozenset is a group of equivalent first names (case-insensitive)

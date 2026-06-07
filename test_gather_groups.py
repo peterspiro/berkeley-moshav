@@ -175,6 +175,10 @@ class TestGroupNamesMatch:
         assert group_names_match("Tech", "Technology")
         assert group_names_match("Technology", "Tech")
 
+    def test_landscape_alias(self):
+        assert group_names_match("Landscape", "Landscaping")
+        assert group_names_match("Landscaping", "Landscape")
+
     def test_acronym_match(self):
         assert group_names_match("CLC", "Community Life Circle")
         assert group_names_match("Community Life Circle", "CLC")
