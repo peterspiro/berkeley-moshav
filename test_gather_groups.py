@@ -771,6 +771,45 @@ class TestResolveGroupMembers:
         assert "3" in member_ids
         assert "99" in member_ids
 
+    def test_ambiguous_resolved_by_existing_membership(self):
+        # "Sam" is ambiguous, but Sam Norris (id="3") is already in the group.
+        users_with_two_sams = USERS + [make_user("99", "Sam", "Vale")]
+        c = make_circle(member_lines=["- Sam"])
+        members, _ = resolve_group_members(
+            c, users_with_two_sams, existing_member_ids={"3"}
+        )
+        assert len(members) == 1
+        assert members[0][0].user_id == "3"
+
+    def test_existing_membership_not_used_when_unambiguous(self):
+        # A unique first-name match should still resolve normally.
+        c = make_circle(member_lines=["- Alex Green"])
+        members, _ = resolve_group_members(c, USERS, existing_member_ids={"99"})
+        assert len(members) == 1
+        assert members[0][0].user_id == "1"
+
+    def test_existing_membership_ignored_when_multiple_existing(self):
+        # If more than one candidate is already in the group, fall back to adding all.
+        users_with_two_sams = USERS + [make_user("99", "Sam", "Vale")]
+        c = make_circle(member_lines=["- Sam"])
+        members, _ = resolve_group_members(
+            c, users_with_two_sams, existing_member_ids={"3", "99"}
+        )
+        member_ids = {u.user_id for u, _ in members}
+        assert "3" in member_ids
+        assert "99" in member_ids
+
+    def test_existing_membership_ignored_when_none_in_group(self):
+        # If no candidate is already in the group, fall back to adding all.
+        users_with_two_sams = USERS + [make_user("99", "Sam", "Vale")]
+        c = make_circle(member_lines=["- Sam"])
+        members, _ = resolve_group_members(
+            c, users_with_two_sams, existing_member_ids=set()
+        )
+        member_ids = {u.user_id for u, _ in members}
+        assert "3" in member_ids
+        assert "99" in member_ids
+
     def test_child_users_excluded_from_matching(self):
         child_user = GatherUser(
             user_id="77", first_name="Luna", last_name="Green",

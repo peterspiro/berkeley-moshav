@@ -678,6 +678,7 @@ def _disambiguate_by_cross_cell(
 def resolve_group_members(
     circle: Circle,
     gather_users: list[GatherUser],
+    existing_member_ids: Optional[set[str]] = None,
 ) -> tuple[list[tuple[GatherUser, bool]], str]:
     """Resolve member/lead lines and consultants to Gather users.
 
@@ -686,6 +687,10 @@ def resolve_group_members(
       remaining_consultants: comma-joined names of consultants not in Gather
 
     Raises ValueError on leads missing from Members.
+
+    existing_member_ids: user IDs already in the Gather group.  When a
+    first-name-only match is ambiguous, if exactly one candidate is already
+    a member, the others are ignored.
     """
     adults = [u for u in gather_users if not u.child]
     resolved: list[tuple[GatherUser, bool]] = []
@@ -696,6 +701,13 @@ def resolve_group_members(
             hits = match_member(first, last, adults)
             if len(hits) > 1 and last is None:
                 hits = _disambiguate_by_cross_cell(hits, circle.lead_lines)
+            if len(hits) > 1 and existing_member_ids:
+                in_group = [u for u in hits if u.user_id in existing_member_ids]
+                if len(in_group) == 1:
+                    log("INFO", "member_match",
+                        f"Disambiguated '{first}' in '{circle.name}' via existing "
+                        f"membership: {in_group[0].full_name}")
+                    hits = in_group
             if len(hits) > 1:
                 log("WARN", "member_match",
                     f"Ambiguous member '{first} {last or ''}' in '{circle.name}': "
@@ -1475,15 +1487,6 @@ def process(
 
         for circle in circles:
             try:
-                members, remaining_consultants = resolve_group_members(
-                    circle, gather_users
-                )
-            except ValueError as e:
-                log("ERROR", "resolve_members", circle.name, str(e))
-                stats["errors"] += 1
-                continue
-
-            try:
                 existing = find_matching_group(circle, gather_groups)
             except ValueError as e:
                 log("ERROR", "find_group", circle.name, str(e))
@@ -1495,12 +1498,27 @@ def process(
             gather_name = existing.name if existing is not None else circle.name
             gather_name_map[circle.name] = gather_name
 
-            # Pre-fetch the group detail for existing groups so we can (a) detect
-            # any existing wiki link in the description and (b) avoid a second page
-            # load inside create_or_update_group.
+            # Pre-fetch the group detail for existing groups so we can:
+            # (a) pass existing member IDs to resolve_group_members for disambiguation,
+            # (b) detect any existing wiki link in the description,
+            # (c) avoid a second page load inside create_or_update_group.
             prefetched_detail: Optional[GatherGroup] = None
             if existing is not None:
                 prefetched_detail = _fetch_group_detail(page, base_url, existing)
+
+            existing_member_ids = (
+                {m.user_id for m in prefetched_detail.members}
+                if prefetched_detail is not None else None
+            )
+
+            try:
+                members, remaining_consultants = resolve_group_members(
+                    circle, gather_users, existing_member_ids
+                )
+            except ValueError as e:
+                log("ERROR", "resolve_members", circle.name, str(e))
+                stats["errors"] += 1
+                continue
 
             wiki_url = ""
             if _group_kind(circle) != "committee":
