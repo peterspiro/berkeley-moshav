@@ -250,12 +250,14 @@ def _normalize_group_name(name: str) -> str:
     - Replace & with 'and' (with surrounding space normalization)
     - Remove commas
     - Collapse runs of whitespace
+    - Normalize "working group" → "work group"
     - Apply name aliases
     """
     n = re.sub(r"\s*\([^)]*\)?\s*$", "", expand_acronym(name).strip()).strip().lower()
     n = re.sub(r"\s*&\s*", " and ", n)
     n = n.replace(",", "")
     n = re.sub(r"\s+", " ", n).strip()
+    n = re.sub(r"\bworking group\b", "work group", n)
     for alias_set in GROUP_NAME_ALIASES:
         if n in alias_set:
             n = min(alias_set)  # canonical form is alphabetically first

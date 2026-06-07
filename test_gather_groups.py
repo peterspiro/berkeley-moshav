@@ -244,6 +244,13 @@ class TestGroupNamesMatch:
             "Development, Finance, and Legal Circle (DF&L)",
         )
 
+    def test_working_group_matches_work_group(self):
+        assert group_names_match("Furnishings Work Group", "Furnishings Working Group")
+        assert group_names_match("Furnishings Working Group", "Furnishings Work Group")
+
+    def test_working_group_no_false_match(self):
+        assert not group_names_match("Furnishings Work Group", "Landscape Working Group")
+
 
 class TestParseSheetParenStrip:
     def test_trailing_paren_stripped_from_name(self):
