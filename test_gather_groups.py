@@ -1521,6 +1521,37 @@ class TestApplyGdriveLink:
         assert new_content.startswith(self.BLOCK_NO_GDRIVE)
         assert "[Old Text]" in new_content
 
+    def test_duplicate_new_format_blocks_consolidated(self):
+        dup = self.BLOCK + "\n\n" + self.BLOCK + "\n\nSome content."
+        new_content, action = self._call(dup)
+        assert action == "update"
+        assert new_content.count("[Members]") == 1
+        assert new_content.startswith(self.BLOCK)
+        assert "Some content." in new_content
+
+    def test_mixed_old_and_new_format_duplicates_consolidated(self):
+        old_block = (
+            "Membership's:\n"
+            "* [Members](/groups/42)\n"
+            "* [Google Drive documents](/gdrive/membership-folder)"
+        )
+        content = old_block + "\n\n" + self.BLOCK + "\n\n" + old_block + "\n\nBody text."
+        new_content, action = self._call(content)
+        assert action == "update"
+        assert new_content.count("[Members]") == 1
+        assert new_content.startswith(self.BLOCK)
+        assert "Body text." in new_content
+        assert "Membership's:" not in new_content
+
+    def test_wrong_url_duplicates_all_replaced(self):
+        wrong = self.BLOCK.replace("/groups/42", "/wiki/meals-circle-wiki")
+        content = "\n\n".join([wrong] * 4 + ["Body text."])
+        new_content, action = self._call(content)
+        assert action == "update"
+        assert new_content.count("[Members]") == 1
+        assert "/wiki/meals-circle-wiki" not in new_content
+        assert new_content.startswith(self.BLOCK)
+
 
 # ── find_gdrive_link ──────────────────────────────────────────────────────────
 

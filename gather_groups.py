@@ -1724,39 +1724,41 @@ def _apply_gdrive_link(content: str, circle_name: str, gdrive_href: str, group_u
 
     Returns (new_content, action) where action is one of:
       "skip"   — block already exists at top with correct content; no change needed
-      "update" — block (or old bare/multi-line block) exists but is wrong or misplaced
+      "update" — existing block(s) found but wrong/duplicated; new_content corrects it
       "add"    — no block yet; new_content has the block prepended
     """
     expected = _links_block(circle_name, group_url, gdrive_href)
 
-    def _prepend(body: str) -> str:
-        body = body.strip()
-        return expected + ("\n\n" + body if body else "\n")
+    new_block_matches = list(_LINKS_BLOCK_RE.finditer(content))
+    old_block_matches = list(_OLD_LINKS_BLOCK_RE.finditer(content))
+    # Search for bare gdrive links only outside new-format blocks to avoid
+    # falsely matching the /gdrive/ URL inside our own correct block.
+    content_outside_blocks = _LINKS_BLOCK_RE.sub("", content)
+    old_gdrive_match = _OLD_GDRIVE_RE.search(content_outside_blocks) if gdrive_href else None
 
-    def _remove_match(m: re.Match) -> str:
-        before = content[: m.start()].rstrip()
-        after = content[m.end() :].lstrip()
-        return "\n\n".join(p for p in [before, after] if p)
+    # Skip only when there is exactly one block, it is correct, it is at the top,
+    # and there is nothing stale left to clean up.
+    if (
+        len(new_block_matches) == 1
+        and new_block_matches[0].group(0) == expected
+        and new_block_matches[0].start() == 0
+        and not old_block_matches
+        and not old_gdrive_match
+    ):
+        return None, "skip"
 
-    # Check new-format block.
-    m = _LINKS_BLOCK_RE.search(content)
-    if m:
-        if m.group(0) == expected and m.start() == 0:
-            return None, "skip"
-        return _prepend(_remove_match(m)), "update"
-
-    # Check old multi-line block and migrate it.
-    m_old_block = _OLD_LINKS_BLOCK_RE.search(content)
-    if m_old_block:
-        return _prepend(_remove_match(m_old_block)), "update"
-
-    # Upgrade old bare gdrive link only when we have a gdrive href to replace it with.
+    # Strip every existing new-format block, old multi-line block, and (when a
+    # gdrive href is available) every old bare gdrive link, then prepend the
+    # single correct block.
+    body = _LINKS_BLOCK_RE.sub("", content)
+    body = _OLD_LINKS_BLOCK_RE.sub("", body)
     if gdrive_href:
-        m_old = _OLD_GDRIVE_RE.search(content)
-        if m_old:
-            return _prepend(_remove_match(m_old)), "update"
+        body = _OLD_GDRIVE_RE.sub("", body)
+    body = re.sub(r"\n{3,}", "\n\n", body).strip()
 
-    return _prepend(content), "add"
+    new_content = expected + ("\n\n" + body if body else "\n")
+    had_block = bool(new_block_matches or old_block_matches or old_gdrive_match)
+    return new_content, "update" if had_block else "add"
 
 
 def _ensure_gdrive_link_on_wiki(
