@@ -1620,6 +1620,9 @@ def process(
 
             if group_id is None:
                 stats["failed"] += 1
+                if existing is not None:
+                    log("WARN", "group_url", circle.name, "group update failed; using existing URL for wiki/hierarchy")
+                    group_urls[circle.name] = f"/groups/{existing.group_id}"
                 continue
 
             if group_id == "dry-run":
@@ -1698,15 +1701,21 @@ def fetch_gdrive_links(page: Page, base_url: str) -> list[tuple[str, str]]:
 
 
 def _links_block(circle_name: str, group_url: str, gdrive_href: str = "") -> str:
-    links = [f"[Members]({group_url})"]
+    links = []
+    if group_url:
+        links.append(f"[Members]({group_url})")
     if gdrive_href:
         links.append(f"[Documents]({gdrive_href})")
+    if not links:
+        return ""
     return f"{circle_name}: {' | '.join(links)}"
 
 
 # Matches the new single-line links block written by this script.
+# Two alternatives: (1) Members with optional Documents, (2) Documents-only (when no group URL).
 _LINKS_BLOCK_RE = re.compile(
     r"[^\n]+: \[Members\]\([^)]*\)(?: \| \[[^\]]*\]\(/gdrive/[^)]+\))?"
+    r"|[^\n]+: \[Documents\]\(/gdrive/[^)]+\)"
 )
 # Matches the old multi-line links block from a previous script version.
 _OLD_LINKS_BLOCK_RE = re.compile(
@@ -1772,8 +1781,8 @@ def _ensure_gdrive_link_on_wiki(
             log("ERROR", "gdrive_wiki", wiki_slug, "Editor not found on wiki edit page")
             return False
         content = _codemirror_get(page)
-        if not group_url:
-            log("WARN", "gdrive_wiki", wiki_slug, "no Gather group URL; removing stale blocks")
+        if not group_url and not gdrive_href:
+            log("WARN", "gdrive_wiki", wiki_slug, "no group URL and no gdrive link; removing stale blocks")
             cleaned = _LINKS_BLOCK_RE.sub("", content)
             cleaned = _OLD_LINKS_BLOCK_RE.sub("", cleaned)
             cleaned = re.sub(r"\n{3,}", "\n\n", cleaned).strip()
@@ -1783,8 +1792,10 @@ def _ensure_gdrive_link_on_wiki(
                 _codemirror_set(page, cleaned)
                 page.locator('input[name="commit"]').click()
                 page.wait_for_load_state("networkidle")
-                log("INFO", "gdrive_wiki", f"{wiki_slug}: removed stale blocks (no group URL)")
+                log("INFO", "gdrive_wiki", f"{wiki_slug}: removed stale blocks (no group URL, no gdrive)")
             return True
+        if not group_url:
+            log("INFO", "gdrive_wiki", wiki_slug, "no Gather group URL; writing gdrive-only link")
         new_content, action = _apply_gdrive_link(content, circle_name, gdrive_href, group_url)
         if action == "skip":
             log("INFO", "gdrive_wiki", f"{wiki_slug}: links block up to date, skipping")

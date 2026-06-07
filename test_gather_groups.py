@@ -1552,6 +1552,47 @@ class TestApplyGdriveLink:
         assert "/wiki/meals-circle-wiki" not in new_content
         assert new_content.startswith(self.BLOCK)
 
+    # ── gdrive-only (no group URL) ────────────────────────────────────────────
+
+    BLOCK_GDRIVE_ONLY = "Membership: [Documents](/gdrive/membership-folder)"
+
+    def _call_no_group_url(self, content, gdrive_href=None):
+        href = self.HREF if gdrive_href is None else gdrive_href
+        return _apply_gdrive_link(content, self.NAME, href, "")
+
+    def test_add_gdrive_only_when_no_group_url(self):
+        new_content, action = self._call_no_group_url("")
+        assert action == "add"
+        assert new_content == self.BLOCK_GDRIVE_ONLY + "\n"
+        assert "[Members]" not in new_content
+
+    def test_skip_gdrive_only_block_when_no_group_url(self):
+        new_content, action = self._call_no_group_url(self.BLOCK_GDRIVE_ONLY)
+        assert action == "skip"
+        assert new_content is None
+
+    def test_gdrive_only_block_relocates_to_top(self):
+        content = "Intro text.\n\n" + self.BLOCK_GDRIVE_ONLY
+        new_content, action = self._call_no_group_url(content)
+        assert action == "update"
+        assert new_content.startswith(self.BLOCK_GDRIVE_ONLY + "\n\n")
+        assert "Intro text." in new_content
+
+    def test_update_members_block_to_gdrive_only_when_group_url_removed(self):
+        new_content, action = self._call_no_group_url(self.BLOCK)
+        assert action == "update"
+        assert new_content.startswith(self.BLOCK_GDRIVE_ONLY)
+        assert "[Members]" not in new_content
+        assert "Documents" in new_content
+
+    def test_gdrive_only_preserves_surrounding_content(self):
+        content = "Before\n\n" + self.BLOCK_GDRIVE_ONLY.replace("membership", "wrong") + "\n\nAfter"
+        new_content, action = self._call_no_group_url(content)
+        assert action == "update"
+        assert new_content.startswith(self.BLOCK_GDRIVE_ONLY + "\n\n")
+        assert "Before" in new_content
+        assert "After" in new_content
+
 
 # ── find_gdrive_link ──────────────────────────────────────────────────────────
 
