@@ -590,7 +590,11 @@ def _render_hierarchy_entry(
         parts.append(f"[Wiki]({wiki_url})")
     if gdrive_url:
         parts.append(f"[Documents]({gdrive_url})")
-    lines = [f"{pad}- {' | '.join(parts)}"]
+    if len(parts) > 1:
+        text = parts[0] + ": " + " | ".join(parts[1:])
+    else:
+        text = parts[0]
+    lines = [f"{pad}- {text}"]
     children = sorted(
         by_parent.get(circle.name, []),
         key=lambda c: gather_name_map.get(c.name, c.name).casefold(),
@@ -1668,14 +1672,18 @@ def fetch_gdrive_links(page: Page, base_url: str) -> list[tuple[str, str]]:
 
 
 def _links_block(circle_name: str, group_url: str, gdrive_href: str = "") -> str:
-    lines = [f"{circle_name}'s:", f"* [Members]({group_url})"]
+    links = [f"[Members]({group_url})"]
     if gdrive_href:
-        lines.append(f"* [Google Drive documents]({gdrive_href})")
-    return "\n".join(lines)
+        links.append(f"[Google Drive documents]({gdrive_href})")
+    return f"{circle_name}: {' | '.join(links)}"
 
 
-# Matches the links block written by this script (gdrive bullet is optional).
+# Matches the new single-line links block written by this script.
 _LINKS_BLOCK_RE = re.compile(
+    r"[^\n]+: \[Members\]\([^)]+\)(?: \| \[[^\]]*\]\(/gdrive/[^)]+\))?"
+)
+# Matches the old multi-line links block from a previous script version.
+_OLD_LINKS_BLOCK_RE = re.compile(
     r"[^\n]*'s:\n\* \[Members\]\([^)]+\)(?:\n\* \[[^\]]*\]\(/gdrive/[^)]+\))?"
 )
 # Matches the old single-line bare gdrive markdown link.
@@ -1685,32 +1693,44 @@ _OLD_GDRIVE_RE = re.compile(r"\[([^\]]*)\]\((/gdrive/[^)]+)\)")
 def _apply_gdrive_link(content: str, circle_name: str, gdrive_href: str, group_url: str) -> tuple[Optional[str], str]:
     """Compute the updated wiki content after applying the Members (+ optional Google Drive) links block.
 
-    gdrive_href may be empty; in that case the Google Drive bullet is omitted.
+    gdrive_href may be empty; in that case the Google Drive link is omitted.
+    The block is a single line placed at the top of the page.
 
     Returns (new_content, action) where action is one of:
-      "skip"   — block already exists with correct content; no change needed
-      "update" — block (or old bare link) exists but is wrong; new_content corrects it
-      "add"    — no block yet; new_content has the block appended
+      "skip"   — block already exists at top with correct content; no change needed
+      "update" — block (or old bare/multi-line block) exists but is wrong or misplaced
+      "add"    — no block yet; new_content has the block prepended
     """
     expected = _links_block(circle_name, group_url, gdrive_href)
 
+    def _prepend(body: str) -> str:
+        body = body.strip()
+        return expected + ("\n\n" + body if body else "\n")
+
+    def _remove_match(m: re.Match) -> str:
+        before = content[: m.start()].rstrip()
+        after = content[m.end() :].lstrip()
+        return "\n\n".join(p for p in [before, after] if p)
+
+    # Check new-format block.
     m = _LINKS_BLOCK_RE.search(content)
     if m:
-        if m.group(0) == expected:
+        if m.group(0) == expected and m.start() == 0:
             return None, "skip"
-        new_content = content[: m.start()] + expected + content[m.end() :]
-        return new_content, "update"
+        return _prepend(_remove_match(m)), "update"
+
+    # Check old multi-line block and migrate it.
+    m_old_block = _OLD_LINKS_BLOCK_RE.search(content)
+    if m_old_block:
+        return _prepend(_remove_match(m_old_block)), "update"
 
     # Upgrade old bare gdrive link only when we have a gdrive href to replace it with.
     if gdrive_href:
         m_old = _OLD_GDRIVE_RE.search(content)
         if m_old:
-            new_content = content[: m_old.start()] + expected + content[m_old.end() :]
-            return new_content, "update"
+            return _prepend(_remove_match(m_old)), "update"
 
-    base = content.strip()
-    new_content = (base + "\n\n" if base else "") + expected + "\n"
-    return new_content, "add"
+    return _prepend(content), "add"
 
 
 def _ensure_gdrive_link_on_wiki(

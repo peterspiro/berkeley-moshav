@@ -1033,14 +1033,14 @@ class TestBuildHierarchyContent:
         md = self._build([root])
         assert "Documents" not in md
 
-    def test_pipe_separators(self):
+    def test_colon_before_first_link(self):
         root = make_circle(self.ROOT, col_index=0)
         md = self._build(
             [root],
             group_urls={self.ROOT: "/groups/1"},
             wiki_url_map={self.ROOT: "/wiki/top-wiki"},
         )
-        assert f"{self.ROOT} | [Members]" in md
+        assert f"{self.ROOT}: [Members]" in md
         assert "[Members](/groups/1) | [Wiki]" in md
 
     def test_name_not_a_link(self):
@@ -1359,15 +1359,8 @@ class TestApplyGdriveLink:
     HREF = "/gdrive/membership-folder"
     NAME = "Membership"
     GROUP_URL = "/groups/42"
-    BLOCK = (
-        "Membership's:\n"
-        "* [Members](/groups/42)\n"
-        "* [Google Drive documents](/gdrive/membership-folder)"
-    )
-    BLOCK_NO_GDRIVE = (
-        "Membership's:\n"
-        "* [Members](/groups/42)"
-    )
+    BLOCK = "Membership: [Members](/groups/42) | [Google Drive documents](/gdrive/membership-folder)"
+    BLOCK_NO_GDRIVE = "Membership: [Members](/groups/42)"
 
     def _call(self, content, gdrive_href=None):
         href = self.HREF if gdrive_href is None else gdrive_href
@@ -1378,43 +1371,66 @@ class TestApplyGdriveLink:
         assert action == "add"
         assert new_content == self.BLOCK + "\n"
 
-    def test_add_appends_after_existing_content(self):
+    def test_add_prepends_before_existing_content(self):
         new_content, action = self._call("Some content.")
         assert action == "add"
-        assert new_content.startswith("Some content.\n\n")
-        assert self.BLOCK in new_content
+        assert new_content.startswith(self.BLOCK + "\n\n")
+        assert "Some content." in new_content
 
-    def test_skip_when_block_already_correct(self):
+    def test_skip_when_block_already_correct_at_top(self):
         new_content, action = self._call(self.BLOCK)
         assert action == "skip"
         assert new_content is None
 
     def test_update_block_wrong_name(self):
+        old_block = "Old Name: [Members](/groups/42) | [Google Drive documents](/gdrive/membership-folder)"
+        new_content, action = self._call(old_block)
+        assert action == "update"
+        assert new_content.startswith(self.BLOCK)
+        assert "Old Name" not in new_content
+
+    def test_update_block_wrong_group_url(self):
+        old_block = "Membership: [Members](/groups/99) | [Google Drive documents](/gdrive/membership-folder)"
+        new_content, action = self._call(old_block)
+        assert action == "update"
+        assert "[Members](/groups/42)" in new_content
+
+    def test_update_relocates_block_to_top(self):
+        content = "Intro text.\n\n" + self.BLOCK.replace("/groups/42", "/groups/99")
+        new_content, action = self._call(content)
+        assert action == "update"
+        assert new_content.startswith(self.BLOCK + "\n\n")
+        assert "Intro text." in new_content
+
+    def test_migrate_old_multiline_block(self):
         old_block = (
-            "Old Name's:\n"
+            "Membership's:\n"
             "* [Members](/groups/42)\n"
             "* [Google Drive documents](/gdrive/membership-folder)"
         )
         new_content, action = self._call(old_block)
         assert action == "update"
-        assert self.BLOCK in new_content
-        assert "Old Name" not in new_content
+        assert new_content.startswith(self.BLOCK)
+        assert "Membership's:" not in new_content
 
-    def test_update_block_wrong_group_url(self):
+    def test_migrate_old_multiline_block_preserves_surrounding(self):
         old_block = (
             "Membership's:\n"
-            "* [Members](/groups/99)\n"
+            "* [Members](/groups/42)\n"
             "* [Google Drive documents](/gdrive/membership-folder)"
         )
-        new_content, action = self._call(old_block)
+        content = "Before\n\n" + old_block + "\n\nAfter"
+        new_content, action = self._call(content)
         assert action == "update"
-        assert "* [Members](/groups/42)" in new_content
+        assert new_content.startswith(self.BLOCK + "\n\n")
+        assert "Before" in new_content
+        assert "After" in new_content
 
     def test_upgrade_old_bare_gdrive_link(self):
         content = "[Membership Google Drive documents](/gdrive/membership-folder)"
         new_content, action = self._call(content)
         assert action == "update"
-        assert self.BLOCK in new_content
+        assert new_content.startswith(self.BLOCK)
         assert "[Membership Google Drive documents]" not in new_content
 
     def test_upgrade_preserves_surrounding_content(self):
@@ -1439,13 +1455,13 @@ class TestApplyGdriveLink:
         new_content, action = self._call(self.BLOCK, gdrive_href="")
         assert action == "update"
         assert "Google Drive" not in new_content
-        assert "* [Members]" in new_content
+        assert "[Members]" in new_content
 
     def test_no_gdrive_does_not_upgrade_old_bare_link(self):
         content = "[Old Text](/gdrive/foo)"
         new_content, action = self._call(content, gdrive_href="")
         assert action == "add"
-        assert self.BLOCK_NO_GDRIVE in new_content
+        assert new_content.startswith(self.BLOCK_NO_GDRIVE)
         assert "[Old Text]" in new_content
 
 
