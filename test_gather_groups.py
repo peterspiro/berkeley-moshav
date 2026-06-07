@@ -866,13 +866,18 @@ class TestResolveGroupMembers:
         assert len(members) == 1
         assert members[0][0].user_id == "1"
 
-    def test_lead_not_in_members_or_gather_raises(self):
+    def test_lead_not_in_gather_skipped_with_warning(self):
+        # Lead not found in Gather at all; should warn and be skipped rather than
+        # raising ValueError so the group can still be created with available members.
         c = make_circle(
             member_lines=["- Alex Green"],
             lead_lines=["- Zara Unknown"],
         )
-        with pytest.raises(ValueError, match="not found"):
-            resolve_group_members(c, USERS)
+        members, _ = resolve_group_members(c, USERS)
+        # Alex Green (the member) is included; no one is promoted to manager
+        assert len(members) == 1
+        assert members[0][0].first_name == "Alex"
+        assert members[0][1] is False  # not a manager (lead was skipped)
 
     def test_lead_not_in_members_but_in_gather_added(self):
         # Robin Blue is in Gather but not in the Members cell; should be added as manager

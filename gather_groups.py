@@ -841,9 +841,9 @@ def resolve_group_members(
                     f"matches {[u.full_name for u in hits]}"
                 )
             if not hits:
-                raise ValueError(
-                    f"Lead '{lead_name}' in '{circle.name}' not found in Members list or Gather users"
-                )
+                log("WARN", "lead_match",
+                    f"Lead '{lead_name}' in '{circle.name}' not found in Gather users, skipping")
+                continue
             u = hits[0]
             if u.user_id not in user_by_id:
                 user_by_id[u.user_id] = u
