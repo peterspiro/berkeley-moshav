@@ -329,6 +329,17 @@ def _group_kind(circle: Circle) -> str:
     return kind
 
 
+def _needs_wiki(circle: Circle) -> bool:
+    """Return True if this circle should get a wiki page.
+
+    All circles get wiki pages, plus work groups (which are committees in
+    Gather but are still substantive circles that warrant a wiki page).
+    """
+    return _group_kind(circle) != "committee" or re.search(
+        r"\bwork\s+group$", circle.name, flags=re.IGNORECASE
+    ) is not None
+
+
 def first_name_matches(a: str, b: str) -> bool:
     a_l, b_l = _cmp(a), _cmp(b)
     if a_l == b_l:
@@ -1521,7 +1532,7 @@ def process(
                 continue
 
             wiki_url = ""
-            if _group_kind(circle) != "committee":
+            if _needs_wiki(circle):
                 if prefetched_detail is not None:
                     existing_wiki_url = _extract_wiki_url(prefetched_detail.description)
                     if existing_wiki_url:
@@ -1567,7 +1578,7 @@ def process(
         gdrive_links = fetch_gdrive_links(page, base_url)
         wiki_circle_entries: list[tuple[str, str]] = []
         for circle in circles:
-            if _group_kind(circle) == "committee":
+            if not _needs_wiki(circle):
                 continue
             gather_name = gather_name_map.get(circle.name, circle.name)
             wiki_url = wiki_url_map.get(circle.name, f"/wiki/{_circle_wiki_slug(gather_name)}")

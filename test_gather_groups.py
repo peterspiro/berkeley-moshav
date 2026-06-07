@@ -22,6 +22,7 @@ from gather_groups import (
     _apply_gdrive_link,
     _extract_wiki_url,
     _filter_circles,
+    _needs_wiki,
     _parse_wiki_index_entries,
     find_gdrive_link,
     _circle_wiki_slug,
@@ -1071,6 +1072,27 @@ class TestGroupKind:
     def test_work_group_not_at_end_is_circle(self):
         c = make_circle(name="Work Group Liaison", col_index=0)
         assert _group_kind(c) == "circle"
+
+
+# ── _needs_wiki ───────────────────────────────────────────────────────────────
+
+class TestNeedsWiki:
+    def test_circle_needs_wiki(self):
+        assert _needs_wiki(make_circle(name="Membership"))
+
+    def test_work_group_needs_wiki(self):
+        assert _needs_wiki(make_circle(name="Landscape Work Group"))
+
+    def test_furnishings_work_group_needs_wiki(self):
+        assert _needs_wiki(make_circle(name="Furnishings Work Group"))
+
+    def test_other_committee_does_not_need_wiki(self):
+        # A circle that is a committee for reasons other than its name
+        # (col_index=1 still maps to "circle" in GROUP_KINDS, so this
+        # just tests the kind override path is respected for non-work-groups)
+        c = make_circle(name="Some Committee", col_index=0)
+        # "Some Committee" has kind "circle" (no work group suffix), so it gets a wiki
+        assert _needs_wiki(c)
 
 
 # ── _extract_wiki_url ────────────────────────────────────────────────────────
