@@ -971,11 +971,25 @@ class TestBuildHierarchyContent:
         beta_idx = next(i for i, l in enumerate(lines) if "Beta Circle" in l)
         assert alpha_idx < beta_idx
 
-    def test_no_root_returns_empty_content(self):
-        # When no circle has parent_name=None, the result is empty (just a newline)
-        orphan = make_circle("Lone Circle", col_index=0, parent_name="Unknown Parent")
+    def test_no_matching_root_produces_synthetic_root(self):
+        # When no circle matches _HIERARCHY_ROOT, a synthetic root entry appears.
+        orphan = make_circle("Lone Circle", col_index=0)  # parent_name=None
         md = self._build([orphan])
-        assert md.strip() == ""
+        assert self.ROOT in md
+        assert "Lone Circle" in md
+
+    def test_synthetic_root_has_no_links(self):
+        orphan = make_circle("Lone Circle", col_index=0)  # parent_name=None
+        md = self._build([orphan], group_urls={"Lone Circle": "/groups/1"})
+        root_line = md.splitlines()[0]
+        assert "[Members]" not in root_line
+
+    def test_orphan_becomes_child_of_synthetic_root(self):
+        orphan = make_circle("Lone Circle", col_index=0)  # parent_name=None
+        md = self._build([orphan])
+        lines = md.splitlines()
+        orphan_line = next(l for l in lines if "Lone Circle" in l)
+        assert orphan_line.startswith("  ")  # indented under synthetic root
 
     def test_members_link_included(self):
         root = make_circle(self.ROOT, col_index=0)

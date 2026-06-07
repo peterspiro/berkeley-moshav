@@ -618,25 +618,37 @@ def _build_hierarchy_content(
 ) -> str:
     """Build markdown for the Circle Hierarchy wiki page.
 
-    The sole circle with parent_name=None (guaranteed unique by parse_sheet) is
-    the root item.  All other circles are keyed under their parent_name.
+    The circle whose name matches _HIERARCHY_ROOT is the root item.  Any circle
+    without a parent_name (other than the root itself) is treated as a direct
+    child of the root.  If no circle matches _HIERARCHY_ROOT a synthetic root
+    entry (name only, no links) is rendered.
     """
     root_circle: Optional[Circle] = None
     by_parent: dict[str, list[Circle]] = {}
     for c in circles:
-        if c.parent_name is None:
+        if group_names_match(c.name, _HIERARCHY_ROOT):
             root_circle = c
         else:
-            by_parent.setdefault(c.parent_name, []).append(c)
+            parent = c.parent_name if c.parent_name else _HIERARCHY_ROOT
+            by_parent.setdefault(parent, []).append(c)
 
-    if root_circle is None:
-        log("WARN", "hierarchy", "No root circle (parent_name=None) found in circles")
-        return "\n"
-
-    lines = _render_hierarchy_entry(
-        root_circle, by_parent, gather_name_map,
-        group_urls, wiki_url_map, gdrive_url_map, depth=0,
-    )
+    if root_circle is not None:
+        lines = _render_hierarchy_entry(
+            root_circle, by_parent, gather_name_map,
+            group_urls, wiki_url_map, gdrive_url_map, depth=0,
+        )
+    else:
+        log("WARN", "hierarchy", f"No circle matching {_HIERARCHY_ROOT!r} found; "
+            "root entry will have no links")
+        lines = [f"- {_HIERARCHY_ROOT}"]
+        for child in sorted(
+            by_parent.get(_HIERARCHY_ROOT, []),
+            key=lambda c: gather_name_map.get(c.name, c.name).casefold(),
+        ):
+            lines.extend(_render_hierarchy_entry(
+                child, by_parent, gather_name_map,
+                group_urls, wiki_url_map, gdrive_url_map, depth=1,
+            ))
     return "\n".join(lines) + "\n"
 
 
