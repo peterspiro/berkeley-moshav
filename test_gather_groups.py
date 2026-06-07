@@ -1322,9 +1322,14 @@ class TestApplyGdriveLink:
         "* [Members](/groups/42)\n"
         "* [Google Drive documents](/gdrive/membership-folder)"
     )
+    BLOCK_NO_GDRIVE = (
+        "Membership's:\n"
+        "* [Members](/groups/42)"
+    )
 
-    def _call(self, content):
-        return _apply_gdrive_link(content, self.NAME, self.HREF, self.GROUP_URL)
+    def _call(self, content, gdrive_href=None):
+        href = self.HREF if gdrive_href is None else gdrive_href
+        return _apply_gdrive_link(content, self.NAME, href, self.GROUP_URL)
 
     def test_add_to_blank_page(self):
         new_content, action = self._call("")
@@ -1376,6 +1381,30 @@ class TestApplyGdriveLink:
         assert action == "update"
         assert "Before" in new_content
         assert "After" in new_content
+
+    def test_add_members_only_when_no_gdrive(self):
+        new_content, action = self._call("", gdrive_href="")
+        assert action == "add"
+        assert new_content == self.BLOCK_NO_GDRIVE + "\n"
+        assert "Google Drive" not in new_content
+
+    def test_skip_members_only_block_when_no_gdrive(self):
+        new_content, action = self._call(self.BLOCK_NO_GDRIVE, gdrive_href="")
+        assert action == "skip"
+        assert new_content is None
+
+    def test_update_full_block_to_members_only_when_no_gdrive(self):
+        new_content, action = self._call(self.BLOCK, gdrive_href="")
+        assert action == "update"
+        assert "Google Drive" not in new_content
+        assert "* [Members]" in new_content
+
+    def test_no_gdrive_does_not_upgrade_old_bare_link(self):
+        content = "[Old Text](/gdrive/foo)"
+        new_content, action = self._call(content, gdrive_href="")
+        assert action == "add"
+        assert self.BLOCK_NO_GDRIVE in new_content
+        assert "[Old Text]" in new_content
 
 
 # ── find_gdrive_link ──────────────────────────────────────────────────────────

@@ -1593,12 +1593,11 @@ def process(
 
             wiki_slug = wiki_url.removeprefix("/wiki/")
             group_url = group_urls.get(circle.name, "")
-            gdrive_href = find_gdrive_link(gather_name, gdrive_links)
-            if gdrive_href:
-                ok = _ensure_gdrive_link_on_wiki(page, base_url, wiki_slug, gdrive_href, gather_name, group_url, dry_run)
-                stats["gdrive_linked" if ok else "gdrive_failed"] += 1
-            else:
+            gdrive_href = find_gdrive_link(gather_name, gdrive_links) or ""
+            if not gdrive_href:
                 stats["gdrive_not_found"] += 1
+            ok = _ensure_gdrive_link_on_wiki(page, base_url, wiki_slug, gdrive_href, gather_name, group_url, dry_run)
+            stats["gdrive_linked" if ok else "gdrive_failed"] += 1
 
         stats["wiki_index_ok"] = _ensure_wiki_index(
             page, base_url, wiki_circle_entries, dry_run,
@@ -1628,24 +1627,25 @@ def fetch_gdrive_links(page: Page, base_url: str) -> list[tuple[str, str]]:
         return []
 
 
-def _links_block(circle_name: str, group_url: str, gdrive_href: str) -> str:
-    return (
-        f"{circle_name}'s:\n"
-        f"* [Members]({group_url})\n"
-        f"* [Google Drive documents]({gdrive_href})"
-    )
+def _links_block(circle_name: str, group_url: str, gdrive_href: str = "") -> str:
+    lines = [f"{circle_name}'s:", f"* [Members]({group_url})"]
+    if gdrive_href:
+        lines.append(f"* [Google Drive documents]({gdrive_href})")
+    return "\n".join(lines)
 
 
-# Matches the two-item links block written by this script.
+# Matches the links block written by this script (gdrive bullet is optional).
 _LINKS_BLOCK_RE = re.compile(
-    r"[^\n]*'s:\n\* \[Members\]\([^)]+\)\n\* \[[^\]]*\]\(/gdrive/[^)]+\)"
+    r"[^\n]*'s:\n\* \[Members\]\([^)]+\)(?:\n\* \[[^\]]*\]\(/gdrive/[^)]+\))?"
 )
 # Matches the old single-line bare gdrive markdown link.
 _OLD_GDRIVE_RE = re.compile(r"\[([^\]]*)\]\((/gdrive/[^)]+)\)")
 
 
 def _apply_gdrive_link(content: str, circle_name: str, gdrive_href: str, group_url: str) -> tuple[Optional[str], str]:
-    """Compute the updated wiki content after applying the Members + Google Drive links block.
+    """Compute the updated wiki content after applying the Members (+ optional Google Drive) links block.
+
+    gdrive_href may be empty; in that case the Google Drive bullet is omitted.
 
     Returns (new_content, action) where action is one of:
       "skip"   — block already exists with correct content; no change needed
@@ -1661,10 +1661,12 @@ def _apply_gdrive_link(content: str, circle_name: str, gdrive_href: str, group_u
         new_content = content[: m.start()] + expected + content[m.end() :]
         return new_content, "update"
 
-    m_old = _OLD_GDRIVE_RE.search(content)
-    if m_old:
-        new_content = content[: m_old.start()] + expected + content[m_old.end() :]
-        return new_content, "update"
+    # Upgrade old bare gdrive link only when we have a gdrive href to replace it with.
+    if gdrive_href:
+        m_old = _OLD_GDRIVE_RE.search(content)
+        if m_old:
+            new_content = content[: m_old.start()] + expected + content[m_old.end() :]
+            return new_content, "update"
 
     base = content.strip()
     new_content = (base + "\n\n" if base else "") + expected + "\n"
@@ -1675,7 +1677,7 @@ def _ensure_gdrive_link_on_wiki(
     page: Page, base_url: str, wiki_slug: str, gdrive_href: str,
     circle_name: str, group_url: str, dry_run: bool,
 ) -> bool:
-    """Add or correct the Members + Google Drive links block on the circle's wiki page."""
+    """Add or correct the Members (+ optional Google Drive) links block on the circle's wiki page."""
     try:
         page.goto(f"{base_url}/wiki/{wiki_slug}/edit", wait_until="networkidle")
         if page.locator(".CodeMirror").count() == 0:
@@ -1684,10 +1686,10 @@ def _ensure_gdrive_link_on_wiki(
         content = _codemirror_get(page)
         new_content, action = _apply_gdrive_link(content, circle_name, gdrive_href, group_url)
         if action == "skip":
-            log("INFO", "gdrive_wiki", f"{wiki_slug}: gdrive link up to date, skipping")
+            log("INFO", "gdrive_wiki", f"{wiki_slug}: links block up to date, skipping")
             return True
         if dry_run:
-            log("DRY-RUN", f"{action}_gdrive_link", f"{wiki_slug} → {gdrive_href}")
+            log("DRY-RUN", f"{action}_links_block", f"{wiki_slug} (gdrive: {gdrive_href or 'none'})")
             return True
         _codemirror_set(page, new_content)
         page.locator('input[name="commit"]').click()
@@ -1695,9 +1697,9 @@ def _ensure_gdrive_link_on_wiki(
         err = _check_submit_errors(page)
         if err:
             screenshot(page, f"gdrive_wiki_err_{wiki_slug[:20]}")
-            log("ERROR", f"{action}_gdrive_link", wiki_slug, err[:200])
+            log("ERROR", f"{action}_links_block", wiki_slug, err[:200])
             return False
-        log("INFO", f"{action}_gdrive_link", f"{wiki_slug}: {action}d link to {gdrive_href}")
+        log("INFO", f"{action}_links_block", f"{wiki_slug}: {action}d (gdrive: {gdrive_href or 'none'})")
         return True
     except Exception as e:
         screenshot(page, f"gdrive_wiki_exc_{wiki_slug[:20]}")
