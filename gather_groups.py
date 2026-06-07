@@ -543,7 +543,7 @@ def build_description(
     if circle.parent_name:
         extra_lines.append(f"\nParent: {circle.parent_name}")
 
-    wiki_line = f'\n<a href="{wiki_url}">Wiki</a>' if wiki_url else ""
+    wiki_line = f'\n.\n<a href="{wiki_url}">Wiki</a>' if wiki_url else ""
 
     # Greedily include extra lines that fit even with an empty base description,
     # reserving space for the wiki link at the end.

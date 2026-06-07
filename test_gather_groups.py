@@ -645,7 +645,12 @@ class TestBuildDescription:
     def test_wiki_link_appended(self):
         c = make_circle(description="Desc")
         result = build_description(c, "", wiki_url="https://host/wiki/alpha-circle-wiki")
-        assert result.endswith('\n<a href="https://host/wiki/alpha-circle-wiki">Wiki</a>')
+        assert result.endswith('\n.\n<a href="https://host/wiki/alpha-circle-wiki">Wiki</a>')
+
+    def test_wiki_link_preceded_by_period(self):
+        c = make_circle(description="Desc")
+        result = build_description(c, "", wiki_url="https://host/wiki/alpha-circle-wiki")
+        assert "\n.\n<a" in result
 
     def test_wiki_link_is_last(self):
         c = make_circle(description="Desc", meetings="Mondays")
@@ -660,7 +665,7 @@ class TestBuildDescription:
 
     def test_wiki_link_truncates_base_description(self):
         wiki_url = "https://host/wiki/alpha-circle-wiki"
-        wiki_line = f'\n<a href="{wiki_url}">Wiki</a>'
+        wiki_line = f'\n.\n<a href="{wiki_url}">Wiki</a>'
         c = make_circle(description="A" * 255)
         result = build_description(c, "", wiki_url=wiki_url)
         post_len = len(result) + result.count("\n")
