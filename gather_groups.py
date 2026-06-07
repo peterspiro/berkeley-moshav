@@ -1772,7 +1772,11 @@ def _ensure_gdrive_link_on_wiki(
             log("ERROR", "gdrive_wiki", wiki_slug, "Editor not found on wiki edit page")
             return False
         content = _codemirror_get(page)
+        expected = _links_block(circle_name, group_url, gdrive_href)
+        log("DEBUG", "gdrive_wiki", f"{wiki_slug}: expected={expected!r}")
+        log("DEBUG", "gdrive_wiki", f"{wiki_slug}: current first 200 chars={content[:200]!r}")
         new_content, action = _apply_gdrive_link(content, circle_name, gdrive_href, group_url)
+        log("DEBUG", "gdrive_wiki", f"{wiki_slug}: action={action}")
         if action == "skip":
             log("INFO", "gdrive_wiki", f"{wiki_slug}: links block up to date, skipping")
             return True
