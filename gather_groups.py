@@ -1706,11 +1706,11 @@ def _links_block(circle_name: str, group_url: str, gdrive_href: str = "") -> str
 
 # Matches the new single-line links block written by this script.
 _LINKS_BLOCK_RE = re.compile(
-    r"[^\n]+: \[Members\]\([^)]+\)(?: \| \[[^\]]*\]\(/gdrive/[^)]+\))?"
+    r"[^\n]+: \[Members\]\([^)]*\)(?: \| \[[^\]]*\]\(/gdrive/[^)]+\))?"
 )
 # Matches the old multi-line links block from a previous script version.
 _OLD_LINKS_BLOCK_RE = re.compile(
-    r"[^\n]*'s:\n\* \[Members\]\([^)]+\)(?:\n\* \[[^\]]*\]\(/gdrive/[^)]+\))?"
+    r"[^\n]*'s:\n\* \[Members\]\([^)]*\)(?:\n\* \[[^\]]*\]\(/gdrive/[^)]+\))?"
 )
 # Matches the old single-line bare gdrive markdown link.
 _OLD_GDRIVE_RE = re.compile(r"\[([^\]]*)\]\((/gdrive/[^)]+)\)")
@@ -1772,11 +1772,20 @@ def _ensure_gdrive_link_on_wiki(
             log("ERROR", "gdrive_wiki", wiki_slug, "Editor not found on wiki edit page")
             return False
         content = _codemirror_get(page)
-        expected = _links_block(circle_name, group_url, gdrive_href)
-        log("DEBUG", "gdrive_wiki", f"{wiki_slug}: expected={expected!r}")
-        log("DEBUG", "gdrive_wiki", f"{wiki_slug}: current first 200 chars={content[:200]!r}")
+        if not group_url:
+            log("WARN", "gdrive_wiki", wiki_slug, "no Gather group URL; removing stale blocks")
+            cleaned = _LINKS_BLOCK_RE.sub("", content)
+            cleaned = _OLD_LINKS_BLOCK_RE.sub("", cleaned)
+            cleaned = re.sub(r"\n{3,}", "\n\n", cleaned).strip()
+            if cleaned == content.strip():
+                return True
+            if not dry_run:
+                _codemirror_set(page, cleaned)
+                page.locator('input[name="commit"]').click()
+                page.wait_for_load_state("networkidle")
+                log("INFO", "gdrive_wiki", f"{wiki_slug}: removed stale blocks (no group URL)")
+            return True
         new_content, action = _apply_gdrive_link(content, circle_name, gdrive_href, group_url)
-        log("DEBUG", "gdrive_wiki", f"{wiki_slug}: action={action}")
         if action == "skip":
             log("INFO", "gdrive_wiki", f"{wiki_slug}: links block up to date, skipping")
             return True
