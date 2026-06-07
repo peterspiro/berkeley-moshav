@@ -674,7 +674,32 @@ def _build_hierarchy_content(
     return "\n".join(lines) + "\n"
 
 
-# ── Gather: fetch users ───────────────────────────────────────────────────────
+# Matches the hierarchy bullet list anchored on the root label.
+_HIERARCHY_BLOCK_RE = re.compile(
+    r"(?m)^- " + re.escape(_HIERARCHY_ROOT) + r"[^\n]*(?:\n[ \t][^\n]+)*"
+)
+
+
+def _apply_hierarchy_content(
+    page_content: str, new_hierarchy: str
+) -> tuple[Optional[str], str]:
+    """Update just the hierarchy bullet list within the page content.
+
+    Finds the existing hierarchy block (anchored on _HIERARCHY_ROOT) and
+    replaces only that portion, preserving any surrounding content.
+
+    Returns (new_page_content, action) where action is 'skip', 'update', or 'add'.
+    """
+    block = new_hierarchy.rstrip("\n")
+    m = _HIERARCHY_BLOCK_RE.search(page_content)
+    if m:
+        if m.group(0) == block:
+            return None, "skip"
+        new_page = page_content[: m.start()] + block + page_content[m.end() :]
+        return new_page, "update"
+    base = page_content.strip()
+    new_page = (base + "\n\n" if base else "") + block + "\n"
+    return new_page, "add"
 
 
 
@@ -1421,13 +1446,14 @@ def _ensure_hierarchy_page(
                 log("ERROR", "update_hierarchy", WIKI_TITLE, "Editor not found on edit page")
                 return False
             current = _codemirror_get(page)
-            if current.strip() == content.strip():
+            new_page, action = _apply_hierarchy_content(current, content)
+            if action == "skip":
                 log("INFO", "hierarchy_wiki", f"'{WIKI_TITLE}' up to date, skipping")
                 return True
             if dry_run:
                 log("DRY-RUN", "update_hierarchy", WIKI_TITLE)
                 return True
-            _codemirror_set(page, content)
+            _codemirror_set(page, new_page)
             page.locator('input[name="commit"]').click()
             page.wait_for_load_state("networkidle")
             err = _check_submit_errors(page)

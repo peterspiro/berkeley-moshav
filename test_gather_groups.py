@@ -20,6 +20,7 @@ from gather_groups import (
     _build_hierarchy_content,
     _circle_name_to_list_name,
     _apply_gdrive_link,
+    _apply_hierarchy_content,
     _canonical_group_name,
     _extract_wiki_url,
     _filter_circles,
@@ -1351,6 +1352,62 @@ class TestFilterCircles:
         circles = [make_circle(name="Alpha One"), make_circle(name="Alpha Two")]
         with pytest.raises(SystemExit):
             _filter_circles(circles, "Alpha")
+
+
+# ── _apply_hierarchy_content ─────────────────────────────────────────────────
+
+class TestApplyHierarchyContent:
+    ROOT = "Top Circle / HOA"
+    HIER = (
+        "- Top Circle / HOA\n"
+        "    - Coordinating Circle: [Members](/groups/1)\n"
+        "        - Sub Circle: [Members](/groups/2)\n"
+    )
+    HIER2 = (
+        "- Top Circle / HOA\n"
+        "    - Coordinating Circle: [Members](/groups/1)\n"
+        "        - Sub Circle: [Members](/groups/2)\n"
+        "        - Another Sub: [Members](/groups/3)\n"
+    )
+
+    def test_add_to_blank_page(self):
+        new_page, action = _apply_hierarchy_content("", self.HIER)
+        assert action == "add"
+        assert new_page == self.HIER
+
+    def test_add_appends_after_existing_content(self):
+        new_page, action = _apply_hierarchy_content("Intro text.", self.HIER)
+        assert action == "add"
+        assert new_page.startswith("Intro text.\n\n")
+        assert self.HIER.rstrip("\n") in new_page
+
+    def test_skip_when_hierarchy_unchanged(self):
+        new_page, action = _apply_hierarchy_content(self.HIER, self.HIER)
+        assert action == "skip"
+        assert new_page is None
+
+    def test_update_replaces_only_hierarchy_block(self):
+        page = "Intro.\n\n" + self.HIER + "\nFooter."
+        new_page, action = _apply_hierarchy_content(page, self.HIER2)
+        assert action == "update"
+        assert "Intro." in new_page
+        assert "Footer." in new_page
+        assert "Another Sub" in new_page
+
+    def test_update_preserves_content_before_and_after(self):
+        page = "## Heading\n\nSome prose.\n\n" + self.HIER + "\n\nSome notes."
+        new_page, action = _apply_hierarchy_content(page, self.HIER2)
+        assert action == "update"
+        assert "## Heading" in new_page
+        assert "Some prose." in new_page
+        assert "Some notes." in new_page
+        assert "Another Sub" in new_page
+
+    def test_skip_with_surrounding_content(self):
+        page = "Intro.\n\n" + self.HIER + "\nFooter."
+        new_page, action = _apply_hierarchy_content(page, self.HIER)
+        assert action == "skip"
+        assert new_page is None
 
 
 # ── _apply_gdrive_link ───────────────────────────────────────────────────────
