@@ -1014,10 +1014,17 @@ class TestBuildHierarchyContent:
         md = self._build([root], group_urls={self.ROOT: "/groups/1"})
         assert f"[{self.ROOT}]" not in md
 
-    def test_no_root_circle_produces_empty(self):
+    def test_no_root_circle_produces_synthetic_root(self):
         circles = [make_circle("Alpha Circle", col_index=0)]
         md = self._build(circles)
-        assert md.strip() == ""
+        assert self.ROOT in md
+        assert "Alpha Circle" in md
+
+    def test_synthetic_root_has_no_links(self):
+        circles = [make_circle("Alpha Circle", col_index=0)]
+        md = self._build(circles, group_urls={"Alpha Circle": "/groups/1"})
+        root_line = md.splitlines()[0]
+        assert "[Members]" not in root_line
 
 
 # ── to_csv_export_url ─────────────────────────────────────────────────────────
