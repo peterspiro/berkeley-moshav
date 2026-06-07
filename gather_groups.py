@@ -260,9 +260,10 @@ def _normalize_group_name(name: str) -> str:
     n = re.sub(r"\s+", " ", n).strip()
     n = re.sub(r"\bworking group\b", "work group", n)
     for alias_set in GROUP_NAME_ALIASES:
-        if n in alias_set:
-            n = min(alias_set)  # canonical form is alphabetically first
-            break
+        canonical = min(alias_set)
+        for alias in alias_set:
+            if alias != canonical:
+                n = re.sub(r"\b" + re.escape(alias) + r"\b", canonical, n)
     return n
 
 

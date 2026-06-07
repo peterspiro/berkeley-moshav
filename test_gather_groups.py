@@ -179,6 +179,10 @@ class TestGroupNamesMatch:
         assert group_names_match("Landscape", "Landscaping")
         assert group_names_match("Landscaping", "Landscape")
 
+    def test_landscape_alias_in_compound_name(self):
+        assert group_names_match("Landscape Work Group", "Landscaping Working Group")
+        assert group_names_match("Landscaping Working Group", "Landscape Work Group")
+
     def test_acronym_match(self):
         assert group_names_match("CLC", "Community Life Circle")
         assert group_names_match("Community Life Circle", "CLC")
