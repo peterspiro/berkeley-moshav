@@ -258,7 +258,7 @@ def _normalize_group_name(name: str) -> str:
     n = re.sub(r"\s*&\s*", " and ", n)
     n = n.replace(",", "")
     n = re.sub(r"\s+", " ", n).strip()
-    n = re.sub(r"\bworking group\b", "work group", n)
+    n = re.sub(r"\bwork group\b", "working group", n)
     for alias_set in GROUP_NAME_ALIASES:
         canonical = min(alias_set)
         for alias in alias_set:
@@ -325,10 +325,15 @@ def _circle_wiki_slug(name: str) -> str:
     return s.strip("-") + "-wiki"
 
 
+def _canonical_group_name(name: str) -> str:
+    """Return name with 'Work Group' replaced by 'Working Group'."""
+    return re.sub(r"\bWork\s+Group\b", "Working Group", name, flags=re.IGNORECASE)
+
+
 def _group_kind(circle: Circle) -> str:
     """Return the Gather group kind for a circle."""
     kind = GROUP_KINDS[circle.col_index]
-    if re.search(r"\bwork\s+group$", circle.name, flags=re.IGNORECASE):
+    if re.search(r"\bwork(?:ing)?\s+group$", circle.name, flags=re.IGNORECASE):
         kind = "committee"
     return kind
 
@@ -336,11 +341,11 @@ def _group_kind(circle: Circle) -> str:
 def _needs_wiki(circle: Circle) -> bool:
     """Return True if this circle should get a wiki page.
 
-    All circles get wiki pages, plus work groups (which are committees in
+    All circles get wiki pages, plus working groups (which are committees in
     Gather but are still substantive circles that warrant a wiki page).
     """
     return _group_kind(circle) != "committee" or re.search(
-        r"\bwork\s+group$", circle.name, flags=re.IGNORECASE
+        r"\bwork(?:ing)?\s+group$", circle.name, flags=re.IGNORECASE
     ) is not None
 
 
@@ -904,8 +909,13 @@ def _group_needs_update(
     desired_name: str,
 ) -> str | None:
     """Return a human-readable reason string if the group needs updating, else None."""
-    if not group_names_match(existing.name, desired_name):
-        return f"name: {existing.name!r} → {desired_name!r}"
+    if existing.name != desired_name:
+        if not group_names_match(existing.name, desired_name):
+            return f"name: {existing.name!r} → {desired_name!r}"
+        # Names match semantically, but trigger a rename if the only difference
+        # is "Work Group" vs "Working Group" (canonical form).
+        if _canonical_group_name(existing.name) == desired_name:
+            return f"name: {existing.name!r} → {desired_name!r}"
     if existing.kind != kind:
         return f"kind: {existing.kind!r} → {kind!r}"
     if existing.availability != availability:
@@ -1105,14 +1115,16 @@ def create_or_update_group(
     description: str,
     dry_run: bool,
     prefetched_detail: Optional[GatherGroup] = None,
+    desired_name: Optional[str] = None,
 ) -> Optional[str]:
     """Create or update a Gather group; return its group_id (str) or None on failure."""
+    name = desired_name if desired_name is not None else circle.name
     kind = _group_kind(circle)
     availability = "closed"
 
     if existing is not None:
         existing_detail = prefetched_detail or _fetch_group_detail(page, base_url, existing)
-        update_reason = _group_needs_update(existing_detail, kind, availability, description, members, circle.name)
+        update_reason = _group_needs_update(existing_detail, kind, availability, description, members, name)
         if not update_reason:
             log("INFO", "group", f"Up to date, skipping: {circle.name}")
             return existing.group_id
@@ -1126,7 +1138,7 @@ def create_or_update_group(
             page.goto(
                 f"{base_url}/groups/{existing.group_id}/edit", wait_until="networkidle"
             )
-            _fill_group_basics(page, existing_detail.name, kind, availability, description)
+            _fill_group_basics(page, name, kind, availability, description)
 
             # Sync members: add missing and fix manager status; never remove
             # manually-added members who aren't in the spreadsheet.
@@ -1164,7 +1176,7 @@ def create_or_update_group(
 
         try:
             page.goto(f"{base_url}/groups/new", wait_until="networkidle")
-            _fill_group_basics(page, circle.name, kind, availability, description)
+            _fill_group_basics(page, name, kind, availability, description)
             for user, is_mgr in members:
                 _add_inline_member(page, user, is_mgr)
             if not _submit_group_form(page, circle.name):
@@ -1175,7 +1187,7 @@ def create_or_update_group(
             screenshot(page, f"group_create_postsubmit_{circle.name[:20]}")
 
             # After creation Gather redirects to /groups; find the new group by name
-            group_id = _find_group_in_list(page, base_url, circle.name)
+            group_id = _find_group_in_list(page, base_url, name)
             if not group_id:
                 log("ERROR", "create_group", circle.name,
                     f"Group not found in list after creation (post-submit URL: {post_submit_url})")
@@ -1510,7 +1522,10 @@ def process(
 
             # Wiki pages are named after the Gather group (which may differ from
             # the spreadsheet name, e.g. "Technology Circle" vs "Technology").
-            gather_name = existing.name if existing is not None else circle.name
+            # "Work Group" is canonicalized to "Working Group".
+            gather_name = _canonical_group_name(
+                existing.name if existing is not None else circle.name
+            )
             gather_name_map[circle.name] = gather_name
 
             # Pre-fetch the group detail for existing groups so we can:
@@ -1553,6 +1568,7 @@ def process(
             group_id = create_or_update_group(
                 page, base_url, circle, existing, members, description, dry_run,
                 prefetched_detail=prefetched_detail,
+                desired_name=gather_name,
             )
 
             if group_id is None:

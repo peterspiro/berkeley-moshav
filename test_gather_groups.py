@@ -20,6 +20,7 @@ from gather_groups import (
     _build_wiki_index_content,
     _circle_name_to_list_name,
     _apply_gdrive_link,
+    _canonical_group_name,
     _extract_wiki_url,
     _filter_circles,
     _needs_wiki,
@@ -311,6 +312,10 @@ class TestGroupNeedsUpdate:
         # "Technology Circle" in Gather matches spreadsheet circle "Technology"
         g = self._make_group(name="Technology Circle")
         assert not _group_needs_update(g, "circle", "closed", "", [], "Technology")
+
+    def test_work_group_to_working_group_triggers_rename(self):
+        g = self._make_group(name="Landscape Work Group")
+        assert _group_needs_update(g, "circle", "closed", "", [], "Landscape Working Group")
 
     def test_stale_kind_triggers_update(self):
         g = self._make_group(kind="committee")
@@ -1061,7 +1066,7 @@ class TestCircleWikiSlug:
         assert _circle_wiki_slug("Membership") == "membership-wiki"
 
     def test_multi_word(self):
-        assert _circle_wiki_slug("Landscape Work Group") == "landscape-work-group-wiki"
+        assert _circle_wiki_slug("Landscape Working Group") == "landscape-working-group-wiki"
 
     def test_accents_folded(self):
         assert _circle_wiki_slug("Café") == "cafe-wiki"
@@ -1085,6 +1090,10 @@ class TestGroupKind:
         c = make_circle(name="Landscape Work Group", col_index=0)
         assert _group_kind(c) == "committee"
 
+    def test_working_group_is_committee(self):
+        c = make_circle(name="Landscape Working Group", col_index=0)
+        assert _group_kind(c) == "committee"
+
     def test_sub_circle_is_circle(self):
         c = make_circle(name="Jewish Life Circle", col_index=1)
         assert _group_kind(c) == "circle"
@@ -1102,6 +1111,9 @@ class TestNeedsWiki:
 
     def test_work_group_needs_wiki(self):
         assert _needs_wiki(make_circle(name="Landscape Work Group"))
+
+    def test_working_group_needs_wiki(self):
+        assert _needs_wiki(make_circle(name="Landscape Working Group"))
 
     def test_furnishings_work_group_needs_wiki(self):
         assert _needs_wiki(make_circle(name="Furnishings Work Group"))
@@ -1236,12 +1248,31 @@ class TestParseWikiIndexEntries:
         assert "alpha-circle-wiki" not in merged
 
 
-# ── Work Group → committee kind ───────────────────────────────────────────────
+# ── _canonical_group_name ─────────────────────────────────────────────────────
+
+class TestCanonicalGroupName:
+    def test_work_group_becomes_working_group(self):
+        assert _canonical_group_name("Landscape Work Group") == "Landscape Working Group"
+
+    def test_working_group_unchanged(self):
+        assert _canonical_group_name("Landscape Working Group") == "Landscape Working Group"
+
+    def test_case_insensitive(self):
+        assert _canonical_group_name("landscape work group") == "landscape Working Group"
+
+    def test_non_working_group_unchanged(self):
+        assert _canonical_group_name("Membership Circle") == "Membership Circle"
+
+    def test_work_group_mid_name_also_transformed(self):
+        assert _canonical_group_name("Work Group Liaison") == "Working Group Liaison"
+
+
+# ── Work Group / Working Group → committee kind ───────────────────────────────
 
 def _kind_for_name(name: str) -> str:
     """Mirror the inline kind-assignment logic from _ensure_group."""
     kind = GROUP_KINDS[0]
-    if re.search(r"\bwork\s+group$", name, flags=re.IGNORECASE):
+    if re.search(r"\bwork(?:ing)?\s+group$", name, flags=re.IGNORECASE):
         kind = "committee"
     return kind
 
@@ -1250,12 +1281,15 @@ class TestWorkGroupKind:
     def test_landscape_work_group_is_committee(self):
         assert _kind_for_name("Landscape Work Group") == "committee"
 
+    def test_landscape_working_group_is_committee(self):
+        assert _kind_for_name("Landscape Working Group") == "committee"
+
     def test_furnishings_work_group_is_committee(self):
         assert _kind_for_name("Furnishings Work Group") == "committee"
 
     def test_case_insensitive(self):
         assert _kind_for_name("landscape work group") == "committee"
-        assert _kind_for_name("LANDSCAPE WORK GROUP") == "committee"
+        assert _kind_for_name("LANDSCAPE WORKING GROUP") == "committee"
 
     def test_regular_circle_is_circle(self):
         assert _kind_for_name("Technology") == "circle"
@@ -1268,10 +1302,17 @@ class TestWorkGroupKind:
 
     def test_group_needs_update_detects_wrong_kind_for_work_group(self):
         g = GatherGroup(
-            group_id="1", name="Landscape Work Group", kind="circle",
+            group_id="1", name="Landscape Working Group", kind="circle",
             availability="closed", description="", members=[],
         )
-        assert _group_needs_update(g, "committee", "closed", "", [], "Landscape Work Group")
+        assert _group_needs_update(g, "committee", "closed", "", [], "Landscape Working Group")
+
+    def test_group_needs_update_renames_work_group_to_working_group(self):
+        g = GatherGroup(
+            group_id="1", name="Landscape Work Group", kind="committee",
+            availability="closed", description="", members=[],
+        )
+        assert _group_needs_update(g, "committee", "closed", "", [], "Landscape Working Group")
 
 
 # ── _filter_circles ───────────────────────────────────────────────────────────
