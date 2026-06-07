@@ -1048,6 +1048,51 @@ class TestBuildHierarchyContent:
         md = self._build([root], group_urls={self.ROOT: "/groups/1"})
         assert f"[{self.ROOT}]" not in md
 
+    def test_orphan_col1_adopted_under_sole_col0_parent(self):
+        # Level-2 circle appears before level-1 in spreadsheet → parent_name=None,
+        # but should be adopted under the unique level-1 circle.
+        level1 = make_circle("Level1", col_index=0)        # parent_name=None → child of HOA
+        orphan = make_circle("Orphan", col_index=1)        # parent_name=None → should adopt under Level1
+        md = self._build([level1, orphan])
+        lines = md.splitlines()
+        level1_line = next(l for l in lines if "Level1" in l)
+        orphan_line = next(l for l in lines if "Orphan" in l)
+        level1_indent = len(level1_line) - len(level1_line.lstrip())
+        orphan_indent = len(orphan_line) - len(orphan_line.lstrip())
+        assert orphan_indent > level1_indent, "orphan should be nested under its sole col0 candidate"
+
+    def test_orphan_col1_falls_back_to_root_when_multiple_col0(self):
+        # If there are multiple col_index=0 circles, orphan adoption is ambiguous
+        # and orphan falls back to direct child of root.
+        level1a = make_circle("Level1A", col_index=0)
+        level1b = make_circle("Level1B", col_index=0)
+        orphan = make_circle("Orphan", col_index=1)
+        md = self._build([level1a, level1b, orphan])
+        lines = md.splitlines()
+        root_line = next(l for l in lines if self.ROOT in l)
+        orphan_line = next(l for l in lines if "Orphan" in l)
+        level1a_line = next(l for l in lines if "Level1A" in l)
+        root_indent = len(root_line) - len(root_line.lstrip())
+        orphan_indent = len(orphan_line) - len(orphan_line.lstrip())
+        level1a_indent = len(level1a_line) - len(level1a_line.lstrip())
+        assert orphan_indent == level1a_indent, "orphan should be at same level as col0 circles (child of root)"
+        assert orphan_indent > root_indent
+
+    def test_real_world_spreadsheet_order(self):
+        # Mirrors actual spreadsheet: orphaned col1 circles appear BEFORE the col0
+        # level-1 circle (parse_sheet produces parent_name=None for them).
+        # All orphans should end up under the sole col0 level-1 circle.
+        orphan1 = make_circle("SubA", col_index=1)   # appears before Level1 in sheet
+        orphan2 = make_circle("SubB", col_index=1)   # appears before Level1 in sheet
+        level1 = make_circle("Level1", col_index=0)
+        md = self._build([orphan1, orphan2, level1])
+        lines = md.splitlines()
+        level1_line = next(l for l in lines if "Level1" in l)
+        suba_line = next(l for l in lines if "SubA" in l)
+        subb_line = next(l for l in lines if "SubB" in l)
+        level1_indent = len(level1_line) - len(level1_line.lstrip())
+        assert len(suba_line) - len(suba_line.lstrip()) > level1_indent
+        assert len(subb_line) - len(subb_line.lstrip()) > level1_indent
 
 
 # ── to_csv_export_url ─────────────────────────────────────────────────────────

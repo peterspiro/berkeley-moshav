@@ -615,15 +615,40 @@ def _build_hierarchy_content(
     without a parent_name (other than the root itself) is treated as a direct
     child of the root.  If no circle matches _HIERARCHY_ROOT a synthetic root
     entry (name only, no links) is rendered.
+
+    Orphaned circles (col_index > 0, parent_name=None — caused by appearing
+    before their parent in the spreadsheet) are adopted under the sole circle
+    at col_index - 1 when exactly one such candidate exists.
     """
     root_circle: Optional[Circle] = None
     by_parent: dict[str, list[Circle]] = {}
+    orphans: list[Circle] = []
+
     for c in circles:
         if group_names_match(c.name, _HIERARCHY_ROOT):
             root_circle = c
+        elif c.parent_name:
+            by_parent.setdefault(c.parent_name, []).append(c)
+        elif c.col_index == 0:
+            by_parent.setdefault(_HIERARCHY_ROOT, []).append(c)
         else:
-            parent = c.parent_name if c.parent_name else _HIERARCHY_ROOT
-            by_parent.setdefault(parent, []).append(c)
+            orphans.append(c)
+
+    # Build lookup of non-root circles by col_index for orphan adoption.
+    non_root_by_col: dict[int, list[Circle]] = {}
+    for c in circles:
+        if not group_names_match(c.name, _HIERARCHY_ROOT):
+            non_root_by_col.setdefault(c.col_index, []).append(c)
+
+    for orphan in orphans:
+        candidates = non_root_by_col.get(orphan.col_index - 1, [])
+        if len(candidates) == 1:
+            by_parent.setdefault(candidates[0].name, []).append(orphan)
+        else:
+            log("WARN", "hierarchy",
+                f"Orphan circle {orphan.name!r} (col_index={orphan.col_index}) has "
+                f"{len(candidates)} candidate parents; placing under root")
+            by_parent.setdefault(_HIERARCHY_ROOT, []).append(orphan)
 
     if root_circle is not None:
         lines = _render_hierarchy_entry(
