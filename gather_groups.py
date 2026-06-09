@@ -1184,6 +1184,7 @@ def process(
     sheet_url: str = DEFAULT_SHEET_URL,
     dry_run: bool = False,
     circle_prefix: Optional[str] = None,
+    headless: bool = True,
 ):
     base_url = base_url.rstrip("/")
     init_log()
@@ -1199,7 +1200,7 @@ def process(
         log("INFO", "filter", f"Processing 1 circle: {circles[0].name!r}")
 
     with sync_playwright() as pw:
-        browser = launch_browser(pw)
+        browser = launch_browser(pw, headless=headless)
         page = browser.new_context().new_page()
 
         try:
@@ -1557,9 +1558,14 @@ def cli():
         "-c", "--circle", default=None, metavar="PREFIX",
         help="Process only the circle whose name starts with PREFIX (must match exactly one)",
     )
+    parser.add_argument(
+        "--no-headless", action="store_true",
+        help="Show the browser window (useful for debugging connection issues)",
+    )
     args = parser.parse_args()
     email, password = load_credentials()
-    process(args.base_url, email, password, args.sheet_url, args.dry_run, args.circle)
+    process(args.base_url, email, password, args.sheet_url, args.dry_run, args.circle,
+            headless=not args.no_headless)
 
 
 if __name__ == "__main__":

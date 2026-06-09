@@ -9,6 +9,7 @@ import csv
 import datetime
 import io
 import os
+import sys
 import re
 import time
 import unicodedata
@@ -120,10 +121,13 @@ def login(page: Page, base_url: str, email: str, password: str) -> None:
     log("INFO", "login", f"Signed in as {email}")
 
 
-def launch_browser(pw) -> Browser:
+def launch_browser(pw, headless: bool = True) -> Browser:
     """Launch Chromium, using the bundled binary if present."""
+    args = ["--disable-blink-features=AutomationControlled"]
+    if sys.platform != "darwin":
+        args.append("--no-sandbox")
     chrome_path = "/opt/pw-browsers/chromium-1194/chrome-linux/chrome"
-    launch_kwargs: dict = {"args": ["--no-sandbox", "--disable-blink-features=AutomationControlled"]}
+    launch_kwargs: dict = {"headless": headless, "args": args}
     if os.path.exists(chrome_path):
         launch_kwargs["executable_path"] = chrome_path
     return pw.chromium.launch(**launch_kwargs)
