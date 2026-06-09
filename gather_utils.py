@@ -124,54 +124,17 @@ def login(page: Page, base_url: str, email: str, password: str) -> None:
     log("INFO", "login", f"Signed in as {email}")
 
 
-def launch_browser(pw, headless: bool | None = None) -> Browser:
-    """Launch Chromium, preferring the system Chrome installation.
+def launch_browser(pw, headless: bool = True) -> Browser:
+    """Launch Chromium in a fresh temporary profile.
 
-    Playwright's bundled Chromium has a distinct TLS fingerprint that CDNs
-    (Cloudflare et al.) detect and block with ERR_EMPTY_RESPONSE. Using the
-    system Chrome binary avoids this.
-
-    On macOS, headless defaults to False because even system Chrome in headless
-    mode presents a fingerprint that the Gather CDN blocks. The brief visible
-    window is the only reliable workaround until Chrome's headless fingerprint
-    is indistinguishable from non-headless.
-
-    On Linux, headless defaults to True (uses the bundled Chromium fallback on
-    CI, which is not subject to the same CDN blocking).
-
-    Falls back to bundled Chromium if system Chrome is not found.
+    The temp profile prevents ERR_EMPTY_RESPONSE errors caused by Playwright
+    conflicting with an already-running Chrome that holds a profile lock.
     """
-    if headless is None:
-        headless = sys.platform != "darwin"
-
-    args = ["--disable-blink-features=AutomationControlled"]
-    if sys.platform != "darwin":
-        args.append("--no-sandbox")
-    if headless:
-        # Use Chrome's new headless mode which shares the same TLS fingerprint
-        # as non-headless, avoiding CDN detection. We pass headless=False to
-        # Playwright and let the flag control actual headlessness.
-        args.append("--headless=new")
-
-    log("DEBUG", "launch_browser", f"headless={headless} platform={sys.platform}")
-
-    # Use a temporary user-data-dir so this Chrome instance never conflicts with
-    # an already-running system Chrome (which locks its profile directory on macOS).
     tmp_profile = tempfile.mkdtemp(prefix="pw_chrome_")
     atexit.register(shutil.rmtree, tmp_profile, ignore_errors=True)
-    chrome_args = args + [f"--user-data-dir={tmp_profile}"]
 
-    # Try system Chrome first (avoids TLS fingerprint blocking by CDNs).
-    try:
-        browser = pw.chromium.launch(channel="chrome", headless=False, args=chrome_args)
-        log("DEBUG", "launch_browser", "using system Chrome")
-        return browser
-    except Exception as e:
-        log("WARN", "launch_browser",
-            f"system Chrome unavailable ({e}); falling back to bundled Chromium")
-
-    # Fall back to bundled Chromium (e.g. on Linux CI where Chrome isn't installed).
     chrome_path = "/opt/pw-browsers/chromium-1194/chrome-linux/chrome"
+    args = ["--no-sandbox", f"--user-data-dir={tmp_profile}"]
     launch_kwargs: dict = {"headless": headless, "args": args}
     if os.path.exists(chrome_path):
         launch_kwargs["executable_path"] = chrome_path

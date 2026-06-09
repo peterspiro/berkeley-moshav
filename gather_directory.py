@@ -370,8 +370,7 @@ def update_user(page: Page, edit_url: str, member: dict, dry_run: bool) -> str:
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
-def main(sheet_url: str, base_url: str, email: str, password: str, dry_run: bool = False,
-         headless: bool | None = None):
+def main(sheet_url: str, base_url: str, email: str, password: str, dry_run: bool = False):
     base_url = base_url.rstrip("/")
     init_log()
 
@@ -382,7 +381,7 @@ def main(sheet_url: str, base_url: str, email: str, password: str, dry_run: bool
     log("INFO", "preprocess", f"{len(households)} households parsed")
 
     with sync_playwright() as pw:
-        browser = launch_browser(pw, headless=headless)
+        browser = launch_browser(pw)
         page = browser.new_context().new_page()
 
         try:
@@ -443,12 +442,9 @@ def cli():
                         help="Gather base URL")
     parser.add_argument("-n", "--dry-run", action="store_true",
                         help="Log what would happen without making any changes")
-    parser.add_argument("--no-headless", action="store_true",
-                        help="Show the browser window (useful for debugging connection issues)")
     args = parser.parse_args()
     email, password = load_credentials()
-    main(args.sheet_url, args.base_url, email, password, args.dry_run,
-         headless=False if args.no_headless else None)
+    main(args.sheet_url, args.base_url, email, password, args.dry_run)
 
 
 if __name__ == "__main__":
