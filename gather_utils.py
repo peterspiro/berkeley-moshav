@@ -144,17 +144,17 @@ def launch_browser(pw, headless: bool | None = None) -> Browser:
     args = ["--disable-blink-features=AutomationControlled"]
     if sys.platform != "darwin":
         args.append("--no-sandbox")
+    if headless:
+        # Use Chrome's new headless mode which shares the same TLS fingerprint
+        # as non-headless, avoiding CDN detection. We pass headless=False to
+        # Playwright and let the flag control actual headlessness.
+        args.append("--headless=new")
 
     log("DEBUG", "launch_browser", f"headless={headless} platform={sys.platform}")
 
     # Try system Chrome first (avoids TLS fingerprint blocking by CDNs).
-    # ignore_default_args removes --enable-automation which Playwright adds by default
-    # and which CDNs use as an automation signal.
     try:
-        browser = pw.chromium.launch(
-            channel="chrome", headless=headless, args=args,
-            ignore_default_args=["--enable-automation"],
-        )
+        browser = pw.chromium.launch(channel="chrome", headless=False, args=args)
         log("DEBUG", "launch_browser", "using system Chrome")
         return browser
     except Exception as e:
