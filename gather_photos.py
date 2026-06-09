@@ -390,6 +390,7 @@ def main(
     email: str,
     password: str,
     dry_run: bool = False,
+    headless: bool = True,
 ):
     base_url = base_url.rstrip("/")
     init_log()
@@ -406,7 +407,7 @@ def main(
     log("INFO", "scrape", f"{len(photos)} photo entries found")
 
     with sync_playwright() as pw:
-        browser = launch_browser(pw)
+        browser = launch_browser(pw, headless=headless)
         page = browser.new_context().new_page()
 
         try:
@@ -479,11 +480,15 @@ def cli():
         "-n", "--dry-run", action="store_true",
         help="Log what would happen without making any changes",
     )
+    parser.add_argument(
+        "--no-headless", action="store_true",
+        help="Show the browser window (useful for debugging connection issues)",
+    )
     args = parser.parse_args()
     email, password = load_credentials()
     main(
         args.sheet_url, args.base_url, args.community_url,
-        email, password, args.dry_run,
+        email, password, args.dry_run, headless=not args.no_headless,
     )
 
 

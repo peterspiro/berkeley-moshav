@@ -121,31 +121,33 @@ def login(page: Page, base_url: str, email: str, password: str) -> None:
     log("INFO", "login", f"Signed in as {email}")
 
 
-def launch_browser(pw, headless: bool = True) -> Browser:
+def launch_browser(pw, headless: bool | None = None) -> Browser:
     """Launch Chromium, preferring the system Chrome installation.
 
-    Playwright's bundled Chromium has a distinct TLS fingerprint that some
-    CDNs (Cloudflare et al.) detect and block. Using the system Chrome binary
-    avoids this because it presents a legitimate browser fingerprint.
+    Playwright's bundled Chromium has a distinct TLS fingerprint that CDNs
+    (Cloudflare et al.) detect and block with ERR_EMPTY_RESPONSE. Using the
+    system Chrome binary avoids this.
 
-    When headless is requested, we pass --headless=new as a Chrome flag rather
-    than using Playwright's headless=True. Chrome's "new headless" mode (112+)
-    shares the same network stack and TLS fingerprint as non-headless, whereas
-    Playwright's headless flag uses the old --headless mode which has a distinct
-    fingerprint that CDNs can detect.
+    On macOS, headless defaults to False because even system Chrome in headless
+    mode presents a fingerprint that the Gather CDN blocks. The brief visible
+    window is the only reliable workaround until Chrome's headless fingerprint
+    is indistinguishable from non-headless.
 
-    Falls back to bundled Chromium (e.g. on Linux CI where Chrome isn't installed).
+    On Linux, headless defaults to True (uses the bundled Chromium fallback on
+    CI, which is not subject to the same CDN blocking).
+
+    Falls back to bundled Chromium if system Chrome is not found.
     """
+    if headless is None:
+        headless = sys.platform != "darwin"
+
     args = ["--disable-blink-features=AutomationControlled"]
     if sys.platform != "darwin":
         args.append("--no-sandbox")
-    if headless:
-        args.append("--headless=new")
 
     # Try system Chrome first (avoids TLS fingerprint blocking by CDNs).
-    # Pass headless=False because we control headlessness via --headless=new above.
     try:
-        return pw.chromium.launch(channel="chrome", headless=False, args=args)
+        return pw.chromium.launch(channel="chrome", headless=headless, args=args)
     except Exception:
         pass
 
