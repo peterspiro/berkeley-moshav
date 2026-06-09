@@ -7,10 +7,13 @@ then import everything else directly from this module.
 
 import csv
 import datetime
+import atexit
 import io
 import os
+import shutil
 import sys
 import re
+import tempfile
 import time
 import unicodedata
 import urllib.request
@@ -152,9 +155,15 @@ def launch_browser(pw, headless: bool | None = None) -> Browser:
 
     log("DEBUG", "launch_browser", f"headless={headless} platform={sys.platform}")
 
+    # Use a temporary user-data-dir so this Chrome instance never conflicts with
+    # an already-running system Chrome (which locks its profile directory on macOS).
+    tmp_profile = tempfile.mkdtemp(prefix="pw_chrome_")
+    atexit.register(shutil.rmtree, tmp_profile, ignore_errors=True)
+    chrome_args = args + [f"--user-data-dir={tmp_profile}"]
+
     # Try system Chrome first (avoids TLS fingerprint blocking by CDNs).
     try:
-        browser = pw.chromium.launch(channel="chrome", headless=False, args=args)
+        browser = pw.chromium.launch(channel="chrome", headless=False, args=chrome_args)
         log("DEBUG", "launch_browser", "using system Chrome")
         return browser
     except Exception as e:
