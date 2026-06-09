@@ -390,7 +390,7 @@ def main(
     email: str,
     password: str,
     dry_run: bool = False,
-    headless: bool = True,
+    headless: bool | None = None,
 ):
     base_url = base_url.rstrip("/")
     init_log()
@@ -488,7 +488,7 @@ def cli():
     email, password = load_credentials()
     main(
         args.sheet_url, args.base_url, args.community_url,
-        email, password, args.dry_run, headless=not args.no_headless,
+        email, password, args.dry_run, headless=False if args.no_headless else None,
     )
 
 

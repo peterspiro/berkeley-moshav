@@ -371,7 +371,7 @@ def update_user(page: Page, edit_url: str, member: dict, dry_run: bool) -> str:
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main(sheet_url: str, base_url: str, email: str, password: str, dry_run: bool = False,
-         headless: bool = True):
+         headless: bool | None = None):
     base_url = base_url.rstrip("/")
     init_log()
 
@@ -448,7 +448,7 @@ def cli():
     args = parser.parse_args()
     email, password = load_credentials()
     main(args.sheet_url, args.base_url, email, password, args.dry_run,
-         headless=not args.no_headless)
+         headless=False if args.no_headless else None)
 
 
 if __name__ == "__main__":

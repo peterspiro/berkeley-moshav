@@ -1184,7 +1184,7 @@ def process(
     sheet_url: str = DEFAULT_SHEET_URL,
     dry_run: bool = False,
     circle_prefix: Optional[str] = None,
-    headless: bool = True,
+    headless: bool | None = None,
 ):
     base_url = base_url.rstrip("/")
     init_log()
@@ -1565,7 +1565,7 @@ def cli():
     args = parser.parse_args()
     email, password = load_credentials()
     process(args.base_url, email, password, args.sheet_url, args.dry_run, args.circle,
-            headless=not args.no_headless)
+            headless=False if args.no_headless else None)
 
 
 if __name__ == "__main__":
