@@ -125,17 +125,29 @@ def login(page: Page, base_url: str, email: str, password: str) -> None:
 
 
 def launch_browser(pw, headless: bool = True) -> Browser:
-    """Launch Chromium in a fresh temporary profile.
+    """Launch Chrome in a fresh temporary profile.
 
-    The temp profile prevents ERR_EMPTY_RESPONSE errors caused by Playwright
-    conflicting with an already-running Chrome that holds a profile lock.
+    Uses system Chrome (channel="chrome") so --user-data-dir can be passed as
+    an arg. The temp profile prevents ERR_EMPTY_RESPONSE caused by conflicting
+    with an already-running Chrome that holds a profile lock.
+
+    Falls back to bundled Chromium (Linux CI) where system Chrome isn't installed;
+    Playwright manages that profile automatically.
     """
     tmp_profile = tempfile.mkdtemp(prefix="pw_chrome_")
     atexit.register(shutil.rmtree, tmp_profile, ignore_errors=True)
 
+    try:
+        return pw.chromium.launch(
+            channel="chrome", headless=headless,
+            args=[f"--user-data-dir={tmp_profile}"],
+        )
+    except Exception as e:
+        log("WARN", "launch_browser",
+            f"system Chrome unavailable ({e}); falling back to bundled Chromium")
+
     chrome_path = "/opt/pw-browsers/chromium-1194/chrome-linux/chrome"
-    args = ["--no-sandbox", f"--user-data-dir={tmp_profile}"]
-    launch_kwargs: dict = {"headless": headless, "args": args}
+    launch_kwargs: dict = {"headless": headless, "args": ["--no-sandbox"]}
     if os.path.exists(chrome_path):
         launch_kwargs["executable_path"] = chrome_path
     return pw.chromium.launch(**launch_kwargs)
