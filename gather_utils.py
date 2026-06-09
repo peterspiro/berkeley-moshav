@@ -148,8 +148,13 @@ def launch_browser(pw, headless: bool | None = None) -> Browser:
     log("DEBUG", "launch_browser", f"headless={headless} platform={sys.platform}")
 
     # Try system Chrome first (avoids TLS fingerprint blocking by CDNs).
+    # ignore_default_args removes --enable-automation which Playwright adds by default
+    # and which CDNs use as an automation signal.
     try:
-        browser = pw.chromium.launch(channel="chrome", headless=headless, args=args)
+        browser = pw.chromium.launch(
+            channel="chrome", headless=headless, args=args,
+            ignore_default_args=["--enable-automation"],
+        )
         log("DEBUG", "launch_browser", "using system Chrome")
         return browser
     except Exception as e:
