@@ -7,13 +7,10 @@ then import everything else directly from this module.
 
 import csv
 import datetime
-import atexit
 import io
 import os
-import shutil
 import sys
 import re
-import tempfile
 import time
 import unicodedata
 import urllib.request
@@ -125,23 +122,14 @@ def login(page: Page, base_url: str, email: str, password: str) -> None:
 
 
 def launch_browser(pw, headless: bool = True) -> Browser:
-    """Launch Chrome in a fresh temporary profile.
+    """Launch Chrome using the system installation (channel="chrome").
 
-    Uses system Chrome (channel="chrome") so --user-data-dir can be passed as
-    an arg. The temp profile prevents ERR_EMPTY_RESPONSE caused by conflicting
-    with an already-running Chrome that holds a profile lock.
-
-    Falls back to bundled Chromium (Linux CI) where system Chrome isn't installed;
-    Playwright manages that profile automatically.
+    System Chrome's TLS fingerprint is not blocked by the Gather CDN, unlike
+    Playwright's bundled Chromium. Falls back to bundled Chromium on Linux CI
+    where system Chrome isn't installed.
     """
-    tmp_profile = tempfile.mkdtemp(prefix="pw_chrome_")
-    atexit.register(shutil.rmtree, tmp_profile, ignore_errors=True)
-
     try:
-        return pw.chromium.launch(
-            channel="chrome", headless=headless,
-            args=[f"--user-data-dir={tmp_profile}"],
-        )
+        return pw.chromium.launch(channel="chrome", headless=headless)
     except Exception as e:
         log("WARN", "launch_browser",
             f"system Chrome unavailable ({e}); falling back to bundled Chromium")
