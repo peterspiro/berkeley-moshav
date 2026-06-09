@@ -127,15 +127,25 @@ def launch_browser(pw, headless: bool = True) -> Browser:
     Playwright's bundled Chromium has a distinct TLS fingerprint that some
     CDNs (Cloudflare et al.) detect and block. Using the system Chrome binary
     avoids this because it presents a legitimate browser fingerprint.
-    Falls back to the bundled Chromium if system Chrome is not found.
+
+    When headless is requested, we pass --headless=new as a Chrome flag rather
+    than using Playwright's headless=True. Chrome's "new headless" mode (112+)
+    shares the same network stack and TLS fingerprint as non-headless, whereas
+    Playwright's headless flag uses the old --headless mode which has a distinct
+    fingerprint that CDNs can detect.
+
+    Falls back to bundled Chromium (e.g. on Linux CI where Chrome isn't installed).
     """
     args = ["--disable-blink-features=AutomationControlled"]
     if sys.platform != "darwin":
         args.append("--no-sandbox")
+    if headless:
+        args.append("--headless=new")
 
     # Try system Chrome first (avoids TLS fingerprint blocking by CDNs).
+    # Pass headless=False because we control headlessness via --headless=new above.
     try:
-        return pw.chromium.launch(channel="chrome", headless=headless, args=args)
+        return pw.chromium.launch(channel="chrome", headless=False, args=args)
     except Exception:
         pass
 
@@ -210,8 +220,11 @@ class GatherGroup:
 
 def fetch_all_gather_users(page: Page, base_url: str) -> list[GatherUser]:
     """Download all users from the Gather directory CSV export."""
-    response = page.request.get(f"{base_url}/users.csv")
-    reader = csv.DictReader(io.StringIO(response.text()))
+    csv_text: str = page.evaluate(
+        "async (url) => { const r = await fetch(url); return await r.text(); }",
+        f"{base_url}/users.csv",
+    )
+    reader = csv.DictReader(io.StringIO(csv_text))
     users: list[GatherUser] = []
     for row in reader:
         uid = row.get("ID", "").strip()
