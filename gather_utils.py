@@ -122,10 +122,24 @@ def login(page: Page, base_url: str, email: str, password: str) -> None:
 
 
 def launch_browser(pw, headless: bool = True) -> Browser:
-    """Launch Chromium, using the bundled binary if present."""
+    """Launch Chromium, preferring the system Chrome installation.
+
+    Playwright's bundled Chromium has a distinct TLS fingerprint that some
+    CDNs (Cloudflare et al.) detect and block. Using the system Chrome binary
+    avoids this because it presents a legitimate browser fingerprint.
+    Falls back to the bundled Chromium if system Chrome is not found.
+    """
     args = ["--disable-blink-features=AutomationControlled"]
     if sys.platform != "darwin":
         args.append("--no-sandbox")
+
+    # Try system Chrome first (avoids TLS fingerprint blocking by CDNs).
+    try:
+        return pw.chromium.launch(channel="chrome", headless=headless, args=args)
+    except Exception:
+        pass
+
+    # Fall back to bundled Chromium (e.g. on Linux CI where Chrome isn't installed).
     chrome_path = "/opt/pw-browsers/chromium-1194/chrome-linux/chrome"
     launch_kwargs: dict = {"headless": headless, "args": args}
     if os.path.exists(chrome_path):
