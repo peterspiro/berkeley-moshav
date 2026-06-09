@@ -160,7 +160,13 @@ def launch_browser(pw, headless: bool = True) -> Browser:
 # ── Sheet fetching ────────────────────────────────────────────────────────────
 
 def to_csv_export_url(url: str) -> str:
-    """Convert any Google Sheets URL to a CSV export URL."""
+    """Convert a Google Sheets edit URL to a CSV export URL.
+
+    URLs that already contain /export? (e.g. ?format=tsv or ?format=csv) are
+    returned unchanged so their format and gid parameters are preserved.
+    """
+    if "/export?" in url:
+        return url
     m = re.search(r"spreadsheets/d/([^/?#\s]+)", url)
     if not m:
         return url
