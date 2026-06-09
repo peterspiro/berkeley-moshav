@@ -7,10 +7,13 @@ then import everything else directly from this module.
 
 import csv
 import datetime
+import atexit
 import io
 import os
+import shutil
 import sys
 import re
+import tempfile
 import time
 import unicodedata
 import urllib.request
@@ -18,7 +21,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-from playwright.sync_api import Browser, Page, sync_playwright
+from playwright.sync_api import Browser, BrowserContext, Page, sync_playwright
 
 
 # ── Configuration ─────────────────────────────────────────────────────────────
@@ -121,24 +124,28 @@ def login(page: Page, base_url: str, email: str, password: str) -> None:
     log("INFO", "login", f"Signed in as {email}")
 
 
-def launch_browser(pw, headless: bool = True) -> Browser:
-    """Launch Chrome using the system installation (channel="chrome").
+def launch_browser(pw, headless: bool = True) -> BrowserContext:
+    """Launch Chrome in a fresh temporary profile via launch_persistent_context.
 
-    System Chrome's TLS fingerprint is not blocked by the Gather CDN, unlike
-    Playwright's bundled Chromium. Falls back to bundled Chromium on Linux CI
-    where system Chrome isn't installed.
+    Uses system Chrome (channel="chrome") to avoid CDN TLS-fingerprint blocking.
+    The temporary user_data_dir prevents profile-lock conflicts with an already-
+    running Chrome instance. Falls back to bundled Chromium on Linux CI.
+    Returns a BrowserContext; callers use context.new_page() directly.
     """
+    tmp_profile = tempfile.mkdtemp(prefix="pw_chrome_")
+    atexit.register(shutil.rmtree, tmp_profile, ignore_errors=True)
+
     try:
-        return pw.chromium.launch(channel="chrome", headless=headless)
+        return pw.chromium.launch_persistent_context(
+            tmp_profile, channel="chrome", headless=headless,
+        )
     except Exception as e:
         log("WARN", "launch_browser",
             f"system Chrome unavailable ({e}); falling back to bundled Chromium")
 
-    chrome_path = "/opt/pw-browsers/chromium-1194/chrome-linux/chrome"
-    launch_kwargs: dict = {"headless": headless, "args": ["--no-sandbox"]}
-    if os.path.exists(chrome_path):
-        launch_kwargs["executable_path"] = chrome_path
-    return pw.chromium.launch(**launch_kwargs)
+    return pw.chromium.launch_persistent_context(
+        tmp_profile, headless=headless, args=["--no-sandbox"],
+    )
 
 
 # ── Sheet fetching ────────────────────────────────────────────────────────────

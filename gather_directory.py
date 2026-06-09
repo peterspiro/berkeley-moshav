@@ -382,7 +382,7 @@ def main(sheet_url: str, base_url: str, email: str, password: str, dry_run: bool
 
     with sync_playwright() as pw:
         browser = launch_browser(pw)
-        page = browser.new_context().new_page()
+        page = browser.new_page()
 
         try:
             login(page, base_url, email, password)
