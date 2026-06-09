@@ -106,7 +106,7 @@ def select2_choose(page: Page, field_selector: str, search_text: str) -> None:
 
 
 def login(page: Page, base_url: str, email: str, password: str) -> None:
-    page.goto(f"{base_url}/people/users/sign-in", wait_until="networkidle")
+    page.goto(f"{base_url}/people/users/sign-in", wait_until="load")
     if "sign-in" not in page.url and "sign_in" not in page.url:
         log("INFO", "login", "Already signed in")
         return
@@ -123,7 +123,7 @@ def login(page: Page, base_url: str, email: str, password: str) -> None:
 def launch_browser(pw) -> Browser:
     """Launch Chromium, using the bundled binary if present."""
     chrome_path = "/opt/pw-browsers/chromium-1194/chrome-linux/chrome"
-    launch_kwargs: dict = {"args": ["--no-sandbox"]}
+    launch_kwargs: dict = {"args": ["--no-sandbox", "--disable-blink-features=AutomationControlled"]}
     if os.path.exists(chrome_path):
         launch_kwargs["executable_path"] = chrome_path
     return pw.chromium.launch(**launch_kwargs)
