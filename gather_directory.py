@@ -9,18 +9,25 @@ Usage:
 """
 
 import argparse
-import csv
-import datetime
-import os
 import sys
-import time
-import urllib.request
 from pathlib import Path
 
 from playwright.sync_api import Page, sync_playwright
 
 from credentials import load_credentials
 from preprocess import preprocess_text
+from gather_utils import (
+    _check_submit_errors,
+    close_log,
+    configure,
+    fetch_sheet,
+    init_log,
+    launch_browser,
+    log,
+    login,
+    screenshot,
+    select2_choose,
+)
 
 
 DEFAULT_SHEET_URL = (
@@ -28,108 +35,10 @@ DEFAULT_SHEET_URL = (
     "1h0f4Dq242kpuqpN7OiVoCnwEm6FDlMHaRlSS4HWiSNY/export?format=tsv"
 )
 
-LOG_FILE = "import_log.csv"
-SCREENSHOT_DIR = Path("import_screenshots")
+_LOG_FILE = Path("import_log.csv")
+_SCREENSHOT_DIR = Path("import_screenshots")
 
-
-def fetch_sheet(url: str) -> str:
-    """Fetch TSV content from a URL or local file path."""
-    if url.startswith("file://"):
-        with open(url[7:], encoding="utf-8-sig") as f:
-            return f.read()
-    if not url.startswith("http://") and not url.startswith("https://"):
-        with open(url, encoding="utf-8-sig") as f:
-            return f.read()
-    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        return resp.read().decode("utf-8-sig")
-
-
-# ── Logging ───────────────────────────────────────────────────────────────────
-
-_log_writer = None
-_log_file_handle = None
-
-
-def init_log():
-    global _log_writer, _log_file_handle
-    SCREENSHOT_DIR.mkdir(exist_ok=True)
-    _log_file_handle = open(LOG_FILE, "a", newline="")
-    _log_writer = csv.writer(_log_file_handle)
-    if Path(LOG_FILE).stat().st_size == 0:
-        _log_writer.writerow(["timestamp", "level", "action", "detail", "error"])
-
-
-def log(level: str, action: str, detail: str = "", error: str = ""):
-    ts = datetime.datetime.now().isoformat(timespec="seconds")
-    print(f"[{ts}] {level:7s} {action}: {detail}" + (f" — {error}" if error else ""))
-    if _log_writer:
-        _log_writer.writerow([ts, level, action, detail, error])
-        _log_file_handle.flush()
-
-
-def close_log():
-    if _log_file_handle:
-        _log_file_handle.close()
-
-
-# ── Browser helpers ───────────────────────────────────────────────────────────
-
-def screenshot(page: Page, name: str):
-    path = SCREENSHOT_DIR / f"{name}_{int(time.time())}.png"
-    try:
-        page.screenshot(path=str(path))
-        log("DEBUG", "screenshot", str(path))
-    except Exception:
-        pass
-
-
-def select2_choose(page: Page, field_selector: str, search_text: str):
-    """Open a Select2 dropdown, search, and click the first matching option."""
-    container = page.locator(
-        f"{field_selector} ~ .select2-container, "
-        f"{field_selector} + .select2-container"
-    )
-    if container.count() > 0:
-        container.first.click()
-    else:
-        page.locator(field_selector).first.evaluate(
-            "el => el.nextElementSibling && el.nextElementSibling.click()"
-        )
-        page.locator(".select2-container").last.click()
-
-    search_input = page.locator(".select2-search__field").last
-    search_input.wait_for(state="visible", timeout=5000)
-    search_input.fill("")
-    search_input.type(search_text)
-
-    option = page.locator(".select2-results__option").filter(has_text=search_text).first
-    option.wait_for(state="visible", timeout=8000)
-    option.click()
-
-
-def _check_submit_errors(page: Page) -> str | None:
-    """Return error text if the form showed validation errors, else None."""
-    if page.locator(".error, #error_explanation, .alert-danger").count() > 0:
-        return page.locator(".error, #error_explanation, .alert-danger").first.inner_text()
-    return None
-
-
-# ── Auth ──────────────────────────────────────────────────────────────────────
-
-def login(page: Page, base_url: str, email: str, password: str):
-    page.goto(f"{base_url}/people/users/sign-in", wait_until="networkidle")
-    if "sign-in" not in page.url and "sign_in" not in page.url:
-        log("INFO", "login", "Already signed in")
-        return
-    page.fill('input[name="user[email]"]', email)
-    page.fill('input[name="user[password]"]', password)
-    page.click('input[type="submit"]')
-    page.wait_for_load_state("networkidle")
-    if "sign-in" in page.url or "sign_in" in page.url:
-        screenshot(page, "login_failed")
-        raise RuntimeError(f"Login failed — still on {page.url}")
-    log("INFO", "login", f"Signed in as {email}")
+configure(_LOG_FILE, _SCREENSHOT_DIR)
 
 
 # ── Search helpers ────────────────────────────────────────────────────────────
@@ -472,11 +381,7 @@ def main(sheet_url: str, base_url: str, email: str, password: str, dry_run: bool
     log("INFO", "preprocess", f"{len(households)} households parsed")
 
     with sync_playwright() as pw:
-        chrome_path = "/opt/pw-browsers/chromium-1194/chrome-linux/chrome"
-        launch_kwargs = {"args": ["--no-sandbox"]}
-        if os.path.exists(chrome_path):
-            launch_kwargs["executable_path"] = chrome_path
-        browser = pw.chromium.launch(**launch_kwargs)
+        browser = launch_browser(pw)
         page = browser.new_context().new_page()
 
         try:

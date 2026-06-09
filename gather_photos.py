@@ -14,12 +14,8 @@ Usage:
 """
 
 import argparse
-import csv
-import datetime
-import os
 import re
 import sys
-import time
 import urllib.parse
 import urllib.request
 from html.parser import HTMLParser
@@ -30,6 +26,16 @@ from playwright.sync_api import Page, sync_playwright
 
 from credentials import load_credentials
 from preprocess import preprocess_text
+from gather_utils import (
+    close_log,
+    configure,
+    fetch_sheet,
+    init_log,
+    launch_browser,
+    log,
+    login,
+    screenshot,
+)
 
 
 COMMUNITY_PAGE_URL = "https://www.berkeleymoshav.org/meet-the-community.html"
@@ -37,45 +43,10 @@ DEFAULT_SHEET_URL = (
     "https://docs.google.com/spreadsheets/d/"
     "1h0f4Dq242kpuqpN7OiVoCnwEm6FDlMHaRlSS4HWiSNY/export?format=tsv"
 )
-LOG_FILE = "photos_log.csv"
-SCREENSHOT_DIR = Path("photo_screenshots")
+_LOG_FILE = Path("photos_log.csv")
+_SCREENSHOT_DIR = Path("photo_screenshots")
 
-
-# ── Logging ───────────────────────────────────────────────────────────────────
-
-_log_writer = None
-_log_file_handle = None
-
-
-def init_log():
-    global _log_writer, _log_file_handle
-    SCREENSHOT_DIR.mkdir(exist_ok=True)
-    _log_file_handle = open(LOG_FILE, "a", newline="")
-    _log_writer = csv.writer(_log_file_handle)
-    if Path(LOG_FILE).stat().st_size == 0:
-        _log_writer.writerow(["timestamp", "level", "action", "detail", "error"])
-
-
-def log(level: str, action: str, detail: str = "", error: str = ""):
-    ts = datetime.datetime.now().isoformat(timespec="seconds")
-    print(f"[{ts}] {level:7s} {action}: {detail}" + (f" — {error}" if error else ""))
-    if _log_writer:
-        _log_writer.writerow([ts, level, action, detail, error])
-        _log_file_handle.flush()
-
-
-def close_log():
-    if _log_file_handle:
-        _log_file_handle.close()
-
-
-def screenshot(page: Page, name: str):
-    path = SCREENSHOT_DIR / f"{name}_{int(time.time())}.png"
-    try:
-        page.screenshot(path=str(path))
-        log("DEBUG", "screenshot", str(path))
-    except Exception:
-        pass
+configure(_LOG_FILE, _SCREENSHOT_DIR)
 
 
 # ── HTTP helpers ──────────────────────────────────────────────────────────────
@@ -88,18 +59,6 @@ def _fetch_html(url: str) -> str:
         if "charset=" in content_type:
             charset = content_type.split("charset=")[-1].strip().split(";")[0]
         return resp.read().decode(charset, errors="replace")
-
-
-def fetch_sheet(url: str) -> str:
-    if url.startswith("file://"):
-        with open(url[7:], encoding="utf-8-sig") as f:
-            return f.read()
-    if not url.startswith("http://") and not url.startswith("https://"):
-        with open(url, encoding="utf-8-sig") as f:
-            return f.read()
-    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        return resp.read().decode("utf-8-sig")
 
 
 # ── Community page parsing ────────────────────────────────────────────────────
@@ -277,21 +236,6 @@ def find_members_for_names(households: list[dict], first_names: list[str]) -> li
 
 # ── Gather browser helpers ────────────────────────────────────────────────────
 
-def login(page: Page, base_url: str, email: str, password: str):
-    page.goto(f"{base_url}/people/users/sign-in", wait_until="networkidle")
-    if "sign-in" not in page.url and "sign_in" not in page.url:
-        log("INFO", "login", "Already signed in")
-        return
-    page.fill('input[name="user[email]"]', email)
-    page.fill('input[name="user[password]"]', password)
-    page.click('input[type="submit"]')
-    page.wait_for_load_state("networkidle")
-    if "sign-in" in page.url or "sign_in" in page.url:
-        screenshot(page, "login_failed")
-        raise RuntimeError(f"Login failed — still on {page.url}")
-    log("INFO", "login", f"Signed in as {email}")
-
-
 def _search(page: Page, base_url: str, path: str, query: str):
     page.goto(f"{base_url}/{path}", wait_until="networkidle")
     page.locator('input[name="search"]').first.fill(query)
@@ -462,11 +406,7 @@ def main(
     log("INFO", "scrape", f"{len(photos)} photo entries found")
 
     with sync_playwright() as pw:
-        chrome_path = "/opt/pw-browsers/chromium-1194/chrome-linux/chrome"
-        launch_kwargs = {"args": ["--no-sandbox"]}
-        if os.path.exists(chrome_path):
-            launch_kwargs["executable_path"] = chrome_path
-        browser = pw.chromium.launch(**launch_kwargs)
+        browser = launch_browser(pw)
         page = browser.new_context().new_page()
 
         try:
