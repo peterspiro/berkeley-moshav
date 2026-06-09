@@ -145,11 +145,16 @@ def launch_browser(pw, headless: bool | None = None) -> Browser:
     if sys.platform != "darwin":
         args.append("--no-sandbox")
 
+    log("DEBUG", "launch_browser", f"headless={headless} platform={sys.platform}")
+
     # Try system Chrome first (avoids TLS fingerprint blocking by CDNs).
     try:
-        return pw.chromium.launch(channel="chrome", headless=headless, args=args)
-    except Exception:
-        pass
+        browser = pw.chromium.launch(channel="chrome", headless=headless, args=args)
+        log("DEBUG", "launch_browser", "using system Chrome")
+        return browser
+    except Exception as e:
+        log("WARN", "launch_browser",
+            f"system Chrome unavailable ({e}); falling back to bundled Chromium")
 
     # Fall back to bundled Chromium (e.g. on Linux CI where Chrome isn't installed).
     chrome_path = "/opt/pw-browsers/chromium-1194/chrome-linux/chrome"
