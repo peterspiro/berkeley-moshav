@@ -61,22 +61,26 @@ configure(_LOG_FILE, _SCREENSHOT_DIR)
 _ACRONYM_EXPANSIONS: dict[str, str] = {
     "P & G": "Process & Governance",
     "D, F, & L": "Development, Finance, & Legal",
+    "DFL": "Development, Finance, & Legal",
     "CLC": "Community Life Circle",
 }
+# Pre-computed for case-insensitive lookup
+_ACRONYM_UPPER: dict[str, str] = {k.upper(): v for k, v in _ACRONYM_EXPANSIONS.items()}
 
 _GROUP_ALIASES: list[frozenset] = [
     frozenset({"tech", "technology"}),
     frozenset({"landscape", "landscaping"}),
+    frozenset({"parking", "parking and car share"}),
 ]
 
 _SUFFIX_RE = re.compile(
-    r"\s+(Circle|Team|Working Group|Work Group|Group|Committee)\s*$",
+    r"\s+(Circle|Team|Working Group|Work Group|Group|Committee|Pod|Gatherings)\s*$",
     re.IGNORECASE,
 )
 
 
 def _normalize_group(name: str) -> str:
-    name = _ACRONYM_EXPANSIONS.get(name.strip(), name.strip())
+    name = _ACRONYM_UPPER.get(name.strip().upper(), name.strip())
     name = re.sub(r"\s*\([^)]*\)?\s*$", "", name).strip()
     name = _SUFFIX_RE.sub("", name).strip().lower()
     name = re.sub(r"\s*&\s*", " and ", name)
@@ -195,10 +199,12 @@ def sync_group_members(
     desired_ids: set[str],
     dry_run: bool,
     users_by_id: dict[str, GatherUser],
+    remove: bool = False,
 ) -> dict[str, int]:
-    """Sync one group's membership to match desired_ids exactly.
+    """Sync one group's membership.
 
-    Returns {'added': N, 'removed': N, 'failed': N}.
+    Adds members missing from the group.  Removes extra members only when
+    remove=True.  Returns {'added': N, 'removed': N, 'failed': N}.
     """
     stats = {"added": 0, "removed": 0, "failed": 0}
     try:
@@ -210,7 +216,7 @@ def sync_group_members(
 
     current_ids = {m.user_id for m in detail.members}
     to_add = desired_ids - current_ids
-    to_remove = current_ids - desired_ids
+    to_remove = (current_ids - desired_ids) if remove else set()
 
     if not to_add and not to_remove:
         log("INFO", "group", f"Up to date: {group.name}")
@@ -261,7 +267,8 @@ def sync_group_members(
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main(
-    sheet_url: str, base_url: str, email: str, password: str, dry_run: bool = False
+    sheet_url: str, base_url: str, email: str, password: str,
+    dry_run: bool = False, remove: bool = False,
 ):
     base_url = base_url.rstrip("/")
     init_log()
@@ -324,7 +331,7 @@ def main(
             gg = managed.get(norm)
             if not gg:
                 continue
-            stats = sync_group_members(page, base_url, gg, user_ids, dry_run, users_by_id)
+            stats = sync_group_members(page, base_url, gg, user_ids, dry_run, users_by_id, remove)
             for k in total:
                 total[k] += stats[k]
 
@@ -351,10 +358,14 @@ def cli():
         "-n", "--dry-run", action="store_true",
         help="Log what would happen without making changes",
     )
+    parser.add_argument(
+        "--remove", action="store_true",
+        help="Also remove members from groups they are no longer listed in",
+    )
     args = parser.parse_args()
 
     email, password = load_credentials()
-    main(args.sheet_url, args.base_url, email, password, args.dry_run)
+    main(args.sheet_url, args.base_url, email, password, args.dry_run, args.remove)
 
 
 if __name__ == "__main__":

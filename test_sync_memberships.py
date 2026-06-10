@@ -5,7 +5,7 @@ from sync_memberships import (
     parse_memberships,
     resolve_user,
 )
-from gather_utils import GatherUser, FIRST_NAME_ALIASES
+from gather_utils import GatherUser
 
 
 # ── _normalize_group / group_names_match ──────────────────────────────────────
@@ -32,11 +32,29 @@ class TestNormalizeGroup:
     def test_acronym_pg(self):
         assert _normalize_group("P & G") == "process and governance"
 
+    def test_acronym_pg_case_insensitive(self):
+        assert _normalize_group("p & g") == "process and governance"
+
+    def test_acronym_dfl(self):
+        assert _normalize_group("DFL") == "development finance and legal"
+
+    def test_acronym_dfl_case_insensitive(self):
+        assert _normalize_group("dfl") == "development finance and legal"
+
     def test_ampersand_becomes_and(self):
         assert _normalize_group("Process & Governance") == "process and governance"
 
+    def test_strips_pod_suffix(self):
+        assert _normalize_group("Young Families Pod") == "young families"
+
+    def test_strips_gatherings_suffix(self):
+        assert _normalize_group("Social Gatherings") == "social"
+
     def test_alias_tech_technology(self):
         assert _normalize_group("Technology") == _normalize_group("Tech")
+
+    def test_alias_parking(self):
+        assert _normalize_group("Parking") == _normalize_group("Parking & Car Share")
 
     def test_work_group_normalized(self):
         assert _normalize_group("Landscape Work Group") == _normalize_group("Landscape Working Group")
@@ -57,6 +75,21 @@ class TestGroupNamesMatch:
 
     def test_tech_alias(self):
         assert group_names_match("Technology", "Tech Circle")
+
+    def test_young_families_pod(self):
+        assert group_names_match("Young Families", "Young Families Pod")
+
+    def test_social_gatherings(self):
+        assert group_names_match("Social", "Social Gatherings")
+
+    def test_parking_car_share(self):
+        assert group_names_match("Parking", "Parking & Car Share")
+
+    def test_dfl_full_name(self):
+        assert group_names_match("DFL", "Development, Finance, & Legal")
+
+    def test_pg_full_name(self):
+        assert group_names_match("P & G", "Process & Governance")
 
     def test_no_match(self):
         assert not group_names_match("Technology", "Finance")
