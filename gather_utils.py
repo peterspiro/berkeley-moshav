@@ -110,7 +110,16 @@ def select2_choose(page: Page, field_selector: str, search_text: str) -> None:
 
 
 def login(page: Page, base_url: str, email: str, password: str) -> None:
-    page.goto(f"{base_url}/people/users/sign-in", wait_until="load")
+    sign_in_url = f"{base_url}/people/users/sign-in"
+    for attempt in range(1, 4):
+        try:
+            page.goto(sign_in_url, wait_until="load")
+            break
+        except Exception as e:
+            if attempt == 3:
+                raise
+            log("WARN", "login", f"page.goto failed (attempt {attempt}/3): {e}; retrying in 3s")
+            time.sleep(3)
     if "sign-in" not in page.url and "sign_in" not in page.url:
         log("INFO", "login", "Already signed in")
         return
