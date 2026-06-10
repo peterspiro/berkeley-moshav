@@ -359,7 +359,7 @@ def cli():
         help="Log what would happen without making changes",
     )
     parser.add_argument(
-        "--remove", action="store_true",
+        "-r", "--remove", action="store_true",
         help="Also remove members from groups they are no longer listed in",
     )
     args = parser.parse_args()
