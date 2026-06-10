@@ -347,20 +347,14 @@ def cli():
         "-u", "--base-url", default="https://berkeley-moshav.gather.coop",
         help="Gather base URL",
     )
-    parser.add_argument("-e", "--email", help="Admin login email")
-    parser.add_argument("-p", "--password", help="Admin login password")
     parser.add_argument(
         "-n", "--dry-run", action="store_true",
         help="Log what would happen without making changes",
     )
     args = parser.parse_args()
 
-    if not args.email or not args.password:
-        creds_email, creds_password = load_credentials()
-        args.email = args.email or creds_email
-        args.password = args.password or creds_password
-
-    main(args.sheet_url, args.base_url, args.email, args.password, args.dry_run)
+    email, password = load_credentials()
+    main(args.sheet_url, args.base_url, email, password, args.dry_run)
 
 
 if __name__ == "__main__":
