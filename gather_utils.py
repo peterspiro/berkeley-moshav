@@ -203,6 +203,7 @@ class GatherUser:
     last_name: str
     full_name: str
     child: bool = False
+    email: str = ""
 
 
 @dataclass
@@ -237,6 +238,7 @@ def fetch_all_gather_users(page: Page, base_url: str) -> list[GatherUser]:
         first = row.get("First Name", "").strip()
         last = row.get("Last Name", "").strip()
         is_child = row.get("Is Child", "").strip().lower() == "true"
+        email = (row.get("Email", "") or row.get("Email Address", "")).strip().lower()
         if not uid:
             continue
         users.append(GatherUser(
@@ -245,6 +247,7 @@ def fetch_all_gather_users(page: Page, base_url: str) -> list[GatherUser]:
             last_name=last,
             full_name=f"{first} {last}".strip(),
             child=is_child,
+            email=email,
         ))
     return users
 
