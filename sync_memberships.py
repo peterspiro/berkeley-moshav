@@ -64,8 +64,11 @@ _ACRONYM_EXPANSIONS: dict[str, str] = {
     "DFL": "Development, Finance, & Legal",
     "CLC": "Community Life Circle",
 }
-# Pre-computed for case-insensitive lookup
-_ACRONYM_UPPER: dict[str, str] = {k.upper(): v for k, v in _ACRONYM_EXPANSIONS.items()}
+# Pre-computed with whitespace-collapsed, case-insensitive keys
+_ACRONYM_UPPER: dict[str, str] = {
+    re.sub(r"\s+", " ", k).upper(): v
+    for k, v in _ACRONYM_EXPANSIONS.items()
+}
 
 _GROUP_ALIASES: list[frozenset] = [
     frozenset({"tech", "technology"}),
@@ -80,7 +83,10 @@ _SUFFIX_RE = re.compile(
 
 
 def _normalize_group(name: str) -> str:
-    name = _ACRONYM_UPPER.get(name.strip().upper(), name.strip())
+    # Collapse all Unicode whitespace so variants (non-breaking space, etc.) don't
+    # prevent acronym lookup matches.
+    name = re.sub(r"\s+", " ", name.strip())
+    name = _ACRONYM_UPPER.get(name.upper(), name)
     name = re.sub(r"\s*\([^)]*\)?\s*$", "", name).strip()
     name = _SUFFIX_RE.sub("", name).strip().lower()
     name = re.sub(r"\s*&\s*", " and ", name)

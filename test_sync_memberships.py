@@ -35,6 +35,10 @@ class TestNormalizeGroup:
     def test_acronym_pg_case_insensitive(self):
         assert _normalize_group("p & g") == "process and governance"
 
+    def test_acronym_pg_nonbreaking_space(self):
+        # Google Sheets sometimes uses non-breaking spaces around &
+        assert _normalize_group("P & G") == "process and governance"
+
     def test_acronym_dfl(self):
         assert _normalize_group("DFL") == "development finance and legal"
 
