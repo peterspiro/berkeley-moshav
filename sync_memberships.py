@@ -109,10 +109,9 @@ def _find_header_row(rows: list[list[str]]) -> int:
 
 
 def parse_memberships(csv_text: str) -> list[dict]:
-    """Return one dict per BM member-status row.
+    """Return one dict per BM row.
 
     Each dict has: first_name, last_name, email, groups (non-BM circle names).
-    Rows where Status doesn't start with "member" (case-insensitive) are skipped.
     Rows where CIRCLE MEMBERSHIP does not contain "BM" are skipped.
     """
     all_rows = list(csv.reader(io.StringIO(csv_text)))
@@ -122,8 +121,6 @@ def parse_memberships(csv_text: str) -> list[dict]:
     results = []
     for raw in all_rows[header_idx + 1:]:
         row = {k: v.strip() for k, v in zip(fieldnames, raw) if k}
-        if not row.get("Status", "").lower().startswith("member"):
-            continue
         memberships_raw = row.get("CIRCLE MEMBERSHIP", "")
         entries = [e.strip() for e in memberships_raw.split(";") if e.strip()]
         if not any(e.upper() == "BM" for e in entries):

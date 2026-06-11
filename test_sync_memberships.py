@@ -127,10 +127,10 @@ class TestParseMemberships:
         result = parse_memberships(csv)
         assert result[0]["groups"] == ["Technology", "Finance"]
 
-    def test_non_member_status_skipped(self):
-        csv = _sheet("notes,Carol,Kim,carol@example.com,Non-member,BM; Technology")
+    def test_consultant_with_bm_included(self):
+        csv = _sheet("notes,Katie,McCamant,k@example.com,Consultant,BM; Technology")
         result = parse_memberships(csv)
-        assert result == []
+        assert len(result) == 1
 
     def test_no_bm_skipped(self):
         csv = _sheet("notes,Dave,Jones,dave@example.com,Member,Technology")
@@ -141,11 +141,6 @@ class TestParseMemberships:
         csv = _sheet("notes,Eve,Wu,eve@example.com,Member,")
         result = parse_memberships(csv)
         assert result == []
-
-    def test_member_variant_status(self):
-        csv = _sheet("notes,Frank,Hall,frank@example.com,Member & Consultant,BM")
-        result = parse_memberships(csv)
-        assert len(result) == 1
 
     def test_email_lowercased(self):
         csv = _sheet("notes,Grace,Park,GRACE@Example.COM,Member,BM")
@@ -166,7 +161,7 @@ class TestParseMemberships:
         csv = _sheet(
             "n,Alice,A,a@example.com,Member,BM; Technology",
             "n,Bob,B,b@example.com,Member,BM",
-            "n,Carol,C,c@example.com,Non-member,BM; Finance",
+            "n,Carol,C,c@example.com,Non-member,Technology",  # no BM → skipped
         )
         result = parse_memberships(csv)
         assert len(result) == 2
