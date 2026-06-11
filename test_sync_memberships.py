@@ -32,6 +32,9 @@ class TestNormalizeGroup:
     def test_acronym_pg(self):
         assert _normalize_group("P & G") == "process and governance"
 
+    def test_acronym_pg_no_spaces(self):
+        assert _normalize_group("P&G") == "process and governance"
+
     def test_acronym_pg_case_insensitive(self):
         assert _normalize_group("p & g") == "process and governance"
 

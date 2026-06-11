@@ -83,10 +83,11 @@ _SUFFIX_RE = re.compile(
 
 
 def _normalize_group(name: str) -> str:
-    # Collapse all Unicode whitespace so variants (non-breaking space, etc.) don't
-    # prevent acronym lookup matches.
+    # Collapse Unicode whitespace and normalize & spacing before acronym lookup
+    # so variants like "P&G", "P & G", or non-breaking spaces all resolve.
     name = re.sub(r"\s+", " ", name.strip())
-    name = _ACRONYM_UPPER.get(name.upper(), name)
+    lookup = re.sub(r"\s*&\s*", " & ", name)
+    name = _ACRONYM_UPPER.get(lookup.upper(), name)
     name = re.sub(r"\s*\([^)]*\)?\s*$", "", name).strip()
     name = _SUFFIX_RE.sub("", name).strip().lower()
     name = re.sub(r"\s*&\s*", " and ", name)
