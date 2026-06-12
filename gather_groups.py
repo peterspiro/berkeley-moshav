@@ -736,8 +736,8 @@ def _group_needs_update(
         return f"kind: {existing.kind!r} → {kind!r}"
     if existing.availability != availability:
         return f"availability: {existing.availability!r} → {availability!r}"
-    if existing.description.strip() != description.strip():
-        return "description changed"
+    if existing.description.strip() != _effective_description(existing.description, description).strip():
+        return "description needs wiki link" if existing.description.strip() else "description changed"
     existing_by_uid = {m.user_id: m.is_manager for m in existing.members}
     missing = [
         (u.user_id, mgr) for u, mgr in members
@@ -911,7 +911,8 @@ def create_or_update_group(
             page.goto(
                 f"{base_url}/groups/{existing.group_id}/edit", wait_until="networkidle"
             )
-            _fill_group_basics(page, name, kind, availability, description)
+            eff_desc = _effective_description(existing_detail.description, description)
+            _fill_group_basics(page, name, kind, availability, eff_desc)
 
             # Sync members: add missing and fix manager status; never remove
             # manually-added members who aren't in the spreadsheet.
@@ -1059,6 +1060,33 @@ def _extract_wiki_url(description: str) -> str:
         re.IGNORECASE,
     )
     return m.group(1) if m else ""
+
+
+def _effective_description(existing_desc: str, desired_desc: str) -> str:
+    """Return the description to write when updating an existing group.
+
+    If the existing group already has a description, it is preserved.
+    The only modification allowed is appending the wiki link from
+    desired_desc if it is absent from the existing description.
+    If the existing description is empty, desired_desc is used as-is.
+    """
+    if not existing_desc.strip():
+        return desired_desc
+    if _extract_wiki_url(existing_desc):
+        return existing_desc  # already has wiki link
+    wiki_url = _extract_wiki_url(desired_desc)
+    if not wiki_url:
+        return existing_desc
+    wiki_line = f'\n.\n<a href="{wiki_url}">Wiki</a>'
+    base = existing_desc.rstrip()
+    candidate = base + wiki_line
+    if _post_len(candidate) <= MAX_DESC:
+        return candidate
+    # Trim existing text to make room for the wiki link
+    budget = MAX_DESC - _post_len(wiki_line)
+    while _post_len(base) > budget:
+        base = base[:-1]
+    return base + wiki_line
 
 
 def _ensure_circle_wiki_page(

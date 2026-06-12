@@ -27,6 +27,7 @@ from gather_groups import (
     _needs_wiki,
     find_gdrive_link,
     _circle_wiki_slug,
+    _effective_description,
     _group_kind,
     _group_needs_update,
     best_column_match,
@@ -319,6 +320,59 @@ class TestGroupNeedsUpdate:
     def test_stale_kind_triggers_update(self):
         g = self._make_group(kind="committee")
         assert _group_needs_update(g, "circle", "closed", "", [], "Alpha Circle")
+
+    def test_existing_description_not_stale_even_if_desired_differs(self):
+        wiki = '<a href="http://x/wiki/foo">Wiki</a>'
+        g = self._make_group(description=f"Custom text\n.\n{wiki}")
+        desired = f"Different text\n.\n{wiki}"
+        assert not _group_needs_update(g, "circle", "closed", desired, [], "Alpha Circle")
+
+    def test_missing_wiki_link_triggers_update(self):
+        g = self._make_group(description="Some existing text")
+        desired = 'Some text\n.\n<a href="http://x/wiki/foo">Wiki</a>'
+        assert _group_needs_update(g, "circle", "closed", desired, [], "Alpha Circle")
+
+    def test_empty_description_changed_triggers_update(self):
+        g = self._make_group(description="")
+        assert _group_needs_update(g, "circle", "closed", "New text", [], "Alpha Circle")
+
+
+# ── _effective_description ────────────────────────────────────────────────────
+
+_WIKI = '<a href="http://example.com/wiki/circle-hierarchy">Wiki</a>'
+_DESIRED = f"Sheet description\n.\n{_WIKI}"
+
+
+class TestEffectiveDescription:
+    def test_empty_existing_uses_desired(self):
+        assert _effective_description("", _DESIRED) == _DESIRED
+
+    def test_existing_with_wiki_preserved_unchanged(self):
+        existing = f"Custom description\n.\n{_WIKI}"
+        assert _effective_description(existing, _DESIRED) == existing
+
+    def test_existing_without_wiki_gets_wiki_appended(self):
+        existing = "Custom description"
+        result = _effective_description(existing, _DESIRED)
+        assert result.startswith("Custom description")
+        assert _WIKI in result
+
+    def test_existing_without_wiki_and_no_wiki_in_desired_unchanged(self):
+        existing = "Custom description"
+        assert _effective_description(existing, "Different text") == existing
+
+    def test_wiki_appended_does_not_duplicate(self):
+        existing = f"Custom\n.\n{_WIKI}"
+        result = _effective_description(existing, _DESIRED)
+        assert result.count(_WIKI) == 1
+
+    def test_long_existing_trimmed_to_fit_wiki(self):
+        from gather_groups import MAX_DESC
+        existing = "x" * MAX_DESC  # too long to append wiki link
+        result = _effective_description(existing, _DESIRED)
+        assert _WIKI in result
+        from gather_groups import _post_len
+        assert _post_len(result) <= MAX_DESC
 
 
 # ── first_name_matches ────────────────────────────────────────────────────────
