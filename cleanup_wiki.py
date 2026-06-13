@@ -45,8 +45,10 @@ from gather_utils import (
 )
 from gather_groups import (
     DEFAULT_SHEET_URL,
+    _canonical_group_name,
     _circle_wiki_slug,
     _needs_wiki,
+    group_names_match,
     parse_sheet,
 )
 
@@ -219,13 +221,25 @@ def _delete_wiki_page(
         return False
 
 
+def _gather_name_for_circle(circle, gather_groups) -> str:
+    """Return the name to use for wiki slug computation.
+
+    Mirrors process(): prefer the actual Gather group name (which may include
+    suffixes like 'Circle' or parentheticals like '(CIT)') over the
+    spreadsheet name, then apply canonical renaming (Work Group → Working Group).
+    """
+    matches = [g for g in gather_groups if group_names_match(circle.name, g.name)]
+    source = matches[0].name if len(matches) == 1 else circle.name
+    return _canonical_group_name(source)
+
+
 def delete_circle_wiki_pages(
-    page, base_url: str, circles, all_wiki_slugs: list[tuple[str, str]], dry_run: bool
+    page, base_url: str, circles, gather_groups, all_wiki_slugs: list[tuple[str, str]], dry_run: bool
 ) -> dict[str, int]:
     stats = {"deleted": 0, "not_found": 0, "failed": 0}
 
     target_slugs: set[str] = {
-        _circle_wiki_slug(circle.name)
+        _circle_wiki_slug(_gather_name_for_circle(circle, gather_groups))
         for circle in circles
         if _needs_wiki(circle)
     }
@@ -239,8 +253,9 @@ def delete_circle_wiki_pages(
     for circle in circles:
         if not _needs_wiki(circle):
             continue
-        slug = _circle_wiki_slug(circle.name)
-        title = f"{circle.name} Wiki"
+        gather_name = _gather_name_for_circle(circle, gather_groups)
+        slug = _circle_wiki_slug(gather_name)
+        title = f"{gather_name} Wiki"
         ok = _delete_wiki_page(page, base_url, slug, title, dry_run)
         if ok:
             stats["deleted"] += 1
@@ -283,9 +298,11 @@ def main(
         log("INFO", "step1_done", str(group_stats))
 
         log("INFO", "step2", "Deleting per-circle wiki pages")
+        gather_groups = fetch_all_gather_groups(page, base_url)
+        log("INFO", "fetch_groups_for_wiki", f"{len(gather_groups)} groups loaded")
         all_wiki_slugs = fetch_all_wiki_slugs(page, base_url)
         log("INFO", "fetch_wikis", f"{len(all_wiki_slugs)} wiki pages found")
-        wiki_stats = delete_circle_wiki_pages(page, base_url, circles, all_wiki_slugs, dry_run)
+        wiki_stats = delete_circle_wiki_pages(page, base_url, circles, gather_groups, all_wiki_slugs, dry_run)
         log("INFO", "step2_done", str(wiki_stats))
 
         browser.close()
