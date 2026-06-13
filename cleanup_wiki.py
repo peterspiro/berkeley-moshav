@@ -177,8 +177,12 @@ def _delete_wiki_page(
         # The button opens a custom confirmation modal with an OK button.
         delete_btn = page.locator('button:has-text("Delete"), input[type="submit"][value="Delete"]').first
         if delete_btn.count() == 0:
+            # Log what buttons/links are visible to help diagnose selector issues.
+            btns = [b.inner_text().strip() for b in page.locator("button, input[type=submit], input[type=button]").all()]
+            links = [a.inner_text().strip() for a in page.locator("a").all() if a.inner_text().strip()]
             log("WARN", "delete_wiki",
-                f"'{title}': no Delete button found on /wiki/{slug}")
+                f"'{title}': no Delete button found on /wiki/{slug} "
+                f"| buttons={btns} | links={links[:20]}")
             screenshot(page, f"delete_wiki_noctrl_{slug[:20]}")
             return False
 
