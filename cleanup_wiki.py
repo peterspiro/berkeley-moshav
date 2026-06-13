@@ -173,38 +173,27 @@ def _delete_wiki_page(
             log("DRY-RUN", "delete_wiki", f"would delete: '{title}' (/wiki/{slug})")
             return True
 
-        # Gather's Rails UI places a delete link on the page (data-method="delete")
-        # or a button inside a form.  Try common selectors in order.
-        delete_sel = (
-            'a[data-method="delete"]',
-            'a[rel="nofollow"][data-method="delete"]',
-            'input[name="_method"][value="delete"] ~ input[type="submit"]',
-        )
-        clicked = False
-        for sel in delete_sel:
-            el = page.locator(sel)
-            if el.count() > 0:
-                # Handle any confirm() dialog that may appear
-                page.once("dialog", lambda d: d.accept())
-                el.first.click()
-                page.wait_for_load_state("networkidle")
-                clicked = True
-                break
-
-        if not clicked:
-            # Fall back: look for a link whose text is "Delete"
-            delete_link = page.locator('a:has-text("Delete")').first
-            if delete_link.count() > 0:
-                page.once("dialog", lambda d: d.accept())
-                delete_link.click()
-                page.wait_for_load_state("networkidle")
-                clicked = True
-
-        if not clicked:
+        # Click the Delete button on the page (not the sign-out link).
+        # The button opens a custom confirmation modal with an OK button.
+        delete_btn = page.locator('button:has-text("Delete"), input[type="submit"][value="Delete"]').first
+        if delete_btn.count() == 0:
             log("WARN", "delete_wiki",
-                f"'{title}': no delete control found on /wiki/{slug}")
+                f"'{title}': no Delete button found on /wiki/{slug}")
             screenshot(page, f"delete_wiki_noctrl_{slug[:20]}")
             return False
+
+        delete_btn.click()
+
+        # Wait for the confirmation modal and click OK.
+        ok_btn = page.locator(
+            'button:has-text("OK"), '
+            'button:has-text("Ok"), '
+            'input[type="button"][value="OK"], '
+            'a:has-text("OK")'
+        ).first
+        ok_btn.wait_for(state="visible", timeout=5000)
+        ok_btn.click()
+        page.wait_for_load_state("networkidle")
 
         err = _check_submit_errors(page)
         if err:
