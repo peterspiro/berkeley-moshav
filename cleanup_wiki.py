@@ -130,6 +130,26 @@ def remove_wiki_links_from_groups(
 
 # ── Step 2: delete per-circle wiki pages ──────────────────────────────────────
 
+def fetch_all_wiki_slugs(page, base_url: str) -> list[tuple[str, str]]:
+    """Scrape /wiki/all and return (slug, title) for every wiki page."""
+    page.goto(f"{base_url}/wiki/all", wait_until="networkidle")
+    results: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for link in page.locator('a[href*="/wiki/"]').all():
+        href = link.get_attribute("href") or ""
+        m = re.match(r"^/wiki/([^/#?]+)$", href)
+        if not m:
+            continue
+        slug = m.group(1)
+        if slug in ("all", "new") or slug in seen:
+            continue
+        title = link.inner_text().strip()
+        if title:
+            seen.add(slug)
+            results.append((slug, title))
+    return results
+
+
 def _delete_wiki_page(
     page, base_url: str, slug: str, title: str, dry_run: bool
 ) -> bool:
@@ -200,9 +220,22 @@ def _delete_wiki_page(
 
 
 def delete_circle_wiki_pages(
-    page, base_url: str, circles, dry_run: bool
+    page, base_url: str, circles, all_wiki_slugs: list[tuple[str, str]], dry_run: bool
 ) -> dict[str, int]:
     stats = {"deleted": 0, "not_found": 0, "failed": 0}
+
+    target_slugs: set[str] = {
+        _circle_wiki_slug(circle.name)
+        for circle in circles
+        if _needs_wiki(circle)
+    }
+
+    skipped = [(slug, title) for slug, title in all_wiki_slugs if slug not in target_slugs]
+    if skipped:
+        log("INFO", "wiki_kept", f"{len(skipped)} wiki page(s) will NOT be deleted:")
+        for slug, title in sorted(skipped, key=lambda x: x[1].lower()):
+            log("INFO", "wiki_kept", f'  /wiki/{slug}  “{title}”')
+
     for circle in circles:
         if not _needs_wiki(circle):
             continue
@@ -210,7 +243,6 @@ def delete_circle_wiki_pages(
         title = f"{circle.name} Wiki"
         ok = _delete_wiki_page(page, base_url, slug, title, dry_run)
         if ok:
-            # Distinguish "deleted" vs "not found" by checking log; simplify to ok/fail.
             stats["deleted"] += 1
         else:
             stats["failed"] += 1
@@ -251,7 +283,9 @@ def main(
         log("INFO", "step1_done", str(group_stats))
 
         log("INFO", "step2", "Deleting per-circle wiki pages")
-        wiki_stats = delete_circle_wiki_pages(page, base_url, circles, dry_run)
+        all_wiki_slugs = fetch_all_wiki_slugs(page, base_url)
+        log("INFO", "fetch_wikis", f"{len(all_wiki_slugs)} wiki pages found")
+        wiki_stats = delete_circle_wiki_pages(page, base_url, circles, all_wiki_slugs, dry_run)
         log("INFO", "step2_done", str(wiki_stats))
 
         browser.close()
