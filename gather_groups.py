@@ -373,14 +373,13 @@ def _post_len(s: str) -> int:
 
 
 def build_description(
-    circle: Circle, remaining_consultant_text: str, wiki_url: str = ""
+    circle: Circle, remaining_consultant_text: str
 ) -> str:
     """Build the Gather group description, capped at MAX_DESC chars.
 
-    Appends Consultants, Meetings, Parent lines, and (if wiki_url is given) an
-    HTML wiki link in that order, truncating the description column content to
-    make room.  Lines that still don't fit with an empty base description are
-    omitted entirely.  The wiki link is always the last line.
+    Appends Consultants and Meetings lines in order, truncating the
+    description column content to make room.  Lines that still don't fit
+    with an empty base description are omitted entirely.
 
     All length checks use POST length (_post_len) because the browser
     normalises bare \\n to \\r\\n before submitting, adding one byte per
@@ -392,22 +391,11 @@ def build_description(
     if circle.meetings:
         extra_lines.append(f"\nMeetings: {circle.meetings}")
 
-    wiki_line = f'\n.\n<a href="{wiki_url}">Wiki</a>' if wiki_url else ""
-
-    # Greedily include extra lines that fit even with an empty base description,
-    # reserving space for the wiki link at the end.
-    wiki_len = _post_len(wiki_line)
+    # Greedily include extra lines that fit even with an empty base description.
     extra = ""
     for line in extra_lines:
-        if _post_len(extra) + _post_len(line) + wiki_len <= MAX_DESC:
+        if _post_len(extra) + _post_len(line) <= MAX_DESC:
             extra += line
-
-    # Append wiki link if it fits (even with an empty base description).
-    if wiki_line and _post_len(extra) + wiki_len <= MAX_DESC:
-        extra += wiki_line
-    elif wiki_line:
-        log("WARN", "description", circle.name,
-            "wiki link does not fit in description even with empty base")
 
     # Trim base description so that POST length of (desc + extra) <= MAX_DESC
     budget = MAX_DESC - _post_len(extra)
@@ -428,7 +416,6 @@ def _render_hierarchy_entry(
     by_parent: dict[str, list[Circle]],
     gather_name_map: dict[str, str],
     group_urls: dict[str, str],
-    wiki_url_map: dict[str, str],
     gdrive_url_map: dict[str, str],
     depth: int,
 ) -> list[str]:
@@ -436,19 +423,16 @@ def _render_hierarchy_entry(
     gather_name = gather_name_map.get(circle.name, circle.name)
     parts: list[str] = [gather_name]
     group_url = group_urls.get(circle.name, "")
-    wiki_url = wiki_url_map.get(circle.name, "")
     gdrive_url = gdrive_url_map.get(circle.name, "")
     if group_url:
         parts.append(f"[Members]({group_url})")
-    if wiki_url:
-        parts.append(f"[Wiki]({wiki_url})")
     if gdrive_url:
         parts.append(f"[Documents]({gdrive_url})")
     if len(parts) > 1:
         text = parts[0] + ": " + " | ".join(parts[1:])
     else:
         text = parts[0]
-        log("DEBUG", "hierarchy_no_links", f"{circle.name}: no links (group={bool(group_url)} wiki={bool(wiki_url)} gdrive={bool(gdrive_url)})")
+        log("DEBUG", "hierarchy_no_links", f"{circle.name}: no links (group={bool(group_url)} gdrive={bool(gdrive_url)})")
     lines = [f"{pad}- {text}"]
     children = sorted(
         by_parent.get(circle.name, []),
@@ -456,7 +440,7 @@ def _render_hierarchy_entry(
     )
     for child in children:
         lines.extend(_render_hierarchy_entry(
-            child, by_parent, gather_name_map, group_urls, wiki_url_map, gdrive_url_map, depth + 1
+            child, by_parent, gather_name_map, group_urls, gdrive_url_map, depth + 1
         ))
     return lines
 
@@ -465,7 +449,6 @@ def _build_hierarchy_content(
     circles: list[Circle],
     gather_name_map: dict[str, str],
     group_urls: dict[str, str],
-    wiki_url_map: dict[str, str],
     gdrive_url_map: dict[str, str],
 ) -> str:
     """Build markdown for the Circle Hierarchy wiki page.
@@ -512,7 +495,7 @@ def _build_hierarchy_content(
     if root_circle is not None:
         lines = _render_hierarchy_entry(
             root_circle, by_parent, gather_name_map,
-            group_urls, wiki_url_map, gdrive_url_map, depth=0,
+            group_urls, gdrive_url_map, depth=0,
         )
     else:
         log("WARN", "hierarchy", f"No circle matching {_HIERARCHY_ROOT!r} found; "
@@ -524,7 +507,7 @@ def _build_hierarchy_content(
         ):
             lines.extend(_render_hierarchy_entry(
                 child, by_parent, gather_name_map,
-                group_urls, wiki_url_map, gdrive_url_map, depth=1,
+                group_urls, gdrive_url_map, depth=1,
             ))
     return "\n".join(lines) + "\n"
 
@@ -737,7 +720,7 @@ def _group_needs_update(
     if existing.availability != availability:
         return f"availability: {existing.availability!r} → {availability!r}"
     if existing.description.strip() != _effective_description(existing.description, description).strip():
-        return "description needs wiki link" if existing.description.strip() else "description changed"
+        return "description changed"
     existing_by_uid = {m.user_id: m.is_manager for m in existing.members}
     missing = [
         (u.user_id, mgr) for u, mgr in members
@@ -1049,44 +1032,13 @@ def create_or_update_wiki_page(
         return True
 
 
-def _extract_wiki_url(description: str) -> str:
-    """Return the href from a trailing <a href="...">Wiki</a> link in description.
-
-    Returns "" if the description does not end with such a link.
-    """
-    m = re.search(
-        r'<a\s+href="([^"]+)">\s*Wiki\s*</a>\s*$',
-        description.strip(),
-        re.IGNORECASE,
-    )
-    return m.group(1) if m else ""
-
-
 def _effective_description(existing_desc: str, desired_desc: str) -> str:
     """Return the description to write when updating an existing group.
 
     If the existing group already has a description, it is preserved.
-    The only modification allowed is appending the wiki link from
-    desired_desc if it is absent from the existing description.
     If the existing description is empty, desired_desc is used as-is.
     """
-    if not existing_desc.strip():
-        return desired_desc
-    if _extract_wiki_url(existing_desc):
-        return existing_desc  # already has wiki link
-    wiki_url = _extract_wiki_url(desired_desc)
-    if not wiki_url:
-        return existing_desc
-    wiki_line = f'\n.\n<a href="{wiki_url}">Wiki</a>'
-    base = existing_desc.rstrip()
-    candidate = base + wiki_line
-    if _post_len(candidate) <= MAX_DESC:
-        return candidate
-    # Trim existing text to make room for the wiki link
-    budget = MAX_DESC - _post_len(wiki_line)
-    while _post_len(base) > budget:
-        base = base[:-1]
-    return base + wiki_line
+    return existing_desc if existing_desc.strip() else desired_desc
 
 
 def _ensure_circle_wiki_page(
@@ -1247,11 +1199,6 @@ def process(
         group_urls: dict[str, str] = {}
         # Maps circle.name → the actual Gather group name (may differ via suffix/alias rules).
         gather_name_map: dict[str, str] = {}
-        # Maps circle.name → the wiki URL to use (derived or extracted from existing desc).
-        wiki_url_map: dict[str, str] = {}
-        # circle.names for which the wiki URL was taken from an existing description
-        # (so we must not create a new page at the derived slug).
-        circles_with_existing_wiki: set[str] = set()
         stats = {
             "created": 0, "updated": 0, "skipped": 0, "failed": 0, "errors": 0,
             "list_created": 0, "list_failed": 0,
@@ -1265,9 +1212,6 @@ def process(
             # or member resolution fails and we hit an early `continue`.
             _fallback_name = _canonical_group_name(circle.name)
             gather_name_map[circle.name] = _fallback_name
-            wiki_url_map[circle.name] = (
-                f"/wiki/{_circle_wiki_slug(_fallback_name)}" if _needs_wiki(circle) else ""
-            )
 
             try:
                 existing = find_matching_group(circle, gather_groups)
@@ -1297,24 +1241,6 @@ def process(
                 if prefetched_detail is not None else None
             )
 
-            # Refine wiki_url using the actual Gather name and any existing description link.
-            wiki_url = ""
-            if _needs_wiki(circle):
-                derived_wiki_url = f"/wiki/{_circle_wiki_slug(gather_name)}"
-                if prefetched_detail is not None:
-                    existing_wiki_url = _extract_wiki_url(prefetched_detail.description)
-                    if existing_wiki_url == derived_wiki_url:
-                        wiki_url = existing_wiki_url
-                        circles_with_existing_wiki.add(circle.name)
-                        log("INFO", "wiki_url", f"{circle.name}: existing link matches {wiki_url!r}")
-                    elif existing_wiki_url:
-                        log("INFO", "wiki_url",
-                            f"{circle.name}: existing link {existing_wiki_url!r} "
-                            f"differs from derived {derived_wiki_url!r}, using derived")
-                if not wiki_url:
-                    wiki_url = derived_wiki_url
-            wiki_url_map[circle.name] = wiki_url
-
             try:
                 members, remaining_consultants = resolve_group_members(
                     circle, gather_users, existing_member_ids
@@ -1324,7 +1250,7 @@ def process(
                 stats["errors"] += 1
                 continue
 
-            description = build_description(circle, remaining_consultants, wiki_url)
+            description = build_description(circle, remaining_consultants)
             log("DEBUG", "description", f"{circle.name}: {len(description)} chars")
 
             group_id = create_or_update_group(
@@ -1369,12 +1295,10 @@ def process(
             if not _needs_wiki(circle):
                 continue
             gather_name = gather_name_map.get(circle.name, circle.name)
-            wiki_url = wiki_url_map.get(circle.name, f"/wiki/{_circle_wiki_slug(gather_name)}")
-            if circle.name not in circles_with_existing_wiki:
-                ok = _ensure_circle_wiki_page(page, base_url, gather_name, dry_run)
-                stats["wiki_created" if ok else "wiki_failed"] += 1
+            ok = _ensure_circle_wiki_page(page, base_url, gather_name, dry_run)
+            stats["wiki_created" if ok else "wiki_failed"] += 1
 
-            wiki_slug = wiki_url.removeprefix("/wiki/")
+            wiki_slug = _circle_wiki_slug(gather_name)
             group_url = group_urls.get(circle.name, "")
             gdrive_href = gdrive_url_map[circle.name]
             if not gdrive_href:
@@ -1383,16 +1307,15 @@ def process(
             stats["gdrive_linked" if ok else "gdrive_failed"] += 1
 
         if circle_prefix is None:
-            # Log any circles whose wiki or gdrive entries are missing before building hierarchy.
+            # Log any circles whose gdrive entries are missing before building hierarchy.
             for _c in circles:
-                _wu = wiki_url_map.get(_c.name, "")
                 _gu = gdrive_url_map.get(_c.name, "")
                 _gurl = group_urls.get(_c.name, "")
-                if not _wu or not _gu:
+                if not _gu:
                     log("INFO", "hierarchy_links",
-                        f"{_c.name}: wiki={_wu!r} gdrive={_gu!r} group={_gurl!r}")
+                        f"{_c.name}: gdrive={_gu!r} group={_gurl!r}")
             hierarchy_content = _build_hierarchy_content(
-                circles, gather_name_map, group_urls, wiki_url_map, gdrive_url_map
+                circles, gather_name_map, group_urls, gdrive_url_map
             )
             stats["wiki_index_ok"] = _ensure_hierarchy_page(
                 page, base_url, hierarchy_content, dry_run

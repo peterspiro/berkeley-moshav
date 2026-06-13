@@ -22,7 +22,6 @@ from gather_groups import (
     _apply_gdrive_link,
     _apply_hierarchy_content,
     _canonical_group_name,
-    _extract_wiki_url,
     _filter_circles,
     _needs_wiki,
     find_gdrive_link,
@@ -322,15 +321,8 @@ class TestGroupNeedsUpdate:
         assert _group_needs_update(g, "circle", "closed", "", [], "Alpha Circle")
 
     def test_existing_description_not_stale_even_if_desired_differs(self):
-        wiki = '<a href="http://x/wiki/foo">Wiki</a>'
-        g = self._make_group(description=f"Custom text\n.\n{wiki}")
-        desired = f"Different text\n.\n{wiki}"
-        assert not _group_needs_update(g, "circle", "closed", desired, [], "Alpha Circle")
-
-    def test_missing_wiki_link_triggers_update(self):
-        g = self._make_group(description="Some existing text")
-        desired = 'Some text\n.\n<a href="http://x/wiki/foo">Wiki</a>'
-        assert _group_needs_update(g, "circle", "closed", desired, [], "Alpha Circle")
+        g = self._make_group(description="Custom text")
+        assert not _group_needs_update(g, "circle", "closed", "Different text", [], "Alpha Circle")
 
     def test_empty_description_changed_triggers_update(self):
         g = self._make_group(description="")
@@ -339,40 +331,16 @@ class TestGroupNeedsUpdate:
 
 # ── _effective_description ────────────────────────────────────────────────────
 
-_WIKI = '<a href="http://example.com/wiki/circle-hierarchy">Wiki</a>'
-_DESIRED = f"Sheet description\n.\n{_WIKI}"
-
-
 class TestEffectiveDescription:
     def test_empty_existing_uses_desired(self):
-        assert _effective_description("", _DESIRED) == _DESIRED
+        assert _effective_description("", "Sheet description") == "Sheet description"
 
-    def test_existing_with_wiki_preserved_unchanged(self):
-        existing = f"Custom description\n.\n{_WIKI}"
-        assert _effective_description(existing, _DESIRED) == existing
-
-    def test_existing_without_wiki_gets_wiki_appended(self):
-        existing = "Custom description"
-        result = _effective_description(existing, _DESIRED)
-        assert result.startswith("Custom description")
-        assert _WIKI in result
-
-    def test_existing_without_wiki_and_no_wiki_in_desired_unchanged(self):
+    def test_non_empty_existing_preserved(self):
         existing = "Custom description"
         assert _effective_description(existing, "Different text") == existing
 
-    def test_wiki_appended_does_not_duplicate(self):
-        existing = f"Custom\n.\n{_WIKI}"
-        result = _effective_description(existing, _DESIRED)
-        assert result.count(_WIKI) == 1
-
-    def test_long_existing_trimmed_to_fit_wiki(self):
-        from gather_groups import MAX_DESC
-        existing = "x" * MAX_DESC  # too long to append wiki link
-        result = _effective_description(existing, _DESIRED)
-        assert _WIKI in result
-        from gather_groups import _post_len
-        assert _post_len(result) <= MAX_DESC
+    def test_whitespace_only_treated_as_empty(self):
+        assert _effective_description("   ", "Desired") == "Desired"
 
 
 # ── first_name_matches ────────────────────────────────────────────────────────
@@ -711,46 +679,9 @@ class TestBuildDescription:
         post_len = len(result) + result.count("\n")
         assert post_len <= 255
 
-    def test_wiki_link_appended(self):
+    def test_no_wiki_link(self):
         c = make_circle(description="Desc")
-        result = build_description(c, "", wiki_url="https://host/wiki/alpha-circle-wiki")
-        assert result.endswith('\n.\n<a href="https://host/wiki/alpha-circle-wiki">Wiki</a>')
-
-    def test_wiki_link_preceded_by_period(self):
-        c = make_circle(description="Desc")
-        result = build_description(c, "", wiki_url="https://host/wiki/alpha-circle-wiki")
-        assert "\n.\n<a" in result
-
-    def test_wiki_link_is_last(self):
-        c = make_circle(description="Desc", meetings="Mondays")
-        result = build_description(c, "", wiki_url="https://host/wiki/alpha-circle-wiki")
-        assert result.endswith(">Wiki</a>")
-        assert result.index("Meetings:") < result.index("Wiki</a>")
-
-    def test_wiki_link_absent_when_url_empty(self):
-        c = make_circle(description="Desc")
-        result = build_description(c, "", wiki_url="")
-        assert "Wiki" not in result
-
-    def test_wiki_link_truncates_base_description(self):
-        wiki_url = "https://host/wiki/alpha-circle-wiki"
-        wiki_line = f'\n.\n<a href="{wiki_url}">Wiki</a>'
-        c = make_circle(description="A" * 255)
-        result = build_description(c, "", wiki_url=wiki_url)
-        post_len = len(result) + result.count("\n")
-        assert post_len <= 255
-        assert result.endswith(wiki_line)
-
-    def test_wiki_link_post_length_never_exceeds_255(self):
-        c = make_circle(description="D" * 100, meetings="M" * 50)
-        result = build_description(c, "", wiki_url="https://host/wiki/alpha-wiki")
-        post_len = len(result) + result.count("\n")
-        assert post_len <= 255
-
-    def test_wiki_link_fits_with_empty_description(self):
-        c = make_circle(description="")
-        result = build_description(c, "", wiki_url="https://host/wiki/alpha-wiki")
-        assert "Wiki</a>" in result
+        assert "Wiki" not in build_description(c, "")
 
 
 # ── match_member ──────────────────────────────────────────────────────────────
@@ -1003,14 +934,13 @@ class TestResolveGroupMembers:
 class TestBuildHierarchyContent:
     ROOT = "Top Circle / HOA"
 
-    def _build(self, circles, group_urls=None, wiki_url_map=None, gdrive_url_map=None):
+    def _build(self, circles, group_urls=None, gdrive_url_map=None):
         names = [c.name for c in circles]
         gather_name_map = {n: n for n in names}
         return _build_hierarchy_content(
             circles,
             gather_name_map,
             group_urls or {},
-            wiki_url_map or {},
             gdrive_url_map or {},
         )
 
@@ -1078,11 +1008,6 @@ class TestBuildHierarchyContent:
         md = self._build([root], group_urls={self.ROOT: "/groups/1"})
         assert "[Members](/groups/1)" in md
 
-    def test_wiki_link_included(self):
-        root = make_circle(self.ROOT, col_index=0)
-        md = self._build([root], wiki_url_map={self.ROOT: "/wiki/top-circle-hoa-wiki"})
-        assert "[Wiki](/wiki/top-circle-hoa-wiki)" in md
-
     def test_documents_link_included_when_present(self):
         root = make_circle(self.ROOT, col_index=0)
         md = self._build([root], gdrive_url_map={self.ROOT: "/gdrive/hoa"})
@@ -1098,10 +1023,9 @@ class TestBuildHierarchyContent:
         md = self._build(
             [root],
             group_urls={self.ROOT: "/groups/1"},
-            wiki_url_map={self.ROOT: "/wiki/top-wiki"},
         )
         assert f"{self.ROOT}: [Members]" in md
-        assert "[Members](/groups/1) | [Wiki]" in md
+        assert "[Members](/groups/1)" in md
 
     def test_name_not_a_link(self):
         root = make_circle(self.ROOT, col_index=0)
@@ -1280,33 +1204,6 @@ class TestNeedsWiki:
         c = make_circle(name="Some Committee", col_index=0)
         # "Some Committee" has kind "circle" (no work group suffix), so it gets a wiki
         assert _needs_wiki(c)
-
-
-# ── _extract_wiki_url ────────────────────────────────────────────────────────
-
-class TestExtractWikiUrl:
-    def test_extracts_relative_url(self):
-        desc = 'Some text\n<a href="/wiki/membership-wiki">Wiki</a>'
-        assert _extract_wiki_url(desc) == "/wiki/membership-wiki"
-
-    def test_extracts_with_trailing_whitespace(self):
-        desc = 'Text\n<a href="/wiki/foo-wiki">Wiki</a>  \n'
-        assert _extract_wiki_url(desc) == "/wiki/foo-wiki"
-
-    def test_case_insensitive_tag(self):
-        desc = 'Text\n<A HREF="/wiki/foo-wiki">Wiki</A>'
-        assert _extract_wiki_url(desc) == "/wiki/foo-wiki"
-
-    def test_returns_empty_when_no_link(self):
-        assert _extract_wiki_url("Some text with no link") == ""
-
-    def test_returns_empty_when_link_not_at_end(self):
-        desc = '<a href="/wiki/foo-wiki">Wiki</a>\nMore text'
-        assert _extract_wiki_url(desc) == ""
-
-    def test_returns_empty_for_non_wiki_link(self):
-        desc = 'Text\n<a href="/groups/42">Groups</a>'
-        assert _extract_wiki_url(desc) == ""
 
 
 # ── _canonical_group_name ─────────────────────────────────────────────────────
