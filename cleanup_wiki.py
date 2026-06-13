@@ -265,14 +265,22 @@ def main(
     password: str,
     sheet_url: str = DEFAULT_SHEET_URL,
     dry_run: bool = False,
+    circle_prefix: str | None = None,
 ):
     base_url = base_url.rstrip("/")
     init_log()
-    log("INFO", "start", f"base_url={base_url} dry_run={dry_run}")
+    log("INFO", "start", f"base_url={base_url} dry_run={dry_run} circle={circle_prefix!r}")
 
     csv_text = fetch_sheet(sheet_url)
     circles = parse_sheet(csv_text)
     log("INFO", "parse_sheet", f"{len(circles)} circles parsed")
+
+    if circle_prefix is not None:
+        prefix_lower = circle_prefix.strip().lower()
+        circles = [c for c in circles if c.name.lower().startswith(prefix_lower)]
+        if not circles:
+            sys.exit(f"Error: --circle {circle_prefix!r} does not match any circle name")
+        log("INFO", "filter", f"Filtered to {len(circles)} circle(s): {[c.name for c in circles]}")
 
     with sync_playwright() as pw:
         browser = launch_browser(pw)
@@ -286,9 +294,13 @@ def main(
             browser.close()
             sys.exit(1)
 
-        log("INFO", "step1", "Removing wiki links from group descriptions")
-        group_stats = remove_wiki_links_from_groups(page, base_url, dry_run)
-        log("INFO", "step1_done", str(group_stats))
+        group_stats: dict = {}
+        if circle_prefix is None:
+            log("INFO", "step1", "Removing wiki links from group descriptions")
+            group_stats = remove_wiki_links_from_groups(page, base_url, dry_run)
+            log("INFO", "step1_done", str(group_stats))
+        else:
+            log("INFO", "step1", "Skipped (--circle filter active)")
 
         log("INFO", "step2", "Deleting per-circle wiki pages")
         gather_groups = fetch_all_gather_groups(page, base_url)
@@ -321,9 +333,13 @@ def cli():
         "-n", "--dry-run", action="store_true",
         help="Log what would change without making any changes",
     )
+    parser.add_argument(
+        "-c", "--circle", default=None, metavar="PREFIX",
+        help="Process only the circle whose name starts with PREFIX; skips group description cleanup",
+    )
     args = parser.parse_args()
     email, password = load_credentials()
-    main(args.base_url, email, password, args.sheet_url, args.dry_run)
+    main(args.base_url, email, password, args.sheet_url, args.dry_run, args.circle)
 
 
 if __name__ == "__main__":
