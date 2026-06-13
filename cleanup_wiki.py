@@ -182,26 +182,14 @@ def _delete_wiki_page(
             'a[data-method="delete"][href*="/wiki/"]'
         ).first
         if delete_btn.count() == 0:
-            # Log every button and link on the page to diagnose selector issues.
-            btns = [b.inner_text().strip() for b in page.locator("button, input[type=submit], input[type=button]").all()]
-            links = [(a.inner_text().strip(), a.get_attribute("href") or "") for a in page.locator("a").all() if a.inner_text().strip()]
             log("WARN", "delete_wiki",
-                f"'{title}': no Delete control found on /wiki/{slug} "
-                f"| buttons={btns} | links={links}")
+                f"'{title}': no Delete control found on /wiki/{slug}")
             screenshot(page, f"delete_wiki_noctrl_{slug[:20]}")
             return False
 
+        # data-confirm triggers a native browser confirm() dialog; accept it.
+        page.once("dialog", lambda d: d.accept())
         delete_btn.click()
-
-        # Wait for the confirmation modal and click OK.
-        ok_btn = page.locator(
-            'button:has-text("OK"), '
-            'button:has-text("Ok"), '
-            'input[type="button"][value="OK"], '
-            'a:has-text("OK")'
-        ).first
-        ok_btn.wait_for(state="visible", timeout=5000)
-        ok_btn.click()
         page.wait_for_load_state("networkidle")
 
         err = _check_submit_errors(page)
