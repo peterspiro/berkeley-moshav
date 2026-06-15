@@ -1202,7 +1202,7 @@ def process(
         stats = {
             "created": 0, "updated": 0, "skipped": 0, "failed": 0, "errors": 0,
             "list_created": 0, "list_failed": 0,
-            "wiki_created": 0, "wiki_failed": 0, "wiki_index_ok": False,
+            "wiki_index_ok": False,
             "gdrive_linked": 0, "gdrive_failed": 0, "gdrive_not_found": 0,
         }
 
@@ -1289,22 +1289,6 @@ def process(
         for circle in circles:
             gather_name = gather_name_map.get(circle.name, circle.name)
             gdrive_url_map[circle.name] = find_gdrive_link(gather_name, gdrive_links) or ""
-
-        # Create a blank wiki page for each circle/working-group, then update their content.
-        for circle in circles:
-            if not _needs_wiki(circle):
-                continue
-            gather_name = gather_name_map.get(circle.name, circle.name)
-            ok = _ensure_circle_wiki_page(page, base_url, gather_name, dry_run)
-            stats["wiki_created" if ok else "wiki_failed"] += 1
-
-            wiki_slug = _circle_wiki_slug(gather_name)
-            group_url = group_urls.get(circle.name, "")
-            gdrive_href = gdrive_url_map[circle.name]
-            if not gdrive_href:
-                stats["gdrive_not_found"] += 1
-            ok = _ensure_gdrive_link_on_wiki(page, base_url, wiki_slug, gdrive_href, gather_name, group_url, dry_run)
-            stats["gdrive_linked" if ok else "gdrive_failed"] += 1
 
         if circle_prefix is None:
             # Log any circles whose gdrive entries are missing before building hierarchy.
