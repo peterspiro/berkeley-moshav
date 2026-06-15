@@ -1496,16 +1496,34 @@ def _ensure_gdrive_group_access(
         )
         if role_sel.count() > 0:
             role_name = role_sel.first.get_attribute("name") or ""
-            try:
-                page.locator(f'select[name="{role_name}"]').select_option("content_manager")
-            except Exception:
+            options = page.evaluate(
+                """name => [...document.querySelectorAll(`select[name="${name}"] option`)]
+                    .map(o => ({value: o.value, label: o.textContent.trim()}))""",
+                role_name,
+            )
+            # Try common value patterns before falling back to first option.
+            selected = False
+            for val in ("content_manager", "contentmanager", "content manager"):
                 try:
-                    page.locator(f'select[name="{role_name}"]').select_option(
-                        label="Content manager"
-                    )
+                    page.locator(f'select[name="{role_name}"]').select_option(val)
+                    selected = True
+                    break
                 except Exception:
-                    log("WARN", "gdrive_access", gather_name,
-                        "Could not select 'Content manager' access level")
+                    pass
+            if not selected:
+                for label in ("Content manager", "Content Manager"):
+                    try:
+                        page.locator(f'select[name="{role_name}"]').select_option(label=label)
+                        selected = True
+                        break
+                    except Exception:
+                        pass
+            if not selected:
+                log("WARN", "gdrive_access", gather_name,
+                    f"Could not select 'Content manager'; available options={options}")
+            else:
+                log("DEBUG", "gdrive_access",
+                    f"Set access_level for {gather_name!r}; options were={options}")
         else:
             log("WARN", "gdrive_access", gather_name, "access_level select not found")
 
