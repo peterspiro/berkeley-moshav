@@ -322,6 +322,7 @@ def sync_group_members(
 def main(
     sheet_url: str, base_url: str, email: str, password: str,
     dry_run: bool = False, remove: bool = False,
+    member_prefix: str | None = None,
 ):
     base_url = base_url.rstrip("/")
     init_log()
@@ -330,6 +331,17 @@ def main(
     csv_text = fetch_sheet(sheet_url)
     sheet_members = parse_memberships(csv_text)
     log("INFO", "parse_sheet", f"{len(sheet_members)} BM members found")
+
+    if member_prefix is not None:
+        prefix_lower = member_prefix.strip().lower()
+        sheet_members = [
+            m for m in sheet_members
+            if f"{m['first_name']} {m['last_name']}".lower().startswith(prefix_lower)
+        ]
+        if not sheet_members:
+            sys.exit(f"Error: --member {member_prefix!r} does not match any member name")
+        names = [f"{m['first_name']} {m['last_name']}" for m in sheet_members]
+        log("INFO", "filter", f"Filtered to {len(sheet_members)} member(s): {names}")
 
     with sync_playwright() as pw:
         browser = launch_browser(pw)
@@ -420,10 +432,14 @@ def cli():
         "-r", "--remove", action="store_true",
         help="Also remove members from groups they are no longer listed in",
     )
+    parser.add_argument(
+        "-m", "--member", default=None, metavar="PREFIX",
+        help="Process only the member whose name starts with PREFIX",
+    )
     args = parser.parse_args()
 
     email, password = load_credentials()
-    main(args.sheet_url, args.base_url, email, password, args.dry_run, args.remove)
+    main(args.sheet_url, args.base_url, email, password, args.dry_run, args.remove, args.member)
 
 
 if __name__ == "__main__":
