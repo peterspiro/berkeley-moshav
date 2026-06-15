@@ -1330,20 +1330,30 @@ def process(
 def _find_gdrive_item_id(
     page: Page, base_url: str, google_file_id: str, candidate_ids: set[str]
 ) -> str | None:
-    """Return the numeric item_id for a linked gdrive folder by checking edit pages."""
+    """Return the numeric item_id for a linked gdrive folder by checking edit pages.
+
+    The edit page may render fields via JS; we wait up to 5s for the external_id
+    input to appear before falling back to logging page body for diagnostics.
+    """
     for iid in sorted(candidate_ids):
         try:
             page.goto(f"{base_url}/gdrive/items/{iid}/edit", wait_until="networkidle")
-            url_after = page.url
-            inputs = {
-                el.get_attribute("name"): el.input_value()
-                for el in page.locator("input[name], select[name], textarea[name]").all()
-            }
-            log("DEBUG", "find_gdrive_item_id",
-                f"item_id={iid} url={url_after!r} inputs={inputs}")
+            # Wait for JS-rendered fields.
             ext_field = page.locator('input[name="gdrive_item[external_id]"]')
-            if ext_field.count() > 0 and ext_field.input_value().strip() == google_file_id:
-                return iid
+            try:
+                ext_field.wait_for(state="visible", timeout=5000)
+            except Exception:
+                pass
+            if ext_field.count() > 0:
+                val = ext_field.input_value().strip()
+                log("DEBUG", "find_gdrive_item_id",
+                    f"item_id={iid} external_id={val!r} target={google_file_id!r}")
+                if val == google_file_id:
+                    return iid
+            else:
+                body = page.locator("body").inner_text()[:400]
+                log("DEBUG", "find_gdrive_item_id",
+                    f"item_id={iid} no external_id field | body={body!r}")
         except Exception as e:
             log("DEBUG", "find_gdrive_item_id", f"item_id={iid} exception: {e}")
     return None
@@ -1396,6 +1406,8 @@ def _ensure_gdrive_group_access(
                 link.element_handle(),
             )
             existing[iid] = container_text
+            log("DEBUG", "gdrive_config_container",
+                f"item_id={iid} text={container_text[:200]!r}")
 
         item_id: str | None = None
         container_text = ""
