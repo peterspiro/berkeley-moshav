@@ -1331,14 +1331,21 @@ def _find_gdrive_item_id(
     page: Page, base_url: str, google_file_id: str, candidate_ids: set[str]
 ) -> str | None:
     """Return the numeric item_id for a linked gdrive folder by checking edit pages."""
-    for iid in candidate_ids:
+    for iid in sorted(candidate_ids):
         try:
             page.goto(f"{base_url}/gdrive/items/{iid}/edit", wait_until="networkidle")
+            url_after = page.url
+            inputs = {
+                el.get_attribute("name"): el.input_value()
+                for el in page.locator("input[name], select[name], textarea[name]").all()
+            }
+            log("DEBUG", "find_gdrive_item_id",
+                f"item_id={iid} url={url_after!r} inputs={inputs}")
             ext_field = page.locator('input[name="gdrive_item[external_id]"]')
             if ext_field.count() > 0 and ext_field.input_value().strip() == google_file_id:
                 return iid
-        except Exception:
-            pass
+        except Exception as e:
+            log("DEBUG", "find_gdrive_item_id", f"item_id={iid} exception: {e}")
     return None
 
 
@@ -1437,6 +1444,9 @@ def _ensure_gdrive_group_access(
                     return False
             else:
                 # Already linked — find item_id by checking each edit page.
+                log("DEBUG", "gdrive_link_item",
+                    f"already-taken error; page_url={page.url!r} "
+                    f"err={err[:200]!r} existing_ids={sorted(existing)}")
                 item_id = _find_gdrive_item_id(
                     page, base_url, google_file_id, set(existing)
                 )
