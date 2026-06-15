@@ -1481,6 +1481,14 @@ def _ensure_gdrive_group_access(
             return False
 
         sel_name = group_sel.get_attribute("name") or ""
+        group_options = page.evaluate(
+            """name => [...document.querySelectorAll(`select[name="${name}"] option`)]
+                .map(o => ({value: o.value, label: o.textContent.trim()}))""",
+            sel_name,
+        )
+        log("DEBUG", "gdrive_access",
+            f"group selector={sel_name!r} options[0:5]={group_options[:5]}")
+
         # Prefer native select_option; fall back to Select2 only if needed.
         has_select2 = page.locator(
             f'select[name="{sel_name}"] ~ .select2-container, '
@@ -1489,7 +1497,16 @@ def _ensure_gdrive_group_access(
         if has_select2:
             select2_choose(page, f'select[name="{sel_name}"]', gather_name)
         else:
-            page.locator(f'select[name="{sel_name}"]').select_option(label=gather_name)
+            try:
+                page.locator(f'select[name="{sel_name}"]').select_option(label=gather_name)
+            except Exception as e:
+                log("WARN", "gdrive_access", gather_name,
+                    f"select_option(label={gather_name!r}) failed: {e} | options={group_options}")
+                screenshot(page, f"gdrive_acc_grpsel_{item_id}")
+                return False
+
+        chosen_group = page.locator(f'select[name="{sel_name}"]').input_value()
+        log("DEBUG", "gdrive_access", f"group selected value={chosen_group!r}")
 
         role_sel = page.locator(
             'select[name*="[access_level]"], select[name*="access_level"], select[name*="access"]'
@@ -1530,10 +1547,22 @@ def _ensure_gdrive_group_access(
         page.locator('input[name="commit"], button[type="submit"]').first.click()
         page.wait_for_load_state("networkidle")
 
+        post_url = page.url
         err = _check_submit_errors(page)
         if err:
             screenshot(page, f"gdrive_acc_err_{item_id}")
-            log("ERROR", "gdrive_access", gather_name, err[:200])
+            log("ERROR", "gdrive_access", gather_name, f"url={post_url} | {err[:200]}")
+            return False
+
+        body_preview = page.locator("body").inner_text()[:300]
+        log("DEBUG", "gdrive_access",
+            f"post-submit url={post_url!r} body={body_preview!r}")
+
+        # Expect redirect away from the new-form URL on success.
+        if f"item-groups/new" in post_url:
+            screenshot(page, f"gdrive_acc_stayed_{item_id}")
+            log("WARN", "gdrive_access", gather_name,
+                "Still on new-form page after submit — likely a silent validation failure")
             return False
 
         log("INFO", "gdrive_access",
