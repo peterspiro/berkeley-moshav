@@ -1330,32 +1330,44 @@ def process(
 def _find_gdrive_item_id(
     page: Page, base_url: str, google_file_id: str, candidate_ids: set[str]
 ) -> str | None:
-    """Return the numeric item_id for a linked gdrive folder by checking edit pages.
+    """Return the numeric item_id for a linked gdrive folder.
 
-    The edit page may render fields via JS; we wait up to 5s for the external_id
-    input to appear before falling back to logging page body for diagnostics.
+    Searches the /gdrive/config page DOM for the google_file_id in any text
+    node or attribute, then finds the nearest item_id in the surrounding HTML.
     """
-    for iid in sorted(candidate_ids):
-        try:
-            page.goto(f"{base_url}/gdrive/items/{iid}/edit", wait_until="networkidle")
-            # Wait for JS-rendered fields.
-            ext_field = page.locator('input[name="gdrive_item[external_id]"]')
-            try:
-                ext_field.wait_for(state="visible", timeout=5000)
-            except Exception:
-                pass
-            if ext_field.count() > 0:
-                val = ext_field.input_value().strip()
-                log("DEBUG", "find_gdrive_item_id",
-                    f"item_id={iid} external_id={val!r} target={google_file_id!r}")
-                if val == google_file_id:
-                    return iid
-            else:
-                body = page.locator("body").inner_text()[:400]
-                log("DEBUG", "find_gdrive_item_id",
-                    f"item_id={iid} no external_id field | body={body!r}")
-        except Exception as e:
-            log("DEBUG", "find_gdrive_item_id", f"item_id={iid} exception: {e}")
+    page.goto(f"{base_url}/gdrive/config", wait_until="networkidle")
+    results = page.evaluate(
+        """(fileId) => {
+            const found = [];
+            const walker = document.createTreeWalker(document.body, 0xffffffff);
+            let node;
+            while (node = walker.nextNode()) {
+                if (node.nodeType === 3 && node.textContent.includes(fileId)) {
+                    found.push({type: 'text', html: node.parentElement.outerHTML.slice(0, 300)});
+                } else if (node.nodeType === 1) {
+                    for (const attr of (node.attributes || [])) {
+                        if (attr.value.includes(fileId)) {
+                            found.push({type: 'attr', name: attr.name, value: attr.value, html: node.outerHTML.slice(0, 300)});
+                        }
+                    }
+                }
+            }
+            return found;
+        }""",
+        google_file_id,
+    )
+    log("DEBUG", "find_gdrive_item_id",
+        f"DOM search for {google_file_id!r}: {results or 'NOT FOUND'}")
+
+    # If found in DOM, look for closest item_id in surrounding HTML.
+    if results:
+        import re as _re
+        for hit in results:
+            html_ctx = hit.get("html", "")
+            m = _re.search(r"item_id=(\d+)", html_ctx)
+            if m and m.group(1) in candidate_ids:
+                return m.group(1)
+
     return None
 
 
