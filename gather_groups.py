@@ -1464,7 +1464,15 @@ def _ensure_gdrive_group_access(
             return False
 
         sel_name = group_sel.get_attribute("name") or ""
-        select2_choose(page, f'select[name="{sel_name}"]', gather_name)
+        # Prefer native select_option; fall back to Select2 only if needed.
+        has_select2 = page.locator(
+            f'select[name="{sel_name}"] ~ .select2-container, '
+            f'select[name="{sel_name}"] + .select2-container'
+        ).count() > 0
+        if has_select2:
+            select2_choose(page, f'select[name="{sel_name}"]', gather_name)
+        else:
+            page.locator(f'select[name="{sel_name}"]').select_option(label=gather_name)
 
         role_sel = page.locator(
             'select[name*="[access_level]"], select[name*="access_level"], select[name*="access"]'
