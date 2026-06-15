@@ -1291,6 +1291,8 @@ def process(
             gdrive_url_map[circle.name] = find_gdrive_link(gather_name, gdrive_links) or ""
 
         # Link each circle's Gather group to its gdrive entry with Content manager access.
+        gdrive_config = fetch_gdrive_config(page, base_url)
+        gdrive_item_by_href: dict[str, dict] = {item["href"]: item for item in gdrive_config}
         for circle in circles:
             gdrive_href = gdrive_url_map.get(circle.name, "")
             gather_name = gather_name_map.get(circle.name, circle.name)
@@ -1299,7 +1301,15 @@ def process(
                 continue
             if circle.name not in group_urls:
                 continue
-            ok = _ensure_gdrive_group_access(page, base_url, gdrive_href, gather_name, dry_run)
+            item = gdrive_item_by_href.get(gdrive_href)
+            if not item:
+                log("WARN", "gdrive_access", gather_name,
+                    f"gdrive item not found in config for href {gdrive_href!r}")
+                stats["gdrive_failed"] += 1
+                continue
+            ok = _ensure_gdrive_group_access(
+                page, base_url, item["item_id"], gather_name, item.get("text", ""), dry_run
+            )
             stats["gdrive_linked" if ok else "gdrive_failed"] += 1
 
         if circle_prefix is None:
@@ -1325,87 +1335,121 @@ def process(
     close_log()
 
 
+def fetch_gdrive_config(page: Page, base_url: str) -> list[dict]:
+    """Scrape /gdrive/config and return info about each linked gdrive item.
+
+    Each dict has: name, href (/gdrive/item/…), item_id (numeric string), text.
+    item_id is extracted from the "Add Group" link href (?item_id=NNN).
+    """
+    try:
+        page.goto(f"{base_url}/gdrive/config", wait_until="networkidle")
+        items = page.evaluate(r"""
+            () => {
+                const results = [];
+                const seen = new Set();
+                const containers = [
+                    ...document.querySelectorAll('tr, li, section, [class*="item"], [class*="folder"]')
+                ];
+                for (const c of containers) {
+                    const itemLink = c.querySelector('a[href*="/gdrive/item/"]');
+                    const addLink = c.querySelector('a[href*="item-groups/new"]');
+                    if (!itemLink || !addLink) continue;
+                    const m = addLink.href.match(/item_id=(\d+)/);
+                    if (!m || seen.has(m[1])) continue;
+                    seen.add(m[1]);
+                    results.push({
+                        name: itemLink.textContent.trim(),
+                        href: new URL(itemLink.href).pathname,
+                        item_id: m[1],
+                        text: c.textContent,
+                    });
+                }
+                return results;
+            }
+        """)
+        log("INFO", "fetch_gdrive_config", f"{len(items)} gdrive items found on config page")
+        return items
+    except Exception as e:
+        log("ERROR", "fetch_gdrive_config", "", str(e))
+        return []
+
+
 def _ensure_gdrive_group_access(
     page: Page,
     base_url: str,
-    gdrive_href: str,
+    item_id: str,
     gather_name: str,
+    container_text: str,
     dry_run: bool,
 ) -> bool:
-    """Add the named Gather group with Content manager access to a gdrive entry.
+    """Add the named Gather group with Content manager access to a gdrive item.
 
-    Skips if the group name is already present in the form.
+    Skips if the group name already appears in the item's container text.
     Returns True on success or skip, False on failure.
     """
-    edit_url = f"{base_url}{gdrive_href}/edit"
-    slug = gdrive_href.strip("/").replace("/", "_")[-20:]
+    if gather_name.lower() in container_text.lower():
+        log("INFO", "gdrive_access",
+            f"{gather_name!r} already linked (item_id={item_id}), skipping")
+        return True
+
+    new_url = f"{base_url}/gdrive/item-groups/new?item_id={item_id}"
+    if dry_run:
+        log("DRY-RUN", "gdrive_access",
+            f"would add {gather_name!r} (Content manager) → item_id={item_id}")
+        return True
+
     try:
-        page.goto(edit_url, wait_until="networkidle")
+        page.goto(new_url, wait_until="networkidle")
 
-        # Select2 renders each selected option's text in .select2-selection__rendered.
-        # If the group is already assigned, its name will appear there.
-        rendered = [
-            el.inner_text().strip()
-            for el in page.locator(".select2-selection__rendered").all()
-        ]
-        if any(gather_name.lower() in t.lower() for t in rendered):
-            log("INFO", "gdrive_access",
-                f"{gather_name!r} already linked to {gdrive_href}, skipping")
-            return True
-
-        if dry_run:
-            log("DRY-RUN", "gdrive_access",
-                f"would add {gather_name!r} (Content manager) to {gdrive_href}")
-            return True
-
-        # Click the inline "Add …" link to reveal a new group/permission row.
-        add_link = page.locator(
-            'a:has-text("Add Group"), a:has-text("Add Permission"), a:has-text("Add")'
-        ).last
-        if add_link.count() == 0:
-            all_links = [a.inner_text().strip() for a in page.locator("a").all() if a.inner_text().strip()]
+        group_sel = page.locator(
+            'select[name*="[group_id]"], select[name*="group_id"], select[name*="group"]'
+        ).first
+        if group_sel.count() == 0:
+            fields = [
+                el.get_attribute("name")
+                for el in page.locator("input[name], select[name]").all()
+            ]
             log("WARN", "gdrive_access", gather_name,
-                f"No 'Add' link found on {edit_url} | links={all_links}")
-            screenshot(page, f"gdrive_acc_noadd_{slug}")
+                f"No group selector found on {new_url} | fields={fields}")
+            screenshot(page, f"gdrive_acc_nosel_{item_id}")
             return False
 
-        add_link.click()
-        page.wait_for_timeout(400)
+        sel_name = group_sel.get_attribute("name") or ""
+        select2_choose(page, f'select[name="{sel_name}"]', gather_name)
 
-        # Use the last group-id select (the newly added row).
-        group_sel = page.locator('select[name*="[group_id]"]').last
-        uid_name = group_sel.get_attribute("name") or ""
-        if not uid_name:
-            log("WARN", "gdrive_access", gather_name,
-                "group_id select not found after clicking Add")
-            screenshot(page, f"gdrive_acc_nosel_{slug}")
-            return False
-        select2_choose(page, f'select[name="{uid_name}"]', gather_name)
-
-        # Set the access level to Content manager.
-        role_name = uid_name.replace("[group_id]", "[access_level]")
-        role_sel = page.locator(f'select[name="{role_name}"]')
+        role_sel = page.locator(
+            'select[name*="[access_level]"], select[name*="access_level"], select[name*="access"]'
+        )
         if role_sel.count() > 0:
-            role_sel.select_option("content_manager")
+            role_name = role_sel.first.get_attribute("name") or ""
+            try:
+                page.locator(f'select[name="{role_name}"]').select_option("content_manager")
+            except Exception:
+                try:
+                    page.locator(f'select[name="{role_name}"]').select_option(
+                        label="Content manager"
+                    )
+                except Exception:
+                    log("WARN", "gdrive_access", gather_name,
+                        "Could not select 'Content manager' access level")
         else:
-            log("WARN", "gdrive_access", gather_name,
-                f"access_level select not found (tried {role_name!r})")
+            log("WARN", "gdrive_access", gather_name, "access_level select not found")
 
-        page.locator('input[name="commit"]').click()
+        page.locator('input[name="commit"], button[type="submit"]').first.click()
         page.wait_for_load_state("networkidle")
 
         err = _check_submit_errors(page)
         if err:
-            screenshot(page, f"gdrive_acc_err_{slug}")
+            screenshot(page, f"gdrive_acc_err_{item_id}")
             log("ERROR", "gdrive_access", gather_name, err[:200])
             return False
 
         log("INFO", "gdrive_access",
-            f"Added {gather_name!r} (Content manager) to {gdrive_href}")
+            f"Added {gather_name!r} (Content manager) to item_id={item_id}")
         return True
 
     except Exception as e:
-        screenshot(page, f"gdrive_acc_exc_{slug}")
+        screenshot(page, f"gdrive_acc_exc_{item_id}")
         log("ERROR", "gdrive_access", gather_name, str(e))
         return False
 
