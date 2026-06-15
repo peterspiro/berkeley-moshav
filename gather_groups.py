@@ -1283,12 +1283,24 @@ def process(
                 ok = _ensure_mailman_list(page, base_url, group_id, list_name, dry_run)
                 stats["list_created" if ok else "list_failed"] += 1
 
-        # Build gdrive URL map for all circles (used both for wiki pages and hierarchy).
+        # Build gdrive URL map for all circles (used for group access and hierarchy).
         gdrive_links = fetch_gdrive_links(page, base_url)
         gdrive_url_map: dict[str, str] = {}
         for circle in circles:
             gather_name = gather_name_map.get(circle.name, circle.name)
             gdrive_url_map[circle.name] = find_gdrive_link(gather_name, gdrive_links) or ""
+
+        # Link each circle's Gather group to its gdrive entry with Content manager access.
+        for circle in circles:
+            gdrive_href = gdrive_url_map.get(circle.name, "")
+            gather_name = gather_name_map.get(circle.name, circle.name)
+            if not gdrive_href:
+                stats["gdrive_not_found"] += 1
+                continue
+            if circle.name not in group_urls:
+                continue
+            ok = _ensure_gdrive_group_access(page, base_url, gdrive_href, gather_name, dry_run)
+            stats["gdrive_linked" if ok else "gdrive_failed"] += 1
 
         if circle_prefix is None:
             # Log any circles whose gdrive entries are missing before building hierarchy.
@@ -1311,6 +1323,91 @@ def process(
 
     log("INFO", "done", str(stats))
     close_log()
+
+
+def _ensure_gdrive_group_access(
+    page: Page,
+    base_url: str,
+    gdrive_href: str,
+    gather_name: str,
+    dry_run: bool,
+) -> bool:
+    """Add the named Gather group with Content manager access to a gdrive entry.
+
+    Skips if the group name is already present in the form.
+    Returns True on success or skip, False on failure.
+    """
+    edit_url = f"{base_url}{gdrive_href}/edit"
+    slug = gdrive_href.strip("/").replace("/", "_")[-20:]
+    try:
+        page.goto(edit_url, wait_until="networkidle")
+
+        # Select2 renders each selected option's text in .select2-selection__rendered.
+        # If the group is already assigned, its name will appear there.
+        rendered = [
+            el.inner_text().strip()
+            for el in page.locator(".select2-selection__rendered").all()
+        ]
+        if any(gather_name.lower() in t.lower() for t in rendered):
+            log("INFO", "gdrive_access",
+                f"{gather_name!r} already linked to {gdrive_href}, skipping")
+            return True
+
+        if dry_run:
+            log("DRY-RUN", "gdrive_access",
+                f"would add {gather_name!r} (Content manager) to {gdrive_href}")
+            return True
+
+        # Click the inline "Add …" link to reveal a new group/permission row.
+        add_link = page.locator(
+            'a:has-text("Add Group"), a:has-text("Add Permission"), a:has-text("Add")'
+        ).last
+        if add_link.count() == 0:
+            all_links = [a.inner_text().strip() for a in page.locator("a").all() if a.inner_text().strip()]
+            log("WARN", "gdrive_access", gather_name,
+                f"No 'Add' link found on {edit_url} | links={all_links}")
+            screenshot(page, f"gdrive_acc_noadd_{slug}")
+            return False
+
+        add_link.click()
+        page.wait_for_timeout(400)
+
+        # Use the last group-id select (the newly added row).
+        group_sel = page.locator('select[name*="[group_id]"]').last
+        uid_name = group_sel.get_attribute("name") or ""
+        if not uid_name:
+            log("WARN", "gdrive_access", gather_name,
+                "group_id select not found after clicking Add")
+            screenshot(page, f"gdrive_acc_nosel_{slug}")
+            return False
+        select2_choose(page, f'select[name="{uid_name}"]', gather_name)
+
+        # Set the access level to Content manager.
+        role_name = uid_name.replace("[group_id]", "[access_level]")
+        role_sel = page.locator(f'select[name="{role_name}"]')
+        if role_sel.count() > 0:
+            role_sel.select_option("content_manager")
+        else:
+            log("WARN", "gdrive_access", gather_name,
+                f"access_level select not found (tried {role_name!r})")
+
+        page.locator('input[name="commit"]').click()
+        page.wait_for_load_state("networkidle")
+
+        err = _check_submit_errors(page)
+        if err:
+            screenshot(page, f"gdrive_acc_err_{slug}")
+            log("ERROR", "gdrive_access", gather_name, err[:200])
+            return False
+
+        log("INFO", "gdrive_access",
+            f"Added {gather_name!r} (Content manager) to {gdrive_href}")
+        return True
+
+    except Exception as e:
+        screenshot(page, f"gdrive_acc_exc_{slug}")
+        log("ERROR", "gdrive_access", gather_name, str(e))
+        return False
 
 
 def fetch_gdrive_links(page: Page, base_url: str) -> list[tuple[str, str]]:
