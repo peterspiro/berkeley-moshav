@@ -1292,7 +1292,10 @@ def process(
 
         # Link each circle's Gather group to its gdrive entry with Content manager access.
         gdrive_config = fetch_gdrive_config(page, base_url)
-        gdrive_item_by_href: dict[str, dict] = {item["href"]: item for item in gdrive_config}
+        # Map google_file_id → config item dict (for correlation with gdrive_url_map).
+        gdrive_item_by_file_id: dict[str, dict] = {
+            i["google_file_id"]: i for i in gdrive_config if i["google_file_id"]
+        }
         for circle in circles:
             gdrive_href = gdrive_url_map.get(circle.name, "")
             gather_name = gather_name_map.get(circle.name, circle.name)
@@ -1301,10 +1304,13 @@ def process(
                 continue
             if circle.name not in group_urls:
                 continue
-            item = gdrive_item_by_href.get(gdrive_href)
+            # gdrive_href is /gdrive/item/{google_file_id}
+            google_file_id = gdrive_href.rstrip("/").split("/")[-1]
+            item = gdrive_item_by_file_id.get(google_file_id)
             if not item:
                 log("WARN", "gdrive_access", gather_name,
-                    f"gdrive item not found in config for href {gdrive_href!r}")
+                    f"gdrive item not found in config for file_id={google_file_id!r} "
+                    f"(href={gdrive_href!r}); may need to be linked first via /gdrive/items/new")
                 stats["gdrive_failed"] += 1
                 continue
             ok = _ensure_gdrive_group_access(
@@ -1338,57 +1344,76 @@ def process(
 def fetch_gdrive_config(page: Page, base_url: str) -> list[dict]:
     """Scrape /gdrive/config and return info about each linked gdrive item.
 
-    Each dict has: name, href (/gdrive/item/…), item_id (numeric string), text.
-    item_id is extracted from the "Add Group" link href (?item_id=NNN).
+    Each dict has: item_id (numeric string), text (full container text).
+    Also navigates to each item's detail page to extract the google_file_id
+    so callers can correlate with /gdrive/item/{hash} browse URLs.
     """
     try:
         page.goto(f"{base_url}/gdrive/config", wait_until="networkidle")
-        items = page.evaluate(r"""
-            () => {
-                const results = [];
-                const seen = new Set();
-                // Find all "Add Group" links (each carries the item_id we need).
-                const addLinks = [...document.querySelectorAll('a[href*="item-groups/new"]')];
-                for (const addLink of addLinks) {
-                    const m = addLink.href.match(/item_id=(\d+)/);
-                    if (!m || seen.has(m[1])) continue;
-                    // Walk up the DOM to find the nearest ancestor that also
-                    // contains a /gdrive/item/ link.
-                    let container = addLink.parentElement;
-                    let itemLink = null;
-                    while (container && container !== document.body) {
-                        itemLink = container.querySelector('a[href*="/gdrive/item/"]');
-                        if (itemLink) break;
-                        container = container.parentElement;
+        # Find "Add Group" links — each has ?item_id=NNN in its href.
+        add_links = page.locator('a[href*="item-groups/new"]').all()
+        items = []
+        seen: set[str] = set()
+        for link in add_links:
+            href = link.get_attribute("href") or ""
+            m = re.search(r"item_id=(\d+)", href)
+            if not m or m.group(1) in seen:
+                continue
+            item_id = m.group(1)
+            seen.add(item_id)
+            # Walk up the DOM to get the container text (to detect already-linked groups).
+            container_text = page.evaluate(
+                """el => {
+                    let c = el.parentElement;
+                    while (c && c !== document.body) {
+                        if (c.querySelectorAll('a[href*="item-groups/new"]').length <= 1) {
+                            return c.textContent;
+                        }
+                        c = c.parentElement;
                     }
-                    if (!itemLink) continue;
-                    seen.add(m[1]);
-                    results.push({
-                        name: itemLink.textContent.trim(),
-                        href: new URL(itemLink.href).pathname,
-                        item_id: m[1],
-                        text: container ? container.textContent : '',
-                    });
-                }
-                return results;
-            }
-        """)
-        log("INFO", "fetch_gdrive_config", f"{len(items)} gdrive items found on config page")
-        if not items:
-            diag = page.evaluate(r"""
-                () => ({
-                    title: document.title,
-                    url: location.href,
-                    addGroupLinks: [...document.querySelectorAll('a')].filter(a =>
-                        a.href.includes('item') || a.href.includes('gdrive') ||
-                        a.textContent.toLowerCase().includes('add') ||
-                        a.textContent.toLowerCase().includes('group')
-                    ).map(a => ({text: a.textContent.trim().slice(0, 60), href: a.getAttribute('href') || ''})),
-                })
-            """)
-            log("DEBUG", "fetch_gdrive_config_diag",
-                f"title={diag['title']!r} url={diag['url']!r} "
-                f"links={diag['addGroupLinks']}")
+                    return '';
+                }""",
+                link.element_handle(),
+            )
+            # Navigate to the item detail page to get the google_file_id.
+            google_file_id = ""
+            try:
+                page.goto(f"{base_url}/gdrive/items/{item_id}", wait_until="networkidle")
+                file_id_input = page.locator(
+                    'input[name*="file_id"], input[name*="google"], '
+                    'input[id*="file_id"], input[id*="google"]'
+                ).first
+                if file_id_input.count() > 0:
+                    google_file_id = file_id_input.input_value().strip()
+                if not google_file_id:
+                    # Try extracting from any visible text or link on the page.
+                    all_text = page.locator("body").inner_text()
+                    fid_m = re.search(
+                        r"['\"/]([A-Za-z0-9_-]{25,})['\"/]", all_text
+                    )
+                    if fid_m:
+                        google_file_id = fid_m.group(1)
+                if not google_file_id:
+                    # Log all inputs so we can find the right field name.
+                    fields = [
+                        (el.get_attribute("name"), el.input_value())
+                        for el in page.locator("input[name]").all()
+                    ]
+                    log("DEBUG", "gdrive_config_item",
+                        f"item_id={item_id}: no file_id found | inputs={fields}")
+            except Exception as e:
+                log("WARN", "gdrive_config_item",
+                    f"item_id={item_id}: error fetching detail: {e}")
+            items.append({
+                "item_id": item_id,
+                "google_file_id": google_file_id,
+                "text": container_text,
+            })
+            page.goto(f"{base_url}/gdrive/config", wait_until="networkidle")
+
+        log("INFO", "fetch_gdrive_config",
+            f"{len(items)} gdrive items found: "
+            f"{[(i['item_id'], i['google_file_id'][:12] if i['google_file_id'] else '') for i in items]}")
         return items
     except Exception as e:
         log("ERROR", "fetch_gdrive_config", "", str(e))
