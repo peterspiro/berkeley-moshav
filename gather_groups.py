@@ -1520,7 +1520,7 @@ def _ensure_gdrive_group_access(
             )
             # Try common value patterns before falling back to first option.
             selected = False
-            for val in ("content_manager", "contentmanager", "content manager"):
+            for val in ("fileOrganizer", "content_manager", "contentmanager", "content manager"):
                 try:
                     page.locator(f'select[name="{role_name}"]').select_option(val)
                     selected = True
@@ -1558,11 +1558,11 @@ def _ensure_gdrive_group_access(
         log("DEBUG", "gdrive_access",
             f"post-submit url={post_url!r} body={body_preview!r}")
 
-        # Expect redirect away from the new-form URL on success.
-        if f"item-groups/new" in post_url:
-            screenshot(page, f"gdrive_acc_stayed_{item_id}")
+        # Catch silent failures: stayed on form, or server error page.
+        if "item-groups/new" in post_url or "something went wrong" in body_preview.lower():
+            screenshot(page, f"gdrive_acc_fail_{item_id}")
             log("WARN", "gdrive_access", gather_name,
-                "Still on new-form page after submit — likely a silent validation failure")
+                f"Submit did not succeed | url={post_url!r} body={body_preview!r}")
             return False
 
         log("INFO", "gdrive_access",
