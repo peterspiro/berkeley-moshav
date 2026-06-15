@@ -1407,6 +1407,7 @@ def _ensure_gdrive_group_access(
                 return False
 
             ext_field.fill(google_file_id)
+            page.locator('select[name="gdrive_item[kind]"]').select_option("folder")
             page.locator('input[name="commit"], button[type="submit"]').first.click()
             page.wait_for_load_state("networkidle")
 
