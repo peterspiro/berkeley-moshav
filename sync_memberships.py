@@ -202,8 +202,12 @@ def populate_google_id(
         page.goto(f"{base_url}/users/{user.user_id}/edit", wait_until="networkidle")
         field = page.locator('input[name="user[google_user_id]"]')
         if field.count() == 0:
+            all_inputs = [
+                el.get_attribute("name") or ""
+                for el in page.locator("input[name]").all()
+            ]
             log("WARN", "google_id", user.full_name,
-                "user[google_user_id] field not found on edit page")
+                f"user[google_user_id] field not found; inputs on page: {all_inputs}")
             return "failed"
         current = field.input_value().strip()
         if current:
