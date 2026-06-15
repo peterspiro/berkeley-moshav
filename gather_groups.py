@@ -1347,21 +1347,27 @@ def fetch_gdrive_config(page: Page, base_url: str) -> list[dict]:
             () => {
                 const results = [];
                 const seen = new Set();
-                const containers = [
-                    ...document.querySelectorAll('tr, li, section, [class*="item"], [class*="folder"]')
-                ];
-                for (const c of containers) {
-                    const itemLink = c.querySelector('a[href*="/gdrive/item/"]');
-                    const addLink = c.querySelector('a[href*="item-groups/new"]');
-                    if (!itemLink || !addLink) continue;
+                // Find all "Add Group" links (each carries the item_id we need).
+                const addLinks = [...document.querySelectorAll('a[href*="item-groups/new"]')];
+                for (const addLink of addLinks) {
                     const m = addLink.href.match(/item_id=(\d+)/);
                     if (!m || seen.has(m[1])) continue;
+                    // Walk up the DOM to find the nearest ancestor that also
+                    // contains a /gdrive/item/ link.
+                    let container = addLink.parentElement;
+                    let itemLink = null;
+                    while (container && container !== document.body) {
+                        itemLink = container.querySelector('a[href*="/gdrive/item/"]');
+                        if (itemLink) break;
+                        container = container.parentElement;
+                    }
+                    if (!itemLink) continue;
                     seen.add(m[1]);
                     results.push({
                         name: itemLink.textContent.trim(),
                         href: new URL(itemLink.href).pathname,
                         item_id: m[1],
-                        text: c.textContent,
+                        text: container ? container.textContent : '',
                     });
                 }
                 return results;
