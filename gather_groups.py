@@ -1327,6 +1327,21 @@ def process(
     close_log()
 
 
+def _find_gdrive_item_id(
+    page: Page, base_url: str, google_file_id: str, candidate_ids: set[str]
+) -> str | None:
+    """Return the numeric item_id for a linked gdrive folder by checking edit pages."""
+    for iid in candidate_ids:
+        try:
+            page.goto(f"{base_url}/gdrive/items/{iid}/edit", wait_until="networkidle")
+            ext_field = page.locator('input[name="gdrive_item[external_id]"]')
+            if ext_field.count() > 0 and ext_field.input_value().strip() == google_file_id:
+                return iid
+        except Exception:
+            pass
+    return None
+
+
 def _ensure_gdrive_group_access(
     page: Page,
     base_url: str,
@@ -1339,10 +1354,10 @@ def _ensure_gdrive_group_access(
     gdrive_href is a /gdrive/item/{google_file_id} path from the browse page.
 
     Steps:
-    1. Check /gdrive/config for an existing item with an "Add Group" link.  We
-       identify the right item by noting all item_ids already present, submitting
-       /gdrive/items/new with the google_file_id if the item isn't linked yet,
-       then finding the new item_id that appeared.
+    1. Snapshot item_ids on /gdrive/config.  Try to link the folder via
+       /gdrive/items/new.  If it succeeds, find the new item_id by diff.
+       If "already taken", find item_id by checking /gdrive/items/{id}/edit
+       for each known config item.
     2. Navigate to /gdrive/item-groups/new?item_id={id}, select the group, set
        access level to Content manager, and save.
     """
@@ -1378,26 +1393,18 @@ def _ensure_gdrive_group_access(
         item_id: str | None = None
         container_text = ""
 
-        # Try to match an existing item by checking if the gdrive browse page
-        # for this folder shows one of the known item-groups links.
-        page.goto(f"{base_url}{gdrive_href}", wait_until="networkidle")
-        for link in page.locator('a[href*="item-groups/new"]').all():
-            href = link.get_attribute("href") or ""
-            m = re.search(r"item_id=(\d+)", href)
-            if m and m.group(1) in existing:
-                item_id = m.group(1)
-                container_text = existing[item_id]
-                break
-
-        if item_id is None:
-            # Item not linked yet — link it via /gdrive/items/new.
-            if dry_run:
+        if dry_run:
+            # In dry-run, check if already linked without making changes.
+            item_id = _find_gdrive_item_id(page, base_url, google_file_id, set(existing))
+            if item_id:
+                container_text = existing.get(item_id, "")
+            else:
                 log("DRY-RUN", "gdrive_link_item",
                     f"would link gdrive folder {google_file_id!r} for {gather_name!r}")
                 log("DRY-RUN", "gdrive_access",
                     f"would add {gather_name!r} (Content manager) to linked item")
                 return True
-
+        else:
             page.goto(f"{base_url}/gdrive/items/new", wait_until="networkidle")
             ext_field = page.locator('input[name="gdrive_item[external_id]"]')
             if ext_field.count() == 0:
@@ -1412,29 +1419,35 @@ def _ensure_gdrive_group_access(
             page.wait_for_load_state("networkidle")
 
             err = _check_submit_errors(page)
-            if err:
-                screenshot(page, f"gdrive_link_err_{short_id}")
-                log("ERROR", "gdrive_link_item", gather_name, err[:200])
-                return False
-
-            log("INFO", "gdrive_link_item",
-                f"Linked gdrive folder {google_file_id!r} for {gather_name!r}")
-
-            # Find the newly created item_id (not in the pre-existing set).
-            page.goto(f"{base_url}/gdrive/config", wait_until="networkidle")
-            for link in page.locator('a[href*="item-groups/new"]').all():
-                href = link.get_attribute("href") or ""
-                m = re.search(r"item_id=(\d+)", href)
-                if m and m.group(1) not in existing:
-                    item_id = m.group(1)
-                    container_text = ""
-                    break
-
-            if item_id is None:
-                log("WARN", "gdrive_link_item", gather_name,
-                    "Could not find new item_id on /gdrive/config after linking")
-                screenshot(page, f"gdrive_link_noid_{short_id}")
-                return False
+            if not err:
+                log("INFO", "gdrive_link_item",
+                    f"Linked gdrive folder {google_file_id!r} for {gather_name!r}")
+                # Find the newly created item_id (not in the pre-existing set).
+                page.goto(f"{base_url}/gdrive/config", wait_until="networkidle")
+                for link in page.locator('a[href*="item-groups/new"]').all():
+                    href = link.get_attribute("href") or ""
+                    m = re.search(r"item_id=(\d+)", href)
+                    if m and m.group(1) not in existing:
+                        item_id = m.group(1)
+                        break
+                if item_id is None:
+                    log("WARN", "gdrive_link_item", gather_name,
+                        "Could not find new item_id on /gdrive/config after linking")
+                    screenshot(page, f"gdrive_link_noid_{short_id}")
+                    return False
+            else:
+                # Already linked — find item_id by checking each edit page.
+                item_id = _find_gdrive_item_id(
+                    page, base_url, google_file_id, set(existing)
+                )
+                if item_id is None:
+                    log("ERROR", "gdrive_link_item", gather_name,
+                        f"Item already linked but could not find item_id | err={err[:200]}")
+                    screenshot(page, f"gdrive_link_err_{short_id}")
+                    return False
+                container_text = existing.get(item_id, "")
+                log("INFO", "gdrive_link_item",
+                    f"Found existing item_id={item_id} for {gather_name!r}")
 
         # ── Step 2: add group if not already present ──────────────────────────
         if gather_name.lower() in container_text.lower():
