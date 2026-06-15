@@ -64,6 +64,7 @@ WIKI_SLUG = "circle-hierarchy"
 _HIERARCHY_ROOT = "Top Circle / HOA"
 _LOG_FILE = Path(__file__).parent / "groups_log.csv"
 _SCREENSHOT_DIR = Path(__file__).parent / "import_screenshots"
+_GDRIVE_MAP_FILE = Path(__file__).parent / "gdrive_item_map.json"
 
 configure(_LOG_FILE, _SCREENSHOT_DIR)
 
@@ -1327,48 +1328,21 @@ def process(
     close_log()
 
 
-def _find_gdrive_item_id(
-    page: Page, base_url: str, google_file_id: str, candidate_ids: set[str]
-) -> str | None:
-    """Return the numeric item_id for a linked gdrive folder.
+def _load_gdrive_item_map() -> dict[str, str]:
+    """Load the persisted google_file_id → numeric item_id mapping."""
+    import json
+    if _GDRIVE_MAP_FILE.exists():
+        try:
+            return json.loads(_GDRIVE_MAP_FILE.read_text())
+        except Exception:
+            pass
+    return {}
 
-    Searches the /gdrive/config page DOM for the google_file_id in any text
-    node or attribute, then finds the nearest item_id in the surrounding HTML.
-    """
-    page.goto(f"{base_url}/gdrive/config", wait_until="networkidle")
-    results = page.evaluate(
-        """(fileId) => {
-            const found = [];
-            const walker = document.createTreeWalker(document.body, 0xffffffff);
-            let node;
-            while (node = walker.nextNode()) {
-                if (node.nodeType === 3 && node.textContent.includes(fileId)) {
-                    found.push({type: 'text', html: node.parentElement.outerHTML.slice(0, 300)});
-                } else if (node.nodeType === 1) {
-                    for (const attr of (node.attributes || [])) {
-                        if (attr.value.includes(fileId)) {
-                            found.push({type: 'attr', name: attr.name, value: attr.value, html: node.outerHTML.slice(0, 300)});
-                        }
-                    }
-                }
-            }
-            return found;
-        }""",
-        google_file_id,
-    )
-    log("DEBUG", "find_gdrive_item_id",
-        f"DOM search for {google_file_id!r}: {results or 'NOT FOUND'}")
 
-    # If found in DOM, look for closest item_id in surrounding HTML.
-    if results:
-        import re as _re
-        for hit in results:
-            html_ctx = hit.get("html", "")
-            m = _re.search(r"item_id=(\d+)", html_ctx)
-            if m and m.group(1) in candidate_ids:
-                return m.group(1)
-
-    return None
+def _save_gdrive_item_map(mapping: dict[str, str]) -> None:
+    """Persist the google_file_id → numeric item_id mapping to disk."""
+    import json
+    _GDRIVE_MAP_FILE.write_text(json.dumps(mapping, indent=2, sort_keys=True))
 
 
 def _ensure_gdrive_group_access(
@@ -1424,18 +1398,22 @@ def _ensure_gdrive_group_access(
         item_id: str | None = None
         container_text = ""
 
-        if dry_run:
-            # In dry-run, check if already linked without making changes.
-            item_id = _find_gdrive_item_id(page, base_url, google_file_id, set(existing))
-            if item_id:
-                container_text = existing.get(item_id, "")
-            else:
+        # Check the persistent map first (written whenever we successfully link a folder).
+        gdrive_map = _load_gdrive_item_map()
+        if google_file_id in gdrive_map:
+            item_id = gdrive_map[google_file_id]
+            container_text = existing.get(item_id, "")
+            log("INFO", "gdrive_link_item",
+                f"Found cached item_id={item_id} for {gather_name!r}")
+
+        if item_id is None:
+            if dry_run:
                 log("DRY-RUN", "gdrive_link_item",
                     f"would link gdrive folder {google_file_id!r} for {gather_name!r}")
                 log("DRY-RUN", "gdrive_access",
                     f"would add {gather_name!r} (Content manager) to linked item")
                 return True
-        else:
+
             page.goto(f"{base_url}/gdrive/items/new", wait_until="networkidle")
             ext_field = page.locator('input[name="gdrive_item[external_id]"]')
             if ext_field.count() == 0:
@@ -1466,22 +1444,14 @@ def _ensure_gdrive_group_access(
                         "Could not find new item_id on /gdrive/config after linking")
                     screenshot(page, f"gdrive_link_noid_{short_id}")
                     return False
+                # Persist the mapping so future runs can find this item_id.
+                gdrive_map[google_file_id] = item_id
+                _save_gdrive_item_map(gdrive_map)
             else:
-                # Already linked — find item_id by checking each edit page.
-                log("DEBUG", "gdrive_link_item",
-                    f"already-taken error; page_url={page.url!r} "
-                    f"err={err[:200]!r} existing_ids={sorted(existing)}")
-                item_id = _find_gdrive_item_id(
-                    page, base_url, google_file_id, set(existing)
-                )
-                if item_id is None:
-                    log("ERROR", "gdrive_link_item", gather_name,
-                        f"Item already linked but could not find item_id | err={err[:200]}")
-                    screenshot(page, f"gdrive_link_err_{short_id}")
-                    return False
-                container_text = existing.get(item_id, "")
-                log("INFO", "gdrive_link_item",
-                    f"Found existing item_id={item_id} for {gather_name!r}")
+                log("ERROR", "gdrive_link_item", gather_name,
+                    f"Already-taken error and no cached item_id | err={err[:200]}")
+                screenshot(page, f"gdrive_link_err_{short_id}")
+                return False
 
         # ── Step 2: add group if not already present ──────────────────────────
         if gather_name.lower() in container_text.lower():
