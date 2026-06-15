@@ -1374,6 +1374,21 @@ def fetch_gdrive_config(page: Page, base_url: str) -> list[dict]:
             }
         """)
         log("INFO", "fetch_gdrive_config", f"{len(items)} gdrive items found on config page")
+        if not items:
+            diag = page.evaluate(r"""
+                () => ({
+                    title: document.title,
+                    url: location.href,
+                    addGroupLinks: [...document.querySelectorAll('a')].filter(a =>
+                        a.href.includes('item') || a.href.includes('gdrive') ||
+                        a.textContent.toLowerCase().includes('add') ||
+                        a.textContent.toLowerCase().includes('group')
+                    ).map(a => ({text: a.textContent.trim().slice(0, 60), href: a.getAttribute('href') || ''})),
+                })
+            """)
+            log("DEBUG", "fetch_gdrive_config_diag",
+                f"title={diag['title']!r} url={diag['url']!r} "
+                f"links={diag['addGroupLinks']}")
         return items
     except Exception as e:
         log("ERROR", "fetch_gdrive_config", "", str(e))
