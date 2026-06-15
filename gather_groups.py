@@ -1394,13 +1394,17 @@ def fetch_gdrive_config(page: Page, base_url: str) -> list[dict]:
                     if fid_m:
                         google_file_id = fid_m.group(1)
                 if not google_file_id:
-                    # Log all inputs so we can find the right field name.
-                    fields = [
-                        (el.get_attribute("name"), el.input_value())
-                        for el in page.locator("input[name]").all()
+                    # Log page content so we can find where the file ID lives.
+                    links = [
+                        (a.get_attribute("href") or "", a.inner_text().strip()[:40])
+                        for a in page.locator("a[href]").all()
+                        if (a.get_attribute("href") or "").startswith(("http", "/"))
+                        and a.inner_text().strip()
                     ]
+                    body_text = page.locator("body").inner_text()[:500]
                     log("DEBUG", "gdrive_config_item",
-                        f"item_id={item_id}: no file_id found | inputs={fields}")
+                        f"item_id={item_id}: no file_id found | "
+                        f"links={links} | body={body_text!r}")
             except Exception as e:
                 log("WARN", "gdrive_config_item",
                     f"item_id={item_id}: error fetching detail: {e}")
