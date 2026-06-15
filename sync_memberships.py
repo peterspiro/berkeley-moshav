@@ -183,6 +183,51 @@ def resolve_user(
     return None
 
 
+# ── Google ID population ──────────────────────────────────────────────────────
+
+def populate_google_id(
+    page,
+    base_url: str,
+    user: GatherUser,
+    sheet_email: str,
+    dry_run: bool,
+) -> str:
+    """Set the Google ID field on a user's profile to sheet_email if it is blank.
+
+    Returns 'skipped', 'updated', or 'failed'.
+    """
+    if not sheet_email:
+        return "skipped"
+    try:
+        page.goto(f"{base_url}/users/{user.user_id}/edit", wait_until="networkidle")
+        field = page.locator('input[name="user[google_user_id]"]')
+        if field.count() == 0:
+            log("WARN", "google_id", user.full_name,
+                "user[google_user_id] field not found on edit page")
+            return "failed"
+        current = field.input_value().strip()
+        if current:
+            log("INFO", "google_id", f"Already set for {user.full_name}: {current!r}")
+            return "skipped"
+        if dry_run:
+            log("DRY-RUN", "google_id", f"{user.full_name} → {sheet_email!r}")
+            return "skipped"
+        field.fill(sheet_email)
+        page.locator('button[type="submit"], input[type="submit"]').first.click()
+        page.wait_for_load_state("networkidle")
+        err = _check_submit_errors(page)
+        if err:
+            screenshot(page, f"google_id_err_{user.user_id}")
+            log("ERROR", "google_id", user.full_name, err[:200])
+            return "failed"
+        log("INFO", "google_id", f"Set for {user.full_name}: {sheet_email!r}")
+        return "updated"
+    except Exception as e:
+        screenshot(page, f"google_id_exc_{user.user_id}")
+        log("ERROR", "google_id", user.full_name, str(e))
+        return "failed"
+
+
 # ── Group sync ────────────────────────────────────────────────────────────────
 
 def _submit_group_form(page, group_name: str) -> bool:
@@ -306,12 +351,16 @@ def main(
         users_by_id: dict[str, GatherUser] = {u.user_id: u for u in gather_users}
         warnings: list[str] = []
 
-        # desired_by_norm: normalized group name → set of user_ids
+        # Resolve every sheet member once; build the group-membership map and
+        # populate Google IDs in a single pass over the roster.
         desired_by_norm: dict[str, set[str]] = {}
+        gid_stats = {"updated": 0, "skipped": 0, "failed": 0}
         for entry in sheet_members:
             user = resolve_user(entry, email_index, gather_users, warnings)
             if not user:
                 continue
+            result = populate_google_id(page, base_url, user, entry["email"], dry_run)
+            gid_stats[result] += 1
             for group_name in entry["groups"]:
                 norm = _normalize_group(group_name)
                 desired_by_norm.setdefault(norm, set()).add(user.user_id)
@@ -339,6 +388,7 @@ def main(
             for k in total:
                 total[k] += stats[k]
 
+        log("INFO", "google_id_done", str(gid_stats))
         log("INFO", "done", str(total))
         browser.close()
 
