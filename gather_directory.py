@@ -399,7 +399,7 @@ def main(sheet_url: str, base_url: str, email: str, password: str, dry_run: bool
             hh_name = household["household_name"]
 
             # ── Household ──
-            edit_url = find_household_edit_url(page, base_url, hh_name) if not dry_run else None
+            edit_url = find_household_edit_url(page, base_url, hh_name)
             if edit_url:
                 result = update_household(page, edit_url, household, dry_run)
                 stats[f"hh_{result}"] += 1
@@ -419,7 +419,7 @@ def main(sheet_url: str, base_url: str, email: str, password: str, dry_run: bool
             guardian_name = find_guardian_for(household)
 
             for member in adults + children:
-                edit_url = find_user_edit_url(page, base_url, member) if not dry_run else None
+                edit_url = find_user_edit_url(page, base_url, member)
                 if edit_url:
                     result = update_user(page, edit_url, member, dry_run)
                     stats[f"user_{result}"] += 1
