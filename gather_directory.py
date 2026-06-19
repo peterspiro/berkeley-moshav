@@ -79,7 +79,6 @@ def find_user_edit_url(page: Page, base_url: str, member: dict) -> str | None:
     Returns the user's edit URL if found, else None.
     """
     full_name = f"{member['first_name']} {member['last_name']}".strip()
-    expected_email = member.get("email", "").strip().lower()
 
     _search(page, base_url, "users", full_name)
 
@@ -93,20 +92,8 @@ def find_user_edit_url(page: Page, base_url: str, member: dict) -> str | None:
 
     for href in candidate_hrefs:
         edit_url = _to_edit_url(base_url, href)
-        if not edit_url:
-            continue
-
-        if expected_email:
-            # Visit the edit form to read the email field directly
-            page.goto(edit_url, wait_until="networkidle")
-            email_input = page.locator('input[name="user[email]"]')
-            if email_input.count() == 0:
-                continue
-            actual_email = email_input.input_value().strip().lower()
-            if actual_email != expected_email:
-                continue
-
-        return edit_url
+        if edit_url:
+            return edit_url
 
     return None
 
