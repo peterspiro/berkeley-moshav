@@ -327,6 +327,8 @@ def update_user(page: Page, edit_url: str, member: dict, dry_run: bool) -> str:
 
         changes = {}
         for field, desired_val in desired.items():
+            if not desired_val:
+                continue  # never erase a field the sheet leaves blank
             current = page.locator(f'input[name="{field}"]').input_value().strip()
             # Phone fields: compare digits only to ignore formatting differences
             if "_phone" in field:
