@@ -395,10 +395,12 @@ def main(sheet_url: str, base_url: str, email: str, password: str,
         prefix_lower = household_prefix.strip().lower()
         households = [h for h in households
                       if h["household_name"].lower().startswith(prefix_lower)]
+        names = [h["household_name"] for h in households]
         if not households:
             sys.exit(f"Error: --household {household_prefix!r} does not match any household name")
-        log("INFO", "filter",
-            f"Filtered to {len(households)} household(s): {[h['household_name'] for h in households]}")
+        if len(households) > 1:
+            sys.exit(f"Error: --household {household_prefix!r} is ambiguous: {names}")
+        log("INFO", "filter", f"Filtered to household: {names[0]!r}")
 
     with sync_playwright() as pw:
         browser = launch_browser(pw)
