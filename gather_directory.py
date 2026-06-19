@@ -380,7 +380,8 @@ def update_user(page: Page, edit_url: str, member: dict, dry_run: bool) -> str:
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
-def main(sheet_url: str, base_url: str, email: str, password: str, dry_run: bool = False):
+def main(sheet_url: str, base_url: str, email: str, password: str,
+         dry_run: bool = False, household_prefix: str | None = None):
     base_url = base_url.rstrip("/")
     init_log()
 
@@ -389,6 +390,15 @@ def main(sheet_url: str, base_url: str, email: str, password: str, dry_run: bool
     tsv_text = fetch_sheet(sheet_url)
     households = preprocess_text(tsv_text)
     log("INFO", "preprocess", f"{len(households)} households parsed")
+
+    if household_prefix is not None:
+        prefix_lower = household_prefix.strip().lower()
+        households = [h for h in households
+                      if h["household_name"].lower().startswith(prefix_lower)]
+        if not households:
+            sys.exit(f"Error: --household {household_prefix!r} does not match any household name")
+        log("INFO", "filter",
+            f"Filtered to {len(households)} household(s): {[h['household_name'] for h in households]}")
 
     with sync_playwright() as pw:
         browser = launch_browser(pw)
@@ -452,9 +462,11 @@ def cli():
                         help="Gather base URL")
     parser.add_argument("-n", "--dry-run", action="store_true",
                         help="Log what would happen without making any changes")
+    parser.add_argument("-H", "--household", default=None, metavar="PREFIX",
+                        help="Process only the household whose name starts with PREFIX")
     args = parser.parse_args()
     email, password = load_credentials()
-    main(args.sheet_url, args.base_url, email, password, args.dry_run)
+    main(args.sheet_url, args.base_url, email, password, args.dry_run, args.household)
 
 
 if __name__ == "__main__":
