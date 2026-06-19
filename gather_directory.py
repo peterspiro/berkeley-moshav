@@ -254,6 +254,7 @@ def create_user(page: Page, base_url: str, member: dict,
 
         if member.get("email"):
             page.fill('input[name="user[email]"]', member["email"])
+            page.fill('input[name="user[google_email]"]', member["email"])
         if member.get("phone"):
             page.fill('input[name="user[mobile_phone]"]', member["phone"])
         if member.get("pronouns"):
@@ -333,6 +334,13 @@ def update_user(page: Page, edit_url: str, member: dict, dry_run: bool) -> str:
                     changes[field] = (current, desired_val)
             elif current != desired_val:
                 changes[field] = (current, desired_val)
+
+        # Set Google ID from email only when the field exists and is blank.
+        email = member.get("email", "").strip()
+        if email:
+            google_field = page.locator('input[name="user[google_email]"]')
+            if google_field.count() > 0 and not google_field.input_value().strip():
+                changes["user[google_email]"] = ("", email)
 
         if not changes:
             log("INFO", "user", f"Up to date, skipping: {full_name}")
