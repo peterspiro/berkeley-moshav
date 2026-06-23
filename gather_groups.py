@@ -1165,6 +1165,7 @@ def process(
     sheet_url: str = DEFAULT_SHEET_URL,
     dry_run: bool = False,
     circle_prefix: Optional[str] = None,
+    create_lists: bool = False,
 ):
     base_url = base_url.rstrip("/")
     init_log()
@@ -1279,7 +1280,8 @@ def process(
 
             # Ensure a Mailman list exists for every confirmed-existing group.
             # Skipped for dry-run placeholders (no real group_id to navigate to).
-            if group_id != "dry-run":
+            # Skipped unless --mailman was passed (create_lists=True).
+            if group_id != "dry-run" and create_lists:
                 list_name = _circle_name_to_list_name(circle.name)
                 ok = _ensure_mailman_list(page, base_url, group_id, list_name, dry_run)
                 stats["list_created" if ok else "list_failed"] += 1
@@ -1754,9 +1756,13 @@ def cli():
         "-c", "--circle", default=None, metavar="PREFIX",
         help="Process only the circle whose name starts with PREFIX (must match exactly one)",
     )
+    parser.add_argument(
+        "-m", "--mailman", action="store_true", default=False,
+        help="Create Mailman email lists for groups (disabled by default)",
+    )
     args = parser.parse_args()
     email, password = load_credentials()
-    process(args.base_url, email, password, args.sheet_url, args.dry_run, args.circle)
+    process(args.base_url, email, password, args.sheet_url, args.dry_run, args.circle, args.mailman)
 
 
 if __name__ == "__main__":
