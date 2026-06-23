@@ -84,7 +84,15 @@ def strip_pronunciation(name: str) -> str:
 
 def derive_household_name(last_names: list[str]) -> str:
     unique = sorted(set(ln.strip() for ln in last_names if ln.strip()))
-    name = "-".join(unique)
+    # If one name's hyphen-parts are a proper subset of another's, drop it.
+    # E.g. "Taller" is dropped when "Saxe-Taller" is present.
+    def _parts(n: str) -> frozenset:
+        return frozenset(p.lower() for p in n.split("-"))
+    filtered = [
+        n for n in unique
+        if not any(_parts(n) < _parts(m) for m in unique if m != n)
+    ]
+    name = "-".join(filtered)
     return name[:32]  # Gather's max household name length
 
 
@@ -249,6 +257,23 @@ def preprocess_text(tsv_text: str) -> list[dict]:
             resolved = resolve_adult_name(other_name, current_last, name_to_row, warnings)
             if resolved:
                 uf.union(name, resolved)
+
+    # Union by hyphenated last name: if one person's last name is a component
+    # of another person's hyphenated last name, place them in the same household.
+    # E.g. "Saxe-Taller" subsumes "Taller", so both go in the Saxe-Taller household.
+    all_names = list(name_to_row.keys())
+    for name_a in all_names:
+        last_a = name_to_row[name_a].get("Last Name", "").strip()
+        if "-" not in last_a:
+            continue
+        parts_a = frozenset(p.lower() for p in last_a.split("-"))
+        for name_b in all_names:
+            if name_a == name_b:
+                continue
+            last_b = name_to_row[name_b].get("Last Name", "").strip()
+            parts_b = frozenset(p.lower() for p in last_b.split("-"))
+            if parts_b < parts_a:  # strict subset: b's parts all appear in a
+                uf.union(name_a, name_b)
 
     # Map union-find root → list of known member names in that group
     groups = uf.groups()

@@ -79,7 +79,6 @@ def find_user_edit_url(page: Page, base_url: str, member: dict) -> str | None:
     Returns the user's edit URL if found, else None.
     """
     full_name = f"{member['first_name']} {member['last_name']}".strip()
-    expected_email = member.get("email", "").strip().lower()
 
     _search(page, base_url, "users", full_name)
 
@@ -93,20 +92,8 @@ def find_user_edit_url(page: Page, base_url: str, member: dict) -> str | None:
 
     for href in candidate_hrefs:
         edit_url = _to_edit_url(base_url, href)
-        if not edit_url:
-            continue
-
-        if expected_email:
-            # Visit the edit form to read the email field directly
-            page.goto(edit_url, wait_until="networkidle")
-            email_input = page.locator('input[name="user[email]"]')
-            if email_input.count() == 0:
-                continue
-            actual_email = email_input.input_value().strip().lower()
-            if actual_email != expected_email:
-                continue
-
-        return edit_url
+        if edit_url:
+            return edit_url
 
     return None
 
@@ -254,6 +241,7 @@ def create_user(page: Page, base_url: str, member: dict,
 
         if member.get("email"):
             page.fill('input[name="user[email]"]', member["email"])
+            page.fill('input[name="user[google_email]"]', member["email"])
         if member.get("phone"):
             page.fill('input[name="user[mobile_phone]"]', member["phone"])
         if member.get("pronouns"):
@@ -326,6 +314,8 @@ def update_user(page: Page, edit_url: str, member: dict, dry_run: bool) -> str:
 
         changes = {}
         for field, desired_val in desired.items():
+            if not desired_val:
+                continue  # never erase a field the sheet leaves blank
             current = page.locator(f'input[name="{field}"]').input_value().strip()
             # Phone fields: compare digits only to ignore formatting differences
             if "_phone" in field:
@@ -333,6 +323,13 @@ def update_user(page: Page, edit_url: str, member: dict, dry_run: bool) -> str:
                     changes[field] = (current, desired_val)
             elif current != desired_val:
                 changes[field] = (current, desired_val)
+
+        # Set Google ID from email only when the field exists and is blank.
+        email = member.get("email", "").strip()
+        if email:
+            google_field = page.locator('input[name="user[google_email]"]')
+            if google_field.count() > 0 and not google_field.input_value().strip():
+                changes["user[google_email]"] = ("", email)
 
         if not changes:
             log("INFO", "user", f"Up to date, skipping: {full_name}")
@@ -370,7 +367,8 @@ def update_user(page: Page, edit_url: str, member: dict, dry_run: bool) -> str:
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
-def main(sheet_url: str, base_url: str, email: str, password: str, dry_run: bool = False):
+def main(sheet_url: str, base_url: str, email: str, password: str,
+         dry_run: bool = False, household_prefix: str | None = None):
     base_url = base_url.rstrip("/")
     init_log()
 
@@ -379,6 +377,17 @@ def main(sheet_url: str, base_url: str, email: str, password: str, dry_run: bool
     tsv_text = fetch_sheet(sheet_url)
     households = preprocess_text(tsv_text)
     log("INFO", "preprocess", f"{len(households)} households parsed")
+
+    if household_prefix is not None:
+        prefix_lower = household_prefix.strip().lower()
+        households = [h for h in households
+                      if h["household_name"].lower().startswith(prefix_lower)]
+        names = [h["household_name"] for h in households]
+        if not households:
+            sys.exit(f"Error: --household {household_prefix!r} does not match any household name")
+        if len(households) > 1:
+            sys.exit(f"Error: --household {household_prefix!r} is ambiguous: {names}")
+        log("INFO", "filter", f"Filtered to household: {names[0]!r}")
 
     with sync_playwright() as pw:
         browser = launch_browser(pw)
@@ -399,7 +408,7 @@ def main(sheet_url: str, base_url: str, email: str, password: str, dry_run: bool
             hh_name = household["household_name"]
 
             # ── Household ──
-            edit_url = find_household_edit_url(page, base_url, hh_name) if not dry_run else None
+            edit_url = find_household_edit_url(page, base_url, hh_name)
             if edit_url:
                 result = update_household(page, edit_url, household, dry_run)
                 stats[f"hh_{result}"] += 1
@@ -419,7 +428,7 @@ def main(sheet_url: str, base_url: str, email: str, password: str, dry_run: bool
             guardian_name = find_guardian_for(household)
 
             for member in adults + children:
-                edit_url = find_user_edit_url(page, base_url, member) if not dry_run else None
+                edit_url = find_user_edit_url(page, base_url, member)
                 if edit_url:
                     result = update_user(page, edit_url, member, dry_run)
                     stats[f"user_{result}"] += 1
@@ -442,9 +451,11 @@ def cli():
                         help="Gather base URL")
     parser.add_argument("-n", "--dry-run", action="store_true",
                         help="Log what would happen without making any changes")
+    parser.add_argument("-H", "--household", default=None, metavar="PREFIX",
+                        help="Process only the household whose name starts with PREFIX")
     args = parser.parse_args()
     email, password = load_credentials()
-    main(args.sheet_url, args.base_url, email, password, args.dry_run)
+    main(args.sheet_url, args.base_url, email, password, args.dry_run, args.household)
 
 
 if __name__ == "__main__":
