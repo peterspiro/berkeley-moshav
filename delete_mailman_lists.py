@@ -50,6 +50,17 @@ def delete_mailman_list(page, base_url: str, group_id: str, group_name: str, dry
             log("INFO", "delete_list", f"{group_name} (id={group_id}): list field empty, skipping")
             return True
 
+        domain_el = page.locator(
+            'select[name*="mailman_list_attributes"][name*="[domain_id]"]'
+        )
+        if domain_el.count() > 0:
+            selected_opt = domain_el.first.locator("option:checked")
+            domain_text = selected_opt.inner_text().strip() if selected_opt.count() > 0 else ""
+            if "gather.coop" not in domain_text.lower():
+                log("INFO", "delete_list",
+                    f"{group_name} (id={group_id}): domain '{domain_text}' is not gather.coop, skipping")
+                return True
+
         if dry_run:
             log("DRY-RUN", "delete_list", f"{group_name} (id={group_id}): would delete list '{list_name}'")
             return True
