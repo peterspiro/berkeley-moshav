@@ -71,14 +71,20 @@ def delete_mailman_list(page, base_url: str, group_id: str, group_name: str, dry
                 'input[type="checkbox"][name*="mailman_list_attributes"][name*="[_destroy]"]',
             )
 
-        page.locator('input[name="commit"]').click()
+        dialog_accepted = []
 
-        page.wait_for_selector(
-            'text="Are you sure you want to delete the email list?"',
-            timeout=10_000,
-        )
-        page.locator('button:has-text("OK"), input[value="OK"]').first.click()
+        def _accept_dialog(dialog):
+            dialog_accepted.append(dialog.message)
+            dialog.accept()
+
+        page.on("dialog", _accept_dialog)
+        page.locator('input[name="commit"]').click()
         page.wait_for_load_state("networkidle")
+        page.remove_listener("dialog", _accept_dialog)
+
+        if not dialog_accepted:
+            screenshot(page, f"delete_list_nodialog_{group_id}")
+            log("WARN", "delete_list", f"{group_name} (id={group_id}): no confirmation dialog appeared")
 
         if "groups" not in page.url or "edit" in page.url:
             screenshot(page, f"delete_list_err_{group_id}")
