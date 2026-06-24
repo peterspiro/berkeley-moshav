@@ -102,6 +102,8 @@ def main():
     parser.add_argument("-u", "--base-url", default=DEFAULT_BASE_URL, help="Gather base URL")
     parser.add_argument("-n", "--dry-run", action="store_true",
                         help="Log what would be deleted without making changes")
+    parser.add_argument("-g", "--group", default=None, metavar="PREFIX",
+                        help="Delete only the group whose name starts with PREFIX (must match exactly one)")
     args = parser.parse_args()
 
     base_url = args.base_url.rstrip("/")
@@ -120,6 +122,21 @@ def main():
 
         groups = fetch_all_gather_groups(page, base_url)
         log("INFO", "start", f"{len(groups)} groups found")
+
+        if args.group is not None:
+            prefix = args.group.strip().lower()
+            matches = [g for g in groups if g.name.lower().startswith(prefix)]
+            if not matches:
+                names = ", ".join(repr(g.name) for g in groups)
+                print(f"Error: --group {args.group!r} does not match any group.\nAvailable: {names}", file=sys.stderr)
+                browser.close()
+                sys.exit(1)
+            if len(matches) > 1:
+                names = ", ".join(repr(g.name) for g in matches)
+                print(f"Error: --group {args.group!r} is ambiguous; matches: {names}", file=sys.stderr)
+                browser.close()
+                sys.exit(1)
+            groups = matches
 
         deleted = skipped = failed = 0
         for group in groups:
