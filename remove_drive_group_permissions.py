@@ -1,5 +1,5 @@
 """
-Remove @berkeleymoshav.org permissions from all folders in a Google Shared Drive.
+Remove @berkeleymoshav.org group permissions from all folders in a Google Shared Drive.
 
 Setup:
   1. In Google Cloud Console, create a Desktop OAuth 2.0 client and download
@@ -81,7 +81,7 @@ def list_permissions(service, file_id: str) -> list[dict]:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Revoke @berkeleymoshav.org permissions from Shared Drive folders.",
+        description="Revoke @berkeleymoshav.org group permissions from Shared Drive folders.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
@@ -133,7 +133,7 @@ def main():
 
         targets = [
             p for p in perms
-            if p.get("type") in ("user", "group")
+            if p.get("type") == "group"
             and p.get("emailAddress", "").lower().endswith(f"@{TARGET_DOMAIN}")
             and p.get("emailAddress", "").lower() not in exclude
         ]
