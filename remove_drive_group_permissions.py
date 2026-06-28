@@ -6,7 +6,7 @@ Setup:
      the JSON as client_secret.json (or pass a different path via -c).
   2. Enable the Google Drive API for the project.
   3. On first run the script opens a browser for OAuth consent and caches the
-     token at ~/.gather_drive_token.json for subsequent runs.
+     token at ~/.google_drive_token.json for subsequent runs.
 """
 
 import argparse
@@ -20,7 +20,7 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 
 SCOPES = ["https://www.googleapis.com/auth/drive"]
-TOKEN_PATH = Path.home() / ".gather_drive_token.json"
+TOKEN_PATH = Path.home() / ".google_drive_token.json"
 DEFAULT_DRIVE_ID = "0AFqC2xo9aTgPUk9PVA"
 TARGET_DOMAIN = "berkeleymoshav.org"
 
