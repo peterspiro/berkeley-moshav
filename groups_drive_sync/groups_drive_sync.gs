@@ -53,7 +53,7 @@ function syncFolder(folderId, runnerEmail) {
   try {
     AdminDirectory.Groups.get(groupEmail);
   } catch (err) {
-    if (err.message && err.message.includes('404')) {
+    if (err.message && (err.message.includes('404') || err.message.includes('Resource Not Found'))) {
       console.warn(`  No matching group found — skipping`);
       return true;
     }
