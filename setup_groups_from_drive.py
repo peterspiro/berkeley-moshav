@@ -119,23 +119,23 @@ def list_top_level_folders(drive_service, drive_id: str) -> list[dict]:
 
 # ── Matching ──────────────────────────────────────────────────────────────────
 
-def best_folder_match(group_name: str, folders: list[dict]) -> tuple[dict | None, float, list[dict]]:
-    """Return (best_folder, ratio, all_folders_at_that_ratio).
+def best_folder_match(group_name: str, folders: list[dict], min_ratio: float) -> tuple[dict | None, float, list[dict]]:
+    """Return (best_folder, best_ratio, all_folders_above_min_ratio).
 
-    If more than one folder ties for the best ratio, all tied folders are
-    returned in the third element so the caller can treat it as an error.
+    If more than one folder scores above min_ratio the caller should treat it
+    as an ambiguous error — the third element contains all such folders.
     """
     group_slug = to_slug(group_name)
-    best_ratio = 0.0
-    for folder in folders:
-        ratio = difflib.SequenceMatcher(None, group_slug, to_slug(folder["name"])).ratio()
-        if ratio > best_ratio:
-            best_ratio = ratio
-    best_folders = [
-        f for f in folders
-        if difflib.SequenceMatcher(None, group_slug, to_slug(f["name"])).ratio() == best_ratio
+    scored = [
+        (difflib.SequenceMatcher(None, group_slug, to_slug(f["name"])).ratio(), f)
+        for f in folders
     ]
-    return (best_folders[0] if len(best_folders) == 1 else None), best_ratio, best_folders
+    above = [(r, f) for r, f in scored if r >= min_ratio]
+    above.sort(key=lambda x: x[0], reverse=True)
+    best_ratio = above[0][0] if above else max((r for r, _ in scored), default=0.0)
+    if len(above) == 1:
+        return above[0][1], above[0][0], above
+    return None, best_ratio, [f for _, f in above]
 
 
 # ── folder_ids.gs writer ──────────────────────────────────────────────────────
@@ -217,16 +217,16 @@ def main():
     errors: list[str] = []
 
     for group in groups:
-        folder, ratio, tied = best_folder_match(group["name"], folders)
-        if ratio < args.min_match:
+        folder, ratio, above = best_folder_match(group["name"], folders, args.min_match)
+        if not above:
             unmatched_groups.append(group)
             print(f"[NO MATCH]  group '{group['name']}' ({group['email']})  best ratio={ratio:.2f}")
             continue
         if folder is None:
-            names = ", ".join(f"'{f['name']}'" for f in tied)
+            names = ", ".join(f"'{f['name']}'" for f in above)
             msg = (
-                f"group '{group['name']}' ({group['email']}) ties {len(tied)} folders "
-                f"at ratio={ratio:.2f}: {names}"
+                f"group '{group['name']}' ({group['email']}) matches {len(above)} folders "
+                f"above threshold: {names}"
             )
             errors.append(msg)
             print(f"[AMBIGUOUS] {msg}")
