@@ -23,7 +23,6 @@ Setup:
 
 import argparse
 import contextlib
-import io
 import os
 import pickle
 import re
@@ -50,6 +49,22 @@ DOMAIN = "berkeleymoshav.org"  # edit to match your Workspace domain
 
 # ── Auth ─────────────────────────────────────────────────────────────────────
 
+class _AuthUrlFormatter:
+    """Pass-through stdout wrapper that splits the OAuth URL onto its own line."""
+    def __init__(self, stream):
+        self._stream = stream
+
+    def write(self, text):
+        self._stream.write(re.sub(
+            r"(Please visit this URL to authorize this application:) (https?://\S+)",
+            r"\1\n\2",
+            text,
+        ))
+
+    def flush(self):
+        self._stream.flush()
+
+
 def get_credentials(client_secrets_file: str):
     creds = None
     if TOKEN_PATH.exists():
@@ -60,14 +75,8 @@ def get_credentials(client_secrets_file: str):
             creds.refresh(Request())
         else:
             flow = InstalledAppFlow.from_client_secrets_file(client_secrets_file, SCOPES)
-            buf = io.StringIO()
-            with contextlib.redirect_stdout(buf):
+            with contextlib.redirect_stdout(_AuthUrlFormatter(sys.stdout)):
                 creds = flow.run_local_server(port=0, open_browser=False)
-            print(re.sub(
-                r"(Please visit this URL to authorize this application:) (https?://\S+)",
-                r"\1\n\2",
-                buf.getvalue(),
-            ), end="")
         with open(TOKEN_PATH, "wb") as f:
             pickle.dump(creds, f)
     return creds
