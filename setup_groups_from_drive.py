@@ -69,8 +69,14 @@ ABBREV_STOP_WORDS = {"a", "an", "and", "at", "by", "for", "in", "of", "on", "or"
 def strip_parens(name: str) -> str:
     return re.sub(r" *\([^)]*\)", "", name).strip()
 
+def normalize_ampersand(name: str) -> str:
+    return re.sub(r"\s*&\s*", " and ", name)
+
 def to_slug(name: str) -> str:
-    return re.sub(r"^-+|-+$", "", re.sub(r"[^a-z0-9]+", "-", strip_parens(name).lower()))
+    return re.sub(r"^-+|-+$", "", re.sub(r"[^a-z0-9]+", "-", normalize_ampersand(strip_parens(name)).lower()))
+
+def group_display_name(folder_name: str) -> str:
+    return normalize_ampersand(strip_parens(folder_name))
 
 def to_match_base(name: str) -> str:
     """Lowercase name with parens and trailing organisational terms removed, used for matching."""
@@ -88,9 +94,6 @@ def folder_abbreviation(folder_name: str) -> str:
 
 def group_email(folder_name: str) -> str:
     return f"{to_slug(folder_name)}@{DOMAIN}"
-
-def group_display_name(folder_name: str) -> str:
-    return strip_parens(folder_name)
 
 
 # ── Google API helpers ────────────────────────────────────────────────────────
