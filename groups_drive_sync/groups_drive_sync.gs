@@ -156,7 +156,7 @@ function installTrigger() {
 
   ScriptApp.newTrigger('syncAll')
     .timeBased()
-    .everyHours(24)
+    .everyHours(1)
     .create();
 
   console.log('Daily trigger installed.');
