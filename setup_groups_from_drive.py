@@ -211,6 +211,11 @@ def main():
         help="Path to OAuth client secrets JSON (default: client_secret.json)",
     )
     parser.add_argument(
+        "-g", "--group",
+        metavar="NAME_OR_EMAIL",
+        help="Process only the group whose name or email matches this value (case-insensitive); skips writing folder_ids.gs",
+    )
+    parser.add_argument(
         "-n", "--dry-run",
         action="store_true",
         help="Print planned changes without renaming groups or writing folder_ids.gs",
@@ -234,6 +239,13 @@ def main():
     print(f"\nListing Google Groups for {DOMAIN}…")
     groups = list_all_groups(dir_service)
     print(f"  {len(groups)} group(s) found.")
+
+    if args.group:
+        needle = args.group.lower()
+        groups = [g for g in groups if g["name"].lower() == needle or g["email"].lower() == needle or g["email"].lower().split("@")[0] == needle]
+        if not groups:
+            sys.exit(f"Error: no group found matching {args.group!r}")
+        print(f"  Filtering to group: '{groups[0]['name']}' ({groups[0]['email']})")
 
     print()
 
@@ -292,7 +304,7 @@ def main():
         for g in unmatched_groups:
             print(f"  {g['name']} ({g['email']})")
 
-    if matched:
+    if matched and not args.group:
         if args.dry_run:
             print("\n[dry-run] Would write folder_ids.gs with:")
             for _g, f in matched:
