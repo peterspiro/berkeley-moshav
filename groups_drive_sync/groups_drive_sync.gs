@@ -25,12 +25,19 @@ function syncAll() {
   const runner = Session.getActiveUser().getEmail();
   console.log(`syncAll started — runner: ${runner}`);
 
+  const missing = [];
+
   for (const folderId of FOLDER_IDS) {
     try {
-      syncFolder(folderId, runner);
+      const skipped = syncFolder(folderId, runner);
+      if (skipped) missing.push(folderId);
     } catch (err) {
       console.error(`Error processing folder ${folderId}: ${err}`);
     }
+  }
+
+  if (missing.length > 0) {
+    throw new Error(`No matching group found for folder ID(s): ${missing.join(', ')}`);
   }
 
   console.log('syncAll complete.');
@@ -48,7 +55,7 @@ function syncFolder(folderId, runnerEmail) {
   } catch (err) {
     if (err.message && err.message.includes('404')) {
       console.warn(`  No matching group found — skipping`);
-      return;
+      return true;
     }
     throw err;
   }
