@@ -13,7 +13,7 @@
 
 // ── Configuration ────────────────────────────────────────────────────────────
 
-const DOMAIN = 'myorg.org'; // replace with your Google Workspace domain
+const DOMAIN = 'berkeleymoshav.org';
 
 const SYNC_ROLE = 'fileOrganizer'; // Drive role for "Content manager"
 
