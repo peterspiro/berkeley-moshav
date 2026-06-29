@@ -135,6 +135,7 @@ function folderNameToGroupEmail(folderName) {
 function folderNameToSlug(folderName) {
   return folderName
     .replace(/ *\([^)]*\)/g, '') // remove parenthesized expressions
+    .replace(/\s*&\s*/g, ' and ') // & → and
     .toLowerCase()
     .trim()
     .replace(/[^a-z0-9]+/g, '-') // non-alphanumeric runs → hyphen
