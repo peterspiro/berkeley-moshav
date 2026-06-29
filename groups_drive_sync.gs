@@ -40,11 +40,18 @@ function syncFolder(folderId, runnerEmail) {
   const folder = DriveApp.getFolderById(folderId);
   const folderName = folder.getName();
   const groupEmail = folderNameToGroupEmail(folderName);
-  const displayName = folderNameToDisplayName(folderName);
 
   console.log(`Folder: "${folderName}" → group: ${groupEmail}`);
 
-  ensureGroupExists(groupEmail, displayName);
+  try {
+    AdminDirectory.Groups.get(groupEmail);
+  } catch (err) {
+    if (err.message && err.message.includes('404')) {
+      console.warn(`  No matching group found — skipping`);
+      return;
+    }
+    throw err;
+  }
 
   const targetEmails = getContentManagerEmails(folder);
   const { added, removed } = syncGroupMembership(groupEmail, targetEmails, runnerEmail);
@@ -66,21 +73,6 @@ function getContentManagerEmails(folder) {
 }
 
 // ── Group helpers ─────────────────────────────────────────────────────────────
-
-function ensureGroupExists(groupEmail, displayName) {
-  try {
-    AdminDirectory.Groups.get(groupEmail);
-    console.log(`  Group exists: ${groupEmail}`);
-  } catch (err) {
-    // 404 means the group doesn't exist yet
-    if (err.message && err.message.includes('404')) {
-      AdminDirectory.Groups.insert({ email: groupEmail, name: displayName });
-      console.log(`  Created group: ${groupEmail}`);
-    } else {
-      throw err;
-    }
-  }
-}
 
 function syncGroupMembership(groupEmail, targetEmails, runnerEmail) {
   const currentMembers = listAllMembers(groupEmail);
@@ -130,11 +122,6 @@ function listAllMembers(groupEmail) {
 
 function folderNameToGroupEmail(folderName) {
   return `${folderNameToSlug(folderName)}@${DOMAIN}`;
-}
-
-function folderNameToDisplayName(folderName) {
-  // Strip parenthesized expressions for the display name too
-  return folderName.replace(/ *\([^)]*\)/g, '').trim();
 }
 
 function folderNameToSlug(folderName) {
