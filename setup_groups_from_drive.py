@@ -213,7 +213,7 @@ def main():
     parser.add_argument(
         "-g", "--group",
         metavar="NAME_OR_EMAIL",
-        help="Process only the group whose name or email matches this value (case-insensitive); skips writing folder_ids.gs",
+        help="Process only the group whose name starts with this prefix (case-insensitive, must be unique); skips writing folder_ids.gs",
     )
     parser.add_argument(
         "-n", "--dry-run",
@@ -241,10 +241,13 @@ def main():
     print(f"  {len(groups)} group(s) found.")
 
     if args.group:
-        needle = args.group.lower()
-        groups = [g for g in groups if g["name"].lower() == needle or g["email"].lower() == needle or g["email"].lower().split("@")[0] == needle]
+        prefix = args.group.lower()
+        groups = [g for g in groups if g["name"].lower().startswith(prefix)]
         if not groups:
-            sys.exit(f"Error: no group found matching {args.group!r}")
+            sys.exit(f"Error: no group name starts with {args.group!r}")
+        if len(groups) > 1:
+            names = ", ".join(f"'{g['name']}'" for g in groups)
+            sys.exit(f"Error: {args.group!r} is ambiguous — matches {names}")
         print(f"  Filtering to group: '{groups[0]['name']}' ({groups[0]['email']})")
 
     print()
