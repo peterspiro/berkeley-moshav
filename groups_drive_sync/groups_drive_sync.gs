@@ -6,7 +6,7 @@
  *
  * Setup:
  *   1. Edit DOMAIN and FOLDER_IDS below.
- *   2. In the GAS editor: Extensions > Advanced Services > enable "Admin SDK Directory API".
+ *   2. In the GAS editor: Extensions > Advanced Services > enable "Admin SDK Directory API" and "Drive API".
  *   3. Run syncAll() once manually to authorize and test.
  *   4. Run installTrigger() once to schedule daily execution.
  */
@@ -53,7 +53,7 @@ function syncFolder(folderId, runnerEmail) {
     throw err;
   }
 
-  const targetEmails = getContentManagerEmails(folder);
+  const targetEmails = getContentManagerEmails(folderId);
   const { added, removed } = syncGroupMembership(groupEmail, targetEmails, runnerEmail);
 
   console.log(`  Done — added: ${added}, removed: ${removed}`);
@@ -61,14 +61,22 @@ function syncFolder(folderId, runnerEmail) {
 
 // ── Drive helpers ─────────────────────────────────────────────────────────────
 
-function getContentManagerEmails(folder) {
+function getContentManagerEmails(folderId) {
   const emails = new Set();
-  const permissions = folder.getPermissions();
-  for (const p of permissions) {
-    if (p.getRole() === SYNC_ROLE && p.getType() === 'user') {
-      emails.add(p.getEmail().toLowerCase());
+  let pageToken;
+  do {
+    const response = Drive.Permissions.list(folderId, {
+      supportsAllDrives: true,
+      fields: 'nextPageToken,permissions(emailAddress,role,type)',
+      pageToken,
+    });
+    for (const p of (response.permissions || [])) {
+      if (p.role === SYNC_ROLE && p.type === 'user') {
+        emails.add(p.emailAddress.toLowerCase());
+      }
     }
-  }
+    pageToken = response.nextPageToken;
+  } while (pageToken);
   return emails;
 }
 
