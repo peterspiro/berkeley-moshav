@@ -143,6 +143,12 @@ def main():
         help="Path to OAuth client secrets JSON (default: client_secret.json)",
     )
     parser.add_argument(
+        "-f", "--folder",
+        metavar="PREFIX",
+        default=None,
+        help="Restrict to a single folder whose name starts with PREFIX (case-insensitive)",
+    )
+    parser.add_argument(
         "-n", "--dry-run",
         action="store_true",
         help="Print what would be removed without making changes",
@@ -173,6 +179,17 @@ def main():
 
     # Check all folders within the drive
     folders = list_all_folders(service, args.drive_id)
+
+    if args.folder is not None:
+        prefix = args.folder.lower()
+        matches = [f for f in folders if f["name"].lower().startswith(prefix)]
+        if not matches:
+            sys.exit(f"Error: no folder found with name starting with {args.folder!r}")
+        if len(matches) > 1:
+            names = ", ".join(f["name"] for f in matches)
+            sys.exit(f"Error: prefix {args.folder!r} matches multiple folders: {names}")
+        folders = matches
+
     print(f"Found {len(folders)} folder(s)\n")
     for folder in folders:
         f, r = process_item(service, folder["id"], f"Folder: {folder['name']} ({folder['id']})", exclude, args.dry_run)
