@@ -171,11 +171,12 @@ def main():
     total_found = 0
     total_removed = 0
 
-    # Check the shared drive root itself
-    drive_name = service.drives().get(driveId=args.drive_id, fields="name").execute().get("name", args.drive_id)
-    f, r = process_item(service, args.drive_id, f"Shared Drive root: {drive_name} ({args.drive_id})", exclude, args.dry_run)
-    total_found += f
-    total_removed += r
+    # Check the shared drive root itself (skipped when restricting to a single folder)
+    if args.folder is None:
+        drive_name = service.drives().get(driveId=args.drive_id, fields="name").execute().get("name", args.drive_id)
+        f, r = process_item(service, args.drive_id, f"Shared Drive root: {drive_name} ({args.drive_id})", exclude, args.dry_run)
+        total_found += f
+        total_removed += r
 
     # Check all folders within the drive
     folders = list_all_folders(service, args.drive_id)
