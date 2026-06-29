@@ -64,11 +64,25 @@ def get_credentials(client_secrets_file: str):
 
 # ── Naming helpers (mirror groups_drive_sync.gs) ─────────────────────────────
 
+# Trailing terms stripped before matching (case-insensitive, order matters —
+# longer phrases before shorter ones that share a prefix).
+MATCH_SUFFIXES = ["working group", "circle"]
+
 def strip_parens(name: str) -> str:
     return re.sub(r" *\([^)]*\)", "", name).strip()
 
 def to_slug(name: str) -> str:
     return re.sub(r"^-+|-+$", "", re.sub(r"[^a-z0-9]+", "-", strip_parens(name).lower()))
+
+def to_match_slug(name: str) -> str:
+    """Slug used only for matching: also strips trailing organisational terms."""
+    slug = to_slug(name)
+    for suffix in MATCH_SUFFIXES:
+        suffix_slug = re.sub(r"[^a-z0-9]+", "-", suffix)
+        if slug.endswith("-" + suffix_slug):
+            slug = slug[: -(len(suffix_slug) + 1)]
+            break
+    return slug
 
 def group_email(folder_name: str) -> str:
     return f"{to_slug(folder_name)}@{DOMAIN}"
@@ -125,9 +139,9 @@ def best_folder_match(group_name: str, folders: list[dict], min_ratio: float) ->
     If more than one folder scores above min_ratio the caller should treat it
     as an ambiguous error — the third element contains all such folders.
     """
-    group_slug = to_slug(group_name)
+    group_slug = to_match_slug(group_name)
     scored = [
-        (difflib.SequenceMatcher(None, group_slug, to_slug(f["name"])).ratio(), f)
+        (difflib.SequenceMatcher(None, group_slug, to_match_slug(f["name"])).ratio(), f)
         for f in folders
     ]
     above = [(r, f) for r, f in scored if r >= min_ratio]
