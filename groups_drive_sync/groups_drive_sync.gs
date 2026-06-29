@@ -159,5 +159,5 @@ function installTrigger() {
     .everyHours(1)
     .create();
 
-  console.log('Daily trigger installed.');
+  console.log('Hourly trigger installed.');
 }
