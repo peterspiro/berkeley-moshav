@@ -5,8 +5,9 @@ Setup:
   1. In Google Cloud Console, create a Desktop OAuth 2.0 client and download
      the JSON as client_secret.json (or pass a different path via -c).
   2. Enable the Google Drive API for the project.
-  3. On first run the script opens a browser for OAuth consent and caches the
-     token at ~/.google_drive_token.json for subsequent runs.
+  3. On first run the script prints an auth URL — paste it into a browser signed
+     in as a Workspace user. The token is cached at ~/.google_drive_token.json
+     for subsequent runs.
 """
 
 import argparse
@@ -68,7 +69,7 @@ def list_permissions(service, file_id: str) -> list[dict]:
         resp = service.permissions().list(
             fileId=file_id,
             supportsAllDrives=True,
-            fields="nextPageToken,permissions(id,emailAddress,role,type)",
+            fields="nextPageToken,permissions(id,emailAddress,role,type,permissionDetails)",
             pageToken=page_token,
         ).execute()
         perms.extend(resp.get("permissions", []))
@@ -78,9 +79,49 @@ def list_permissions(service, file_id: str) -> list[dict]:
     return perms
 
 
+def is_explicit(perm: dict) -> bool:
+    """Return True if the permission is explicitly set on this item (not merely inherited)."""
+    details = perm.get("permissionDetails", [])
+    if not details:
+        return True
+    return any(not d.get("inherited", False) for d in details)
+
+
+def process_item(service, item_id: str, item_label: str, exclude: set, dry_run: bool) -> tuple[int, int]:
+    perms = list_permissions(service, item_id)
+    targets = [
+        p for p in perms
+        if p.get("type") == "group"
+        and p.get("emailAddress", "").lower().endswith(f"@{TARGET_DOMAIN}")
+        and p.get("emailAddress", "").lower() not in exclude
+        and is_explicit(p)
+    ]
+    if not targets:
+        return 0, 0
+
+    found = len(targets)
+    removed = 0
+    print(item_label)
+    for p in targets:
+        email = p["emailAddress"]
+        role = p["role"]
+        if dry_run:
+            print(f"  [dry-run] would remove: {email} ({role})")
+        else:
+            service.permissions().delete(
+                fileId=item_id,
+                permissionId=p["id"],
+                supportsAllDrives=True,
+            ).execute()
+            print(f"  Removed: {email} ({role})")
+            removed += 1
+    print()
+    return found, removed
+
+
 def main():
     parser = argparse.ArgumentParser(
-        description="Revoke @berkeleymoshav.org group permissions from Shared Drive folders.",
+        description="Revoke @berkeleymoshav.org group permissions from a Shared Drive and its folders.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
@@ -119,43 +160,24 @@ def main():
     creds = get_credentials(args.credentials)
     service = build("drive", "v3", credentials=creds)
 
-    print(f"Scanning Shared Drive: {args.drive_id}")
-    folders = list_all_folders(service, args.drive_id)
-    print(f"Found {len(folders)} folder(s)\n")
+    print(f"Scanning Shared Drive: {args.drive_id}\n")
 
     total_found = 0
     total_removed = 0
 
+    # Check the shared drive root itself
+    drive_name = service.drives().get(driveId=args.drive_id, fields="name").execute().get("name", args.drive_id)
+    f, r = process_item(service, args.drive_id, f"Shared Drive root: {drive_name} ({args.drive_id})", exclude, args.dry_run)
+    total_found += f
+    total_removed += r
+
+    # Check all folders within the drive
+    folders = list_all_folders(service, args.drive_id)
+    print(f"Found {len(folders)} folder(s)\n")
     for folder in folders:
-        fid, fname = folder["id"], folder["name"]
-        perms = list_permissions(service, fid)
-
-        targets = [
-            p for p in perms
-            if p.get("type") == "group"
-            and p.get("emailAddress", "").lower().endswith(f"@{TARGET_DOMAIN}")
-            and p.get("emailAddress", "").lower() not in exclude
-        ]
-
-        if not targets:
-            continue
-
-        print(f"Folder: {fname} ({fid})")
-        for p in targets:
-            total_found += 1
-            email = p["emailAddress"]
-            role = p["role"]
-            if args.dry_run:
-                print(f"  [dry-run] would remove: {email} ({role})")
-            else:
-                service.permissions().delete(
-                    fileId=fid,
-                    permissionId=p["id"],
-                    supportsAllDrives=True,
-                ).execute()
-                print(f"  Removed: {email} ({role})")
-                total_removed += 1
-        print()
+        f, r = process_item(service, folder["id"], f"Folder: {folder['name']} ({folder['id']})", exclude, args.dry_run)
+        total_found += f
+        total_removed += r
 
     if args.dry_run:
         print(f"Dry run complete. {len(folders)} folders scanned, {total_found} permission(s) would be removed.")
