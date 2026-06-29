@@ -22,6 +22,8 @@ Setup:
 """
 
 import argparse
+import contextlib
+import io
 import os
 import pickle
 import re
@@ -58,7 +60,14 @@ def get_credentials(client_secrets_file: str):
             creds.refresh(Request())
         else:
             flow = InstalledAppFlow.from_client_secrets_file(client_secrets_file, SCOPES)
-            creds = flow.run_local_server(port=0, open_browser=False)
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                creds = flow.run_local_server(port=0, open_browser=False)
+            print(re.sub(
+                r"(Please visit this URL to authorize this application:) (https?://\S+)",
+                r"\1\n\2",
+                buf.getvalue(),
+            ), end="")
         with open(TOKEN_PATH, "wb") as f:
             pickle.dump(creds, f)
     return creds
