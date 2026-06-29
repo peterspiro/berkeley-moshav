@@ -135,6 +135,10 @@ def list_top_level_folders(drive_service, drive_id: str) -> list[dict]:
 
 # ── Matching ──────────────────────────────────────────────────────────────────
 
+def singularize(base: str) -> str:
+    """Strip trailing 's' from each word token for plural-insensitive comparison."""
+    return re.sub(r"[a-z0-9]+", lambda m: m.group()[:-1] if m.group().endswith("s") and len(m.group()) > 2 else m.group(), base)
+
 def concat(base: str) -> str:
     """Remove all non-alphanumeric characters, collapsing word boundaries."""
     return re.sub(r"[^a-z0-9]", "", base)
@@ -142,15 +146,15 @@ def concat(base: str) -> str:
 def folder_matches_group(group_name: str, folder_name: str) -> bool:
     """True if group_name matches folder_name by prefix or abbreviation.
 
-    Both names are normalised (parens and trailing Circle/Working Group stripped)
-    before comparison.  A match occurs when:
+    Both names are normalised (parens and trailing Circle/Working Group stripped,
+    words singularized) before comparison.  A match occurs when:
       - the group's match base is a prefix of the folder's match base
         (with or without word separators, so 'jewishlife' matches 'jewish life'), or
       - the group's match base equals the folder's abbreviation (initials of
         non-stop words), e.g. 'dfl' matches 'Development, Finance, and Legal'.
     """
-    group_base = to_match_base(group_name)
-    folder_base = to_match_base(folder_name)
+    group_base = singularize(to_match_base(group_name))
+    folder_base = singularize(to_match_base(folder_name))
     if folder_base.startswith(group_base) or concat(folder_base).startswith(concat(group_base)):
         return True
     if group_base == folder_abbreviation(folder_name):
