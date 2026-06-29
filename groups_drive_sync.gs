@@ -17,11 +17,7 @@ const DOMAIN = 'myorg.org'; // replace with your Google Workspace domain
 
 const SYNC_ROLE = 'fileOrganizer'; // Drive role for "Content manager"
 
-// Add the Google Drive folder IDs to sync. The group email is derived from the
-// folder name automatically (see folderNameToGroupEmail).
-const FOLDER_IDS = [
-  // '1AbCdEfGhIjKlMnOpQrStUvWxYz', // example — replace with real folder IDs
-];
+// FOLDER_IDS is defined in folder_ids.gs (shared with other scripts)
 
 // ── Main entry point ─────────────────────────────────────────────────────────
 
