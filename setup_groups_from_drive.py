@@ -19,7 +19,6 @@ Setup:
 """
 
 import argparse
-import difflib
 import os
 import pickle
 import re
@@ -39,9 +38,6 @@ FOLDER_IDS_PATH = Path(__file__).parent / "folder_ids.gs"
 
 DEFAULT_DRIVE_ID = "0AFqC2xo9aTgPUk9PVA"
 DOMAIN = "berkeleymoshav.org"  # edit to match your Workspace domain
-
-# Minimum similarity ratio (0–1) to accept a folder match
-MIN_MATCH_RATIO = 0.5
 
 
 # ── Auth ─────────────────────────────────────────────────────────────────────
@@ -64,9 +60,11 @@ def get_credentials(client_secrets_file: str):
 
 # ── Naming helpers (mirror groups_drive_sync.gs) ─────────────────────────────
 
-# Trailing terms stripped before matching (case-insensitive, order matters —
-# longer phrases before shorter ones that share a prefix).
+# Trailing terms stripped before matching (longer phrases before shorter).
 MATCH_SUFFIXES = ["working group", "circle"]
+
+# Small words skipped when building an abbreviation from a folder name.
+ABBREV_STOP_WORDS = {"a", "an", "and", "at", "by", "for", "in", "of", "on", "or", "the", "to"}
 
 def strip_parens(name: str) -> str:
     return re.sub(r" *\([^)]*\)", "", name).strip()
@@ -74,15 +72,19 @@ def strip_parens(name: str) -> str:
 def to_slug(name: str) -> str:
     return re.sub(r"^-+|-+$", "", re.sub(r"[^a-z0-9]+", "-", strip_parens(name).lower()))
 
-def to_match_slug(name: str) -> str:
-    """Slug used only for matching: also strips trailing organisational terms."""
-    slug = to_slug(name)
+def to_match_base(name: str) -> str:
+    """Lowercase name with parens and trailing organisational terms removed, used for matching."""
+    base = strip_parens(name).lower().strip()
     for suffix in MATCH_SUFFIXES:
-        suffix_slug = re.sub(r"[^a-z0-9]+", "-", suffix)
-        if slug.endswith("-" + suffix_slug):
-            slug = slug[: -(len(suffix_slug) + 1)]
+        if re.search(r"\b" + re.escape(suffix) + r"\s*$", base):
+            base = re.sub(r"\b" + re.escape(suffix) + r"\s*$", "", base).strip()
             break
-    return slug
+    return base
+
+def folder_abbreviation(folder_name: str) -> str:
+    """Initial letter of each non-stop word in the match base, e.g. 'dfl' for 'Development, Finance, and Legal'."""
+    words = re.findall(r"[a-z0-9]+", to_match_base(folder_name))
+    return "".join(w[0] for w in words if w not in ABBREV_STOP_WORDS)
 
 def group_email(folder_name: str) -> str:
     return f"{to_slug(folder_name)}@{DOMAIN}"
@@ -133,23 +135,27 @@ def list_top_level_folders(drive_service, drive_id: str) -> list[dict]:
 
 # ── Matching ──────────────────────────────────────────────────────────────────
 
-def best_folder_match(group_name: str, folders: list[dict], min_ratio: float) -> tuple[dict | None, float, list[dict]]:
-    """Return (best_folder, best_ratio, all_folders_above_min_ratio).
+def folder_matches_group(group_name: str, folder_name: str) -> bool:
+    """True if group_name matches folder_name by prefix or abbreviation.
 
-    If more than one folder scores above min_ratio the caller should treat it
-    as an ambiguous error — the third element contains all such folders.
+    Both names are normalised (parens and trailing Circle/Working Group stripped)
+    before comparison.  A match occurs when:
+      - the group's match base is a prefix of the folder's match base, or
+      - the group's match base equals the folder's abbreviation (initials of
+        non-stop words), e.g. 'dfl' matches 'Development, Finance, and Legal'.
     """
-    group_slug = to_match_slug(group_name)
-    scored = [
-        (difflib.SequenceMatcher(None, group_slug, to_match_slug(f["name"])).ratio(), f)
-        for f in folders
-    ]
-    above = [(r, f) for r, f in scored if r >= min_ratio]
-    above.sort(key=lambda x: x[0], reverse=True)
-    best_ratio = above[0][0] if above else max((r for r, _ in scored), default=0.0)
-    if len(above) == 1:
-        return above[0][1], above[0][0], above
-    return None, best_ratio, [f for _, f in above]
+    group_base = to_match_base(group_name)
+    folder_base = to_match_base(folder_name)
+    if folder_base.startswith(group_base):
+        return True
+    if group_base == folder_abbreviation(folder_name):
+        return True
+    return False
+
+
+def find_matching_folders(group_name: str, folders: list[dict]) -> list[dict]:
+    """Return all folders that match group_name."""
+    return [f for f in folders if folder_matches_group(group_name, f["name"])]
 
 
 # ── folder_ids.gs writer ──────────────────────────────────────────────────────
@@ -193,13 +199,6 @@ def main():
         help="Path to OAuth client secrets JSON (default: client_secret.json)",
     )
     parser.add_argument(
-        "-m", "--min-match",
-        type=float,
-        default=MIN_MATCH_RATIO,
-        metavar="RATIO",
-        help=f"Minimum similarity ratio 0–1 to accept a match (default: {MIN_MATCH_RATIO})",
-    )
-    parser.add_argument(
         "-n", "--dry-run",
         action="store_true",
         help="Print planned changes without renaming groups or writing folder_ids.gs",
@@ -231,21 +230,21 @@ def main():
     errors: list[str] = []
 
     for group in groups:
-        folder, ratio, above = best_folder_match(group["name"], folders, args.min_match)
-        if not above:
+        matching = find_matching_folders(group["name"], folders)
+        if not matching:
             unmatched_groups.append(group)
-            print(f"[NO MATCH]  group '{group['name']}' ({group['email']})  best ratio={ratio:.2f}")
+            print(f"[NO MATCH]  group '{group['name']}' ({group['email']})")
             continue
-        if folder is None:
-            names = ", ".join(f"'{f['name']}'" for f in above)
+        if len(matching) > 1:
+            names = ", ".join(f"'{f['name']}'" for f in matching)
             msg = (
-                f"group '{group['name']}' ({group['email']}) matches {len(above)} folders "
-                f"above threshold: {names}"
+                f"group '{group['name']}' ({group['email']}) matches {len(matching)} folders: {names}"
             )
             errors.append(msg)
             print(f"[AMBIGUOUS] {msg}")
             continue
 
+        folder = matching[0]
         new_email = group_email(folder["name"])
         new_name = group_display_name(folder["name"])
         rename_needed = (
@@ -254,14 +253,11 @@ def main():
         )
 
         tag = "[dry-run] " if args.dry_run else ""
-        print(
-            f"[MATCH {ratio:.2f}]  '{group['name']}' ({group['email']})\n"
-            f"            → folder '{folder['name']}' ({folder['id']})"
-        )
+        print(f"[MATCH]  '{group['name']}' ({group['email']}) → folder '{folder['name']}' ({folder['id']})")
         if rename_needed:
-            print(f"            {tag}rename: '{group['name']}' → '{new_name}' / {group['email']} → {new_email}")
+            print(f"         {tag}rename: '{group['name']}' → '{new_name}' / {group['email']} → {new_email}")
         else:
-            print(f"            (no rename needed)")
+            print(f"         (no rename needed)")
 
         if rename_needed and not args.dry_run:
             dir_service.groups().update(
