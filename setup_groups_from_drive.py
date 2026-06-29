@@ -12,10 +12,13 @@ The naming rules mirror groups_drive_sync.gs:
 Setup:
   1. In Google Cloud Console, create a Desktop OAuth 2.0 client and download
      the JSON as client_secret.json (or pass a different path via -c).
-  2. Enable the Google Drive API and Admin SDK (Directory API) for the project.
+  2. Enable the Google Drive API, Admin SDK (Directory API), and Groups Settings
+     API for the project.
   3. On first run the script prints an auth URL — paste it into a browser
      signed in as a Workspace super-admin.  The token is cached at
      ~/.google_setup_token.pkl for subsequent runs.
+  Note: if you add new API scopes, delete ~/.google_setup_token.pkl so the
+  token is refreshed with the updated scope set.
 """
 
 import argparse
@@ -32,7 +35,10 @@ from googleapiclient.discovery import build
 SCOPES = [
     "https://www.googleapis.com/auth/drive.readonly",
     "https://www.googleapis.com/auth/admin.directory.group",
+    "https://www.googleapis.com/auth/apps.groups.settings",
 ]
+
+WHO_CAN_POST_EXTERNAL = "ANYONE_CAN_POST"
 TOKEN_PATH = Path.home() / ".google_setup_token.pkl"
 FOLDER_IDS_PATH = Path(__file__).parent / "folder_ids.gs"
 
@@ -231,6 +237,7 @@ def main():
     creds = get_credentials(args.credentials)
     drive_service = build("drive", "v3", credentials=creds)
     dir_service = build("admin", "directory_v1", credentials=creds)
+    settings_service = build("groupssettings", "v1", credentials=creds)
 
     print(f"Listing top-level folders in Shared Drive {args.drive_id}…")
     folders = list_top_level_folders(drive_service, args.drive_id)
@@ -286,11 +293,26 @@ def main():
         else:
             print(f"         (no rename needed)")
 
+        # Fetch settings before rename so we use the current email as the key.
+        settings = settings_service.groups().get(groupUniqueId=group["email"]).execute()
+        post_setting_ok = settings.get("whoCanPostMessage") == WHO_CAN_POST_EXTERNAL
+
         if rename_needed and not args.dry_run:
             dir_service.groups().update(
                 groupKey=group["id"],
                 body={"email": new_email, "name": new_name},
             ).execute()
+
+        # Update "Who can post" if needed; use new email if the group was renamed.
+        if not post_setting_ok:
+            print(f"         {tag}set whoCanPostMessage → {WHO_CAN_POST_EXTERNAL}")
+            if not args.dry_run:
+                settings_service.groups().update(
+                    groupUniqueId=new_email,
+                    body={"whoCanPostMessage": WHO_CAN_POST_EXTERNAL},
+                ).execute()
+        else:
+            print(f"         whoCanPostMessage already {WHO_CAN_POST_EXTERNAL}")
 
         matched.append((group, folder))
 
