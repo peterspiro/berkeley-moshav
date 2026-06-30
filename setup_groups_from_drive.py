@@ -5,9 +5,10 @@ rules, and initialize folder_ids.gs with the matched folder IDs.
 
 The naming rules mirror groups_drive_sync.gs:
   - Strip parenthesized expressions from the folder name
+  - Convert & to "and"
   - Lowercase, trim, collapse non-alphanumeric runs to hyphens
   - Group email  → <slug>@DOMAIN
-  - Display name → folder name with parenthesized expressions stripped
+  - Display name → folder name with parenthesized expressions stripped & normalized
 
 Setup:
   1. In Google Cloud Console, create a Desktop OAuth 2.0 client and download
@@ -22,88 +23,33 @@ Setup:
 """
 
 import argparse
-import contextlib
 import os
-import pickle
 import re
 import sys
-from pathlib import Path
 
-from google.auth.transport.requests import Request
-from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 
-SCOPES = [
-    "https://www.googleapis.com/auth/drive.readonly",
-    "https://www.googleapis.com/auth/admin.directory.group",
-    "https://www.googleapis.com/auth/apps.groups.settings",
-]
-
-WHO_CAN_POST_EXTERNAL = "ANYONE_CAN_POST"
-TOKEN_PATH = Path.home() / ".google_setup_token.pkl"
-FOLDER_IDS_PATH = Path(__file__).parent / "folder_ids.gs"
+from google_group_utils import (
+    DOMAIN,
+    WHO_CAN_POST_ANYONE_ON_WEB,
+    ensure_who_can_post_web,
+    get_credentials,
+    group_display_name,
+    group_email,
+    strip_parens,
+    to_slug,
+    write_folder_ids,
+)
 
 DEFAULT_DRIVE_ID = "0AFqC2xo9aTgPUk9PVA"
-DOMAIN = "berkeleymoshav.org"  # edit to match your Workspace domain
 
+# ── Matching helpers ──────────────────────────────────────────────────────────
 
-# ── Auth ─────────────────────────────────────────────────────────────────────
-
-class _AuthUrlFormatter:
-    """Pass-through stdout wrapper that splits the OAuth URL onto its own line."""
-    def __init__(self, stream):
-        self._stream = stream
-
-    def write(self, text):
-        self._stream.write(re.sub(
-            r"(Please visit this URL to authorize this application:) (https?://\S+)",
-            r"\1\n\2",
-            text,
-        ))
-
-    def flush(self):
-        self._stream.flush()
-
-
-def get_credentials(client_secrets_file: str):
-    creds = None
-    if TOKEN_PATH.exists():
-        with open(TOKEN_PATH, "rb") as f:
-            creds = pickle.load(f)
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-        else:
-            flow = InstalledAppFlow.from_client_secrets_file(client_secrets_file, SCOPES)
-            with contextlib.redirect_stdout(_AuthUrlFormatter(sys.stdout)):
-                creds = flow.run_local_server(port=0, open_browser=False)
-        with open(TOKEN_PATH, "wb") as f:
-            pickle.dump(creds, f)
-    return creds
-
-
-# ── Naming helpers (mirror groups_drive_sync.gs) ─────────────────────────────
-
-# Trailing terms stripped before matching (longer phrases before shorter).
 MATCH_SUFFIXES = ["working group", "circle"]
-
-# Small words skipped when building an abbreviation from a folder name.
 ABBREV_STOP_WORDS = {"a", "an", "and", "at", "by", "for", "in", "of", "on", "or", "the", "to"}
 
-def strip_parens(name: str) -> str:
-    return re.sub(r" *\([^)]*\)", "", name).strip()
-
-def normalize_ampersand(name: str) -> str:
-    return re.sub(r"\s*&\s*", " and ", name)
-
-def to_slug(name: str) -> str:
-    return re.sub(r"^-+|-+$", "", re.sub(r"[^a-z0-9]+", "-", normalize_ampersand(strip_parens(name)).lower()))
-
-def group_display_name(folder_name: str) -> str:
-    return normalize_ampersand(strip_parens(folder_name))
 
 def to_match_base(name: str) -> str:
-    """Lowercase name with parens and trailing organisational terms removed, used for matching."""
     base = strip_parens(name).lower().strip()
     for suffix in MATCH_SUFFIXES:
         if re.search(r"\b" + re.escape(suffix) + r"\s*$", base):
@@ -111,13 +57,36 @@ def to_match_base(name: str) -> str:
             break
     return base
 
+
 def folder_abbreviation(folder_name: str) -> str:
-    """Initial letter of each non-stop word in the match base, e.g. 'dfl' for 'Development, Finance, and Legal'."""
     words = re.findall(r"[a-z0-9]+", to_match_base(folder_name))
     return "".join(w[0] for w in words if w not in ABBREV_STOP_WORDS)
 
-def group_email(folder_name: str) -> str:
-    return f"{to_slug(folder_name)}@{DOMAIN}"
+
+def singularize(base: str) -> str:
+    return re.sub(
+        r"[a-z0-9]+",
+        lambda m: m.group()[:-1] if m.group().endswith("s") and len(m.group()) > 2 else m.group(),
+        base,
+    )
+
+
+def concat(base: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", base)
+
+
+def folder_matches_group(group_name: str, folder_name: str) -> bool:
+    group_base = singularize(to_match_base(group_name))
+    folder_base = singularize(to_match_base(folder_name))
+    if folder_base.startswith(group_base) or concat(folder_base).startswith(concat(group_base)):
+        return True
+    if group_base == folder_abbreviation(folder_name):
+        return True
+    return False
+
+
+def find_matching_folders(group_name: str, folders: list[dict]) -> list[dict]:
+    return [f for f in folders if folder_matches_group(group_name, f["name"])]
 
 
 # ── Google API helpers ────────────────────────────────────────────────────────
@@ -140,7 +109,6 @@ def list_all_groups(dir_service) -> list[dict]:
 
 
 def list_top_level_folders(drive_service, drive_id: str) -> list[dict]:
-    """Return folders whose only parent is the shared drive root."""
     folders = []
     page_token = None
     while True:
@@ -160,61 +128,6 @@ def list_top_level_folders(drive_service, drive_id: str) -> list[dict]:
     return folders
 
 
-# ── Matching ──────────────────────────────────────────────────────────────────
-
-def singularize(base: str) -> str:
-    """Strip trailing 's' from each word token for plural-insensitive comparison."""
-    return re.sub(r"[a-z0-9]+", lambda m: m.group()[:-1] if m.group().endswith("s") and len(m.group()) > 2 else m.group(), base)
-
-def concat(base: str) -> str:
-    """Remove all non-alphanumeric characters, collapsing word boundaries."""
-    return re.sub(r"[^a-z0-9]", "", base)
-
-def folder_matches_group(group_name: str, folder_name: str) -> bool:
-    """True if group_name matches folder_name by prefix or abbreviation.
-
-    Both names are normalised (parens and trailing Circle/Working Group stripped,
-    words singularized) before comparison.  A match occurs when:
-      - the group's match base is a prefix of the folder's match base
-        (with or without word separators, so 'jewishlife' matches 'jewish life'), or
-      - the group's match base equals the folder's abbreviation (initials of
-        non-stop words), e.g. 'dfl' matches 'Development, Finance, and Legal'.
-    """
-    group_base = singularize(to_match_base(group_name))
-    folder_base = singularize(to_match_base(folder_name))
-    if folder_base.startswith(group_base) or concat(folder_base).startswith(concat(group_base)):
-        return True
-    if group_base == folder_abbreviation(folder_name):
-        return True
-    return False
-
-
-def find_matching_folders(group_name: str, folders: list[dict]) -> list[dict]:
-    """Return all folders that match group_name."""
-    return [f for f in folders if folder_matches_group(group_name, f["name"])]
-
-
-# ── folder_ids.gs writer ──────────────────────────────────────────────────────
-
-def write_folder_ids(matches: list[tuple[dict, dict]]):
-    """Write folder_ids.gs with matched folder IDs annotated with folder names."""
-    lines = [
-        "/**",
-        " * Shared list of Google Drive folder IDs to sync.",
-        " * This file is maintained by multiple scripts — edit here only.",
-        " *",
-        " * Each entry should be followed by a comment with the folder's name:",
-        " *   '1AbCdEfGhIjKlMnOpQrStUvWxYz', // My Folder Name",
-        " */",
-        "const FOLDER_IDS = [",
-    ]
-    for _group, folder in matches:
-        lines.append(f"  '{folder['id']}', // {folder['name']}")
-    lines += ["];", ""]
-    FOLDER_IDS_PATH.write_text("\n".join(lines))
-    print(f"\nWrote {FOLDER_IDS_PATH} with {len(matches)} folder ID(s).")
-
-
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
@@ -224,26 +137,15 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
-    parser.add_argument(
-        "-d", "--drive-id",
-        default=DEFAULT_DRIVE_ID,
-        help=f"Shared Drive ID (default: {DEFAULT_DRIVE_ID})",
-    )
-    parser.add_argument(
-        "-c", "--credentials",
-        default="client_secret.json",
-        help="Path to OAuth client secrets JSON (default: client_secret.json)",
-    )
-    parser.add_argument(
-        "-g", "--group",
-        metavar="NAME_OR_EMAIL",
-        help="Process only the group whose name starts with this prefix (case-insensitive, must be unique); skips writing folder_ids.gs",
-    )
-    parser.add_argument(
-        "-n", "--dry-run",
-        action="store_true",
-        help="Print planned changes without renaming groups or writing folder_ids.gs",
-    )
+    parser.add_argument("-d", "--drive-id", default=DEFAULT_DRIVE_ID,
+                        help=f"Shared Drive ID (default: {DEFAULT_DRIVE_ID})")
+    parser.add_argument("-c", "--credentials", default="client_secret.json",
+                        help="Path to OAuth client secrets JSON (default: client_secret.json)")
+    parser.add_argument("-g", "--group", metavar="PREFIX",
+                        help="Process only the group whose name starts with this prefix "
+                             "(case-insensitive, must be unique); skips writing folder_ids.gs")
+    parser.add_argument("-n", "--dry-run", action="store_true",
+                        help="Print planned changes without renaming groups or writing folder_ids.gs")
     args = parser.parse_args()
 
     if not os.path.exists(args.credentials):
@@ -277,7 +179,7 @@ def main():
 
     print()
 
-    matched: list[tuple[dict, dict]] = []   # (group, folder)
+    matched: list[tuple[dict, dict]] = []
     unmatched_groups: list[dict] = []
     errors: list[str] = []
 
@@ -289,9 +191,7 @@ def main():
             continue
         if len(matching) > 1:
             names = ", ".join(f"'{f['name']}'" for f in matching)
-            msg = (
-                f"group '{group['name']}' ({group['email']}) matches {len(matching)} folders: {names}"
-            )
+            msg = f"group '{group['name']}' ({group['email']}) matches {len(matching)} folders: {names}"
             errors.append(msg)
             print(f"[AMBIGUOUS] {msg}")
             continue
@@ -311,9 +211,8 @@ def main():
         else:
             print(f"         (no rename needed)")
 
-        # Fetch settings before rename so we use the current email as the key.
         settings = settings_service.groups().get(groupUniqueId=group["email"]).execute()
-        post_setting_ok = settings.get("whoCanPostMessage") == WHO_CAN_POST_EXTERNAL
+        post_setting_ok = settings.get("whoCanPostMessage") == WHO_CAN_POST_ANYONE_ON_WEB
 
         if rename_needed and not args.dry_run:
             dir_service.groups().update(
@@ -321,16 +220,15 @@ def main():
                 body={"email": new_email, "name": new_name},
             ).execute()
 
-        # Update "Who can post" if needed; use new email if the group was renamed.
         if not post_setting_ok:
-            print(f"         {tag}set whoCanPostMessage → {WHO_CAN_POST_EXTERNAL}")
+            print(f"         {tag}set whoCanPostMessage → {WHO_CAN_POST_ANYONE_ON_WEB}")
             if not args.dry_run:
                 settings_service.groups().update(
                     groupUniqueId=new_email,
-                    body={"whoCanPostMessage": WHO_CAN_POST_EXTERNAL},
+                    body={"whoCanPostMessage": WHO_CAN_POST_ANYONE_ON_WEB},
                 ).execute()
         else:
-            print(f"         whoCanPostMessage already {WHO_CAN_POST_EXTERNAL}")
+            print(f"         whoCanPostMessage already {WHO_CAN_POST_ANYONE_ON_WEB}")
 
         matched.append((group, folder))
 
@@ -348,12 +246,13 @@ def main():
             print(f"  {g['name']} ({g['email']})")
 
     if matched and not args.group:
+        entries = [(f["id"], f["name"]) for _, f in matched]
         if args.dry_run:
             print("\n[dry-run] Would write folder_ids.gs with:")
-            for _g, f in matched:
-                print(f"  '{f['id']}', // {f['name']}")
+            for fid, name in entries:
+                print(f"  '{fid}', // {name}")
         else:
-            write_folder_ids(matched)
+            write_folder_ids(entries)
 
 
 if __name__ == "__main__":
