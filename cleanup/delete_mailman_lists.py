@@ -14,11 +14,14 @@ Usage:
 import argparse
 import re
 import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from playwright.sync_api import sync_playwright
 
-from credentials import load_credentials
-from gather_utils import (
+from util.credentials import load_credentials
+from util.gather_utils import (
     fetch_all_gather_groups,
     launch_browser,
     log,

@@ -26,10 +26,13 @@ import argparse
 import os
 import re
 import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from googleapiclient.discovery import build
 
-from google_group_utils import (
+from util.google_group_utils import (
     DOMAIN,
     REQUIRED_GROUP_SETTINGS,
     ensure_group_settings,

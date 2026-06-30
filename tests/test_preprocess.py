@@ -8,7 +8,7 @@ import sys
 import tempfile
 import unittest
 
-from preprocess import (
+from setup.preprocess import (
     UnionFind,
     derive_household_name,
     is_international_phone,

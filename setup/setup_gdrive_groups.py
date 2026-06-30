@@ -25,12 +25,15 @@ import os
 import re
 import sys
 import time
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from playwright.sync_api import sync_playwright
 from googleapiclient.discovery import build
 
-from credentials import load_credentials
-from gather_utils import (
+from util.credentials import load_credentials
+from util.gather_utils import (
     configure,
     init_log,
     launch_browser,
@@ -39,7 +42,7 @@ from gather_utils import (
     screenshot,
     _check_submit_errors,
 )
-from google_group_utils import (
+from util.google_group_utils import (
     DOMAIN,
     REQUIRED_GROUP_SETTINGS,
     ensure_group_exists,

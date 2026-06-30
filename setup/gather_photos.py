@@ -22,11 +22,13 @@ from html.parser import HTMLParser
 from pathlib import Path
 from typing import Optional
 
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 from playwright.sync_api import Page, sync_playwright
 
-from credentials import load_credentials
-from preprocess import preprocess_text
-from gather_utils import (
+from util.credentials import load_credentials
+from setup.preprocess import preprocess_text
+from util.gather_utils import (
     close_log,
     configure,
     fetch_sheet,

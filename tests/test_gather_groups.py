@@ -11,7 +11,7 @@ import pytest
 
 import re
 
-from gather_groups import (
+from setup.gather_groups import (
     Circle,
     GatherGroup,
     GatherGroupMember,

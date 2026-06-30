@@ -2,7 +2,7 @@
 
 import pytest
 
-from gather_photos import (
+from setup.gather_photos import (
     _H2Parser,
     _PhotoLinkParser,
     find_members_for_names,

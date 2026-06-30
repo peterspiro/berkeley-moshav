@@ -1,11 +1,11 @@
 import pytest
-from sync_memberships import (
+from setup.sync_memberships import (
     _normalize_group,
     group_names_match,
     parse_memberships,
     resolve_user,
 )
-from gather_utils import GatherUser
+from util.gather_utils import GatherUser
 
 
 # ── _normalize_group / group_names_match ──────────────────────────────────────

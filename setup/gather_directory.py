@@ -12,11 +12,13 @@ import argparse
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 from playwright.sync_api import Page, sync_playwright
 
-from credentials import load_credentials
-from preprocess import preprocess_text
-from gather_utils import (
+from util.credentials import load_credentials
+from setup.preprocess import preprocess_text
+from util.gather_utils import (
     _check_submit_errors,
     close_log,
     configure,
