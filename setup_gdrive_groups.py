@@ -174,16 +174,16 @@ def set_gather_group_email_list(
             changed = True
         else:
             log("WARN", "set_email_list", f"group {group_id}: domain selector not found")
+        # Filling the name triggers JS that reveals .list-form-details; wait for it.
+        page.locator(".list-form-details").wait_for(state="visible", timeout=5_000)
     elif current_name != list_local_part:
         log("WARN", "set_email_list",
             f"group {group_id}: name field disabled but value '{current_name}' ≠ '{list_local_part}'")
 
     if everyone_checkbox.count() > 0:
         if not everyone_checkbox.first.is_checked():
-            # The checkbox is visually hidden inside a <label>; click the label instead
-            page.locator(
-                'label[for="groups_group_mailman_list_attributes_all_cmty_members_can_send"]'
-            ).click()
+            # The checkbox is CSS-hidden inside a Bootstrap <label>; use force to bypass visibility.
+            everyone_checkbox.first.check(force=True)
             changed = True
     else:
         log("WARN", "set_email_list", f"group {group_id}: all_cmty_members_can_send checkbox not found")
