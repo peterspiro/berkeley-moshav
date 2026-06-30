@@ -45,7 +45,7 @@ from util.gather_utils import (
     login,
     screenshot,
 )
-from setup.gather_groups import (
+from setup.import_groups import (
     DEFAULT_SHEET_URL,
     _canonical_group_name,
     _circle_wiki_slug,
