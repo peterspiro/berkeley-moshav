@@ -60,49 +60,35 @@ configure(_LOG_FILE_PATH, _SCREENSHOT_DIR)
 
 # ── Gather scraping ───────────────────────────────────────────────────────────
 
-def _folder_id_from_url(url: str) -> str | None:
-    """Extract Google Drive folder ID from a drive.google.com URL."""
-    m = re.search(r"/folders/([^/?&#]+)", url)
-    return m.group(1) if m else None
-
-
 def scrape_gdrive_config(page, base_url: str) -> list[dict]:
     """
-    Navigate to /gdrive/config and return a list of entries, each a dict with:
-      folder_id   – Google Drive folder ID
-      folder_name – display name of the folder
+    Navigate to /gdrive/config and return a list of entries for the Folders
+    section only (not Shared Drives), each a dict with:
+      folder_name – display name of the folder (plain text on page)
       group_id    – Gather group ID associated with this folder
       group_name  – Gather group name
+
+    The page has a single <table> with <tr class="heading"> rows separating
+    sections (Shared Drives / Folders / Files).  Each data row has the folder
+    name as plain text in the first <td> and a /groups/{id} link in the
+    third <td>.
     """
     page.goto(f"{base_url}/gdrive/config", wait_until="networkidle")
 
     entries = []
+    in_folders_section = False
 
-    # Dump page HTML to help diagnose selector mismatches
-    html_path = _SCREENSHOT_DIR / "gdrive_config.html"
-    _SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
-    html_path.write_text(page.content())
-    log("INFO", "scrape", f"Page HTML dumped to {html_path}")
-
-    # Each config row is expected to contain a Drive folder link and a Gather group link.
-    # Adjust selectors below if the page structure differs.
-    rows = page.locator("table tbody tr, .gdrive-item, li.gdrive-config-row").all()
-    if not rows:
-        # Fallback: scan all Drive folder links on the page
-        rows = [page]
-
-    for row in rows:
-        # Drive folder link
-        drive_link = row.locator("a[href*='drive.google.com'], a[href*='/drive/folders/']")
-        if drive_link.count() == 0:
+    for row in page.locator("table tbody tr").all():
+        # Section heading row — track which section we're in
+        heading = row.locator("h2")
+        if heading.count() > 0:
+            in_folders_section = heading.first.inner_text().strip() == "Folders"
             continue
-        folder_url = drive_link.first.get_attribute("href") or ""
-        folder_id = _folder_id_from_url(folder_url)
-        if not folder_id:
-            continue
-        folder_name = drive_link.first.inner_text().strip()
 
-        # Associated Gather group link
+        if not in_folders_section:
+            continue
+
+        # Group link — rows without one are header/empty rows
         group_link = row.locator("a[href*='/groups/']")
         if group_link.count() == 0:
             continue
@@ -113,8 +99,15 @@ def scrape_gdrive_config(page, base_url: str) -> list[dict]:
         group_id = gm.group(1)
         group_name = group_link.first.inner_text().strip()
 
+        # Folder name is plain text in the first <td>
+        cells = row.locator("td").all()
+        if not cells:
+            continue
+        folder_name = cells[0].inner_text().strip()
+        if not folder_name:
+            continue
+
         entries.append(dict(
-            folder_id=folder_id,
             folder_name=folder_name,
             group_id=group_id,
             group_name=group_name,
@@ -255,13 +248,13 @@ def main():
                 sys.exit(f"Error: {args.folder!r} is ambiguous — matches {names}")
             entries = matching
 
-        # Current FOLDER_IDS state
-        existing_ids = {fid for fid, _ in read_folder_ids()}
+        # Current FOLDER_IDS state — build name→id lookup for cross-referencing
         folder_ids_entries = list(read_folder_ids())  # preserve current order
+        existing_ids = {fid for fid, _ in folder_ids_entries}
+        name_to_fid = {name: fid for fid, name in folder_ids_entries}
         folder_ids_dirty = False
 
         for entry in entries:
-            fid = entry["folder_id"]
             fname = entry["folder_name"]
             gid = entry["group_id"]
             gemail = group_email(fname)
@@ -270,8 +263,12 @@ def main():
 
             log("INFO", "process", f"Folder '{fname}' → group {gemail}")
 
-            # 1. Add to FOLDER_IDS if missing
-            if fid not in existing_ids:
+            # 1. Add to FOLDER_IDS if we know the Drive folder ID
+            fid = name_to_fid.get(fname)
+            if fid is None:
+                log("INFO", "folder_ids",
+                    f"  '{fname}' not in folder_ids.gs (no Drive folder ID available on page)")
+            elif fid not in existing_ids:
                 log("INFO", "folder_ids", f"  Adding '{fname}' ({fid}) to folder_ids.gs")
                 if not args.dry_run:
                     folder_ids_entries.append((fid, fname))
