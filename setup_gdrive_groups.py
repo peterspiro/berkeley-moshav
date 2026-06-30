@@ -180,7 +180,10 @@ def set_gather_group_email_list(
 
     if everyone_checkbox.count() > 0:
         if not everyone_checkbox.first.is_checked():
-            everyone_checkbox.first.check()
+            # The checkbox is visually hidden inside a <label>; click the label instead
+            page.locator(
+                'label[for="groups_group_mailman_list_attributes_all_cmty_members_can_send"]'
+            ).click()
             changed = True
     else:
         log("WARN", "set_email_list", f"group {group_id}: all_cmty_members_can_send checkbox not found")
