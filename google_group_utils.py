@@ -16,6 +16,13 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 
 DOMAIN = "berkeleymoshav.org"
 WHO_CAN_POST_ANYONE_ON_WEB = "ANYONE_CAN_POST"
+
+REQUIRED_GROUP_SETTINGS = {
+    "whoCanPostMessage": "ANYONE_CAN_POST",       # Anyone on the web can post
+    "whoCanViewGroup": "ALL_IN_DOMAIN_CAN_VIEW",  # Entire organization can view conversations
+    "whoCanViewMembership": "ALL_IN_DOMAIN_CAN_VIEW",  # Entire organization can view members
+    "allowExternalMembers": "true",               # Allow external members
+}
 TOKEN_PATH = Path.home() / ".google_setup_token.pkl"
 FOLDER_IDS_PATH = Path(__file__).parent / "groups_drive_sync" / "folder_ids.gs"
 
@@ -132,13 +139,16 @@ def ensure_group_exists(dir_service, gemail: str, display_name: str) -> bool:
         raise
 
 
+def ensure_group_settings(settings_service, gemail: str) -> dict:
+    """Apply REQUIRED_GROUP_SETTINGS to the group. Return dict of {field: new_value} for changed fields."""
+    current = settings_service.groups().get(groupUniqueId=gemail).execute()
+    updates = {k: v for k, v in REQUIRED_GROUP_SETTINGS.items() if current.get(k) != v}
+    if updates:
+        settings_service.groups().update(groupUniqueId=gemail, body=updates).execute()
+    return updates
+
+
 def ensure_who_can_post_web(settings_service, gemail: str) -> bool:
-    """Set whoCanPostMessage to ANYONE_CAN_POST if not already. Return True if changed."""
-    settings = settings_service.groups().get(groupUniqueId=gemail).execute()
-    if settings.get("whoCanPostMessage") == WHO_CAN_POST_ANYONE_ON_WEB:
-        return False
-    settings_service.groups().update(
-        groupUniqueId=gemail,
-        body={"whoCanPostMessage": WHO_CAN_POST_ANYONE_ON_WEB},
-    ).execute()
-    return True
+    """Deprecated shim — use ensure_group_settings instead."""
+    updates = ensure_group_settings(settings_service, gemail)
+    return "whoCanPostMessage" in updates

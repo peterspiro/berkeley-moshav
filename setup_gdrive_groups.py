@@ -41,8 +41,9 @@ from gather_utils import (
 )
 from google_group_utils import (
     DOMAIN,
+    REQUIRED_GROUP_SETTINGS,
     ensure_group_exists,
-    ensure_who_can_post_web,
+    ensure_group_settings,
     get_credentials,
     group_display_name,
     group_email,
@@ -285,14 +286,16 @@ def main():
                 log("INFO", "google_group",
                     f"  Group {gemail} {'created' if created else 'already exists'}")
 
-            # 3. Ensure "Who can post" = Anyone on the web
+            # 3. Ensure required group settings
             if args.dry_run:
                 log("INFO", "google_group",
-                    f"  [dry-run] would ensure whoCanPostMessage=ANYONE_CAN_POST for {gemail}")
+                    f"  [dry-run] would apply settings: {REQUIRED_GROUP_SETTINGS}")
             else:
-                changed = ensure_who_can_post_web(settings_service, gemail)
-                log("INFO", "google_group",
-                    f"  whoCanPostMessage: {'set to ANYONE_CAN_POST' if changed else 'already ANYONE_CAN_POST'}")
+                updates = ensure_group_settings(settings_service, gemail)
+                if updates:
+                    log("INFO", "google_group", f"  Updated settings: {updates}")
+                else:
+                    log("INFO", "google_group", "  Settings already correct")
 
             # 4. Set Gather group email list
             set_gather_group_email_list(page, BASE_URL, gid, list_local, args.dry_run)

@@ -31,8 +31,8 @@ from googleapiclient.discovery import build
 
 from google_group_utils import (
     DOMAIN,
-    WHO_CAN_POST_ANYONE_ON_WEB,
-    ensure_who_can_post_web,
+    REQUIRED_GROUP_SETTINGS,
+    ensure_group_settings,
     get_credentials,
     group_display_name,
     group_email,
@@ -211,24 +211,20 @@ def main():
         else:
             print(f"         (no rename needed)")
 
-        settings = settings_service.groups().get(groupUniqueId=group["email"]).execute()
-        post_setting_ok = settings.get("whoCanPostMessage") == WHO_CAN_POST_ANYONE_ON_WEB
-
         if rename_needed and not args.dry_run:
             dir_service.groups().update(
                 groupKey=group["id"],
                 body={"email": new_email, "name": new_name},
             ).execute()
 
-        if not post_setting_ok:
-            print(f"         {tag}set whoCanPostMessage → {WHO_CAN_POST_ANYONE_ON_WEB}")
-            if not args.dry_run:
-                settings_service.groups().update(
-                    groupUniqueId=new_email,
-                    body={"whoCanPostMessage": WHO_CAN_POST_ANYONE_ON_WEB},
-                ).execute()
+        if args.dry_run:
+            print(f"         {tag}would apply settings: {REQUIRED_GROUP_SETTINGS}")
         else:
-            print(f"         whoCanPostMessage already {WHO_CAN_POST_ANYONE_ON_WEB}")
+            updates = ensure_group_settings(settings_service, new_email)
+            if updates:
+                print(f"         Updated settings: {updates}")
+            else:
+                print(f"         Settings already correct")
 
         matched.append((group, folder))
 
