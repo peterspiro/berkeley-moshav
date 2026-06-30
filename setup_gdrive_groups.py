@@ -174,8 +174,6 @@ def set_gather_group_email_list(
             changed = True
         else:
             log("WARN", "set_email_list", f"group {group_id}: domain selector not found")
-        # Filling the name triggers JS that reveals .list-form-details; wait for it.
-        page.locator(".list-form-details").wait_for(state="visible", timeout=5_000)
     elif current_name != list_local_part:
         log("WARN", "set_email_list",
             f"group {group_id}: name field disabled but value '{current_name}' ≠ '{list_local_part}'")
