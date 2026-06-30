@@ -134,6 +134,13 @@ def set_gather_group_email_list(
     """
     page.goto(f"{base_url}/groups/{group_id}/edit", wait_until="networkidle")
 
+    # Dump HTML once to verify selectors
+    html_path = _SCREENSHOT_DIR / f"group_{group_id}_edit.html"
+    if not html_path.exists():
+        _SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
+        html_path.write_text(page.content())
+        log("INFO", "set_email_list", f"Page HTML dumped to {html_path}")
+
     # Local part of the email list address
     name_input = page.locator('input[name*="mailman_list_attributes"][name*="[name]"]')
     if name_input.count() == 0:
@@ -179,8 +186,9 @@ def set_gather_group_email_list(
     else:
         log("WARN", "set_email_list", f"group {group_id}: everyone_can_post checkbox not found")
 
-    page.locator('input[type="submit"]').first.click()
-    page.wait_for_load_state("networkidle")
+    submit = page.locator('input[type="submit"], button[type="submit"]')
+    submit.first.click(timeout=10_000)
+    page.wait_for_load_state("networkidle", timeout=30_000)
 
     err = _check_submit_errors(page)
     if err:
