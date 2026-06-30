@@ -78,6 +78,12 @@ def scrape_gdrive_config(page, base_url: str) -> list[dict]:
 
     entries = []
 
+    # Dump page HTML to help diagnose selector mismatches
+    html_path = _SCREENSHOT_DIR / "gdrive_config.html"
+    _SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
+    html_path.write_text(page.content())
+    log("INFO", "scrape", f"Page HTML dumped to {html_path}")
+
     # Each config row is expected to contain a Drive folder link and a Gather group link.
     # Adjust selectors below if the page structure differs.
     rows = page.locator("table tbody tr, .gdrive-item, li.gdrive-config-row").all()
