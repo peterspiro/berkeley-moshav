@@ -9,8 +9,7 @@ and for each folder listed there:
      check "All community members can send to list?", and submit the form.
 
 Setup:
-  1. Set BASE_URL below to your Gather instance URL.
-  2. Ensure ~/.gather contains your Gather admin credentials (email + password).
+  1. Ensure ~/.gather contains your Gather admin credentials (email + password).
   3. In Google Cloud Console, create a Desktop OAuth 2.0 client and download
      the JSON as client_secret.json (or pass a different path via -c).
   4. Enable Admin SDK (Directory API) and Groups Settings API for the project.
@@ -51,7 +50,7 @@ from google_group_utils import (
     write_folder_ids,
 )
 
-BASE_URL = "https://gather.example.com"  # edit before running
+BASE_URL = "https://berkeley-moshav.gather.coop"
 
 _LOG_FILE_PATH = __import__("pathlib").Path("gdrive_groups_log.csv")
 _SCREENSHOT_DIR = __import__("pathlib").Path("gdrive_groups_screenshots")
