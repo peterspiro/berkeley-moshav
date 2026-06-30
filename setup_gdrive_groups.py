@@ -128,66 +128,68 @@ def set_gather_group_email_list(
 ) -> None:
     """
     Open the Gather group edit page and configure the email list:
-      - Set the list address local part
-      - Select the domain (DOMAIN) from the domain selector
+      - Set the list address local part and domain (only when fields are enabled,
+        i.e. the list has not yet been created — Gather disables them after creation)
       - Check "All community members can send to list?"
     """
     page.goto(f"{base_url}/groups/{group_id}/edit", wait_until="networkidle")
 
-    # Dump HTML once to verify selectors
-    html_path = _SCREENSHOT_DIR / f"group_{group_id}_edit.html"
-    if not html_path.exists():
-        _SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
-        html_path.write_text(page.content())
-        log("INFO", "set_email_list", f"Page HTML dumped to {html_path}")
-
-    # Local part of the email list address
-    name_input = page.locator('input[name*="mailman_list_attributes"][name*="[name]"]')
+    # Name field — name="groups_group[mailman_list_attributes][name]"
+    # Disabled once the list exists; Gather won't let it be changed after creation.
+    name_input = page.locator('#groups_group_mailman_list_attributes_name')
     if name_input.count() == 0:
         log("WARN", "set_email_list", f"group {group_id}: mailman name field not found")
         return
 
+    name_disabled = name_input.first.is_disabled()
     current_name = name_input.first.input_value().strip()
-    if current_name == list_local_part:
-        log("INFO", "set_email_list", f"group {group_id}: list name already '{list_local_part}'")
-    else:
-        log("INFO", "set_email_list",
-            f"group {group_id}: setting list name '{current_name}' → '{list_local_part}'")
 
-    # Domain selector — selects which @domain the list lives under.
-    # NOTE: verify the selector against the actual page if this doesn't work.
-    domain_select = page.locator('select[name*="mailman_list_attributes"][name*="[domain]"]')
+    # Domain select — name="groups_group[mailman_list_attributes][domain_id]"
+    # Also disabled once list exists. Select by option label (the domain text), not value (numeric ID).
+    domain_select = page.locator('#groups_group_mailman_list_attributes_domain_id')
 
     # "All community members can send to list?" checkbox
-    # NOTE: verify the selector against the actual page if this doesn't work.
-    everyone_checkbox = page.locator(
-        'input[type="checkbox"][name*="mailman_list_attributes"][name*="[everyone_can_post]"]'
-    )
+    everyone_checkbox = page.locator('#groups_group_mailman_list_attributes_all_cmty_members_can_send')
 
     if dry_run:
-        domain_val = domain_select.first.input_value() if domain_select.count() > 0 else "(unknown)"
         checked = everyone_checkbox.first.is_checked() if everyone_checkbox.count() > 0 else False
-        log("INFO", "set_email_list",
-            f"[dry-run] group {group_id}: would set name='{list_local_part}' "
-            f"domain='{DOMAIN}' everyone_can_post=True "
-            f"(current domain='{domain_val}' everyone_can_post={checked})")
+        if name_disabled:
+            log("INFO", "set_email_list",
+                f"[dry-run] group {group_id}: name/domain fields disabled (list exists) "
+                f"name='{current_name}' everyone_can_post={checked}→True")
+        else:
+            log("INFO", "set_email_list",
+                f"[dry-run] group {group_id}: would set name='{list_local_part}' "
+                f"domain='{DOMAIN}' everyone_can_post=True (current everyone_can_post={checked})")
         return
 
-    name_input.first.fill(list_local_part)
+    changed = False
 
-    if domain_select.count() > 0:
-        domain_select.first.select_option(DOMAIN)
-    else:
-        log("WARN", "set_email_list", f"group {group_id}: domain selector not found")
+    if not name_disabled:
+        if current_name != list_local_part:
+            name_input.first.fill(list_local_part)
+            changed = True
+        if domain_select.count() > 0:
+            domain_select.first.select_option(label=DOMAIN)
+            changed = True
+        else:
+            log("WARN", "set_email_list", f"group {group_id}: domain selector not found")
+    elif current_name != list_local_part:
+        log("WARN", "set_email_list",
+            f"group {group_id}: name field disabled but value '{current_name}' ≠ '{list_local_part}'")
 
     if everyone_checkbox.count() > 0:
         if not everyone_checkbox.first.is_checked():
             everyone_checkbox.first.check()
+            changed = True
     else:
-        log("WARN", "set_email_list", f"group {group_id}: everyone_can_post checkbox not found")
+        log("WARN", "set_email_list", f"group {group_id}: all_cmty_members_can_send checkbox not found")
 
-    submit = page.locator('input[type="submit"], button[type="submit"]')
-    submit.first.click(timeout=10_000)
+    if not changed:
+        log("INFO", "set_email_list", f"group {group_id}: email list settings already correct")
+        return
+
+    page.locator('input[type="submit"]').first.click(timeout=10_000)
     page.wait_for_load_state("networkidle", timeout=30_000)
 
     err = _check_submit_errors(page)
@@ -196,7 +198,7 @@ def set_gather_group_email_list(
         log("ERROR", "set_email_list", f"group {group_id}: form error — {err}")
     else:
         log("INFO", "set_email_list",
-            f"group {group_id}: list set to {list_local_part}@{DOMAIN}, everyone_can_post=True")
+            f"group {group_id}: email list settings updated")
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
