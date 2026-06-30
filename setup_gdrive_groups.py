@@ -180,8 +180,11 @@ def set_gather_group_email_list(
 
     if everyone_checkbox.count() > 0:
         if not everyone_checkbox.first.is_checked():
-            # The checkbox is CSS-hidden inside a Bootstrap <label>; use force to bypass visibility.
-            everyone_checkbox.first.check(force=True)
+            # The checkbox is CSS-hidden; set it directly via JS to bypass visibility checks.
+            page.evaluate(
+                "document.getElementById"
+                "('groups_group_mailman_list_attributes_all_cmty_members_can_send').checked = true"
+            )
             changed = True
     else:
         log("WARN", "set_email_list", f"group {group_id}: all_cmty_members_can_send checkbox not found")
