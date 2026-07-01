@@ -65,6 +65,13 @@ _SCREENSHOT_DIR = __import__("pathlib").Path("debug/gdrive_groups_screenshots")
 configure(_LOG_FILE_PATH, _SCREENSHOT_DIR)
 
 
+def log_noop(quiet: bool, level: str, action: str, detail: str = "", error: str = "") -> None:
+    """Like log(), but suppressed when quiet is True. Use for lines that
+    describe an already-correct/no-op state, never for an actual change."""
+    if not quiet:
+        log(level, action, detail, error)
+
+
 # ── Gather group edit ─────────────────────────────────────────────────────────
 
 def set_gather_group_email_list(
@@ -73,6 +80,7 @@ def set_gather_group_email_list(
     group_id: str,
     list_local_part: str,
     dry_run: bool,
+    quiet: bool = False,
 ) -> None:
     """
     Open the Gather group edit page and configure the email list:
@@ -123,7 +131,8 @@ def set_gather_group_email_list(
             log("INFO", "set_email_list",
                 f"[dry-run] group {group_id}: would change {', '.join(changes)}")
         else:
-            log("INFO", "set_email_list", f"group {group_id}: email list settings already correct")
+            log_noop(quiet, "INFO", "set_email_list",
+                      f"group {group_id}: email list settings already correct")
         return
 
     changed = False
@@ -153,7 +162,8 @@ def set_gather_group_email_list(
         log("WARN", "set_email_list", f"group {group_id}: all_cmty_members_can_send checkbox not found")
 
     if not changed:
-        log("INFO", "set_email_list", f"group {group_id}: email list settings already correct")
+        log_noop(quiet, "INFO", "set_email_list",
+                  f"group {group_id}: email list settings already correct")
         return
 
     page.locator('input[type="submit"]').first.click(timeout=10_000)
@@ -183,6 +193,9 @@ def main():
                              "(case-insensitive, must be unique)")
     parser.add_argument("-n", "--dry-run", action="store_true",
                         help="Print planned changes without modifying anything")
+    parser.add_argument("-q", "--quiet", action="store_true",
+                        help="Only log actual changes (or, in dry-run, changes that would be "
+                             "made) — suppress already-correct/no-op status lines")
     parser.add_argument("--headless", action="store_true", default=True,
                         help="Run browser in headless mode (default: True)")
     args = parser.parse_args()
@@ -239,13 +252,13 @@ def main():
             gdisplay = group_display_name(fname)
             list_local = to_slug_local(gemail)
 
-            log("INFO", "process", f"Folder '{fname}' → group {gemail}")
+            log_noop(args.quiet, "INFO", "process", f"Folder '{fname}' → group {gemail}")
 
             # 1. Add to FOLDER_IDS if we know the Drive folder ID
             fid = name_to_fid.get(fname)
             if fid is None:
-                log("INFO", "folder_ids",
-                    f"  '{fname}' not in folder_ids.gs (no Drive folder ID available on page)")
+                log_noop(args.quiet, "INFO", "folder_ids",
+                          f"  '{fname}' not in folder_ids.gs (no Drive folder ID available on page)")
             elif fid not in existing_ids:
                 log("INFO", "folder_ids", f"  Adding '{fname}' ({fid}) to folder_ids.gs")
                 if not args.dry_run:
@@ -253,19 +266,22 @@ def main():
                     existing_ids.add(fid)
                     folder_ids_dirty = True
             else:
-                log("INFO", "folder_ids", f"  '{fname}' already in folder_ids.gs")
+                log_noop(args.quiet, "INFO", "folder_ids", f"  '{fname}' already in folder_ids.gs")
 
             # 2. Ensure Google Group exists
             if args.dry_run:
                 already_exists = group_exists(dir_service, gemail)
                 if already_exists:
-                    log("INFO", "google_group", f"  Group {gemail} already exists (no change)")
+                    log_noop(args.quiet, "INFO", "google_group",
+                              f"  Group {gemail} already exists (no change)")
                 else:
                     log("INFO", "google_group", f"  [dry-run] would create group {gemail}")
             else:
                 already_exists = not ensure_group_exists(dir_service, gemail, gdisplay)
-                log("INFO", "google_group",
-                    f"  Group {gemail} {'already exists' if already_exists else 'created'}")
+                if already_exists:
+                    log_noop(args.quiet, "INFO", "google_group", f"  Group {gemail} already exists")
+                else:
+                    log("INFO", "google_group", f"  Group {gemail} created")
 
             # 3. Ensure required group settings
             if args.dry_run:
@@ -274,7 +290,8 @@ def main():
                     if updates:
                         log("INFO", "google_group", f"  [dry-run] would update settings: {updates}")
                     else:
-                        log("INFO", "google_group", "  Settings already correct (no change)")
+                        log_noop(args.quiet, "INFO", "google_group",
+                                  "  Settings already correct (no change)")
                 else:
                     log("INFO", "google_group",
                         f"  [dry-run] would apply settings once created: {REQUIRED_GROUP_SETTINGS}")
@@ -283,10 +300,10 @@ def main():
                 if updates:
                     log("INFO", "google_group", f"  Updated settings: {updates}")
                 else:
-                    log("INFO", "google_group", "  Settings already correct")
+                    log_noop(args.quiet, "INFO", "google_group", "  Settings already correct")
 
             # 4. Set Gather group email list
-            set_gather_group_email_list(page, BASE_URL, gid, list_local, args.dry_run)
+            set_gather_group_email_list(page, BASE_URL, gid, list_local, args.dry_run, args.quiet)
 
         # Write updated folder_ids.gs if any new entries were added
         if folder_ids_dirty:
