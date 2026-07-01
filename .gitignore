@@ -6,3 +6,5 @@ photos_log.csv
 import_screenshots/
 photo_screenshots/
 *.tsv
+client_secret*.json
+.google_setup_token.pkl
