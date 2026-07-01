@@ -198,15 +198,21 @@ def gdrive_config_item_ids(page, base_url: str) -> dict[str, str]:
     return existing
 
 
-def gdrive_item_url(base_url: str, google_file_id: str) -> str:
-    """Return Gather's own viewer URL for a linked Drive item.
+def gdrive_item_url(google_file_id: str) -> str:
+    """Return Gather's own viewer path for a linked Drive item, relative
+    (no base_url prefix) — matching the convention used for [Members] links
+    (/groups/{id}) and for Documents links elsewhere in the codebase
+    (import_groups.py's gdrive_href, scraped straight from Gather's own
+    anchors, is likewise relative). Keeping this relative avoids every
+    existing hierarchy entry looking "changed" on the first run after this
+    was introduced, just because of an absolute-vs-relative mismatch.
 
     This is the actual route Gather exposes (confirmed from a real example:
     /gdrive/item/{google_file_id}) — there is no /gdrive/items/{id}/edit
     route (that 404s), and the numeric item_id used in item-groups/new
     links is a separate internal ID, not the Drive file ID.
     """
-    return f"{base_url}/gdrive/item/{google_file_id}"
+    return f"/gdrive/item/{google_file_id}"
 
 
 # ── Linking a Drive folder into /gdrive/config ────────────────────────────────

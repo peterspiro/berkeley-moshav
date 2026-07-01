@@ -8,7 +8,9 @@ excluding hidden groups:
     hierarchy line to the current name (matched by Gather group ID, embedded
     in the [Members] link, so renames don't break the association).
   - If it has a Drive folder linked (via /gdrive/config) but the hierarchy
-    line is missing a [Documents] link, adds one.
+    line is missing a [Documents] link, adds one. If the linked folder has
+    changed, updates the existing link. If the folder has been unlinked
+    entirely, removes the [Documents] link.
   - If it's missing from the hierarchy entirely, prompts for a prefix that
     uniquely matches an existing hierarchy entry's name, and adds it as a
     child of that entry — inserted alphabetically among its siblings.
@@ -142,9 +144,18 @@ def fetch_group_info(page, base_url: str) -> tuple[dict[str, dict], set[str]]:
     return info, hidden_ids
 
 
-def fetch_documents_url_by_group_id(page, base_url: str, drive_service, drive_id: str) -> dict[str, str]:
-    """Return {group_id: documents_href} for every Gather group with a
-    Drive folder linked via /gdrive/config.
+def fetch_documents_url_by_group_id(
+    page, base_url: str, drive_service, drive_id: str
+) -> tuple[dict[str, str], set[str]]:
+    """Return ({group_id: documents_href}, linked_group_ids).
+
+    linked_group_ids is every group_id that currently has a Drive folder
+    linked via /gdrive/config, whether or not its URL could be resolved —
+    this lets the caller distinguish "folder unlinked entirely" (not in
+    linked_group_ids, so any existing [Documents] link should be removed)
+    from "still linked, but couldn't resolve this run" (in linked_group_ids
+    but not in the returned dict, so an existing link should be left alone
+    rather than destroyed over a transient resolution failure).
 
     /gdrive/config's Folders rows don't reliably expose the underlying
     Drive folder ID at all (confirmed: some rows render the folder name as
@@ -164,6 +175,7 @@ def fetch_documents_url_by_group_id(page, base_url: str, drive_service, drive_id
     Folders resolved by none of these are logged as unresolved.
     """
     config_entries = scrape_gdrive_config(page, base_url)
+    linked_group_ids = {entry["group_id"] for entry in config_entries}
 
     item_id_to_google_file_id = {
         item_id: google_file_id
@@ -182,7 +194,7 @@ def fetch_documents_url_by_group_id(page, base_url: str, drive_service, drive_id
             or google_file_id_by_folder_name.get(entry["folder_name"])
         )
         if google_file_id:
-            documents_url_by_group_id[entry["group_id"]] = gdrive_item_url(base_url, google_file_id)
+            documents_url_by_group_id[entry["group_id"]] = gdrive_item_url(google_file_id)
         else:
             unresolved.append(entry)
 
@@ -199,7 +211,7 @@ def fetch_documents_url_by_group_id(page, base_url: str, drive_service, drive_id
         for entry in unresolved:
             matches = by_name.get(entry["folder_name"], [])
             if len(matches) == 1:
-                documents_url_by_group_id[entry["group_id"]] = gdrive_item_url(base_url, matches[0])
+                documents_url_by_group_id[entry["group_id"]] = gdrive_item_url(matches[0])
             else:
                 still_unresolved.append(entry)
                 if len(matches) > 1:
@@ -215,7 +227,7 @@ def fetch_documents_url_by_group_id(page, base_url: str, drive_service, drive_id
             f"no known Drive folder ID for item_id={entry['item_id']!r}, and no "
             f"exact name match found in Shared Drive {drive_id} ({dump_note})")
 
-    return documents_url_by_group_id
+    return documents_url_by_group_id, linked_group_ids
 
 
 # ── Interactive parent selection ───────────────────────────────────────────────
@@ -249,10 +261,10 @@ def prompt_yes_no(question: str) -> bool:
 
 def sync_hierarchy(
     root, group_info: dict[str, dict], documents_url_by_group_id: dict[str, str],
-    hidden_ids: set[str], dry_run: bool,
+    linked_group_ids: set[str], hidden_ids: set[str], dry_run: bool,
 ) -> None:
-    """Mutate the parsed hierarchy tree in place: rename, add Documents
-    links, prompt for deletion of stale entries."""
+    """Mutate the parsed hierarchy tree in place: rename, add/alter/remove
+    Documents links, prompt for deletion of stale entries."""
     for node in list(iter_nodes(root)):
         if not node.group_id or node.group_id in hidden_ids:
             continue
@@ -276,12 +288,22 @@ def sync_hierarchy(
             print(f"Renaming '{node.name}' -> '{live['name']}'")
             node.name = live["name"]
 
+        current_documents_url = documents_url_by_group_id.get(node.group_id)
+
         if not node.documents_url:
-            documents_url = documents_url_by_group_id.get(node.group_id)
-            if documents_url:
+            if current_documents_url:
                 log("INFO", "add_documents_link", f"{node.name} (id={node.group_id})")
                 print(f"Adding Documents link for '{node.name}'")
-                node.documents_url = documents_url
+                node.documents_url = current_documents_url
+        elif current_documents_url and current_documents_url != node.documents_url:
+            log("INFO", "update_documents_link",
+                f"{node.name} (id={node.group_id}): {node.documents_url!r} -> {current_documents_url!r}")
+            print(f"Updating Documents link for '{node.name}'")
+            node.documents_url = current_documents_url
+        elif not current_documents_url and node.group_id not in linked_group_ids:
+            log("INFO", "remove_documents_link", f"{node.name} (id={node.group_id})")
+            print(f"Removing Documents link for '{node.name}' (folder no longer linked)")
+            node.documents_url = ""
 
 
 def add_missing_groups(
@@ -348,11 +370,13 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
         root = parse_hierarchy(current_content)
 
         group_info, hidden_ids = fetch_group_info(page, base_url)
-        documents_url_by_group_id = fetch_documents_url_by_group_id(
+        documents_url_by_group_id, linked_group_ids = fetch_documents_url_by_group_id(
             page, base_url, drive_service, drive_id
         )
 
-        sync_hierarchy(root, group_info, documents_url_by_group_id, hidden_ids, dry_run)
+        sync_hierarchy(
+            root, group_info, documents_url_by_group_id, linked_group_ids, hidden_ids, dry_run
+        )
         add_missing_groups(root, group_info, documents_url_by_group_id, dry_run)
 
         new_content = render_hierarchy(root)
