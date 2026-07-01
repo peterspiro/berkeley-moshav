@@ -134,24 +134,37 @@ def write_folder_ids(entries: list[tuple[str, str]]) -> None:
 
 # ── Group API helpers ─────────────────────────────────────────────────────────
 
-def ensure_group_exists(dir_service, gemail: str, display_name: str) -> bool:
-    """Create the Google Group if it doesn't exist. Return True if created."""
+def group_exists(dir_service, gemail: str) -> bool:
+    """Return True if gemail already exists as a Google Group. Read-only —
+    safe to call from a dry run."""
     try:
         dir_service.groups().get(groupKey=gemail).execute()
-        return False
+        return True
     except Exception as err:
         if "404" in str(err) or "Resource Not Found" in str(err):
-            dir_service.groups().insert(
-                body={"email": gemail, "name": display_name}
-            ).execute()
-            return True
+            return False
         raise
+
+
+def ensure_group_exists(dir_service, gemail: str, display_name: str) -> bool:
+    """Create the Google Group if it doesn't exist. Return True if created."""
+    if group_exists(dir_service, gemail):
+        return False
+    dir_service.groups().insert(body={"email": gemail, "name": display_name}).execute()
+    return True
+
+
+def compute_group_settings_updates(settings_service, gemail: str) -> dict:
+    """Return {field: new_value} for settings that differ from
+    REQUIRED_GROUP_SETTINGS, without applying them. Read-only — safe to
+    call from a dry run. Raises if the group doesn't exist."""
+    current = settings_service.groups().get(groupUniqueId=gemail).execute()
+    return {k: v for k, v in REQUIRED_GROUP_SETTINGS.items() if current.get(k) != v}
 
 
 def ensure_group_settings(settings_service, gemail: str) -> dict:
     """Apply REQUIRED_GROUP_SETTINGS to the group. Return dict of {field: new_value} for changed fields."""
-    current = settings_service.groups().get(groupUniqueId=gemail).execute()
-    updates = {k: v for k, v in REQUIRED_GROUP_SETTINGS.items() if current.get(k) != v}
+    updates = compute_group_settings_updates(settings_service, gemail)
     if updates:
         settings_service.groups().update(groupUniqueId=gemail, body=updates).execute()
     return updates

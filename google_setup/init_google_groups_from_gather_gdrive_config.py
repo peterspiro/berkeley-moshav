@@ -45,11 +45,13 @@ from util.google_group_utils import (
     DEFAULT_CLIENT_SECRETS_PATH,
     DOMAIN,
     REQUIRED_GROUP_SETTINGS,
+    compute_group_settings_updates,
     ensure_group_exists,
     ensure_group_settings,
     get_credentials,
     group_display_name,
     group_email,
+    group_exists,
     read_folder_ids,
     write_folder_ids,
 )
@@ -99,14 +101,29 @@ def set_gather_group_email_list(
 
     if dry_run:
         checked = everyone_checkbox.first.is_checked() if everyone_checkbox.count() > 0 else False
+        changes = []
         if name_disabled:
-            log("INFO", "set_email_list",
-                f"[dry-run] group {group_id}: name/domain fields disabled (list exists) "
-                f"name='{current_name}' everyone_can_post={checked}→True")
+            if current_name != list_local_part:
+                log("WARN", "set_email_list",
+                    f"group {group_id}: name field disabled but value '{current_name}' ≠ '{list_local_part}'")
         else:
+            # Mirrors the live branch below: the domain is always (re)submitted
+            # here (not conditionally compared), since this path only runs
+            # while the list hasn't been created yet.
+            if current_name != list_local_part:
+                changes.append(f"name: '{current_name}' → '{list_local_part}'")
+            if domain_select.count() > 0:
+                changes.append(f"domain → '{DOMAIN}'")
+            else:
+                log("WARN", "set_email_list", f"group {group_id}: domain selector not found")
+        if not checked:
+            changes.append("everyone_can_post: False → True")
+
+        if changes:
             log("INFO", "set_email_list",
-                f"[dry-run] group {group_id}: would set name='{list_local_part}' "
-                f"domain='{DOMAIN}' everyone_can_post=True (current everyone_can_post={checked})")
+                f"[dry-run] group {group_id}: would change {', '.join(changes)}")
+        else:
+            log("INFO", "set_email_list", f"group {group_id}: email list settings already correct")
         return
 
     changed = False
@@ -240,16 +257,27 @@ def main():
 
             # 2. Ensure Google Group exists
             if args.dry_run:
-                log("INFO", "google_group", f"  [dry-run] would ensure group {gemail} exists")
+                already_exists = group_exists(dir_service, gemail)
+                if already_exists:
+                    log("INFO", "google_group", f"  Group {gemail} already exists (no change)")
+                else:
+                    log("INFO", "google_group", f"  [dry-run] would create group {gemail}")
             else:
-                created = ensure_group_exists(dir_service, gemail, gdisplay)
+                already_exists = not ensure_group_exists(dir_service, gemail, gdisplay)
                 log("INFO", "google_group",
-                    f"  Group {gemail} {'created' if created else 'already exists'}")
+                    f"  Group {gemail} {'already exists' if already_exists else 'created'}")
 
             # 3. Ensure required group settings
             if args.dry_run:
-                log("INFO", "google_group",
-                    f"  [dry-run] would apply settings: {REQUIRED_GROUP_SETTINGS}")
+                if already_exists:
+                    updates = compute_group_settings_updates(settings_service, gemail)
+                    if updates:
+                        log("INFO", "google_group", f"  [dry-run] would update settings: {updates}")
+                    else:
+                        log("INFO", "google_group", "  Settings already correct (no change)")
+                else:
+                    log("INFO", "google_group",
+                        f"  [dry-run] would apply settings once created: {REQUIRED_GROUP_SETTINGS}")
             else:
                 updates = ensure_group_settings(settings_service, gemail)
                 if updates:
