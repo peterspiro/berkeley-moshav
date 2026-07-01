@@ -44,7 +44,7 @@ from util.gather_utils import (
     log,
     login,
 )
-from util.gdrive_config import drive_folder_url, google_file_id_for_item, scrape_gdrive_config
+from util.gdrive_config import resolve_documents_url_for_item, scrape_gdrive_config
 from util.hierarchy_wiki import (
     WIKI_SLUG,
     HierarchyNode,
@@ -140,12 +140,12 @@ def fetch_documents_url_by_group_id(page, base_url: str) -> dict[str, str]:
             log("WARN", "documents_link", entry["folder_name"],
                 "no item_id found on /gdrive/config row; skipping")
             continue
-        google_file_id = google_file_id_for_item(page, base_url, entry["item_id"])
-        if not google_file_id:
+        documents_url = resolve_documents_url_for_item(page, base_url, entry["item_id"])
+        if not documents_url:
             log("WARN", "documents_link", entry["folder_name"],
-                f"could not resolve external_id for item_id={entry['item_id']}")
+                f"could not resolve a Drive URL for item_id={entry['item_id']}")
             continue
-        documents_url_by_group_id[entry["group_id"]] = drive_folder_url(google_file_id)
+        documents_url_by_group_id[entry["group_id"]] = documents_url
     return documents_url_by_group_id
 
 

@@ -129,6 +129,13 @@ def gdrive_config_item_ids(page, base_url: str) -> dict[str, str]:
     return existing
 
 
+_EXTERNAL_ID_SELECTORS = (
+    'input[name="gdrive_item[external_id]"]',
+    'input[name*="external_id"]',
+    'input[id*="external_id"]',
+)
+
+
 def google_file_id_for_item(page, base_url: str, item_id: str) -> str | None:
     """Return the underlying Google Drive file/folder ID for a Gather
     gdrive_item, by reading its external_id field on /gdrive/items/{id}/edit.
@@ -136,13 +143,51 @@ def google_file_id_for_item(page, base_url: str, item_id: str) -> str | None:
     Unlike matching folder names against the /gdrive browse page (which
     only surfaces top-level items), this works regardless of how deeply
     nested the folder is in the Shared Drive.
+
+    The field may be disabled/read-only (or named slightly differently)
+    on the edit page compared to the new-item form, so several selectors
+    are tried before giving up.
     """
     page.goto(f"{base_url}/gdrive/items/{item_id}/edit", wait_until="networkidle")
-    ext_field = page.locator('input[name="gdrive_item[external_id]"]')
-    if ext_field.count() == 0:
-        return None
-    value = ext_field.first.input_value().strip()
-    return value or None
+    for selector in _EXTERNAL_ID_SELECTORS:
+        field = page.locator(selector)
+        if field.count() > 0:
+            value = field.first.input_value().strip()
+            if value:
+                return value
+    return None
+
+
+def resolve_documents_url_for_item(page, base_url: str, item_id: str) -> str | None:
+    """Return a direct Google Drive URL for a linked gdrive_item.
+
+    Prefers an existing "open in Drive" link on /gdrive/items/{id}/edit, if
+    the page provides one — that's whatever URL Gather already considers
+    canonical for the item. Falls back to reading the external_id field and
+    constructing a folders/ URL from it.
+    """
+    page.goto(f"{base_url}/gdrive/items/{item_id}/edit", wait_until="networkidle")
+
+    drive_link = page.locator('a[href*="drive.google.com"]')
+    if drive_link.count() > 0:
+        href = drive_link.first.get_attribute("href")
+        if href:
+            return href
+
+    for selector in _EXTERNAL_ID_SELECTORS:
+        field = page.locator(selector)
+        if field.count() > 0:
+            value = field.first.input_value().strip()
+            if value:
+                return drive_folder_url(value)
+
+    fields = [
+        el.get_attribute("name") or el.get_attribute("id")
+        for el in page.locator("input[name], input[id]").all()
+    ]
+    log("WARN", "resolve_documents_url", f"item_id={item_id}",
+        f"no Drive link or external_id field found; page fields={fields}")
+    return None
 
 
 def drive_folder_url(google_file_id: str) -> str:
