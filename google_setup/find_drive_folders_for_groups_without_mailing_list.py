@@ -42,7 +42,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from googleapiclient.discovery import build
 from playwright.sync_api import sync_playwright
 
-from google_setup.init_google_groups_from_drive_folders import (
+from google_setup.match_google_groups_to_drive_folders import (
     ABBREV_STOP_WORDS,
     DEFAULT_DRIVE_ID,
     folder_matches_group,
