@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """
-Read-only report: for every Gather group under /groups that has no mailing
-list configured, search the Shared Drive (descending its full folder tree)
-for folder names that roughly match the group's name. In addition to the
-strict prefix/abbreviation match, a folder sharing just one significant
-word with the group name (e.g. group 'Landscape' vs. folder 'Landscape &
-Grounds Photos') is also reported, flagged as a weaker match.
+Read-only report: for every Gather group under /groups (excluding groups
+with Availability = Everybody) that has no mailing list configured, search
+the Shared Drive (descending its full folder tree) for folder names that
+roughly match the group's name. In addition to the strict prefix/abbreviation
+match, a folder sharing just one significant word with the group name (e.g.
+group 'Landscape' vs. folder 'Landscape & Grounds Photos') is also reported,
+flagged as a weaker match.
 
 Does not modify anything in Gather, Google Groups, or Drive — it only
 prints a report of candidate folders per unmatched group, so a human can
@@ -167,12 +168,14 @@ def main(base_url: str, email: str, password: str, drive_id: str, credentials_pa
         unlisted = []
         for group in groups:
             detail = _fetch_group_detail(page, base_url, group)
+            if detail.availability.strip().lower() == "everybody":
+                continue
             if not detail.list_name:
                 unlisted.append(detail)
 
         browser.close()
 
-    log("INFO", "filter", f"{len(unlisted)} group(s) have no mailing list")
+    log("INFO", "filter", f"{len(unlisted)} group(s) have no mailing list (excluding Availability=Everybody)")
 
     log("INFO", "walk_drive", f"Walking folder tree of Shared Drive {drive_id}…")
     folders = walk_drive_folders(drive_service, drive_id)
