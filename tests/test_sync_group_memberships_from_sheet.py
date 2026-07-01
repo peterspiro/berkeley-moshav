@@ -1,5 +1,5 @@
 import pytest
-from setup.sync_memberships import (
+from data_import.sync_group_memberships_from_sheet import (
     _normalize_group,
     group_names_match,
     parse_memberships,

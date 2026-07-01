@@ -9,9 +9,9 @@ not listed for that group are removed.  Only groups that appear in the sheet
 are managed; other groups are left untouched.
 
 Usage:
-    python sync_memberships.py
-    python sync_memberships.py -n            # dry-run
-    python sync_memberships.py -s SHEET_URL  # override sheet
+    python sync_group_memberships_from_sheet.py
+    python sync_group_memberships_from_sheet.py -n            # dry-run
+    python sync_group_memberships_from_sheet.py -s SHEET_URL  # override sheet
 """
 
 import argparse
