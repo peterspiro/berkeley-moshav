@@ -50,6 +50,96 @@ def walk_drive_folders(drive_service, drive_id: str) -> list[dict]:
     return folders
 
 
+def find_top_level_folder_id(drive_service, drive_id: str, name: str) -> str | None:
+    """Return the Drive folder ID of the top-level folder called name
+    (exact match), or None if no such folder exists."""
+    resp = drive_service.files().list(
+        corpora="drive",
+        driveId=drive_id,
+        includeItemsFromAllDrives=True,
+        supportsAllDrives=True,
+        q=f"mimeType='application/vnd.google-apps.folder' and "
+          f"'{drive_id}' in parents and trashed=false and name='{name}'",
+        fields="files(id,name)",
+    ).execute()
+    files = resp.get("files", [])
+    return files[0]["id"] if files else None
+
+
+def create_drive_folder(drive_service, name: str, parent_id: str) -> str:
+    """Create a new folder named name under parent_id. Returns the new
+    folder's Drive ID."""
+    resp = drive_service.files().create(
+        body={"name": name, "mimeType": "application/vnd.google-apps.folder", "parents": [parent_id]},
+        fields="id",
+        supportsAllDrives=True,
+    ).execute()
+    return resp["id"]
+
+
+# ── Naming/placement for a newly created group folder ─────────────────────────
+
+_SMALL_WORDS = {"a", "an", "and", "at", "by", "for", "in", "of", "on", "or", "the", "to"}
+
+# Gather group "kind" -> folder name suffix / Shared Drive placement rule.
+FOLDER_TYPE_SUFFIXES = {
+    "circle": "Circle",
+    "committee": "Working Group",
+    "club": "Club",
+}
+
+
+def standardize_name(name: str) -> str:
+    """Title-case a human-entered name: capitalize each word's first
+    letter, except words that are already an acronym (all-uppercase, e.g.
+    "CIT", "DF&L") or otherwise mixed-case (e.g. "McTeague"), which are
+    left as typed. Small linking words (and, of, the, ...) are lowercased
+    unless they're the first or last word, per standard title-case style.
+    """
+    words = name.strip().split()
+    if not words:
+        return name.strip()
+    last_idx = len(words) - 1
+    result = []
+    for i, w in enumerate(words):
+        if w.isupper() or any(c.isupper() for c in w[1:]):
+            result.append(w)
+        elif 0 < i < last_idx and w.lower() in _SMALL_WORDS:
+            result.append(w.lower())
+        else:
+            result.append(w[:1].upper() + w[1:].lower())
+    return " ".join(result)
+
+
+def folder_name_for_group_type(raw_name: str, kind: str) -> str:
+    """Standardize a user-entered folder name and append the type's suffix
+    (e.g. "Working Group" for a committee-kind group) if not already
+    present. Raises ValueError for any kind this sync system doesn't know
+    how to place in the Shared Drive."""
+    if kind not in FOLDER_TYPE_SUFFIXES:
+        raise ValueError(f"Don't know how to handle type {kind!r}")
+    name = standardize_name(raw_name)
+    suffix = FOLDER_TYPE_SUFFIXES[kind]
+    if not re.search(r"\b" + re.escape(suffix) + r"\s*$", name, re.IGNORECASE):
+        name = f"{name} {suffix}"
+    return name
+
+
+def parent_folder_id_for_group_type(drive_service, drive_id: str, kind: str) -> str:
+    """Return the Drive folder ID under which a new folder for a group of
+    this kind should be created: the Shared Drive's own root for
+    circle/committee, or the top-level "Clubs" folder for club. Raises
+    ValueError for any other kind, or if "Clubs" can't be found."""
+    if kind in ("circle", "committee"):
+        return drive_id
+    if kind == "club":
+        clubs_id = find_top_level_folder_id(drive_service, drive_id, "Clubs")
+        if clubs_id is None:
+            raise ValueError('Could not find a top-level "Clubs" folder in the Shared Drive')
+        return clubs_id
+    raise ValueError(f"Don't know how to handle type {kind!r}")
+
+
 # ── Persisted google_file_id → Gather item_id cache ───────────────────────────
 
 def load_gdrive_item_map() -> dict[str, str]:
