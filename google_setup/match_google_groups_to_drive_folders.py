@@ -33,6 +33,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from googleapiclient.discovery import build
 
 from util.google_group_utils import (
+    DEFAULT_CLIENT_SECRETS_PATH,
     DOMAIN,
     REQUIRED_GROUP_SETTINGS,
     ensure_group_settings,
@@ -144,8 +145,8 @@ def main():
     )
     parser.add_argument("-d", "--drive-id", default=DEFAULT_DRIVE_ID,
                         help=f"Shared Drive ID (default: {DEFAULT_DRIVE_ID})")
-    parser.add_argument("-c", "--credentials", default="client_secret.json",
-                        help="Path to OAuth client secrets JSON (default: client_secret.json)")
+    parser.add_argument("-c", "--credentials", default=str(DEFAULT_CLIENT_SECRETS_PATH),
+                        help=f"Path to OAuth client secrets JSON (default: {DEFAULT_CLIENT_SECRETS_PATH})")
     parser.add_argument("-g", "--group", metavar="PREFIX",
                         help="Process only the group whose name starts with this prefix "
                              "(case-insensitive, must be unique); skips writing folder_ids.gs")

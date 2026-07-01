@@ -60,7 +60,7 @@ from util.gather_utils import (
     login,
 )
 from util.gdrive_config import add_group_access_to_gdrive_item, create_gdrive_item, walk_drive_folders
-from util.google_group_utils import get_credentials
+from util.google_group_utils import DEFAULT_CLIENT_SECRETS_PATH, get_credentials
 
 _LOG_FILE = Path("debug/find_drive_folders_log.csv")
 _SCREENSHOT_DIR = Path("debug/find_drive_folders_screenshots")
@@ -223,8 +223,8 @@ def cli():
         help="Shared Drive ID to search",
     )
     parser.add_argument(
-        "-c", "--credentials", default="client_secret.json",
-        help="Path to OAuth client secrets JSON",
+        "-c", "--credentials", default=str(DEFAULT_CLIENT_SECRETS_PATH),
+        help=f"Path to OAuth client secrets JSON (default: {DEFAULT_CLIENT_SECRETS_PATH})",
     )
     parser.add_argument(
         "-n", "--dry-run", action="store_true",

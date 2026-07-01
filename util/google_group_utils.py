@@ -25,6 +25,7 @@ REQUIRED_GROUP_SETTINGS = {
 }
 TOKEN_PATH = Path.home() / ".google_setup_token.pkl"
 FOLDER_IDS_PATH = Path(__file__).parent.parent / "groups_drive_sync" / "folder_ids.gs"
+DEFAULT_CLIENT_SECRETS_PATH = Path(__file__).parent.parent / "client_secret.json"
 
 SCOPES = [
     "https://www.googleapis.com/auth/drive.readonly",

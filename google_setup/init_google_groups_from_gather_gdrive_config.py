@@ -42,6 +42,7 @@ from util.gather_utils import (
     _check_submit_errors,
 )
 from util.google_group_utils import (
+    DEFAULT_CLIENT_SECRETS_PATH,
     DOMAIN,
     REQUIRED_GROUP_SETTINGS,
     ensure_group_exists,
@@ -158,8 +159,8 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
-    parser.add_argument("-c", "--credentials", default="client_secret.json",
-                        help="Path to OAuth client secrets JSON (default: client_secret.json)")
+    parser.add_argument("-c", "--credentials", default=str(DEFAULT_CLIENT_SECRETS_PATH),
+                        help=f"Path to OAuth client secrets JSON (default: {DEFAULT_CLIENT_SECRETS_PATH})")
     parser.add_argument("-f", "--folder", metavar="PREFIX",
                         help="Process only the folder whose name starts with this prefix "
                              "(case-insensitive, must be unique)")

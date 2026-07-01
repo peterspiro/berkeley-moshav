@@ -64,7 +64,7 @@ from util.gdrive_config import (
     scrape_gdrive_config,
     walk_drive_folders,
 )
-from util.google_group_utils import get_credentials, read_folder_ids
+from util.google_group_utils import DEFAULT_CLIENT_SECRETS_PATH, get_credentials, read_folder_ids
 from util.hierarchy_wiki import (
     WIKI_SLUG,
     HierarchyNode,
@@ -379,8 +379,9 @@ def cli():
         help="Log what would change without writing the wiki page",
     )
     parser.add_argument(
-        "-c", "--credentials", default="client_secret.json",
-        help="Path to OAuth client secrets JSON (for the Drive folder-ID fallback search)",
+        "-c", "--credentials", default=str(DEFAULT_CLIENT_SECRETS_PATH),
+        help="Path to OAuth client secrets JSON (for the Drive folder-ID fallback search) "
+             f"(default: {DEFAULT_CLIENT_SECRETS_PATH})",
     )
     parser.add_argument(
         "-d", "--drive-id", default=DEFAULT_DRIVE_ID,
