@@ -11,7 +11,7 @@ from pathlib import Path
 
 from util.gather_utils import _check_submit_errors, log, screenshot, select2_choose
 
-GDRIVE_MAP_FILE = Path(__file__).parent.parent / "gdrive_item_map.json"
+GDRIVE_MAP_FILE = Path(__file__).parent.parent / "groups_drive_sync" / "gdrive_item_map.json"
 
 
 # ── Google Drive API traversal ─────────────────────────────────────────────────
