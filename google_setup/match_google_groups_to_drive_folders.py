@@ -39,6 +39,7 @@ from util.google_group_utils import (
     get_credentials,
     group_display_name,
     group_email,
+    normalize_ampersand,
     read_folder_ids,
     strip_parens,
     to_slug,
@@ -54,7 +55,7 @@ ABBREV_STOP_WORDS = {"a", "an", "and", "at", "by", "for", "in", "of", "on", "or"
 
 
 def to_match_base(name: str) -> str:
-    base = strip_parens(name).lower().strip()
+    base = normalize_ampersand(strip_parens(name)).lower().strip()
     for suffix in MATCH_SUFFIXES:
         if re.search(r"\b" + re.escape(suffix) + r"\s*$", base):
             base = re.sub(r"\b" + re.escape(suffix) + r"\s*$", "", base).strip()
