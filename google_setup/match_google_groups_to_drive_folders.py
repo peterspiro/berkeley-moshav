@@ -24,7 +24,6 @@ Setup:
 
 import argparse
 import os
-import re
 import sys
 from pathlib import Path
 
@@ -32,6 +31,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from googleapiclient.discovery import build
 
+from util.folder_matching import folder_matches_group
 from util.google_group_utils import (
     DEFAULT_CLIENT_SECRETS_PATH,
     DOMAIN,
@@ -40,60 +40,12 @@ from util.google_group_utils import (
     get_credentials,
     group_display_name,
     group_email,
-    normalize_ampersand,
     read_folder_ids,
-    strip_parens,
     to_slug,
     write_folder_ids,
 )
 
 DEFAULT_DRIVE_ID = "0AFqC2xo9aTgPUk9PVA"
-
-# ── Matching helpers ──────────────────────────────────────────────────────────
-
-MATCH_SUFFIXES = ["working group", "circle"]
-ABBREV_STOP_WORDS = {"a", "an", "and", "at", "by", "for", "in", "of", "on", "or", "the", "to"}
-
-
-def to_match_base(name: str) -> str:
-    base = normalize_ampersand(strip_parens(name)).lower().strip()
-    for suffix in MATCH_SUFFIXES:
-        if re.search(r"\b" + re.escape(suffix) + r"\s*$", base):
-            base = re.sub(r"\b" + re.escape(suffix) + r"\s*$", "", base).strip()
-            break
-    return base
-
-
-def folder_abbreviation(folder_name: str) -> str:
-    words = re.findall(r"[a-z0-9]+", to_match_base(folder_name))
-    return "".join(w[0] for w in words if w not in ABBREV_STOP_WORDS)
-
-
-def singularize(base: str) -> str:
-    return re.sub(
-        r"[a-z0-9]+",
-        lambda m: m.group()[:-1] if m.group().endswith("s") and len(m.group()) > 2 else m.group(),
-        base,
-    )
-
-
-def concat(base: str) -> str:
-    return re.sub(r"[^a-z0-9]", "", base)
-
-
-def folder_matches_group(group_name: str, folder_name: str) -> bool:
-    group_base = singularize(to_match_base(group_name))
-    folder_base = singularize(to_match_base(folder_name))
-    if folder_base.startswith(group_base) or concat(folder_base).startswith(concat(group_base)):
-        return True
-    if group_base == folder_abbreviation(folder_name):
-        return True
-    return False
-
-
-def find_matching_folders(group_name: str, folders: list[dict]) -> list[dict]:
-    return [f for f in folders if folder_matches_group(group_name, f["name"])]
-
 
 # ── Google API helpers ────────────────────────────────────────────────────────
 
@@ -190,7 +142,7 @@ def main():
     errors: list[str] = []
 
     for group in groups:
-        matching = find_matching_folders(group["name"], folders)
+        matching = [f for f in folders if folder_matches_group(group["name"], f["name"])]
         if not matching:
             unmatched_groups.append(group)
             print(f"[NO MATCH]  group '{group['name']}' ({group['email']})")

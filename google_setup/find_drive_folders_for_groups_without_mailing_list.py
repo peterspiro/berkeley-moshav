@@ -32,7 +32,6 @@ Usage:
 
 import argparse
 import os
-import re
 import sys
 from pathlib import Path
 
@@ -41,14 +40,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from googleapiclient.discovery import build
 from playwright.sync_api import sync_playwright
 
-from google_setup.match_google_groups_to_drive_folders import (
-    ABBREV_STOP_WORDS,
-    DEFAULT_DRIVE_ID,
-    folder_matches_group,
-    singularize,
-    to_match_base,
-)
+from google_setup.match_google_groups_to_drive_folders import DEFAULT_DRIVE_ID
 from util.credentials import load_credentials
+from util.folder_matching import find_matching_folders
 from util.gather_utils import (
     _fetch_group_detail,
     close_log,
@@ -66,42 +60,6 @@ _LOG_FILE = Path("debug/find_drive_folders_log.csv")
 _SCREENSHOT_DIR = Path("debug/find_drive_folders_screenshots")
 
 configure(_LOG_FILE, _SCREENSHOT_DIR)
-
-
-MIN_TERM_LENGTH = 3
-
-
-def significant_words(base: str) -> set[str]:
-    """Words worth matching on: no stop words, no very short/common words."""
-    return {
-        w for w in re.findall(r"[a-z0-9]+", base)
-        if w not in ABBREV_STOP_WORDS and len(w) >= MIN_TERM_LENGTH
-    }
-
-
-def shares_significant_term(group_name: str, folder_name: str) -> bool:
-    """True if the group and folder names share at least one significant word,
-    e.g. group 'Landscape' vs. folder 'Landscape & Grounds Photos'."""
-    group_words = significant_words(singularize(to_match_base(group_name)))
-    folder_words = significant_words(singularize(to_match_base(folder_name)))
-    return bool(group_words & folder_words)
-
-
-def find_matching_folders(group_name: str, folders: list[dict]) -> list[dict]:
-    """Return candidate folders, each tagged with how it matched.
-
-    Folders satisfying the strict prefix/abbreviation rule (folder_matches_group)
-    are tagged "strict"; folders that merely share one significant word with the
-    group name are tagged "term" — a weaker signal meant to widen the candidate
-    list for human review.
-    """
-    matches = []
-    for f in folders:
-        if folder_matches_group(group_name, f["name"]):
-            matches.append({**f, "match_kind": "strict"})
-        elif shares_significant_term(group_name, f["name"]):
-            matches.append({**f, "match_kind": "term"})
-    return matches
 
 
 # ── Interactive selection ─────────────────────────────────────────────────────

@@ -23,7 +23,6 @@ Setup:
 import argparse
 import os
 import sys
-import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -37,9 +36,9 @@ from util.gather_utils import (
     init_log,
     launch_browser,
     log,
+    log_noop,
     login,
-    screenshot,
-    _check_submit_errors,
+    set_gather_group_email_list,
 )
 from util.google_group_utils import (
     DEFAULT_CLIENT_SECRETS_PATH,
@@ -63,119 +62,6 @@ _LOG_FILE_PATH = __import__("pathlib").Path("debug/gdrive_groups_log.csv")
 _SCREENSHOT_DIR = __import__("pathlib").Path("debug/gdrive_groups_screenshots")
 
 configure(_LOG_FILE_PATH, _SCREENSHOT_DIR)
-
-
-def log_noop(quiet: bool, level: str, action: str, detail: str = "", error: str = "") -> None:
-    """Like log(), but suppressed when quiet is True. Use for lines that
-    describe an already-correct/no-op state, never for an actual change."""
-    if not quiet:
-        log(level, action, detail, error)
-
-
-# ── Gather group edit ─────────────────────────────────────────────────────────
-
-def set_gather_group_email_list(
-    page,
-    base_url: str,
-    group_id: str,
-    list_local_part: str,
-    dry_run: bool,
-    quiet: bool = False,
-) -> None:
-    """
-    Open the Gather group edit page and configure the email list:
-      - Set the list address local part and domain (only when fields are enabled,
-        i.e. the list has not yet been created — Gather disables them after creation)
-      - Check "All community members can send to list?"
-    """
-    page.goto(f"{base_url}/groups/{group_id}/edit", wait_until="networkidle")
-
-    # Name field — name="groups_group[mailman_list_attributes][name]"
-    # Disabled once the list exists; Gather won't let it be changed after creation.
-    name_input = page.locator('#groups_group_mailman_list_attributes_name')
-    if name_input.count() == 0:
-        log("WARN", "set_email_list", f"group {group_id}: mailman name field not found")
-        return
-
-    name_disabled = name_input.first.is_disabled()
-    current_name = name_input.first.input_value().strip()
-
-    # Domain select — name="groups_group[mailman_list_attributes][domain_id]"
-    # Also disabled once list exists. Select by option label (the domain text), not value (numeric ID).
-    domain_select = page.locator('#groups_group_mailman_list_attributes_domain_id')
-
-    # "All community members can send to list?" checkbox
-    everyone_checkbox = page.locator('#groups_group_mailman_list_attributes_all_cmty_members_can_send')
-
-    if dry_run:
-        checked = everyone_checkbox.first.is_checked() if everyone_checkbox.count() > 0 else False
-        changes = []
-        if name_disabled:
-            if current_name != list_local_part:
-                log("WARN", "set_email_list",
-                    f"group {group_id}: name field disabled but value '{current_name}' ≠ '{list_local_part}'")
-        else:
-            # Mirrors the live branch below: the domain is always (re)submitted
-            # here (not conditionally compared), since this path only runs
-            # while the list hasn't been created yet.
-            if current_name != list_local_part:
-                changes.append(f"name: '{current_name}' → '{list_local_part}'")
-            if domain_select.count() > 0:
-                changes.append(f"domain → '{DOMAIN}'")
-            else:
-                log("WARN", "set_email_list", f"group {group_id}: domain selector not found")
-        if not checked:
-            changes.append("everyone_can_post: False → True")
-
-        if changes:
-            log("INFO", "set_email_list",
-                f"[dry-run] group {group_id}: would change {', '.join(changes)}")
-        else:
-            log_noop(quiet, "INFO", "set_email_list",
-                      f"group {group_id}: email list settings already correct")
-        return
-
-    changed = False
-
-    if not name_disabled:
-        if current_name != list_local_part:
-            name_input.first.fill(list_local_part)
-            changed = True
-        if domain_select.count() > 0:
-            domain_select.first.select_option(label=DOMAIN)
-            changed = True
-        else:
-            log("WARN", "set_email_list", f"group {group_id}: domain selector not found")
-    elif current_name != list_local_part:
-        log("WARN", "set_email_list",
-            f"group {group_id}: name field disabled but value '{current_name}' ≠ '{list_local_part}'")
-
-    if everyone_checkbox.count() > 0:
-        if not everyone_checkbox.first.is_checked():
-            # The checkbox is CSS-hidden; set it directly via JS to bypass visibility checks.
-            page.evaluate(
-                "document.getElementById"
-                "('groups_group_mailman_list_attributes_all_cmty_members_can_send').checked = true"
-            )
-            changed = True
-    else:
-        log("WARN", "set_email_list", f"group {group_id}: all_cmty_members_can_send checkbox not found")
-
-    if not changed:
-        log_noop(quiet, "INFO", "set_email_list",
-                  f"group {group_id}: email list settings already correct")
-        return
-
-    page.locator('input[type="submit"]').first.click(timeout=10_000)
-    page.wait_for_load_state("networkidle", timeout=30_000)
-
-    err = _check_submit_errors(page)
-    if err:
-        screenshot(page, f"group_{group_id}_error")
-        log("ERROR", "set_email_list", f"group {group_id}: form error — {err}")
-    else:
-        log("INFO", "set_email_list",
-            f"group {group_id}: email list settings updated")
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -303,7 +189,7 @@ def main():
                     log_noop(args.quiet, "INFO", "google_group", "  Settings already correct")
 
             # 4. Set Gather group email list
-            set_gather_group_email_list(page, BASE_URL, gid, list_local, args.dry_run, args.quiet)
+            set_gather_group_email_list(page, BASE_URL, gid, list_local, DOMAIN, args.dry_run, args.quiet)
 
         # Write updated folder_ids.gs if any new entries were added
         if folder_ids_dirty:
