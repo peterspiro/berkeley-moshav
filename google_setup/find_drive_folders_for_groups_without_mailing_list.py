@@ -2,7 +2,10 @@
 """
 Read-only report: for every Gather group under /groups that has no mailing
 list configured, search the Shared Drive (descending its full folder tree)
-for folder names that roughly match the group's name.
+for folder names that roughly match the group's name. In addition to the
+strict prefix/abbreviation match, a folder sharing just one significant
+word with the group name (e.g. group 'Landscape' vs. folder 'Landscape &
+Grounds Photos') is also reported, flagged as a weaker match.
 
 Does not modify anything in Gather, Google Groups, or Drive — it only
 prints a report of candidate folders per unmatched group, so a human can
@@ -26,6 +29,7 @@ Usage:
 
 import argparse
 import os
+import re
 import sys
 from collections import deque
 from pathlib import Path
@@ -36,8 +40,11 @@ from googleapiclient.discovery import build
 from playwright.sync_api import sync_playwright
 
 from google_setup.init_google_groups_from_drive_folders import (
+    ABBREV_STOP_WORDS,
     DEFAULT_DRIVE_ID,
     folder_matches_group,
+    singularize,
+    to_match_base,
 )
 from util.credentials import load_credentials
 from util.gather_utils import (
@@ -95,8 +102,40 @@ def walk_drive_folders(drive_service, drive_id: str) -> list[dict]:
     return folders
 
 
+MIN_TERM_LENGTH = 3
+
+
+def significant_words(base: str) -> set[str]:
+    """Words worth matching on: no stop words, no very short/common words."""
+    return {
+        w for w in re.findall(r"[a-z0-9]+", base)
+        if w not in ABBREV_STOP_WORDS and len(w) >= MIN_TERM_LENGTH
+    }
+
+
+def shares_significant_term(group_name: str, folder_name: str) -> bool:
+    """True if the group and folder names share at least one significant word,
+    e.g. group 'Landscape' vs. folder 'Landscape & Grounds Photos'."""
+    group_words = significant_words(singularize(to_match_base(group_name)))
+    folder_words = significant_words(singularize(to_match_base(folder_name)))
+    return bool(group_words & folder_words)
+
+
 def find_matching_folders(group_name: str, folders: list[dict]) -> list[dict]:
-    return [f for f in folders if folder_matches_group(group_name, f["name"])]
+    """Return candidate folders, each tagged with how it matched.
+
+    Folders satisfying the strict prefix/abbreviation rule (folder_matches_group)
+    are tagged "strict"; folders that merely share one significant word with the
+    group name are tagged "term" — a weaker signal meant to widen the candidate
+    list for human review.
+    """
+    matches = []
+    for f in folders:
+        if folder_matches_group(group_name, f["name"]):
+            matches.append({**f, "match_kind": "strict"})
+        elif shares_significant_term(group_name, f["name"]):
+            matches.append({**f, "match_kind": "term"})
+    return matches
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -148,7 +187,8 @@ def main(base_url: str, email: str, password: str, drive_id: str, credentials_pa
         print(f"[{len(matches)} MATCH(ES)]  '{group.name}'")
         for f in matches:
             path_str = " / ".join(f["path"])
-            print(f"    {path_str}   ({f['id']})")
+            tag = "" if f["match_kind"] == "strict" else " [weak: shared term only]"
+            print(f"    {path_str}   ({f['id']}){tag}")
 
     close_log()
 
