@@ -36,15 +36,19 @@ def scrape_gdrive_config(page, base_url: str) -> list[dict]:
     """
     Navigate to /gdrive/config and return a list of entries for the Folders
     section only (not Shared Drives), each a dict with:
-      folder_name – display name of the folder (plain text on page)
-      group_id    – Gather group ID associated with this folder
-      group_name  – Gather group name
-      item_id     – Gather's internal numeric ID for this linked item, or
-                    None if no item-groups/new link was found in the row
+      folder_name    – display name of the folder
+      group_id       – Gather group ID associated with this folder
+      group_name     – Gather group name
+      item_id        – Gather's internal numeric ID for this linked item, or
+                       None if no item-groups/new link was found in the row
+      google_file_id – the underlying Google Drive folder ID, parsed from a
+                       /gdrive/item/{id} link on the folder name, or None if
+                       the folder name isn't rendered as a link
 
     The page has a single <table> with <tr class="heading"> rows separating
     sections (Shared Drives / Folders / Files).  Each data row has the folder
-    name as plain text in the first <td> and a /groups/{id} link in the
+    name in the first <td> (sometimes a plain-text label, sometimes a link
+    to /gdrive/item/{google_file_id}) and a /groups/{id} link in the
     third <td>.
     """
     page.goto(f"{base_url}/gdrive/config", wait_until="networkidle")
@@ -73,13 +77,20 @@ def scrape_gdrive_config(page, base_url: str) -> list[dict]:
         group_id = gm.group(1)
         group_name = group_link.first.inner_text().strip()
 
-        # Folder name is plain text in the first <td>
         cells = row.locator("td").all()
         if not cells:
             continue
         folder_name = cells[0].inner_text().strip()
         if not folder_name:
             continue
+
+        google_file_id = None
+        folder_link = cells[0].locator("a[href*='/gdrive/item/']")
+        if folder_link.count() > 0:
+            folder_href = folder_link.first.get_attribute("href") or ""
+            fm = re.search(r"/gdrive/item/([^/?#]+)", folder_href)
+            if fm:
+                google_file_id = fm.group(1)
 
         item_id = None
         item_link = row.locator('a[href*="item-groups/new"]')
@@ -94,6 +105,7 @@ def scrape_gdrive_config(page, base_url: str) -> list[dict]:
             group_id=group_id,
             group_name=group_name,
             item_id=item_id,
+            google_file_id=google_file_id,
         ))
 
     return entries
