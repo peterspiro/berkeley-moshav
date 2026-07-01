@@ -2,7 +2,7 @@
 
 import pytest
 
-from setup.import_photos import (
+from data_import.import_photos import (
     _H2Parser,
     _PhotoLinkParser,
     find_members_for_names,
