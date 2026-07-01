@@ -107,10 +107,18 @@ const FOLDER_IDS = ["""
 
 
 def read_folder_ids() -> list[tuple[str, str]]:
-    """Return [(folder_id, folder_name), ...] parsed from folder_ids.gs."""
+    """Return [(folder_id, folder_name), ...] parsed from folder_ids.gs.
+
+    Only parses entries inside the FOLDER_IDS array itself, so the example
+    entry in the file's leading doc comment isn't mistaken for real data.
+    """
     if not FOLDER_IDS_PATH.exists():
         return []
-    return re.findall(r"'([^']+)',\s*//\s*(.+)", FOLDER_IDS_PATH.read_text())
+    text = FOLDER_IDS_PATH.read_text()
+    m = re.search(r"const FOLDER_IDS = \[(.*?)\];", text, re.DOTALL)
+    if not m:
+        return []
+    return re.findall(r"'([^']+)',\s*//\s*(.+)", m.group(1))
 
 
 def write_folder_ids(entries: list[tuple[str, str]]) -> None:
