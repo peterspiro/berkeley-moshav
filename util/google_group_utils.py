@@ -24,7 +24,7 @@ REQUIRED_GROUP_SETTINGS = {
     "allowExternalMembers": "true",               # Allow external members
 }
 TOKEN_PATH = Path.home() / ".google_setup_token.pkl"
-FOLDER_IDS_PATH = Path(__file__).parent / "groups_drive_sync" / "folder_ids.gs"
+FOLDER_IDS_PATH = Path(__file__).parent.parent / "groups_drive_sync" / "folder_ids.gs"
 
 SCOPES = [
     "https://www.googleapis.com/auth/drive.readonly",
