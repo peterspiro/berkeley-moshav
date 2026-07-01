@@ -44,7 +44,8 @@ from util.gather_utils import (
     log,
     login,
 )
-from util.gdrive_config import resolve_documents_url_for_item, scrape_gdrive_config
+from util.gdrive_config import gdrive_item_url, load_gdrive_item_map, scrape_gdrive_config
+from util.google_group_utils import read_folder_ids
 from util.hierarchy_wiki import (
     WIKI_SLUG,
     HierarchyNode,
@@ -126,26 +127,42 @@ def fetch_documents_url_by_group_id(page, base_url: str) -> dict[str, str]:
     """Return {group_id: documents_href} for every Gather group with a
     Drive folder linked via /gdrive/config.
 
-    Resolves each linked item's underlying Google Drive folder ID directly
-    from its /gdrive/items/{id}/edit page and builds a direct Drive URL from
-    it. This works regardless of how deeply the folder is nested in the
-    Shared Drive — matching folder names against the /gdrive browse page
-    (the previous approach) only found top-level folders.
+    /gdrive/config only shows the folder's display name and a numeric
+    item_id (used for the item-groups association, not the Drive file
+    itself) — it doesn't expose the underlying Google Drive folder ID, and
+    there's no working /gdrive/items/{id}/edit page to look it up on
+    (confirmed 404). So the Drive folder ID is resolved entirely from data
+    already on disk instead of extra page navigation:
+      1. gdrive_item_map.json — google_file_id -> item_id, populated
+         whenever create_gdrive_item() links a new folder.
+      2. groups_drive_sync/folder_ids.gs — folder_id/folder_name pairs,
+         populated by match_google_groups_to_drive_folders.py.
+    Folders linked some other way (e.g. directly through the Gather UI)
+    won't be in either source and are logged as unresolved.
     """
     config_entries = scrape_gdrive_config(page, base_url)
 
+    item_id_to_google_file_id = {
+        item_id: google_file_id
+        for google_file_id, item_id in load_gdrive_item_map().items()
+    }
+    google_file_id_by_folder_name = {
+        name: folder_id for folder_id, name in read_folder_ids()
+    }
+
     documents_url_by_group_id: dict[str, str] = {}
     for entry in config_entries:
-        if not entry["item_id"]:
+        google_file_id = (
+            item_id_to_google_file_id.get(entry["item_id"])
+            or google_file_id_by_folder_name.get(entry["folder_name"])
+        )
+        if not google_file_id:
             log("WARN", "documents_link", entry["folder_name"],
-                "no item_id found on /gdrive/config row; skipping")
+                f"no known Drive folder ID for item_id={entry['item_id']!r} — "
+                "run match_google_groups_to_drive_folders.py, or link it via "
+                "init_google_groups_from_gather_gdrive_config.py, to record it")
             continue
-        documents_url = resolve_documents_url_for_item(page, base_url, entry["item_id"])
-        if not documents_url:
-            log("WARN", "documents_link", entry["folder_name"],
-                f"could not resolve a Drive URL for item_id={entry['item_id']}")
-            continue
-        documents_url_by_group_id[entry["group_id"]] = documents_url
+        documents_url_by_group_id[entry["group_id"]] = gdrive_item_url(base_url, google_file_id)
     return documents_url_by_group_id
 
 

@@ -129,86 +129,15 @@ def gdrive_config_item_ids(page, base_url: str) -> dict[str, str]:
     return existing
 
 
-_EXTERNAL_ID_SELECTORS = (
-    'input[name="gdrive_item[external_id]"]',
-    'input[name*="external_id"]',
-    'input[id*="external_id"]',
-)
+def gdrive_item_url(base_url: str, google_file_id: str) -> str:
+    """Return Gather's own viewer URL for a linked Drive item.
 
-
-def google_file_id_for_item(page, base_url: str, item_id: str) -> str | None:
-    """Return the underlying Google Drive file/folder ID for a Gather
-    gdrive_item, by reading its external_id field on /gdrive/items/{id}/edit.
-
-    Unlike matching folder names against the /gdrive browse page (which
-    only surfaces top-level items), this works regardless of how deeply
-    nested the folder is in the Shared Drive.
-
-    The field may be disabled/read-only (or named slightly differently)
-    on the edit page compared to the new-item form, so several selectors
-    are tried before giving up.
+    This is the actual route Gather exposes (confirmed from a real example:
+    /gdrive/item/{google_file_id}) — there is no /gdrive/items/{id}/edit
+    route (that 404s), and the numeric item_id used in item-groups/new
+    links is a separate internal ID, not the Drive file ID.
     """
-    page.goto(f"{base_url}/gdrive/items/{item_id}/edit", wait_until="networkidle")
-    for selector in _EXTERNAL_ID_SELECTORS:
-        field = page.locator(selector)
-        if field.count() > 0:
-            value = field.first.input_value().strip()
-            if value:
-                return value
-    return None
-
-
-_LABELED_ID_RE = (
-    r"(?:external|drive|google)[\s_-]*(?:id|file)?[:\s]*"
-    r"([A-Za-z0-9_-]{15,60})"
-)
-
-
-def resolve_documents_url_for_item(page, base_url: str, item_id: str) -> str | None:
-    """Return a direct Google Drive URL for a linked gdrive_item.
-
-    Tries, in order:
-      1. An existing "open in Drive" link on /gdrive/items/{id}/edit, if the
-         page provides one — whatever URL Gather already considers canonical.
-      2. An external_id-like <input> field.
-      3. A Drive-ID-shaped token appearing near a label like "External ID"
-         in the page's visible text (for read-only/non-form displays).
-    Logs rich diagnostics (URL, title, body preview) if none of these work,
-    so the actual page structure can be determined.
-    """
-    page.goto(f"{base_url}/gdrive/items/{item_id}/edit", wait_until="networkidle")
-
-    drive_link = page.locator('a[href*="drive.google.com"]')
-    if drive_link.count() > 0:
-        href = drive_link.first.get_attribute("href")
-        if href:
-            return href
-
-    for selector in _EXTERNAL_ID_SELECTORS:
-        field = page.locator(selector)
-        if field.count() > 0:
-            value = field.first.input_value().strip()
-            if value:
-                return drive_folder_url(value)
-
-    body_text = page.locator("body").inner_text()
-    labeled_m = re.search(_LABELED_ID_RE, body_text, re.IGNORECASE)
-    if labeled_m:
-        return drive_folder_url(labeled_m.group(1))
-
-    fields = [
-        el.get_attribute("name") or el.get_attribute("id")
-        for el in page.locator("input[name], input[id]").all()
-    ]
-    log("WARN", "resolve_documents_url", f"item_id={item_id}",
-        f"url={page.url!r} title={page.title()!r} fields={fields} "
-        f"body_preview={body_text[:300]!r}")
-    return None
-
-
-def drive_folder_url(google_file_id: str) -> str:
-    """Return a direct, depth-independent Google Drive URL for a folder ID."""
-    return f"https://drive.google.com/drive/folders/{google_file_id}"
+    return f"{base_url}/gdrive/item/{google_file_id}"
 
 
 # ── Linking a Drive folder into /gdrive/config ────────────────────────────────
