@@ -158,13 +158,23 @@ def google_file_id_for_item(page, base_url: str, item_id: str) -> str | None:
     return None
 
 
+_LABELED_ID_RE = (
+    r"(?:external|drive|google)[\s_-]*(?:id|file)?[:\s]*"
+    r"([A-Za-z0-9_-]{15,60})"
+)
+
+
 def resolve_documents_url_for_item(page, base_url: str, item_id: str) -> str | None:
     """Return a direct Google Drive URL for a linked gdrive_item.
 
-    Prefers an existing "open in Drive" link on /gdrive/items/{id}/edit, if
-    the page provides one — that's whatever URL Gather already considers
-    canonical for the item. Falls back to reading the external_id field and
-    constructing a folders/ URL from it.
+    Tries, in order:
+      1. An existing "open in Drive" link on /gdrive/items/{id}/edit, if the
+         page provides one — whatever URL Gather already considers canonical.
+      2. An external_id-like <input> field.
+      3. A Drive-ID-shaped token appearing near a label like "External ID"
+         in the page's visible text (for read-only/non-form displays).
+    Logs rich diagnostics (URL, title, body preview) if none of these work,
+    so the actual page structure can be determined.
     """
     page.goto(f"{base_url}/gdrive/items/{item_id}/edit", wait_until="networkidle")
 
@@ -181,12 +191,18 @@ def resolve_documents_url_for_item(page, base_url: str, item_id: str) -> str | N
             if value:
                 return drive_folder_url(value)
 
+    body_text = page.locator("body").inner_text()
+    labeled_m = re.search(_LABELED_ID_RE, body_text, re.IGNORECASE)
+    if labeled_m:
+        return drive_folder_url(labeled_m.group(1))
+
     fields = [
         el.get_attribute("name") or el.get_attribute("id")
         for el in page.locator("input[name], input[id]").all()
     ]
     log("WARN", "resolve_documents_url", f"item_id={item_id}",
-        f"no Drive link or external_id field found; page fields={fields}")
+        f"url={page.url!r} title={page.title()!r} fields={fields} "
+        f"body_preview={body_text[:300]!r}")
     return None
 
 
