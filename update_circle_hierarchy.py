@@ -2,7 +2,8 @@
 """
 Syncs the "Circle Hierarchy" wiki page with the current /groups list.
 
-For every circle/working group in Gather (kind "circle" or "committee"):
+For every circle/working group in Gather (kind "circle" or "committee"),
+excluding hidden groups:
   - If it's already in the hierarchy but has been renamed, updates the
     hierarchy line to the current name (matched by Gather group ID, embedded
     in the [Members] link, so renames don't break the association).
@@ -14,9 +15,15 @@ For every circle/working group in Gather (kind "circle" or "committee"):
   - If a hierarchy entry's linked group no longer exists in Gather, asks
     whether to delete it (reparenting any children to keep the tree intact).
 
+Hidden groups are skipped entirely: not offered for addition, not flagged
+as stale if their hierarchy entry still references them.
+
+In dry-run mode (-n), missing/stale entries are only reported, never
+prompted for.
+
 Usage:
-    python sync_circle_hierarchy_wiki.py -e admin@example.com -p secret
-    python sync_circle_hierarchy_wiki.py -u https://example.gather.coop -n
+    python update_circle_hierarchy.py -e admin@example.com -p secret
+    python update_circle_hierarchy.py -u https://example.gather.coop -n
 """
 
 import argparse
@@ -49,8 +56,8 @@ from util.hierarchy_wiki import (
     render_hierarchy,
 )
 
-_LOG_FILE = Path("sync_hierarchy_log.csv")
-_SCREENSHOT_DIR = Path("sync_hierarchy_screenshots")
+_LOG_FILE = Path("update_circle_hierarchy_log.csv")
+_SCREENSHOT_DIR = Path("update_circle_hierarchy_screenshots")
 
 configure(_LOG_FILE, _SCREENSHOT_DIR)
 
@@ -82,19 +89,38 @@ def fetch_current_hierarchy(page, base_url: str) -> str:
     return _codemirror_get(page)
 
 
-def fetch_group_info(page, base_url: str) -> dict[str, dict]:
-    """Return {group_id: {"name", "kind", "url"}} for every Gather group."""
+def _group_is_hidden(page, detail) -> bool:
+    """True if the group is hidden — either via a "Hidden" availability
+    value, or a boolean hidden checkbox on the edit page (whichever this
+    Gather instance uses)."""
+    if detail.availability.strip().lower() == "hidden":
+        return True
+    checkbox = page.locator('input[type="checkbox"][name*="[hidden]"]')
+    return checkbox.count() > 0 and checkbox.first.is_checked()
+
+
+def fetch_group_info(page, base_url: str) -> tuple[dict[str, dict], set[str]]:
+    """Return ({group_id: {"name", "kind", "url"}}, hidden_group_ids).
+
+    Hidden groups are reported separately (not included in info) so callers
+    can skip them entirely — neither offered for addition nor flagged as
+    stale if a hierarchy entry still references them.
+    """
     groups = fetch_all_gather_groups(page, base_url)
     log("INFO", "fetch_groups", f"{len(groups)} group(s) found")
     info: dict[str, dict] = {}
+    hidden_ids: set[str] = set()
     for group in groups:
         detail = _fetch_group_detail(page, base_url, group)
+        if _group_is_hidden(page, detail):
+            hidden_ids.add(group.group_id)
+            continue
         info[group.group_id] = {
             "name": detail.name,
             "kind": (detail.kind or "").strip().lower(),
             "url": f"/groups/{group.group_id}",
         }
-    return info
+    return info, hidden_ids
 
 
 def fetch_documents_url_by_group_id(page, base_url: str) -> dict[str, str]:
@@ -147,16 +173,21 @@ def prompt_yes_no(question: str) -> bool:
 
 def sync_hierarchy(
     root, group_info: dict[str, dict], documents_url_by_group_id: dict[str, str],
+    hidden_ids: set[str], dry_run: bool,
 ) -> None:
     """Mutate the parsed hierarchy tree in place: rename, add Documents
     links, prompt for deletion of stale entries."""
     for node in list(iter_nodes(root)):
-        if not node.group_id:
+        if not node.group_id or node.group_id in hidden_ids:
             continue
 
         live = group_info.get(node.group_id)
         if live is None:
-            if prompt_yes_no(
+            if dry_run:
+                print(f"[dry-run] '{node.name}' (id={node.group_id}) no longer exists "
+                      f"in Gather; would prompt to delete")
+                log("INFO", "would_remove", f"{node.name} (id={node.group_id})")
+            elif prompt_yes_no(
                 f"Group '{node.name}' (id={node.group_id}) is in the hierarchy "
                 f"but no longer exists in Gather. Delete it from the hierarchy?"
             ):
@@ -179,6 +210,7 @@ def sync_hierarchy(
 
 def add_missing_groups(
     root, group_info: dict[str, dict], documents_url_by_group_id: dict[str, str],
+    dry_run: bool,
 ) -> None:
     """Prompt for and add any eligible group not yet present in the hierarchy."""
     tree_group_ids = {n.group_id for n in iter_nodes(root) if n.group_id}
@@ -191,6 +223,12 @@ def add_missing_groups(
     missing.sort(key=lambda item: item[1]["name"].casefold())
 
     for group_id, info in missing:
+        if dry_run:
+            print(f"[dry-run] '{info['name']}' (id={group_id}) is missing from the "
+                  f"hierarchy; would prompt for its parent circle")
+            log("INFO", "would_add_missing", f"{info['name']} (id={group_id})")
+            continue
+
         parent = prompt_for_parent(info["name"], all_nodes)
         if parent is None:
             log("INFO", "skip_missing", f"{info['name']} (id={group_id})")
@@ -229,11 +267,11 @@ def main(base_url: str, email: str, password: str, dry_run: bool):
         current_content = fetch_current_hierarchy(page, base_url)
         root = parse_hierarchy(current_content)
 
-        group_info = fetch_group_info(page, base_url)
+        group_info, hidden_ids = fetch_group_info(page, base_url)
         documents_url_by_group_id = fetch_documents_url_by_group_id(page, base_url)
 
-        sync_hierarchy(root, group_info, documents_url_by_group_id)
-        add_missing_groups(root, group_info, documents_url_by_group_id)
+        sync_hierarchy(root, group_info, documents_url_by_group_id, hidden_ids, dry_run)
+        add_missing_groups(root, group_info, documents_url_by_group_id, dry_run)
 
         new_content = render_hierarchy(root)
         ok = ensure_hierarchy_page(page, base_url, new_content, dry_run)
