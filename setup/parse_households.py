@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-Preprocesses a TSV spreadsheet of community members into household clusters.
+Parses a TSV spreadsheet of community members into household clusters.
 
 Usage:
-    python preprocess.py members.tsv
-    python preprocess.py members.tsv --output households.json
+    python parse_households.py members.tsv
+    python parse_households.py members.tsv --output households.json
 """
 
 import argparse
@@ -208,7 +208,7 @@ def resolve_adult_name(
 
 # ── Main parsing logic ────────────────────────────────────────────────────────
 
-def preprocess_text(tsv_text: str) -> list[dict]:
+def parse_households_from_text(tsv_text: str) -> list[dict]:
     """Parse TSV text (already loaded as a string) into household dicts."""
     all_rows = list(csv.reader(io.StringIO(tsv_text), delimiter="\t"))
     header_idx = find_header_row_index(all_rows)
@@ -366,10 +366,10 @@ def preprocess_text(tsv_text: str) -> list[dict]:
     return households
 
 
-def preprocess(tsv_path: str) -> list[dict]:
+def parse_households(tsv_path: str) -> list[dict]:
     """Read a TSV file from disk and return household dicts."""
     with open(tsv_path, newline="", encoding="utf-8-sig") as f:
-        return preprocess_text(f.read())
+        return parse_households_from_text(f.read())
 
 
 def main():
@@ -378,7 +378,7 @@ def main():
     parser.add_argument("--output", "-o", help="Output JSON file (default: stdout)")
     args = parser.parse_args()
 
-    households = preprocess(args.tsv)
+    households = parse_households(args.tsv)
     output = json.dumps(households, indent=2)
 
     if args.output:

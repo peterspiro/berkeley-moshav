@@ -27,7 +27,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from playwright.sync_api import Page, sync_playwright
 
 from util.credentials import load_credentials
-from setup.preprocess import preprocess_text
+from setup.parse_households import parse_households_from_text
 from util.gather_utils import (
     close_log,
     configure,
@@ -400,8 +400,8 @@ def main(
 
     log("INFO", "fetch_sheet", sheet_url)
     tsv_text = fetch_sheet(sheet_url)
-    households = preprocess_text(tsv_text)
-    log("INFO", "preprocess", f"{len(households)} households parsed")
+    households = parse_households_from_text(tsv_text)
+    log("INFO", "parse_households", f"{len(households)} households parsed")
 
     log("INFO", "scrape", f"Fetching {community_url}")
     photos = scrape_community_photos(community_url)

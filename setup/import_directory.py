@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from playwright.sync_api import Page, sync_playwright
 
 from util.credentials import load_credentials
-from setup.preprocess import preprocess_text
+from setup.parse_households import parse_households_from_text
 from util.gather_utils import (
     _check_submit_errors,
     close_log,
@@ -377,8 +377,8 @@ def main(sheet_url: str, base_url: str, email: str, password: str,
     log("INFO", "start", f"sheet_url={sheet_url} base_url={base_url} dry_run={dry_run}")
 
     tsv_text = fetch_sheet(sheet_url)
-    households = preprocess_text(tsv_text)
-    log("INFO", "preprocess", f"{len(households)} households parsed")
+    households = parse_households_from_text(tsv_text)
+    log("INFO", "parse_households", f"{len(households)} households parsed")
 
     if household_prefix is not None:
         prefix_lower = household_prefix.strip().lower()

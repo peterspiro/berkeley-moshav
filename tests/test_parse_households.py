@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Unit tests for preprocess.py"""
+"""Unit tests for parse_households.py"""
 
 import io
 import json
@@ -8,14 +8,14 @@ import sys
 import tempfile
 import unittest
 
-from setup.preprocess import (
+from setup.parse_households import (
     UnionFind,
     derive_household_name,
     is_international_phone,
     normalize_name,
     parse_others,
     parse_unit,
-    preprocess,
+    parse_households,
     resolve_adult_name,
     strip_pronunciation,
 )
@@ -193,7 +193,7 @@ class TestPreprocess(unittest.TestCase):
                 "Status": "Member",
             },
         ])
-        result = preprocess(path)
+        result = parse_households(path)
         self.assertEqual(len(result), 1)
         hh = result[0]
         self.assertEqual(hh["household_name"], "Blue-Green")
@@ -220,8 +220,8 @@ class TestPreprocess(unittest.TestCase):
             },
         ]
         path = self._tsv_file(rows)
-        r1 = preprocess(path)
-        r2 = preprocess(path)
+        r1 = parse_households(path)
+        r2 = parse_households(path)
         self.assertEqual(json.dumps(r1, sort_keys=True), json.dumps(r2, sort_keys=True))
 
     def test_children_from_others_column_by_age(self):
@@ -241,7 +241,7 @@ class TestPreprocess(unittest.TestCase):
                 "Status": "Member",
             },
         ])
-        result = preprocess(path)
+        result = parse_households(path)
         self.assertEqual(len(result), 1)
         hh = result[0]
         # 2 adults + 2 children (Kael and Wren deduped across both parents)
@@ -273,7 +273,7 @@ class TestPreprocess(unittest.TestCase):
                 "Status": "Member",
             },
         ])
-        result = preprocess(path)
+        result = parse_households(path)
         self.assertEqual(len(result), 1)
         children = [m for m in result[0]["members"] if m["child"]]
         self.assertEqual(len(children), 1)
@@ -297,7 +297,7 @@ class TestPreprocess(unittest.TestCase):
                 "Status": "Member",
             },
         ])
-        result = preprocess(path)
+        result = parse_households(path)
         self.assertEqual(len(result), 1)
         hh = result[0]
         self.assertEqual(hh["household_name"], "East-West")
@@ -316,7 +316,7 @@ class TestPreprocess(unittest.TestCase):
                 "Status": "Member",
             },
         ])
-        result = preprocess(path)
+        result = parse_households(path)
         children = [m for m in result[0]["members"] if m["child"]]
         child_names = {m["first_name"] for m in children}
         self.assertIn("Luna Liliana", child_names)
@@ -337,7 +337,7 @@ class TestPreprocess(unittest.TestCase):
                 "Status": "Member",
             },
         ])
-        result = preprocess(path)
+        result = parse_households(path)
         self.assertEqual(len(result), 1)
         self.assertEqual(len(result[0]["members"]), 2)
 
@@ -356,7 +356,7 @@ class TestPreprocess(unittest.TestCase):
                 "Status": "Member",
             },
         ])
-        result = preprocess(path)
+        result = parse_households(path)
         self.assertEqual(len(result), 1)
         self.assertEqual(len(result[0]["members"]), 2)
 
@@ -378,7 +378,7 @@ class TestPreprocess(unittest.TestCase):
                 "Status": "Member",
             },
         ])
-        result = preprocess(path)
+        result = parse_households(path)
         self.assertEqual(len(result), 1)
         self.assertEqual(len(result[0]["members"]), 2)
         self.assertEqual(result[0]["household_name"], "Cooper-Mills")
@@ -393,7 +393,7 @@ class TestPreprocess(unittest.TestCase):
                 "Status": "Member",
             },
         ])
-        result = preprocess(path)
+        result = parse_households(path)
         self.assertEqual(len(result), 1)
         # Only Nina — no phantom entry for Morgan
         self.assertEqual(len(result[0]["members"]), 1)
@@ -413,7 +413,7 @@ class TestPreprocess(unittest.TestCase):
                 "Status": "Member",
             },
         ])
-        result = preprocess(path)
+        result = parse_households(path)
         self.assertEqual(len(result), 1)
         adults = [m for m in result[0]["members"] if not m["child"]]
         first_names = {m["first_name"] for m in adults}
@@ -428,7 +428,7 @@ class TestPreprocess(unittest.TestCase):
                 "Status": "Member & Consultant",
             },
         ])
-        result = preprocess(path)
+        result = parse_households(path)
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0]["household_name"], "Daly")
         children = [m for m in result[0]["members"] if m["child"]]
@@ -450,7 +450,7 @@ class TestPreprocess(unittest.TestCase):
                 "Status": "Applicant",
             },
         ])
-        result = preprocess(path)
+        result = parse_households(path)
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0]["household_name"], "Smith")
 
@@ -463,7 +463,7 @@ class TestPreprocess(unittest.TestCase):
                 "Status": "MEMBER",
             },
         ])
-        result = preprocess(path)
+        result = parse_households(path)
         self.assertEqual(len(result), 1)
 
     def test_status_filter_empty_returns_nothing(self):
@@ -475,7 +475,7 @@ class TestPreprocess(unittest.TestCase):
                 "Status": "",
             },
         ])
-        result = preprocess(path)
+        result = parse_households(path)
         self.assertEqual(result, [])
 
     def test_international_phone_stored_in_pronouns(self):
@@ -488,7 +488,7 @@ class TestPreprocess(unittest.TestCase):
                 "Status": "Member",
             },
         ])
-        result = preprocess(path)
+        result = parse_households(path)
         member = result[0]["members"][0]
         self.assertEqual(member["phone"], "")
         self.assertEqual(member["pronouns"], "+44 20 7946 0958")
@@ -504,8 +504,8 @@ class TestPreprocess(unittest.TestCase):
                 "Status": "Member",
             }])
         )
-        from preprocess import preprocess_text
-        result = preprocess_text(tsv)
+        from setup.parse_households import parse_households_from_text
+        result = parse_households_from_text(tsv)
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0]["members"][0]["first_name"], "Alex")
 
@@ -531,7 +531,7 @@ class TestPreprocess(unittest.TestCase):
                 "Status": "Member",
             },
         ])
-        result = preprocess(path)
+        result = parse_households(path)
         self.assertEqual(len(result), 1)
         self.assertEqual(len(result[0]["members"]), 3)
 
@@ -550,7 +550,7 @@ class TestPreprocess(unittest.TestCase):
                 "Status": "Member",
             },
         ])
-        result = preprocess(path)
+        result = parse_households(path)
         self.assertEqual(len(result), 2)
         names = {h["household_name"] for h in result}
         self.assertIn("Jones", names)
@@ -565,7 +565,7 @@ class TestPreprocess(unittest.TestCase):
                 "Status": "Member",
             },
         ])
-        result = preprocess(path)
+        result = parse_households(path)
         self.assertEqual(result[0]["unit_num"], 20)
         self.assertEqual(result[0]["unit_suffix"], "2A")
 
@@ -578,7 +578,7 @@ class TestPreprocess(unittest.TestCase):
                 "Status": "Member",
             },
         ])
-        result = preprocess(path)
+        result = parse_households(path)
         adult = result[0]["members"][0]
         self.assertFalse(adult["child"])
         self.assertTrue(adult["full_access"])
@@ -595,7 +595,7 @@ class TestPreprocess(unittest.TestCase):
                 "Status": "Member",
             },
         ])
-        result = preprocess(path)
+        result = parse_households(path)
         # No children: Kids column is ignored, Others has no age-qualified entries
         children = [m for m in result[0]["members"] if m["child"]]
         self.assertEqual(len(children), 0)
