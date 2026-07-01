@@ -51,6 +51,7 @@ from util.gather_utils import (
     select2_choose,
     to_csv_export_url,
 )
+from util.gdrive_config import ensure_gdrive_group_access
 
 
 # ── Constants ─────────────────────────────────────────────────────────────────
@@ -66,7 +67,6 @@ WIKI_SLUG = "circle-hierarchy"
 _HIERARCHY_ROOT = "Top Circle / HOA"
 _LOG_FILE = Path(__file__).parent / "groups_log.csv"
 _SCREENSHOT_DIR = Path(__file__).parent / "import_screenshots"
-_GDRIVE_MAP_FILE = Path(__file__).parent / "gdrive_item_map.json"
 
 configure(_LOG_FILE, _SCREENSHOT_DIR)
 
@@ -1304,7 +1304,7 @@ def process(
                 continue
             if circle.name not in group_urls:
                 continue
-            ok = _ensure_gdrive_group_access(
+            ok = ensure_gdrive_group_access(
                 page, base_url, gdrive_href, gather_name, dry_run
             )
             stats["gdrive_linked" if ok else "gdrive_failed"] += 1
@@ -1330,253 +1330,6 @@ def process(
 
     log("INFO", "done", str(stats))
     close_log()
-
-
-def _load_gdrive_item_map() -> dict[str, str]:
-    """Load the persisted google_file_id → numeric item_id mapping."""
-    import json
-    if _GDRIVE_MAP_FILE.exists():
-        try:
-            return json.loads(_GDRIVE_MAP_FILE.read_text())
-        except Exception:
-            pass
-    return {}
-
-
-def _save_gdrive_item_map(mapping: dict[str, str]) -> None:
-    """Persist the google_file_id → numeric item_id mapping to disk."""
-    import json
-    _GDRIVE_MAP_FILE.write_text(json.dumps(mapping, indent=2, sort_keys=True))
-
-
-def _ensure_gdrive_group_access(
-    page: Page,
-    base_url: str,
-    gdrive_href: str,
-    gather_name: str,
-    dry_run: bool,
-) -> bool:
-    """Link a gdrive folder to Gather if needed, then add the Gather group as Content manager.
-
-    gdrive_href is a /gdrive/item/{google_file_id} path from the browse page.
-
-    Steps:
-    1. Snapshot item_ids on /gdrive/config.  Try to link the folder via
-       /gdrive/items/new.  If it succeeds, find the new item_id by diff.
-       If "already taken", find item_id by checking /gdrive/items/{id}/edit
-       for each known config item.
-    2. Navigate to /gdrive/item-groups/new?item_id={id}, select the group, set
-       access level to Content manager, and save.
-    """
-    google_file_id = gdrive_href.rstrip("/").split("/")[-1]
-    short_id = google_file_id[:12]
-
-    try:
-        # ── Step 1: find the numeric item_id for this folder ──────────────────
-        page.goto(f"{base_url}/gdrive/config", wait_until="networkidle")
-
-        # Collect all existing item_ids and their container text.
-        existing: dict[str, str] = {}  # item_id → container_text
-        for link in page.locator('a[href*="item-groups/new"]').all():
-            href = link.get_attribute("href") or ""
-            m = re.search(r"item_id=(\d+)", href)
-            if not m:
-                continue
-            iid = m.group(1)
-            container_text = page.evaluate(
-                """el => {
-                    let c = el.parentElement;
-                    while (c && c !== document.body) {
-                        if (c.querySelectorAll('a[href*="item-groups/new"]').length <= 1)
-                            return c.textContent;
-                        c = c.parentElement;
-                    }
-                    return '';
-                }""",
-                link.element_handle(),
-            )
-            existing[iid] = container_text
-            log("DEBUG", "gdrive_config_container",
-                f"item_id={iid} text={container_text[:200]!r}")
-
-        item_id: str | None = None
-        container_text = ""
-
-        # Check the persistent map first (written whenever we successfully link a folder).
-        gdrive_map = _load_gdrive_item_map()
-        if google_file_id in gdrive_map:
-            item_id = gdrive_map[google_file_id]
-            container_text = existing.get(item_id, "")
-            log("INFO", "gdrive_link_item",
-                f"Found cached item_id={item_id} for {gather_name!r}")
-
-        if item_id is None:
-            if dry_run:
-                log("DRY-RUN", "gdrive_link_item",
-                    f"would link gdrive folder {google_file_id!r} for {gather_name!r}")
-                log("DRY-RUN", "gdrive_access",
-                    f"would add {gather_name!r} (Content manager) to linked item")
-                return True
-
-            page.goto(f"{base_url}/gdrive/items/new", wait_until="networkidle")
-            ext_field = page.locator('input[name="gdrive_item[external_id]"]')
-            if ext_field.count() == 0:
-                log("WARN", "gdrive_link_item", gather_name,
-                    "gdrive_item[external_id] field not found on /gdrive/items/new")
-                screenshot(page, f"gdrive_link_nofield_{short_id}")
-                return False
-
-            ext_field.fill(google_file_id)
-            page.locator('select[name="gdrive_item[kind]"]').select_option("folder")
-            page.locator('input[name="commit"], button[type="submit"]').first.click()
-            page.wait_for_load_state("networkidle")
-
-            err = _check_submit_errors(page)
-            if not err:
-                log("INFO", "gdrive_link_item",
-                    f"Linked gdrive folder {google_file_id!r} for {gather_name!r}")
-                # Find the newly created item_id (not in the pre-existing set).
-                page.goto(f"{base_url}/gdrive/config", wait_until="networkidle")
-                for link in page.locator('a[href*="item-groups/new"]').all():
-                    href = link.get_attribute("href") or ""
-                    m = re.search(r"item_id=(\d+)", href)
-                    if m and m.group(1) not in existing:
-                        item_id = m.group(1)
-                        break
-                if item_id is None:
-                    log("WARN", "gdrive_link_item", gather_name,
-                        "Could not find new item_id on /gdrive/config after linking")
-                    screenshot(page, f"gdrive_link_noid_{short_id}")
-                    return False
-                # Persist the mapping so future runs can find this item_id.
-                gdrive_map[google_file_id] = item_id
-                _save_gdrive_item_map(gdrive_map)
-            else:
-                log("ERROR", "gdrive_link_item", gather_name,
-                    f"Already-taken error and no cached item_id | err={err[:200]}")
-                screenshot(page, f"gdrive_link_err_{short_id}")
-                return False
-
-        # ── Step 2: add group if not already present ──────────────────────────
-        if gather_name.lower() in container_text.lower():
-            log("INFO", "gdrive_access",
-                f"{gather_name!r} already linked to item_id={item_id}, skipping")
-            return True
-
-        if dry_run:
-            log("DRY-RUN", "gdrive_access",
-                f"would add {gather_name!r} (Content manager) → item_id={item_id}")
-            return True
-
-        new_url = f"{base_url}/gdrive/item-groups/new?item_id={item_id}"
-        page.goto(new_url, wait_until="networkidle")
-
-        group_sel = page.locator(
-            'select[name*="[group_id]"], select[name*="group_id"], select[name*="group"]'
-        ).first
-        if group_sel.count() == 0:
-            fields = [
-                el.get_attribute("name")
-                for el in page.locator("input[name], select[name]").all()
-            ]
-            log("WARN", "gdrive_access", gather_name,
-                f"No group selector found on {new_url} | fields={fields}")
-            screenshot(page, f"gdrive_acc_nosel_{item_id}")
-            return False
-
-        sel_name = group_sel.get_attribute("name") or ""
-        group_options = page.evaluate(
-            """name => [...document.querySelectorAll(`select[name="${name}"] option`)]
-                .map(o => ({value: o.value, label: o.textContent.trim()}))""",
-            sel_name,
-        )
-        log("DEBUG", "gdrive_access",
-            f"group selector={sel_name!r} options[0:5]={group_options[:5]}")
-
-        # Prefer native select_option; fall back to Select2 only if needed.
-        has_select2 = page.locator(
-            f'select[name="{sel_name}"] ~ .select2-container, '
-            f'select[name="{sel_name}"] + .select2-container'
-        ).count() > 0
-        if has_select2:
-            select2_choose(page, f'select[name="{sel_name}"]', gather_name)
-        else:
-            try:
-                page.locator(f'select[name="{sel_name}"]').select_option(label=gather_name)
-            except Exception as e:
-                log("WARN", "gdrive_access", gather_name,
-                    f"select_option(label={gather_name!r}) failed: {e} | options={group_options}")
-                screenshot(page, f"gdrive_acc_grpsel_{item_id}")
-                return False
-
-        chosen_group = page.locator(f'select[name="{sel_name}"]').input_value()
-        log("DEBUG", "gdrive_access", f"group selected value={chosen_group!r}")
-
-        role_sel = page.locator(
-            'select[name*="[access_level]"], select[name*="access_level"], select[name*="access"]'
-        )
-        if role_sel.count() > 0:
-            role_name = role_sel.first.get_attribute("name") or ""
-            options = page.evaluate(
-                """name => [...document.querySelectorAll(`select[name="${name}"] option`)]
-                    .map(o => ({value: o.value, label: o.textContent.trim()}))""",
-                role_name,
-            )
-            # Try common value patterns before falling back to first option.
-            selected = False
-            for val in ("fileOrganizer", "content_manager", "contentmanager", "content manager"):
-                try:
-                    page.locator(f'select[name="{role_name}"]').select_option(val)
-                    selected = True
-                    break
-                except Exception:
-                    pass
-            if not selected:
-                for label in ("Content manager", "Content Manager"):
-                    try:
-                        page.locator(f'select[name="{role_name}"]').select_option(label=label)
-                        selected = True
-                        break
-                    except Exception:
-                        pass
-            if not selected:
-                log("WARN", "gdrive_access", gather_name,
-                    f"Could not select 'Content manager'; available options={options}")
-            else:
-                log("DEBUG", "gdrive_access",
-                    f"Set access_level for {gather_name!r}; options were={options}")
-        else:
-            log("WARN", "gdrive_access", gather_name, "access_level select not found")
-
-        page.locator('input[name="commit"], button[type="submit"]').first.click()
-        page.wait_for_load_state("networkidle")
-
-        post_url = page.url
-        err = _check_submit_errors(page)
-        if err:
-            screenshot(page, f"gdrive_acc_err_{item_id}")
-            log("ERROR", "gdrive_access", gather_name, f"url={post_url} | {err[:200]}")
-            return False
-
-        body_preview = page.locator("body").inner_text()[:300]
-        log("DEBUG", "gdrive_access",
-            f"post-submit url={post_url!r} body={body_preview!r}")
-
-        # Catch silent failures: stayed on form, or server error page.
-        if "item-groups/new" in post_url or "something went wrong" in body_preview.lower():
-            screenshot(page, f"gdrive_acc_fail_{item_id}")
-            log("WARN", "gdrive_access", gather_name,
-                f"Submit did not succeed | url={post_url!r} body={body_preview!r}")
-            return False
-
-        log("INFO", "gdrive_access",
-            f"Added {gather_name!r} (Content manager) to item_id={item_id}")
-        return True
-
-    except Exception as e:
-        screenshot(page, f"gdrive_acc_exc_{short_id}")
-        log("ERROR", "gdrive_access", gather_name, str(e))
-        return False
 
 
 def fetch_gdrive_links(page: Page, base_url: str) -> list[tuple[str, str]]:

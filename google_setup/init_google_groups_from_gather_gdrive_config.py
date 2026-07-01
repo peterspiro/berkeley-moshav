@@ -22,7 +22,6 @@ Setup:
 
 import argparse
 import os
-import re
 import sys
 import time
 from pathlib import Path
@@ -53,6 +52,7 @@ from util.google_group_utils import (
     read_folder_ids,
     write_folder_ids,
 )
+from util.gdrive_config import scrape_gdrive_config
 
 BASE_URL = "https://berkeley-moshav.gather.coop"
 
@@ -60,64 +60,6 @@ _LOG_FILE_PATH = __import__("pathlib").Path("gdrive_groups_log.csv")
 _SCREENSHOT_DIR = __import__("pathlib").Path("gdrive_groups_screenshots")
 
 configure(_LOG_FILE_PATH, _SCREENSHOT_DIR)
-
-
-# ── Gather scraping ───────────────────────────────────────────────────────────
-
-def scrape_gdrive_config(page, base_url: str) -> list[dict]:
-    """
-    Navigate to /gdrive/config and return a list of entries for the Folders
-    section only (not Shared Drives), each a dict with:
-      folder_name – display name of the folder (plain text on page)
-      group_id    – Gather group ID associated with this folder
-      group_name  – Gather group name
-
-    The page has a single <table> with <tr class="heading"> rows separating
-    sections (Shared Drives / Folders / Files).  Each data row has the folder
-    name as plain text in the first <td> and a /groups/{id} link in the
-    third <td>.
-    """
-    page.goto(f"{base_url}/gdrive/config", wait_until="networkidle")
-
-    entries = []
-    in_folders_section = False
-
-    for row in page.locator("table tbody tr").all():
-        # Section heading row — track which section we're in
-        heading = row.locator("h2")
-        if heading.count() > 0:
-            in_folders_section = heading.first.inner_text().strip() == "Folders"
-            continue
-
-        if not in_folders_section:
-            continue
-
-        # Group link — rows without one are header/empty rows
-        group_link = row.locator("a[href*='/groups/']")
-        if group_link.count() == 0:
-            continue
-        group_href = group_link.first.get_attribute("href") or ""
-        gm = re.search(r"/groups/(\d+)", group_href)
-        if not gm:
-            continue
-        group_id = gm.group(1)
-        group_name = group_link.first.inner_text().strip()
-
-        # Folder name is plain text in the first <td>
-        cells = row.locator("td").all()
-        if not cells:
-            continue
-        folder_name = cells[0].inner_text().strip()
-        if not folder_name:
-            continue
-
-        entries.append(dict(
-            folder_name=folder_name,
-            group_id=group_id,
-            group_name=group_name,
-        ))
-
-    return entries
 
 
 # ── Gather group edit ─────────────────────────────────────────────────────────

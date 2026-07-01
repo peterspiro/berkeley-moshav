@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
 """
-Read-only report: for every Gather group under /groups (excluding groups
-with Availability = Everybody) that has no mailing list configured, search
-the Shared Drive (descending its full folder tree) for folder names that
-roughly match the group's name. In addition to the strict prefix/abbreviation
-match, a folder sharing just one significant word with the group name (e.g.
-group 'Landscape' vs. folder 'Landscape & Grounds Photos') is also reported,
+For every Gather group under /groups (excluding groups with Availability =
+Everybody) that has no mailing list configured, search the Shared Drive
+(descending its full folder tree) for folder names that roughly match the
+group's name. In addition to the strict prefix/abbreviation match, a folder
+sharing just one significant word with the group name (e.g. group
+'Landscape' vs. folder 'Landscape & Grounds Photos') is also reported,
 flagged as a weaker match.
 
-Does not modify anything in Gather, Google Groups, or Drive — it only
-prints a report of candidate folders per unmatched group, so a human can
-decide whether to run init_google_groups_from_drive_folders.py or
-init_google_groups_from_gather_gdrive_config.py against them.
+For each group with candidate folders, prompts you to pick one (or skip).
+If you pick a folder:
+  - Errors out (and leaves Gather untouched) if that folder is already
+    linked on /gdrive/config.
+  - Otherwise, links the folder there and adds the group with Content
+    manager access.
 
 Setup:
   1. Ensure ~/.gather contains your Gather admin credentials (email + password).
@@ -58,6 +60,7 @@ from util.gather_utils import (
     log,
     login,
 )
+from util.gdrive_config import add_group_access_to_gdrive_item, create_gdrive_item
 from util.google_group_utils import get_credentials
 
 _LOG_FILE = Path("find_drive_folders_log.csv")
@@ -139,9 +142,54 @@ def find_matching_folders(group_name: str, folders: list[dict]) -> list[dict]:
     return matches
 
 
+# ── Interactive selection ─────────────────────────────────────────────────────
+
+def prompt_folder_choice(group_name: str, matches: list[dict]) -> dict | None:
+    """Print candidate folders for group_name and prompt the user to pick one.
+    Returns the chosen folder dict, or None if the user skips."""
+    print(f"[{len(matches)} MATCH(ES)]  '{group_name}'")
+    for i, f in enumerate(matches, start=1):
+        path_str = " / ".join(f["path"])
+        tag = "" if f["match_kind"] == "strict" else " [weak: shared term only]"
+        print(f"    {i}. {path_str}   ({f['id']}){tag}")
+
+    while True:
+        choice = input(
+            f"    Select folder to link [1-{len(matches)}], or Enter to skip: "
+        ).strip()
+        if choice == "":
+            return None
+        if choice.isdigit() and 1 <= int(choice) <= len(matches):
+            return matches[int(choice) - 1]
+        print("    Invalid choice.")
+
+
+def link_folder_to_group(page, base_url: str, folder: dict, group_name: str, dry_run: bool) -> None:
+    """Link folder onto /gdrive/config and grant group_name Content manager
+    access. Prints an error and does nothing else if the folder is already
+    linked there."""
+    item_id, err = create_gdrive_item(page, base_url, folder["id"], dry_run=dry_run)
+    if err:
+        print(f"    ERROR: folder already in /gdrive/config or failed to link — {err}")
+        log("ERROR", "link_folder", f"{group_name}: {folder['name']} — {err}")
+        return
+
+    if dry_run:
+        print(f"    [dry-run] would link '{folder['name']}' and add "
+              f"'{group_name}' as Content manager")
+        return
+
+    ok = add_group_access_to_gdrive_item(page, base_url, item_id, group_name, dry_run)
+    if ok:
+        print(f"    Linked '{folder['name']}' and added '{group_name}' as Content manager.")
+    else:
+        print(f"    ERROR: folder linked, but failed to add '{group_name}' — see log.")
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 
-def main(base_url: str, email: str, password: str, drive_id: str, credentials_path: str):
+def main(base_url: str, email: str, password: str, drive_id: str,
+         credentials_path: str, dry_run: bool = False):
     base_url = base_url.rstrip("/")
     init_log()
     log("INFO", "start", f"base_url={base_url} drive_id={drive_id}")
@@ -173,25 +221,28 @@ def main(base_url: str, email: str, password: str, drive_id: str, credentials_pa
             if not detail.list_name:
                 unlisted.append(detail)
 
+        log("INFO", "filter",
+            f"{len(unlisted)} group(s) have no mailing list (excluding Availability=Everybody)")
+
+        log("INFO", "walk_drive", f"Walking folder tree of Shared Drive {drive_id}…")
+        folders = walk_drive_folders(drive_service, drive_id)
+        log("INFO", "walk_drive", f"{len(folders)} folder(s) found")
+
+        print()
+        for group in unlisted:
+            matches = find_matching_folders(group.name, folders)
+            if not matches:
+                print(f"[NO MATCH]  '{group.name}'")
+                continue
+
+            chosen = prompt_folder_choice(group.name, matches)
+            if chosen is None:
+                log("INFO", "skip", f"{group.name}: no folder selected")
+                continue
+
+            link_folder_to_group(page, base_url, chosen, group.name, dry_run)
+
         browser.close()
-
-    log("INFO", "filter", f"{len(unlisted)} group(s) have no mailing list (excluding Availability=Everybody)")
-
-    log("INFO", "walk_drive", f"Walking folder tree of Shared Drive {drive_id}…")
-    folders = walk_drive_folders(drive_service, drive_id)
-    log("INFO", "walk_drive", f"{len(folders)} folder(s) found")
-
-    print()
-    for group in unlisted:
-        matches = find_matching_folders(group.name, folders)
-        if not matches:
-            print(f"[NO MATCH]  '{group.name}'")
-            continue
-        print(f"[{len(matches)} MATCH(ES)]  '{group.name}'")
-        for f in matches:
-            path_str = " / ".join(f["path"])
-            tag = "" if f["match_kind"] == "strict" else " [weak: shared term only]"
-            print(f"    {path_str}   ({f['id']}){tag}")
 
     close_log()
 
@@ -213,6 +264,10 @@ def cli():
         "-c", "--credentials", default="client_secret.json",
         help="Path to OAuth client secrets JSON",
     )
+    parser.add_argument(
+        "-n", "--dry-run", action="store_true",
+        help="Log what would be linked without making any changes",
+    )
     args = parser.parse_args()
 
     if not os.path.exists(args.credentials):
@@ -222,7 +277,7 @@ def cli():
         )
 
     email, password = load_credentials()
-    main(args.base_url, email, password, args.drive_id, args.credentials)
+    main(args.base_url, email, password, args.drive_id, args.credentials, args.dry_run)
 
 
 if __name__ == "__main__":
