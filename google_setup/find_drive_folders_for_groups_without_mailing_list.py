@@ -34,7 +34,6 @@ import argparse
 import os
 import re
 import sys
-from collections import deque
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -60,50 +59,13 @@ from util.gather_utils import (
     log,
     login,
 )
-from util.gdrive_config import add_group_access_to_gdrive_item, create_gdrive_item
+from util.gdrive_config import add_group_access_to_gdrive_item, create_gdrive_item, walk_drive_folders
 from util.google_group_utils import get_credentials
 
 _LOG_FILE = Path("find_drive_folders_log.csv")
 _SCREENSHOT_DIR = Path("find_drive_folders_screenshots")
 
 configure(_LOG_FILE, _SCREENSHOT_DIR)
-
-
-# ── Drive traversal ───────────────────────────────────────────────────────────
-
-def walk_drive_folders(drive_service, drive_id: str) -> list[dict]:
-    """Breadth-first walk of every folder in the Shared Drive.
-
-    Returns a flat list of {"id", "name", "path"} dicts, where "path" is the
-    list of ancestor folder names (not including the drive root) leading to
-    and including this folder.
-    """
-    folders: list[dict] = []
-    queue = deque([(drive_id, [])])
-
-    while queue:
-        parent_id, parent_path = queue.popleft()
-        page_token = None
-        while True:
-            resp = drive_service.files().list(
-                corpora="drive",
-                driveId=drive_id,
-                includeItemsFromAllDrives=True,
-                supportsAllDrives=True,
-                q=f"mimeType='application/vnd.google-apps.folder' and "
-                  f"'{parent_id}' in parents and trashed=false",
-                fields="nextPageToken,files(id,name)",
-                pageToken=page_token,
-            ).execute()
-            for f in resp.get("files", []):
-                path = parent_path + [f["name"]]
-                folders.append({"id": f["id"], "name": f["name"], "path": path})
-                queue.append((f["id"], path))
-            page_token = resp.get("nextPageToken")
-            if not page_token:
-                break
-
-    return folders
 
 
 MIN_TERM_LENGTH = 3

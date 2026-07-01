@@ -21,17 +21,30 @@ as stale if their hierarchy entry still references them.
 In dry-run mode (-n), missing/stale entries are only reported, never
 prompted for.
 
+Resolving a group's linked Drive folder ID (for the [Documents] link)
+requires Google API access, since Gather's own /gdrive/config page doesn't
+reliably expose it:
+  1. In Google Cloud Console, create a Desktop OAuth 2.0 client and download
+     the JSON as client_secret.json (or pass a different path via -c).
+  2. Enable the Google Drive API for the project.
+  3. On first run the script prints an auth URL — paste it into a browser
+     signed in as a Workspace super-admin. The token is cached at
+     ~/.google_setup_token.pkl for subsequent runs.
+
 Usage:
     python update_circle_hierarchy.py -e admin@example.com -p secret
     python update_circle_hierarchy.py -u https://example.gather.coop -n
 """
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
+from googleapiclient.discovery import build
 from playwright.sync_api import sync_playwright
 
+from google_setup.match_google_groups_to_drive_folders import DEFAULT_DRIVE_ID
 from util.credentials import load_credentials
 from util.gather_utils import (
     _codemirror_get,
@@ -49,8 +62,9 @@ from util.gdrive_config import (
     gdrive_item_url,
     load_gdrive_item_map,
     scrape_gdrive_config,
+    walk_drive_folders,
 )
-from util.google_group_utils import read_folder_ids
+from util.google_group_utils import get_credentials, read_folder_ids
 from util.hierarchy_wiki import (
     WIKI_SLUG,
     HierarchyNode,
@@ -128,18 +142,25 @@ def fetch_group_info(page, base_url: str) -> tuple[dict[str, dict], set[str]]:
     return info, hidden_ids
 
 
-def fetch_documents_url_by_group_id(page, base_url: str) -> dict[str, str]:
+def fetch_documents_url_by_group_id(page, base_url: str, drive_service, drive_id: str) -> dict[str, str]:
     """Return {group_id: documents_href} for every Gather group with a
     Drive folder linked via /gdrive/config.
 
-    Prefers the Drive folder ID scraped directly from the folder's
-    /gdrive/item/{id} link on /gdrive/config itself — always current,
-    regardless of nesting depth. Falls back to data already on disk for
-    rows where the folder name isn't rendered as a link:
-      1. gdrive_item_map.json — google_file_id -> item_id, populated
+    /gdrive/config's Folders rows don't reliably expose the underlying
+    Drive folder ID at all (confirmed: some rows render the folder name as
+    a plain label with no link, no external_id field, and no working
+    show/edit page for the item — only "add group" and "delete item"
+    actions). So the Drive folder ID is resolved via, in order:
+      1. A /gdrive/item/{id} link on the folder name, if the row happens
+         to have one.
+      2. gdrive_item_map.json — google_file_id -> item_id, populated
          whenever create_gdrive_item() links a new folder.
-      2. groups_drive_sync/folder_ids.gs — folder_id/folder_name pairs,
+      3. groups_drive_sync/folder_ids.gs — folder_id/folder_name pairs,
          populated by match_google_groups_to_drive_folders.py.
+      4. A live Google Drive API search of the Shared Drive tree, matching
+         by exact folder name (works regardless of nesting depth or of
+         how the folder was originally linked in Gather). Only performed
+         if something is still unresolved after the first three steps.
     Folders resolved by none of these are logged as unresolved.
     """
     config_entries = scrape_gdrive_config(page, base_url)
@@ -153,22 +174,47 @@ def fetch_documents_url_by_group_id(page, base_url: str) -> dict[str, str]:
     }
 
     documents_url_by_group_id: dict[str, str] = {}
+    unresolved: list[dict] = []
     for entry in config_entries:
         google_file_id = (
             entry["google_file_id"]
             or item_id_to_google_file_id.get(entry["item_id"])
             or google_file_id_by_folder_name.get(entry["folder_name"])
         )
-        if not google_file_id:
-            dump_path = dump_gdrive_config_row_html(page, base_url, entry["folder_name"])
-            dump_note = f"row HTML dumped to {dump_path}" if dump_path else \
-                "row HTML dump also failed — no matching row found"
-            log("WARN", "documents_link", entry["folder_name"],
-                f"no known Drive folder ID for item_id={entry['item_id']!r} — "
-                "run match_google_groups_to_drive_folders.py, or link it via "
-                f"init_google_groups_from_gather_gdrive_config.py, to record it. ({dump_note})")
-            continue
-        documents_url_by_group_id[entry["group_id"]] = gdrive_item_url(base_url, google_file_id)
+        if google_file_id:
+            documents_url_by_group_id[entry["group_id"]] = gdrive_item_url(base_url, google_file_id)
+        else:
+            unresolved.append(entry)
+
+    if unresolved:
+        log("INFO", "documents_link",
+            f"{len(unresolved)} folder(s) unresolved via config/cache; "
+            f"searching Shared Drive {drive_id} by name…")
+        drive_folders = walk_drive_folders(drive_service, drive_id)
+        by_name: dict[str, list[str]] = {}
+        for f in drive_folders:
+            by_name.setdefault(f["name"], []).append(f["id"])
+
+        still_unresolved: list[dict] = []
+        for entry in unresolved:
+            matches = by_name.get(entry["folder_name"], [])
+            if len(matches) == 1:
+                documents_url_by_group_id[entry["group_id"]] = gdrive_item_url(base_url, matches[0])
+            else:
+                still_unresolved.append(entry)
+                if len(matches) > 1:
+                    log("WARN", "documents_link", entry["folder_name"],
+                        f"{len(matches)} Drive folders share this name — ambiguous, skipping")
+        unresolved = still_unresolved
+
+    for entry in unresolved:
+        dump_path = dump_gdrive_config_row_html(page, base_url, entry["folder_name"])
+        dump_note = f"row HTML dumped to {dump_path}" if dump_path else \
+            "row HTML dump also failed — no matching row found"
+        log("WARN", "documents_link", entry["folder_name"],
+            f"no known Drive folder ID for item_id={entry['item_id']!r}, and no "
+            f"exact name match found in Shared Drive {drive_id} ({dump_note})")
+
     return documents_url_by_group_id
 
 
@@ -277,10 +323,14 @@ def add_missing_groups(
         print(f"Added '{info['name']}' under '{parent.name}'")
 
 
-def main(base_url: str, email: str, password: str, dry_run: bool):
+def main(base_url: str, email: str, password: str, dry_run: bool,
+         credentials_path: str, drive_id: str):
     base_url = base_url.rstrip("/")
     init_log()
     log("INFO", "start", f"base_url={base_url} dry_run={dry_run}")
+
+    creds = get_credentials(credentials_path)
+    drive_service = build("drive", "v3", credentials=creds)
 
     with sync_playwright() as pw:
         browser = launch_browser(pw)
@@ -298,7 +348,9 @@ def main(base_url: str, email: str, password: str, dry_run: bool):
         root = parse_hierarchy(current_content)
 
         group_info, hidden_ids = fetch_group_info(page, base_url)
-        documents_url_by_group_id = fetch_documents_url_by_group_id(page, base_url)
+        documents_url_by_group_id = fetch_documents_url_by_group_id(
+            page, base_url, drive_service, drive_id
+        )
 
         sync_hierarchy(root, group_info, documents_url_by_group_id, hidden_ids, dry_run)
         add_missing_groups(root, group_info, documents_url_by_group_id, dry_run)
@@ -326,10 +378,24 @@ def cli():
         "-n", "--dry-run", action="store_true",
         help="Log what would change without writing the wiki page",
     )
+    parser.add_argument(
+        "-c", "--credentials", default="client_secret.json",
+        help="Path to OAuth client secrets JSON (for the Drive folder-ID fallback search)",
+    )
+    parser.add_argument(
+        "-d", "--drive-id", default=DEFAULT_DRIVE_ID,
+        help="Shared Drive ID to search when a folder's ID can't be found any other way",
+    )
     args = parser.parse_args()
 
+    if not os.path.exists(args.credentials):
+        sys.exit(
+            f"Error: credentials file not found: {args.credentials}\n"
+            "Download a Desktop OAuth 2.0 client JSON from Google Cloud Console."
+        )
+
     email, password = load_credentials()
-    main(args.base_url, email, password, args.dry_run)
+    main(args.base_url, email, password, args.dry_run, args.credentials, args.drive_id)
 
 
 if __name__ == "__main__":

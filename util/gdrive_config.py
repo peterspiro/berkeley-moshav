@@ -6,11 +6,48 @@ granted access to them.
 
 import json
 import re
+from collections import deque
 from pathlib import Path
 
 from util.gather_utils import _check_submit_errors, log, screenshot, select2_choose
 
 GDRIVE_MAP_FILE = Path(__file__).parent.parent / "gdrive_item_map.json"
+
+
+# ── Google Drive API traversal ─────────────────────────────────────────────────
+
+def walk_drive_folders(drive_service, drive_id: str) -> list[dict]:
+    """Breadth-first walk of every folder in the Shared Drive, via the Drive
+    API (not Gather). Returns a flat list of {"id", "name", "path"} dicts,
+    where "path" is the list of ancestor folder names (not including the
+    drive root) leading to and including this folder.
+    """
+    folders: list[dict] = []
+    queue = deque([(drive_id, [])])
+
+    while queue:
+        parent_id, parent_path = queue.popleft()
+        page_token = None
+        while True:
+            resp = drive_service.files().list(
+                corpora="drive",
+                driveId=drive_id,
+                includeItemsFromAllDrives=True,
+                supportsAllDrives=True,
+                q=f"mimeType='application/vnd.google-apps.folder' and "
+                  f"'{parent_id}' in parents and trashed=false",
+                fields="nextPageToken,files(id,name)",
+                pageToken=page_token,
+            ).execute()
+            for f in resp.get("files", []):
+                path = parent_path + [f["name"]]
+                folders.append({"id": f["id"], "name": f["name"], "path": path})
+                queue.append((f["id"], path))
+            page_token = resp.get("nextPageToken")
+            if not page_token:
+                break
+
+    return folders
 
 
 # ── Persisted google_file_id → Gather item_id cache ───────────────────────────
