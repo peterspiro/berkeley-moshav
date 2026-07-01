@@ -39,6 +39,8 @@ def scrape_gdrive_config(page, base_url: str) -> list[dict]:
       folder_name – display name of the folder (plain text on page)
       group_id    – Gather group ID associated with this folder
       group_name  – Gather group name
+      item_id     – Gather's internal numeric ID for this linked item, or
+                    None if no item-groups/new link was found in the row
 
     The page has a single <table> with <tr class="heading"> rows separating
     sections (Shared Drives / Folders / Files).  Each data row has the folder
@@ -79,10 +81,19 @@ def scrape_gdrive_config(page, base_url: str) -> list[dict]:
         if not folder_name:
             continue
 
+        item_id = None
+        item_link = row.locator('a[href*="item-groups/new"]')
+        if item_link.count() > 0:
+            item_href = item_link.first.get_attribute("href") or ""
+            im = re.search(r"item_id=(\d+)", item_href)
+            if im:
+                item_id = im.group(1)
+
         entries.append(dict(
             folder_name=folder_name,
             group_id=group_id,
             group_name=group_name,
+            item_id=item_id,
         ))
 
     return entries
@@ -116,6 +127,27 @@ def gdrive_config_item_ids(page, base_url: str) -> dict[str, str]:
         )
         existing[iid] = container_text
     return existing
+
+
+def google_file_id_for_item(page, base_url: str, item_id: str) -> str | None:
+    """Return the underlying Google Drive file/folder ID for a Gather
+    gdrive_item, by reading its external_id field on /gdrive/items/{id}/edit.
+
+    Unlike matching folder names against the /gdrive browse page (which
+    only surfaces top-level items), this works regardless of how deeply
+    nested the folder is in the Shared Drive.
+    """
+    page.goto(f"{base_url}/gdrive/items/{item_id}/edit", wait_until="networkidle")
+    ext_field = page.locator('input[name="gdrive_item[external_id]"]')
+    if ext_field.count() == 0:
+        return None
+    value = ext_field.first.input_value().strip()
+    return value or None
+
+
+def drive_folder_url(google_file_id: str) -> str:
+    """Return a direct, depth-independent Google Drive URL for a folder ID."""
+    return f"https://drive.google.com/drive/folders/{google_file_id}"
 
 
 # ── Linking a Drive folder into /gdrive/config ────────────────────────────────

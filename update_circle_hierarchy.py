@@ -32,7 +32,6 @@ from pathlib import Path
 
 from playwright.sync_api import sync_playwright
 
-from data_import.import_groups import fetch_gdrive_links
 from util.credentials import load_credentials
 from util.gather_utils import (
     _codemirror_get,
@@ -45,7 +44,7 @@ from util.gather_utils import (
     log,
     login,
 )
-from util.gdrive_config import scrape_gdrive_config
+from util.gdrive_config import drive_folder_url, google_file_id_for_item, scrape_gdrive_config
 from util.hierarchy_wiki import (
     WIKI_SLUG,
     HierarchyNode,
@@ -125,20 +124,28 @@ def fetch_group_info(page, base_url: str) -> tuple[dict[str, dict], set[str]]:
 
 def fetch_documents_url_by_group_id(page, base_url: str) -> dict[str, str]:
     """Return {group_id: documents_href} for every Gather group with a
-    Drive folder linked via /gdrive/config, by matching each config entry's
-    folder_name to its href on the public /gdrive browse page."""
-    config_entries = scrape_gdrive_config(page, base_url)
-    gdrive_links = fetch_gdrive_links(page, base_url)
+    Drive folder linked via /gdrive/config.
 
-    href_by_folder_name: dict[str, str] = {}
-    for text, href in gdrive_links:
-        href_by_folder_name.setdefault(text, href)
+    Resolves each linked item's underlying Google Drive folder ID directly
+    from its /gdrive/items/{id}/edit page and builds a direct Drive URL from
+    it. This works regardless of how deeply the folder is nested in the
+    Shared Drive — matching folder names against the /gdrive browse page
+    (the previous approach) only found top-level folders.
+    """
+    config_entries = scrape_gdrive_config(page, base_url)
 
     documents_url_by_group_id: dict[str, str] = {}
     for entry in config_entries:
-        href = href_by_folder_name.get(entry["folder_name"])
-        if href:
-            documents_url_by_group_id[entry["group_id"]] = href
+        if not entry["item_id"]:
+            log("WARN", "documents_link", entry["folder_name"],
+                "no item_id found on /gdrive/config row; skipping")
+            continue
+        google_file_id = google_file_id_for_item(page, base_url, entry["item_id"])
+        if not google_file_id:
+            log("WARN", "documents_link", entry["folder_name"],
+                f"could not resolve external_id for item_id={entry['item_id']}")
+            continue
+        documents_url_by_group_id[entry["group_id"]] = drive_folder_url(google_file_id)
     return documents_url_by_group_id
 
 
