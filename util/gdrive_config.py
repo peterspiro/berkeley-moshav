@@ -111,6 +111,26 @@ def scrape_gdrive_config(page, base_url: str) -> list[dict]:
     return entries
 
 
+_DUMP_DIR = Path("gdrive_config_row_dumps")
+
+
+def dump_gdrive_config_row_html(page, base_url: str, folder_name: str) -> Path | None:
+    """Write the outerHTML of the /gdrive/config row for folder_name to disk,
+    for inspecting the actual markup when automatic resolution fails.
+    Returns the file path, or None if no matching row was found."""
+    page.goto(f"{base_url}/gdrive/config", wait_until="networkidle")
+    for row in page.locator("table tbody tr").all():
+        cells = row.locator("td").all()
+        if cells and cells[0].inner_text().strip() == folder_name:
+            html = row.evaluate("el => el.outerHTML")
+            _DUMP_DIR.mkdir(parents=True, exist_ok=True)
+            safe_name = re.sub(r"[^A-Za-z0-9_-]+", "_", folder_name)[:60]
+            path = _DUMP_DIR / f"{safe_name}.html"
+            path.write_text(html)
+            return path
+    return None
+
+
 def gdrive_config_item_ids(page, base_url: str) -> dict[str, str]:
     """Return {item_id: container_text} for every item currently linked on
     /gdrive/config (any section), keyed by the numeric item_id used in

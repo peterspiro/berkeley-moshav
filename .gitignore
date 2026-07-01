@@ -8,3 +8,4 @@ photo_screenshots/
 *.tsv
 client_secret*.json
 .google_setup_token.pkl
+gdrive_config_row_dumps/

@@ -44,7 +44,12 @@ from util.gather_utils import (
     log,
     login,
 )
-from util.gdrive_config import gdrive_item_url, load_gdrive_item_map, scrape_gdrive_config
+from util.gdrive_config import (
+    dump_gdrive_config_row_html,
+    gdrive_item_url,
+    load_gdrive_item_map,
+    scrape_gdrive_config,
+)
 from util.google_group_utils import read_folder_ids
 from util.hierarchy_wiki import (
     WIKI_SLUG,
@@ -155,10 +160,13 @@ def fetch_documents_url_by_group_id(page, base_url: str) -> dict[str, str]:
             or google_file_id_by_folder_name.get(entry["folder_name"])
         )
         if not google_file_id:
+            dump_path = dump_gdrive_config_row_html(page, base_url, entry["folder_name"])
+            dump_note = f"row HTML dumped to {dump_path}" if dump_path else \
+                "row HTML dump also failed — no matching row found"
             log("WARN", "documents_link", entry["folder_name"],
                 f"no known Drive folder ID for item_id={entry['item_id']!r} — "
                 "run match_google_groups_to_drive_folders.py, or link it via "
-                "init_google_groups_from_gather_gdrive_config.py, to record it")
+                f"init_google_groups_from_gather_gdrive_config.py, to record it. ({dump_note})")
             continue
         documents_url_by_group_id[entry["group_id"]] = gdrive_item_url(base_url, google_file_id)
     return documents_url_by_group_id
