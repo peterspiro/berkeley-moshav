@@ -123,7 +123,9 @@ def read_folder_ids() -> list[tuple[str, str]]:
 
 
 def write_folder_ids(entries: list[tuple[str, str]]) -> None:
-    """Write folder_ids.gs with the given [(folder_id, folder_name)] list."""
+    """Write folder_ids.gs with the given [(folder_id, folder_name)] list,
+    sorted alphabetically (case-insensitive) by folder name."""
+    entries = sorted(entries, key=lambda e: e[1].casefold())
     lines = _FOLDER_IDS_HEADER.splitlines()
     for fid, name in entries:
         lines.append(f"  '{fid}', // {name}")

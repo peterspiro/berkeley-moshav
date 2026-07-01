@@ -7,8 +7,8 @@
  */
 const FOLDER_IDS = [
   '19UXbSuyBsMchJ3-bYSrU_R4TiSTWbtYt', // Care Circle
-  '1gvt_woH6fgnGSinzcBVFwPqLq8cD7KGb', // Construction Interface Team (CIT)
   '1lwU1NsHoTm6_GFXViaMjHo-QyQtinzld', // Community Life Circle
+  '1gvt_woH6fgnGSinzcBVFwPqLq8cD7KGb', // Construction Interface Team (CIT)
   '1NlflXGdWU5lZoUZE_wJtp63RjYAC2x0t', // Coordinating Circle
   '1l-HurF1r1VwqaEFrWtak85o83AnE-jAv', // Development, Finance, and Legal Circle (DF&L)
   '1zrv5q3cthYQn6fy8jUB5RI4sYjPG2Fe4', // Furnishings Working Group
