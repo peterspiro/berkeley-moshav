@@ -37,8 +37,8 @@ DEFAULT_SHEET_URL = (
     "1h0f4Dq242kpuqpN7OiVoCnwEm6FDlMHaRlSS4HWiSNY/export?format=tsv"
 )
 
-_LOG_FILE = Path("import_log.csv")
-_SCREENSHOT_DIR = Path("import_screenshots")
+_LOG_FILE = Path("debug/import_log.csv")
+_SCREENSHOT_DIR = Path("debug/import_screenshots")
 
 configure(_LOG_FILE, _SCREENSHOT_DIR)
 

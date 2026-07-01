@@ -75,8 +75,8 @@ from util.hierarchy_wiki import (
     render_hierarchy,
 )
 
-_LOG_FILE = Path("update_circle_hierarchy_log.csv")
-_SCREENSHOT_DIR = Path("update_circle_hierarchy_screenshots")
+_LOG_FILE = Path("debug/update_circle_hierarchy_log.csv")
+_SCREENSHOT_DIR = Path("debug/update_circle_hierarchy_screenshots")
 
 configure(_LOG_FILE, _SCREENSHOT_DIR)
 

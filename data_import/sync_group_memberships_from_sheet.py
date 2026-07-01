@@ -52,8 +52,8 @@ DEFAULT_SHEET_URL = (
     "12f7D5JEnCuc5rsQavVQLftEoQVC8jCgpdGnqH3yrkRk/edit?gid=2035578656#gid=2035578656"
 )
 
-_LOG_FILE = Path("memberships_log.csv")
-_SCREENSHOT_DIR = Path("import_screenshots")
+_LOG_FILE = Path("debug/memberships_log.csv")
+_SCREENSHOT_DIR = Path("debug/memberships_screenshots")
 
 configure(_LOG_FILE, _SCREENSHOT_DIR)
 

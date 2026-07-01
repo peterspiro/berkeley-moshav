@@ -56,8 +56,8 @@ from util.gdrive_config import scrape_gdrive_config
 
 BASE_URL = "https://berkeley-moshav.gather.coop"
 
-_LOG_FILE_PATH = __import__("pathlib").Path("gdrive_groups_log.csv")
-_SCREENSHOT_DIR = __import__("pathlib").Path("gdrive_groups_screenshots")
+_LOG_FILE_PATH = __import__("pathlib").Path("debug/gdrive_groups_log.csv")
+_SCREENSHOT_DIR = __import__("pathlib").Path("debug/gdrive_groups_screenshots")
 
 configure(_LOG_FILE_PATH, _SCREENSHOT_DIR)
 

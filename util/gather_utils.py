@@ -26,8 +26,8 @@ from playwright.sync_api import Browser, BrowserContext, Page, sync_playwright
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 
-_log_file: Path = Path("gather_log.csv")
-_screenshot_dir: Path = Path("gather_screenshots")
+_log_file: Path = Path("debug/gather_log.csv")
+_screenshot_dir: Path = Path("debug/gather_screenshots")
 
 
 def configure(log_file: Path, screenshot_dir: Path) -> None:
@@ -45,6 +45,7 @@ _log_file_handle = None
 
 def init_log() -> None:
     global _log_writer, _log_file_handle
+    _log_file.parent.mkdir(parents=True, exist_ok=True)
     _screenshot_dir.mkdir(parents=True, exist_ok=True)
     _log_file_handle = open(_log_file, "a", newline="")
     _log_writer = csv.writer(_log_file_handle)

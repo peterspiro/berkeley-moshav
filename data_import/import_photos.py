@@ -45,8 +45,8 @@ DEFAULT_SHEET_URL = (
     "https://docs.google.com/spreadsheets/d/"
     "1h0f4Dq242kpuqpN7OiVoCnwEm6FDlMHaRlSS4HWiSNY/export?format=tsv"
 )
-_LOG_FILE = Path("photos_log.csv")
-_SCREENSHOT_DIR = Path("photo_screenshots")
+_LOG_FILE = Path("debug/photos_log.csv")
+_SCREENSHOT_DIR = Path("debug/photo_screenshots")
 
 configure(_LOG_FILE, _SCREENSHOT_DIR)
 

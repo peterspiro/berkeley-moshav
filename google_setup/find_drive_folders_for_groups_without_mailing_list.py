@@ -62,8 +62,8 @@ from util.gather_utils import (
 from util.gdrive_config import add_group_access_to_gdrive_item, create_gdrive_item, walk_drive_folders
 from util.google_group_utils import get_credentials
 
-_LOG_FILE = Path("find_drive_folders_log.csv")
-_SCREENSHOT_DIR = Path("find_drive_folders_screenshots")
+_LOG_FILE = Path("debug/find_drive_folders_log.csv")
+_SCREENSHOT_DIR = Path("debug/find_drive_folders_screenshots")
 
 configure(_LOG_FILE, _SCREENSHOT_DIR)
 

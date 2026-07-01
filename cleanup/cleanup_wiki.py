@@ -54,8 +54,8 @@ from data_import.import_groups import (
     parse_sheet,
 )
 
-_LOG_FILE = Path("cleanup_wiki_log.csv")
-_SCREENSHOT_DIR = Path("cleanup_screenshots")
+_LOG_FILE = Path("debug/cleanup_wiki_log.csv")
+_SCREENSHOT_DIR = Path("debug/cleanup_screenshots")
 
 configure(_LOG_FILE, _SCREENSHOT_DIR)
 

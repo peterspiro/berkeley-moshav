@@ -148,7 +148,7 @@ def scrape_gdrive_config(page, base_url: str) -> list[dict]:
     return entries
 
 
-_DUMP_DIR = Path("gdrive_config_row_dumps")
+_DUMP_DIR = Path("debug/gdrive_config_row_dumps")
 
 
 def dump_gdrive_config_row_html(page, base_url: str, folder_name: str) -> Path | None:

@@ -69,8 +69,9 @@ DEFAULT_SHEET_URL = (
 )
 
 MAX_DESC = 255
-_LOG_FILE = Path(__file__).parent / "groups_log.csv"
-_SCREENSHOT_DIR = Path(__file__).parent / "import_screenshots"
+_REPO_ROOT = Path(__file__).parent.parent
+_LOG_FILE = _REPO_ROOT / "debug" / "groups_log.csv"
+_SCREENSHOT_DIR = _REPO_ROOT / "debug" / "import_screenshots"
 
 configure(_LOG_FILE, _SCREENSHOT_DIR)
 

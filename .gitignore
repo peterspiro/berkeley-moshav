@@ -1,11 +1,6 @@
 __pycache__/
 *.py[cod]
-import_log.csv
-groups_log.csv
-photos_log.csv
-import_screenshots/
-photo_screenshots/
 *.tsv
 client_secret*.json
 .google_setup_token.pkl
-gdrive_config_row_dumps/
+debug/
