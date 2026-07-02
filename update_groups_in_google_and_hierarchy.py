@@ -54,6 +54,7 @@ Usage:
 
 import argparse
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -151,11 +152,21 @@ def _group_is_hidden(page, detail) -> bool:
     return checkbox.count() > 0 and checkbox.first.is_checked()
 
 
+_INACTIVE_NAME_RE = re.compile(r"\(\s*inactive\s*\)\s*$", re.IGNORECASE)
+
+
 def _group_is_deactivated(page, detail) -> bool:
-    """True if the group is deactivated/inactive — via an availability
-    value containing "deactivat"/"inactive", an unchecked "active"
-    checkbox, or a checked "deactivated"/"archived" checkbox (whichever
-    this Gather instance uses)."""
+    """True if the group is deactivated/inactive.
+
+    Confirmed signal: Gather appends "(Inactive)" to the group's own name
+    (e.g. "HOA Setup" -> "HOA Setup (Inactive)") rather than exposing a
+    separate status field. Also checks an availability value containing
+    "deactivat"/"inactive", an unchecked "active" checkbox, or a checked
+    "deactivated"/"archived" checkbox, in case this Gather instance uses
+    one of those instead/as well.
+    """
+    if _INACTIVE_NAME_RE.search(detail.name.strip()):
+        return True
     availability = detail.availability.strip().lower()
     if "deactivat" in availability or "inactive" in availability:
         return True
