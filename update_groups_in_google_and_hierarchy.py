@@ -31,8 +31,9 @@ excluding hidden groups:
   4.  If a hierarchy entry's linked group no longer exists in Gather, asks
       whether to delete it (reparenting any children to keep the tree intact).
 
-Hidden groups are skipped entirely: not offered for addition, not flagged
-as stale if their hierarchy entry still references them.
+Hidden and deactivated/inactive groups are skipped entirely: not offered
+for addition, not flagged as stale if their hierarchy entry still
+references them.
 
 In dry-run mode (-n), missing/stale entries and folder/email-list gaps are
 only reported, never prompted for.
@@ -150,21 +151,40 @@ def _group_is_hidden(page, detail) -> bool:
     return checkbox.count() > 0 and checkbox.first.is_checked()
 
 
-def fetch_group_info(page, base_url: str) -> tuple[dict[str, dict], set[str]]:
-    """Return ({group_id: {"name", "kind", "url", "list_name"}}, hidden_group_ids).
+def _group_is_deactivated(page, detail) -> bool:
+    """True if the group is deactivated/inactive — via an availability
+    value containing "deactivat"/"inactive", an unchecked "active"
+    checkbox, or a checked "deactivated"/"archived" checkbox (whichever
+    this Gather instance uses)."""
+    availability = detail.availability.strip().lower()
+    if "deactivat" in availability or "inactive" in availability:
+        return True
+    active_checkbox = page.locator('input[type="checkbox"][name*="[active]"]')
+    if active_checkbox.count() > 0 and not active_checkbox.first.is_checked():
+        return True
+    for name_fragment in ("[deactivated]", "[archived]"):
+        checkbox = page.locator(f'input[type="checkbox"][name*="{name_fragment}"]')
+        if checkbox.count() > 0 and checkbox.first.is_checked():
+            return True
+    return False
 
-    Hidden groups are reported separately (not included in info) so callers
-    can skip them entirely — neither offered for addition nor flagged as
-    stale if a hierarchy entry still references them.
+
+def fetch_group_info(page, base_url: str) -> tuple[dict[str, dict], set[str]]:
+    """Return ({group_id: {"name", "kind", "url", "list_name"}}, excluded_group_ids).
+
+    Hidden and deactivated/inactive groups are reported separately (not
+    included in info) so callers can skip them entirely — neither offered
+    for addition nor flagged as stale if a hierarchy entry still
+    references them.
     """
     groups = fetch_all_gather_groups(page, base_url)
     log("INFO", "fetch_groups", f"{len(groups)} group(s) found")
     info: dict[str, dict] = {}
-    hidden_ids: set[str] = set()
+    excluded_ids: set[str] = set()
     for group in groups:
         detail = _fetch_group_detail(page, base_url, group)
-        if _group_is_hidden(page, detail):
-            hidden_ids.add(group.group_id)
+        if _group_is_hidden(page, detail) or _group_is_deactivated(page, detail):
+            excluded_ids.add(group.group_id)
             continue
         info[group.group_id] = {
             "name": detail.name,
@@ -172,7 +192,7 @@ def fetch_group_info(page, base_url: str) -> tuple[dict[str, dict], set[str]]:
             "url": f"/groups/{group.group_id}",
             "list_name": detail.list_name,
         }
-    return info, hidden_ids
+    return info, excluded_ids
 
 
 def fetch_documents_url_by_group_id(
@@ -515,12 +535,12 @@ def ensure_email_lists(
 
 def sync_hierarchy(
     root, group_info: dict[str, dict], documents_url_by_group_id: dict[str, str],
-    linked_group_ids: set[str], hidden_ids: set[str], dry_run: bool,
+    linked_group_ids: set[str], excluded_ids: set[str], dry_run: bool,
 ) -> None:
     """Mutate the parsed hierarchy tree in place: rename, add/alter/remove
     Documents links, prompt for deletion of stale entries."""
     for node in list(iter_nodes(root)):
-        if not node.group_id or node.group_id in hidden_ids:
+        if not node.group_id or node.group_id in excluded_ids:
             continue
 
         live = group_info.get(node.group_id)
@@ -625,7 +645,7 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
         current_content = fetch_current_hierarchy(page, base_url)
         root = parse_hierarchy(current_content)
 
-        group_info, hidden_ids = fetch_group_info(page, base_url)
+        group_info, excluded_ids = fetch_group_info(page, base_url)
 
         log("INFO", "walk_drive", f"Walking folder tree of Shared Drive {drive_id}…")
         drive_folders = walk_drive_folders(drive_service, drive_id)
@@ -657,7 +677,7 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
         )
 
         sync_hierarchy(
-            root, group_info, documents_url_by_group_id, linked_group_ids, hidden_ids, dry_run
+            root, group_info, documents_url_by_group_id, linked_group_ids, excluded_ids, dry_run
         )
         add_missing_groups(root, group_info, documents_url_by_group_id, dry_run)
 
