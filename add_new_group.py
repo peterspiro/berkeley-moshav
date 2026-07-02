@@ -9,9 +9,9 @@ Steps:
      Group, and Gather group don't already exist; and (unless --type=club)
      --parent-circle uniquely identifies a live entry in the Circle
      Hierarchy.
-  2. Create the Drive folder, Google Group (with the usual settings, except
-     clubs disallow external members), and Gather group (with the usual
-     settings, except clubs set "All Community Can Send?" to No).
+  2. Create the Drive folder, Google Group (with the usual settings), and
+     Gather group (with the usual settings, except clubs get
+     availability=open instead of closed).
   3. Link the folder on /gdrive/config and grant the new Gather group
      Content manager access.
   4. Wire the Gather group's mailing list to the new Google Group.
@@ -62,7 +62,6 @@ from util.gdrive_config import (
     parent_folder_id_for_group_type,
 )
 from util.google_group_utils import (
-    CLUB_GROUP_SETTINGS,
     DEFAULT_CLIENT_SECRETS_PATH,
     DOMAIN,
     REQUIRED_GROUP_SETTINGS,
@@ -240,13 +239,13 @@ def main(
         log("INFO", "create_google_group", gemail)
         print(f"Created Google Group '{gemail}'.")
 
-        required_settings = (
-            CLUB_GROUP_SETTINGS if group_type == GroupType.CLUB else REQUIRED_GROUP_SETTINGS
-        )
-        ensure_group_settings(settings_service, gemail, required_settings)
+        ensure_group_settings(settings_service, gemail, REQUIRED_GROUP_SETTINGS)
 
         # ── Create Gather group ──────────────────────────────────────────────
-        gather_group_id = create_gather_group(page, base_url, gdisplay, kind, dry_run=False)
+        availability = "open" if group_type == GroupType.CLUB else "closed"
+        gather_group_id = create_gather_group(
+            page, base_url, gdisplay, kind, availability=availability, dry_run=False
+        )
         if not gather_group_id:
             close_log()
             browser.close()
@@ -268,7 +267,7 @@ def main(
         # ── Wire the mailing list ────────────────────────────────────────────
         set_gather_group_email_list(
             page, base_url, gather_group_id, gemail.split("@")[0], DOMAIN,
-            dry_run=False, all_can_send=(group_type != GroupType.CLUB),
+            dry_run=False, all_can_send=True,
         )
         print(f"Configured mailing list for '{gdisplay}'.")
 

@@ -174,9 +174,6 @@ def ensure_group_exists(dir_service, gemail: str, display_name: str) -> bool:
     return True
 
 
-CLUB_GROUP_SETTINGS = {**REQUIRED_GROUP_SETTINGS, "allowExternalMembers": "false"}
-
-
 def compute_group_settings_updates(settings_service, gemail: str, required: dict = None) -> dict:
     """Return {field: new_value} for settings that differ from `required`
     (default REQUIRED_GROUP_SETTINGS), without applying them. Read-only —
