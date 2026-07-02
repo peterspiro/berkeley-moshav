@@ -104,40 +104,42 @@ def group_display_name(folder_name: str) -> str:
 
 _FOLDER_IDS_HEADER = """\
 /**
- * Shared list of Google Drive folder IDs to sync.
+ * Shared map of Google Group email address -> Drive folder ID to sync.
  * This file is maintained by multiple scripts — edit here only.
  *
- * Each entry should be followed by a comment with the folder's name:
- *   '1AbCdEfGhIjKlMnOpQrStUvWxYz', // My Folder Name
+ * Keying on the group's address (rather than deriving it from the
+ * folder's name at sync time) lets an entry here override the usual
+ * name-matching rules for a specific group/folder pair.
+ *
+ *   'group@example.org': '1AbCdEfGhIjKlMnOpQrStUvWxYz',
  */
-const FOLDER_IDS = ["""
+const FOLDER_IDS = {"""
 
 
-def read_folder_ids() -> list[tuple[str, str]]:
-    """Return [(folder_id, folder_name), ...] parsed from folder_ids.gs.
+def read_folder_ids() -> dict[str, str]:
+    """Return {group_email: folder_id} parsed from folder_ids.gs.
 
-    Only parses entries inside the FOLDER_IDS array itself, so the example
+    Only parses entries inside the FOLDER_IDS object itself, so the example
     entry in the file's leading doc comment isn't mistaken for real data.
     """
     if not FOLDER_IDS_PATH.exists():
-        return []
+        return {}
     text = FOLDER_IDS_PATH.read_text()
-    m = re.search(r"const FOLDER_IDS = \[(.*?)\];", text, re.DOTALL)
+    m = re.search(r"const FOLDER_IDS = \{(.*?)\};", text, re.DOTALL)
     if not m:
-        return []
-    return re.findall(r"'([^']+)',\s*//\s*(.+)", m.group(1))
+        return {}
+    return dict(re.findall(r"'([^']+)':\s*'([^']+)',?", m.group(1)))
 
 
-def write_folder_ids(entries: list[tuple[str, str]]) -> None:
-    """Write folder_ids.gs with the given [(folder_id, folder_name)] list,
-    sorted alphabetically (case-insensitive) by folder name."""
-    entries = sorted(entries, key=lambda e: e[1].casefold())
+def write_folder_ids(mapping: dict[str, str]) -> None:
+    """Write folder_ids.gs with the given {group_email: folder_id} mapping,
+    sorted alphabetically (case-insensitive) by group email address."""
     lines = _FOLDER_IDS_HEADER.splitlines()
-    for fid, name in entries:
-        lines.append(f"  '{fid}', // {name}")
-    lines += ["];", ""]
+    for email in sorted(mapping, key=str.casefold):
+        lines.append(f"  '{email}': '{mapping[email]}',")
+    lines += ["};", ""]
     FOLDER_IDS_PATH.write_text("\n".join(lines))
-    print(f"Wrote {FOLDER_IDS_PATH} with {len(entries)} folder ID(s).")
+    print(f"Wrote {FOLDER_IDS_PATH} with {len(mapping)} entr{'y' if len(mapping) == 1 else 'ies'}.")
 
 
 # ── Group API helpers ─────────────────────────────────────────────────────────

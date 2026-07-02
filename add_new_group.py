@@ -5,7 +5,8 @@ together, and (unless --type=club) adds the new group to the Circle
 Hierarchy wiki page under its parent circle.
 
 Steps:
-  1. Validate: the folder isn't already in FOLDER_IDS; the folder, Google
+  1. Validate: the new group's email isn't already a key in FOLDER_IDS
+     (folder_ids.gs, a {group_email: folder_id} map); the folder, Google
      Group, and Gather group don't already exist; and (unless --type=club)
      --parent-circle uniquely identifies a live entry in the Circle
      Hierarchy.
@@ -137,9 +138,9 @@ def main(
     settings_service = build("groupssettings", "v1", credentials=creds)
 
     # ── FOLDER_IDS check (no network needed) ────────────────────────────────
-    folder_ids_entries = list(read_folder_ids())
-    if any(name.casefold() == folder_name.casefold() for _, name in folder_ids_entries):
-        sys.exit(f"Error: '{folder_name}' is already listed in FOLDER_IDS.")
+    folder_ids_mapping = read_folder_ids()
+    if gemail in folder_ids_mapping:
+        sys.exit(f"Error: '{gemail}' is already listed in FOLDER_IDS.")
 
     with sync_playwright() as pw:
         browser = launch_browser(pw)
@@ -292,8 +293,8 @@ def main(
         browser.close()
 
     # ── Update and deploy FOLDER_IDS ─────────────────────────────────────────
-    folder_ids_entries.append((folder_id, folder_name))
-    write_folder_ids(folder_ids_entries)
+    folder_ids_mapping[gemail] = folder_id
+    write_folder_ids(folder_ids_mapping)
     deploy_folder_ids_to_apps_script()
 
     close_log()

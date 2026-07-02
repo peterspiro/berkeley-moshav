@@ -41,7 +41,6 @@ from util.google_group_utils import (
     group_display_name,
     group_email,
     read_folder_ids,
-    to_slug,
     write_folder_ids,
 )
 
@@ -200,34 +199,35 @@ def main():
             print(f"  {g['name']} ({g['email']})")
 
     if matched and not args.group:
-        existing_entries = read_folder_ids()
-        existing_by_id = dict(existing_entries)
-        new_entries = [(f["id"], f["name"]) for _, f in matched]
+        existing_mapping = read_folder_ids()
+        new_mapping = {group_email(f["name"]): f["id"] for _, f in matched}
 
-        added = [(fid, name) for fid, name in new_entries if fid not in existing_by_id]
-        changed = [
-            (fid, existing_by_id[fid], name) for fid, name in new_entries
-            if fid in existing_by_id and existing_by_id[fid] != name
-        ]
+        added = {
+            email: fid for email, fid in new_mapping.items()
+            if email not in existing_mapping
+        }
+        changed = {
+            email: (existing_mapping[email], fid) for email, fid in new_mapping.items()
+            if email in existing_mapping and existing_mapping[email] != fid
+        }
 
         if not added and not changed:
             print("\nfolder_ids.gs already up to date — no changes to write.")
         else:
-            # Merge into the existing list (preserve entries not matched this
-            # run, e.g. filtered out by --group or not yet matchable) rather
-            # than clobbering the file with only this run's matches.
-            merged = dict(existing_entries)
-            merged.update(new_entries)
-            merged_entries = list(merged.items())
+            # Merge into the existing mapping (preserve entries not matched
+            # this run, e.g. filtered out by --group or not yet matchable)
+            # rather than clobbering the file with only this run's matches.
+            merged = dict(existing_mapping)
+            merged.update(new_mapping)
 
             if args.dry_run:
                 print("\n[dry-run] Would update folder_ids.gs:")
-                for fid, name in added:
-                    print(f"  + '{fid}', // {name}")
-                for fid, old_name, name in changed:
-                    print(f"  ~ '{fid}', // {old_name!r} → {name!r}")
+                for email, fid in added.items():
+                    print(f"  + '{email}': '{fid}'")
+                for email, (old_fid, fid) in changed.items():
+                    print(f"  ~ '{email}': {old_fid!r} → {fid!r}")
             else:
-                write_folder_ids(merged_entries)
+                write_folder_ids(merged)
 
 
 if __name__ == "__main__":

@@ -5,15 +5,13 @@
  * (fileOrganizer) permissions on its corresponding Google Drive folder.
  *
  * Setup:
- *   1. Edit DOMAIN and FOLDER_IDS below.
+ *   1. Edit FOLDER_IDS in folder_ids.gs (group email -> Drive folder ID).
  *   2. In the GAS editor: Extensions > Advanced Services > enable "Admin SDK Directory API" and "Drive API".
  *   3. Run syncAll() once manually to authorize and test.
  *   4. Run installTrigger() once to schedule daily execution.
  */
 
 // ── Configuration ────────────────────────────────────────────────────────────
-
-const DOMAIN = 'berkeleymoshav.org';
 
 const SYNC_ROLE = 'fileOrganizer'; // Drive role for "Content manager"
 
@@ -27,26 +25,26 @@ function syncAll() {
 
   const missing = [];
 
-  for (const folderId of FOLDER_IDS) {
+  for (const groupEmail of Object.keys(FOLDER_IDS)) {
+    const folderId = FOLDER_IDS[groupEmail];
     try {
-      const skipped = syncFolder(folderId, runner);
-      if (skipped) missing.push(folderId);
+      const skipped = syncFolder(folderId, groupEmail, runner);
+      if (skipped) missing.push(groupEmail);
     } catch (err) {
-      console.error(`Error processing folder ${folderId}: ${err}`);
+      console.error(`Error processing ${groupEmail} (folder ${folderId}): ${err}`);
     }
   }
 
   if (missing.length > 0) {
-    throw new Error(`No matching group found for folder ID(s): ${missing.join(', ')}`);
+    throw new Error(`No matching group found for: ${missing.join(', ')}`);
   }
 
   console.log('syncAll complete.');
 }
 
-function syncFolder(folderId, runnerEmail) {
+function syncFolder(folderId, groupEmail, runnerEmail) {
   const folder = DriveApp.getFolderById(folderId);
   const folderName = folder.getName();
-  const groupEmail = folderNameToGroupEmail(folderName);
 
   console.log(`Folder: "${folderName}" → group: ${groupEmail}`);
 
@@ -131,22 +129,6 @@ function listAllMembers(groupEmail) {
     pageToken = response.nextPageToken;
   } while (pageToken);
   return members;
-}
-
-// ── Naming helpers ────────────────────────────────────────────────────────────
-
-function folderNameToGroupEmail(folderName) {
-  return `${folderNameToSlug(folderName)}@${DOMAIN}`;
-}
-
-function folderNameToSlug(folderName) {
-  return folderName
-    .replace(/ *\([^)]*\)/g, '') // remove parenthesized expressions
-    .replace(/\s*&\s*/g, ' and ') // & → and
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, '-') // non-alphanumeric runs → hyphen
-    .replace(/^-+|-+$/g, '');    // strip leading/trailing hyphens
 }
 
 // ── Trigger setup (run once manually) ────────────────────────────────────────

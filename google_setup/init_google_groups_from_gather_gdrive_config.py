@@ -2,7 +2,10 @@
 One-off setup script: reads Gather's Google Drive Settings (/gdrive/config)
 and for each folder listed there:
 
-  1. Adds the folder to FOLDER_IDS in folder_ids.gs if not already present.
+  1. Reports whether the folder's group is already present in FOLDER_IDS
+     (folder_ids.gs) — this script has no Drive folder ID of its own to add
+     with, so it only informs; run update_groups_in_google_and_hierarchy.py
+     or match_google_groups_to_drive_folders.py to populate FOLDER_IDS.
   2. Creates the corresponding Google Group if it doesn't exist.
   3. Sets the group's "Who can post" to "Anyone on the web" if not already set.
   4. Edits the Gather group to set the Google Group email as its email list,
@@ -52,7 +55,6 @@ from util.google_group_utils import (
     group_email,
     group_exists,
     read_folder_ids,
-    write_folder_ids,
 )
 from util.gdrive_config import scrape_gdrive_config
 
@@ -125,11 +127,9 @@ def main():
                 sys.exit(f"Error: {args.folder!r} is ambiguous — matches {names}")
             entries = matching
 
-        # Current FOLDER_IDS state — build name→id lookup for cross-referencing
-        folder_ids_entries = list(read_folder_ids())  # preserve current order
-        existing_ids = {fid for fid, _ in folder_ids_entries}
-        name_to_fid = {name: fid for fid, name in folder_ids_entries}
-        folder_ids_dirty = False
+        # Current FOLDER_IDS state, keyed the same way this script derives
+        # each entry's expected group email.
+        folder_ids_mapping = read_folder_ids()
 
         for entry in entries:
             fname = entry["folder_name"]
@@ -140,19 +140,12 @@ def main():
 
             log_noop(args.quiet, "INFO", "process", f"Folder '{fname}' → group {gemail}")
 
-            # 1. Add to FOLDER_IDS if we know the Drive folder ID
-            fid = name_to_fid.get(fname)
-            if fid is None:
-                log_noop(args.quiet, "INFO", "folder_ids",
-                          f"  '{fname}' not in folder_ids.gs (no Drive folder ID available on page)")
-            elif fid not in existing_ids:
-                log("INFO", "folder_ids", f"  Adding '{fname}' ({fid}) to folder_ids.gs")
-                if not args.dry_run:
-                    folder_ids_entries.append((fid, fname))
-                    existing_ids.add(fid)
-                    folder_ids_dirty = True
+            # 1. Report FOLDER_IDS state for this group (populated by other
+            # scripts — this one has no Drive folder ID to add on its own).
+            if gemail in folder_ids_mapping:
+                log_noop(args.quiet, "INFO", "folder_ids", f"  '{gemail}' already in folder_ids.gs")
             else:
-                log_noop(args.quiet, "INFO", "folder_ids", f"  '{fname}' already in folder_ids.gs")
+                log_noop(args.quiet, "INFO", "folder_ids", f"  '{gemail}' not yet in folder_ids.gs")
 
             # 2. Ensure Google Group exists
             if args.dry_run:
@@ -190,11 +183,6 @@ def main():
 
             # 4. Set Gather group email list
             set_gather_group_email_list(page, BASE_URL, gid, list_local, DOMAIN, args.dry_run, args.quiet)
-
-        # Write updated folder_ids.gs if any new entries were added
-        if folder_ids_dirty:
-            write_folder_ids(folder_ids_entries)
-            log("INFO", "folder_ids", f"Wrote folder_ids.gs with {len(folder_ids_entries)} entries.")
 
         context.close()
 

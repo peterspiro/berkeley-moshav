@@ -12,12 +12,18 @@ excluding hidden groups:
       given the type's suffix ("Circle"/"Working Group"/"Club") if missing,
       then created at the appropriate place in the Shared Drive (top-level
       for circle/committee, under "Clubs" for club). Either way, the folder
-      is added to FOLDER_IDS and linked to the group on /gdrive/config with
-      Content manager access.
+      is linked to the group on /gdrive/config with Content manager access.
   0b. If the group now has a folder but no mailing list configured, searches
       existing Google Groups using the usual matching rules and prompts to
       select one or create a new one (using the usual create-group logic),
       then wires the result into Gather as the group's email list.
+  0c. Once every group's folder and mailing-list state is settled, syncs
+      FOLDER_IDS (folder_ids.gs, a {group_email: folder_id} map) to match:
+      any group with both a linked folder and a mailing list gets its
+      entry added or updated. Existing entries are never removed here —
+      FOLDER_IDS also supports exceptions Gather doesn't know about, so an
+      entry is only touched when Gather itself currently implies a
+      (possibly different) pairing for that same email.
   1.  If it's already in the hierarchy but has been renamed, updates the
       hierarchy line to the current name (matched by Gather group ID, embedded
       in the [Members] link, so renames don't break the association).
@@ -230,10 +236,12 @@ def fetch_group_info(page, base_url: str) -> tuple[dict[str, dict], set[str], se
 
 def fetch_documents_url_by_group_id(
     page, base_url: str, drive_id: str, config_entries: list[dict], drive_folders: list[dict],
-) -> tuple[dict[str, str], set[str]]:
-    """Return ({group_id: documents_href}, linked_group_ids), given the
-    already-scraped /gdrive/config entries and an already-walked Shared
-    Drive folder tree (both fetched once in main() and reused across steps).
+    folder_ids_mapping: dict[str, str], email_by_group_id: dict[str, str],
+) -> tuple[dict[str, str], set[str], dict[str, str]]:
+    """Return ({group_id: documents_href}, linked_group_ids,
+    {group_id: google_file_id}), given the already-scraped /gdrive/config
+    entries and an already-walked Shared Drive folder tree (both fetched
+    once in main() and reused across steps).
 
     linked_group_ids is every group_id that currently has a Drive folder
     linked via /gdrive/config, whether or not its URL could be resolved —
@@ -252,8 +260,8 @@ def fetch_documents_url_by_group_id(
          to have one.
       2. gdrive_item_map.json — google_file_id -> item_id, populated
          whenever create_gdrive_item() links a new folder.
-      3. groups_drive_sync/folder_ids.gs — folder_id/folder_name pairs,
-         populated by match_google_groups_to_drive_folders.py.
+      3. FOLDER_IDS (folder_ids.gs), keyed by the group's own email address
+         (via email_by_group_id) rather than by folder name.
       4. Matching by exact folder name against the already-walked Shared
          Drive tree (works regardless of nesting depth or of how the
          folder was originally linked in Gather).
@@ -265,20 +273,21 @@ def fetch_documents_url_by_group_id(
         item_id: google_file_id
         for google_file_id, item_id in load_gdrive_item_map().items()
     }
-    google_file_id_by_folder_name = {
-        name: folder_id for folder_id, name in read_folder_ids()
-    }
 
     documents_url_by_group_id: dict[str, str] = {}
+    google_file_id_by_group_id: dict[str, str] = {}
     unresolved: list[dict] = []
     for entry in config_entries:
+        gid = entry["group_id"]
+        email = email_by_group_id.get(gid)
         google_file_id = (
             entry["google_file_id"]
             or item_id_to_google_file_id.get(entry["item_id"])
-            or google_file_id_by_folder_name.get(entry["folder_name"])
+            or (folder_ids_mapping.get(email) if email else None)
         )
         if google_file_id:
-            documents_url_by_group_id[entry["group_id"]] = gdrive_item_url(google_file_id)
+            documents_url_by_group_id[gid] = gdrive_item_url(google_file_id)
+            google_file_id_by_group_id[gid] = google_file_id
         else:
             unresolved.append(entry)
 
@@ -292,6 +301,7 @@ def fetch_documents_url_by_group_id(
             matches = by_name.get(entry["folder_name"], [])
             if len(matches) == 1:
                 documents_url_by_group_id[entry["group_id"]] = gdrive_item_url(matches[0])
+                google_file_id_by_group_id[entry["group_id"]] = matches[0]
             else:
                 still_unresolved.append(entry)
                 if len(matches) > 1:
@@ -307,7 +317,7 @@ def fetch_documents_url_by_group_id(
             f"no known Drive folder ID for item_id={entry['item_id']!r}, and no "
             f"exact name match found in Shared Drive {drive_id} ({dump_note})")
 
-    return documents_url_by_group_id, linked_group_ids
+    return documents_url_by_group_id, linked_group_ids, google_file_id_by_group_id
 
 
 # ── Interactive parent selection ───────────────────────────────────────────────
@@ -439,26 +449,26 @@ def prompt_folder_id_for_group(drive_service) -> tuple[str, str] | None:
 def ensure_group_folders(
     page, base_url: str, drive_service, drive_id: str,
     group_info: dict[str, dict], linked_group_ids: set[str],
-    documents_url_by_group_id: dict[str, str], drive_folders: list[dict],
-    folder_owner: dict[str, str], folder_name_by_group_id: dict[str, str],
-    folder_ids_entries: list[tuple[str, str]], dry_run: bool,
-) -> bool:
+    documents_url_by_group_id: dict[str, str], google_file_id_by_group_id: dict[str, str],
+    drive_folders: list[dict], folder_owner: dict[str, str],
+    folder_name_by_group_id: dict[str, str], dry_run: bool,
+) -> None:
     """For every eligible group with no Drive folder, interactively find,
     create, or skip one. If resolved, links it on /gdrive/config with
-    Content manager access and records it in folder_ids_entries.
+    Content manager access.
 
-    Mutates linked_group_ids, documents_url_by_group_id, folder_owner,
-    folder_name_by_group_id, and folder_ids_entries in place. Returns True
-    if folder_ids_entries was changed (caller should write folder_ids.gs).
+    Mutates linked_group_ids, documents_url_by_group_id,
+    google_file_id_by_group_id, folder_owner, and folder_name_by_group_id
+    in place. FOLDER_IDS itself isn't touched here — it's synced
+    separately in sync_folder_ids_with_gather(), once every group's folder
+    *and* mailing list state is final, since an entry needs both a folder
+    and a group email to be meaningful.
     """
     missing = [
         (gid, info) for gid, info in group_info.items()
         if info["kind"] in ELIGIBLE_KINDS and gid not in linked_group_ids
     ]
     missing.sort(key=lambda item: item[1]["name"].casefold())
-
-    existing_folder_ids = {fid for fid, _ in folder_ids_entries}
-    folder_ids_dirty = False
 
     for group_id, info in missing:
         group_name = info["name"]
@@ -504,19 +514,13 @@ def ensure_group_folders(
             print(f"  ERROR: folder linked, but failed to add '{group_name}' as Content manager")
             log("ERROR", "add_group_access", f"{group_name}: {folder_name}")
 
-        if folder_id not in existing_folder_ids:
-            folder_ids_entries.append((folder_id, folder_name))
-            existing_folder_ids.add(folder_id)
-            folder_ids_dirty = True
-
         linked_group_ids.add(group_id)
         documents_url_by_group_id[group_id] = gdrive_item_url(folder_id)
+        google_file_id_by_group_id[group_id] = folder_id
         folder_owner[folder_name] = group_id
         folder_name_by_group_id[group_id] = folder_name
         print(f"  Linked '{folder_name}' to '{group_name}'.")
         log("INFO", "ensure_folder", f"{group_name} (id={group_id}) -> '{folder_name}' ({folder_id})")
-
-    return folder_ids_dirty
 
 
 # ── Step 2: ensure every eligible (foldered) group has a mailing list ─────────
@@ -629,8 +633,62 @@ def ensure_email_lists(
 
         list_local = email.split("@")[0]
         set_gather_group_email_list(page, base_url, group_id, list_local, DOMAIN, dry_run)
+        info["list_name"] = list_local
         print(f"  Set mailing list for '{group_name}' to {email}")
         log("INFO", "ensure_email_list", f"{group_name} (id={group_id}) -> {email}")
+
+
+# ── Step 3: keep FOLDER_IDS in sync with Gather's group ↔ folder ↔ email ───────
+
+def sync_folder_ids_with_gather(
+    group_info: dict[str, dict], google_file_id_by_group_id: dict[str, str],
+    email_by_group_id: dict[str, str], dry_run: bool,
+) -> None:
+    """Keep FOLDER_IDS (group_email -> Drive folder ID) in sync with
+    Gather's own state: for every eligible group that currently has both a
+    linked Drive folder and a configured mailing list, that pairing
+    implies one FOLDER_IDS entry, added or updated to match.
+
+    Entries are only ever added/updated here, never removed — an existing
+    entry whose email Gather can't currently derive a pairing for is left
+    alone, since FOLDER_IDS entries exist precisely to support exceptions
+    to the usual matching rules (e.g. a folder/group pairing Gather has no
+    way to represent). Only a matching Gather-derived pairing can
+    overwrite an existing entry for that same email.
+    """
+    desired: dict[str, str] = {}
+    for group_id, info in group_info.items():
+        if info["kind"] not in ELIGIBLE_KINDS:
+            continue
+        email = email_by_group_id.get(group_id)
+        google_file_id = google_file_id_by_group_id.get(group_id)
+        if email and google_file_id:
+            desired[email] = google_file_id
+
+    current = read_folder_ids()
+    added = {e: fid for e, fid in desired.items() if e not in current}
+    changed = {
+        e: (current[e], fid) for e, fid in desired.items()
+        if e in current and current[e] != fid
+    }
+
+    if not added and not changed:
+        return
+
+    for e, fid in added.items():
+        print(f"  + folder_ids: '{e}' -> '{fid}'")
+        log("INFO", "folder_ids", f"add {e} -> {fid}")
+    for e, (old_fid, fid) in changed.items():
+        print(f"  ~ folder_ids: '{e}': '{old_fid}' -> '{fid}'")
+        log("INFO", "folder_ids", f"update {e}: {old_fid} -> {fid}")
+
+    if dry_run:
+        print("[dry-run] would update folder_ids.gs as shown above")
+        return
+
+    merged = dict(current)
+    merged.update(desired)
+    write_folder_ids(merged)
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -826,11 +884,18 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
         config_entries = scrape_gdrive_config(page, base_url)
         folder_owner = {e["folder_name"]: e["group_id"] for e in config_entries}
         folder_name_by_group_id = {e["group_id"]: e["folder_name"] for e in config_entries}
-        folder_ids_entries = list(read_folder_ids())
-        original_folder_ids_entries = list(folder_ids_entries)
+        folder_ids_mapping = read_folder_ids()
 
-        documents_url_by_group_id, linked_group_ids = fetch_documents_url_by_group_id(
-            page, base_url, drive_id, config_entries, drive_folders
+        email_by_group_id = {
+            gid: f"{info['list_name']}@{DOMAIN}"
+            for gid, info in group_info.items() if info.get("list_name")
+        }
+
+        documents_url_by_group_id, linked_group_ids, google_file_id_by_group_id = (
+            fetch_documents_url_by_group_id(
+                page, base_url, drive_id, config_entries, drive_folders,
+                folder_ids_mapping, email_by_group_id,
+            )
         )
 
         quit_requested = False
@@ -839,17 +904,13 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
         try:
             ensure_group_folders(
                 page, base_url, drive_service, drive_id, group_info, linked_group_ids,
-                documents_url_by_group_id, drive_folders, folder_owner, folder_name_by_group_id,
-                folder_ids_entries, dry_run,
+                documents_url_by_group_id, google_file_id_by_group_id, drive_folders,
+                folder_owner, folder_name_by_group_id, dry_run,
             )
         except QuitScript:
             quit_requested = True
             print("\nQuit requested — skipping remaining steps and saving progress so far.")
             log("INFO", "quit", "User quit during the Drive folder step")
-
-        if folder_ids_entries != original_folder_ids_entries:
-            write_folder_ids(folder_ids_entries)
-            log("INFO", "folder_ids", f"Wrote folder_ids.gs with {len(folder_ids_entries)} entries.")
 
         # Step 2: ensure every eligible, now-foldered group has a mailing list.
         if not quit_requested:
@@ -862,6 +923,15 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
                 quit_requested = True
                 print("\nQuit requested — skipping remaining steps and saving progress so far.")
                 log("INFO", "quit", "User quit during the mailing list step")
+
+        # Step 3: keep FOLDER_IDS in sync with Gather's folder/email associations.
+        email_by_group_id = {
+            gid: f"{info['list_name']}@{DOMAIN}"
+            for gid, info in group_info.items() if info.get("list_name")
+        }
+        sync_folder_ids_with_gather(
+            group_info, google_file_id_by_group_id, email_by_group_id, dry_run
+        )
 
         if not quit_requested:
             try:
