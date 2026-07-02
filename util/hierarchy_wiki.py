@@ -19,11 +19,18 @@ from util.gather_utils import _check_submit_errors, _codemirror_get, _codemirror
 
 WIKI_TITLE = "Circle Hierarchy"
 WIKI_SLUG = "circle-hierarchy"
+# The root line's full name is managed by ensure_root_node() in
+# update_groups_in_google_and_hierarchy.py and may change over time, but it
+# always contains this substring — used below to locate the block
+# regardless of exactly how the rest of the root's name is worded.
 HIERARCHY_ROOT = "Top Circle / HOA"
 
-# Matches the hierarchy bullet list anchored on the root label.
+# Matches the hierarchy bullet list anchored on the root label. Matches the
+# substring anywhere in the top-level bullet's text (not just as a prefix)
+# so a root name like "Full Community (Circle of Everyone / Top Circle /
+# HOA)" is still found.
 HIERARCHY_BLOCK_RE = re.compile(
-    r"(?m)^- " + re.escape(HIERARCHY_ROOT) + r"[^\n]*(?:\n[ \t][^\n]+)*"
+    r"(?m)^- [^\n]*" + re.escape(HIERARCHY_ROOT) + r"[^\n]*(?:\n[ \t][^\n]+)*"
 )
 
 

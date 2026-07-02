@@ -35,6 +35,13 @@ Hidden and deactivated/inactive groups are skipped entirely: not offered
 for addition, not flagged as stale if their hierarchy entry still
 references them.
 
+The outermost hierarchy entry (the root) is always forced to represent the
+"everyone" group: named "Full Community (Circle of Everyone / Top Circle /
+HOA)", linked to the "Full Community" Gather group via [Members], and
+linked to the root Shared Drive page (/gdrive) via [Documents]. This
+happens unconditionally on every run, overwriting any manual edits to that
+line.
+
 In dry-run mode (-n), missing/stale entries and folder/email-list gaps are
 only reported, never prompted for.
 
@@ -621,6 +628,55 @@ def ensure_email_lists(
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
+FULL_COMMUNITY_GROUP_NAME = "Full Community"
+ROOT_NODE_NAME = "Full Community (Circle of Everyone / Top Circle / HOA)"
+ROOT_DOCUMENTS_URL = "/gdrive"
+
+
+def ensure_root_node(root, group_info: dict[str, dict], dry_run: bool) -> None:
+    """Force the hierarchy root's name/links to always be the "everyone"
+    group: [Members] -> the "Full Community" Gather group, [Documents] ->
+    the root Shared Drive page (/gdrive).
+
+    Unlike every other node, the root isn't matched/renamed by its
+    group_id via sync_hierarchy (see the `node is root` skip there) —
+    its identity is fixed by this function instead.
+    """
+    full_community_id = next(
+        (gid for gid, info in group_info.items()
+         if info["name"].casefold() == FULL_COMMUNITY_GROUP_NAME.casefold()),
+        None,
+    )
+    if full_community_id is None:
+        log("WARN", "root_node",
+            f"No Gather group named '{FULL_COMMUNITY_GROUP_NAME}' found; "
+            "leaving hierarchy root untouched")
+        return
+
+    members_url = f"/groups/{full_community_id}"
+    changes = []
+    if root.name != ROOT_NODE_NAME:
+        changes.append(f"name: {root.name!r} -> {ROOT_NODE_NAME!r}")
+    if root.members_url != members_url:
+        changes.append(f"[Members] -> {members_url}")
+    if root.documents_url != ROOT_DOCUMENTS_URL:
+        changes.append(f"[Documents] -> {ROOT_DOCUMENTS_URL}")
+    if not changes:
+        return
+
+    if dry_run:
+        print(f"[dry-run] Would update hierarchy root: {'; '.join(changes)}")
+        log("INFO", "would_update_root", "; ".join(changes))
+        return
+
+    root.name = ROOT_NODE_NAME
+    root.group_id = full_community_id
+    root.members_url = members_url
+    root.documents_url = ROOT_DOCUMENTS_URL
+    print(f"Updated hierarchy root: {'; '.join(changes)}")
+    log("INFO", "update_root", "; ".join(changes))
+
+
 def sync_hierarchy(
     root, group_info: dict[str, dict], documents_url_by_group_id: dict[str, str],
     linked_group_ids: set[str], excluded_ids: set[str], deactivated_ids: set[str], dry_run: bool,
@@ -631,9 +687,12 @@ def sync_hierarchy(
     Deactivated groups are removed from the hierarchy outright (no
     prompt, since they're gone for good, not just excluded from
     consideration). Merely-hidden groups are left untouched.
+
+    The root node itself is skipped — its name/links are forced by
+    ensure_root_node(), not by the generic rename/link-sync rules here.
     """
     for node in list(iter_nodes(root)):
-        if not node.group_id:
+        if node is root or not node.group_id:
             continue
 
         if node.group_id in deactivated_ids:
@@ -799,6 +858,7 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
 
         if not quit_requested:
             try:
+                ensure_root_node(root, group_info, dry_run)
                 sync_hierarchy(
                     root, group_info, documents_url_by_group_id, linked_group_ids,
                     excluded_ids, deactivated_ids, dry_run
