@@ -38,6 +38,10 @@ references them.
 In dry-run mode (-n), missing/stale entries and folder/email-list gaps are
 only reported, never prompted for.
 
+Every interactive prompt accepts 'q' (or 'quit') to stop immediately —
+whatever's already been done (Drive folders linked, groups created,
+FOLDER_IDS entries, hierarchy edits) is still saved.
+
 Requires Google API access (Drive, Admin Directory, Groups Settings):
   1. In Google Cloud Console, create a Desktop OAuth 2.0 client and download
      the JSON as client_secret.json (or pass a different path via -c).
@@ -115,6 +119,22 @@ _SCREENSHOT_DIR = Path("debug/update_groups_in_google_and_hierarchy_screenshots"
 configure(_LOG_FILE, _SCREENSHOT_DIR)
 
 ELIGIBLE_KINDS = {"circle", "committee", "club"}
+
+QUIT_WORDS = ("q", "quit")
+
+
+class QuitScript(Exception):
+    """Raised when the user asks to quit at any interactive prompt.
+
+    Caught in main(), which stops asking further questions but still saves
+    whatever progress was already made (folder_ids.gs, the hierarchy page)."""
+
+
+def check_quit(answer: str) -> None:
+    """Raise QuitScript if answer is a quit command. Call this on every
+    raw input() result before doing anything else with it."""
+    if answer.strip().lower() in QUIT_WORDS:
+        raise QuitScript()
 
 
 # ── Data gathering ─────────────────────────────────────────────────────────────
@@ -304,8 +324,10 @@ def prompt_for_parent(group_name: str, all_nodes: list) -> "object | None":
     while True:
         prefix = input(
             f"Group '{group_name}' is not in the hierarchy. Enter a prefix "
-            f"uniquely matching its parent circle's name (blank to skip): "
+            f"uniquely matching its parent circle's name (blank to skip, "
+            f"'q' to quit): "
         ).strip()
+        check_quit(prefix)
         if not prefix:
             return None
         matches = [n for n in all_nodes if n.name.lower().startswith(prefix.lower())]
@@ -319,7 +341,8 @@ def prompt_for_parent(group_name: str, all_nodes: list) -> "object | None":
 
 
 def prompt_yes_no(question: str) -> bool:
-    answer = input(f"{question} [y/N]: ").strip().lower()
+    answer = input(f"{question} [y/N/q]: ").strip().lower()
+    check_quit(answer)
     return answer in ("y", "yes")
 
 
@@ -342,13 +365,15 @@ def prompt_folder_choice_for_group(
         for i, f in enumerate(available, start=1):
             tag = "" if f["match_kind"] == "strict" else " [weak: shared term only]"
             print(f"    {i}. {' / '.join(f['path'])}{tag}")
-        prompt = f"  Select folder [1-{len(available)}], 'c' to create a new folder, or Enter to skip: "
+        prompt = (f"  Select folder [1-{len(available)}], 'c' to create a new folder, "
+                  f"Enter to skip, or 'q' to quit: ")
     else:
         print("  No candidate folders found.")
-        prompt = "  'c' to create a new folder, or Enter to skip: "
+        prompt = "  'c' to create a new folder, Enter to skip, or 'q' to quit: "
 
     while True:
         choice = input(prompt).strip()
+        check_quit(choice)
         if choice == "":
             return "skip", None
         if choice.lower() == "c":
@@ -359,14 +384,15 @@ def prompt_folder_choice_for_group(
 
 
 def create_folder_for_group(
-    drive_service, drive_id: str, group_kind: str, dry_run: bool
+    drive_service, drive_id: str, group_kind: str, group_name: str, dry_run: bool
 ) -> tuple[str, str] | None:
     """Interactively create a new Drive folder for a group of this kind.
-    Returns (folder_id, folder_name), or None if skipped/failed."""
-    raw_name = input("  Enter the new folder's name: ").strip()
+    Defaults to the group's own name if the user enters nothing. Returns
+    (folder_id, folder_name), or None if skipped/failed."""
+    raw_name = input(f"  Enter the new folder's name [{group_name}]: ").strip()
+    check_quit(raw_name)
     if not raw_name:
-        print("  No name entered; skipping.")
-        return None
+        raw_name = group_name
 
     try:
         folder_name = folder_name_for_group_type(raw_name, group_kind)
@@ -434,7 +460,7 @@ def ensure_group_folders(
             continue
 
         if action == "create":
-            result = create_folder_for_group(drive_service, drive_id, kind, dry_run)
+            result = create_folder_for_group(drive_service, drive_id, kind, group_name, dry_run)
             if result is None:
                 continue
             folder_id, folder_name = result
@@ -476,13 +502,15 @@ def prompt_group_choice_for_email_list(matches: list[dict]) -> tuple[str, dict |
         print("  Candidate existing Google Groups:")
         for i, g in enumerate(matches, start=1):
             print(f"    {i}. {g['name']} <{g['email']}>")
-        prompt = f"  Select group [1-{len(matches)}], 'c' to create a new group, or Enter to skip: "
+        prompt = (f"  Select group [1-{len(matches)}], 'c' to create a new group, "
+                  f"Enter to skip, or 'q' to quit: ")
     else:
         print("  No candidate Google Groups found.")
-        prompt = "  'c' to create a new group, or Enter to skip: "
+        prompt = "  'c' to create a new group, Enter to skip, or 'q' to quit: "
 
     while True:
         choice = input(prompt).strip()
+        check_quit(choice)
         if choice == "":
             return "skip", None
         if choice.lower() == "c":
@@ -692,32 +720,53 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
         folder_owner = {e["folder_name"]: e["group_id"] for e in config_entries}
         folder_name_by_group_id = {e["group_id"]: e["folder_name"] for e in config_entries}
         folder_ids_entries = list(read_folder_ids())
+        original_folder_ids_entries = list(folder_ids_entries)
 
         documents_url_by_group_id, linked_group_ids = fetch_documents_url_by_group_id(
             page, base_url, drive_id, config_entries, drive_folders
         )
 
+        quit_requested = False
+
         # Step 1: ensure every eligible group has a Drive folder.
-        folder_ids_dirty = ensure_group_folders(
-            page, base_url, drive_service, drive_id, group_info, linked_group_ids,
-            documents_url_by_group_id, drive_folders, folder_owner, folder_name_by_group_id,
-            folder_ids_entries, dry_run,
-        )
-        if folder_ids_dirty:
+        try:
+            ensure_group_folders(
+                page, base_url, drive_service, drive_id, group_info, linked_group_ids,
+                documents_url_by_group_id, drive_folders, folder_owner, folder_name_by_group_id,
+                folder_ids_entries, dry_run,
+            )
+        except QuitScript:
+            quit_requested = True
+            print("\nQuit requested — skipping remaining steps and saving progress so far.")
+            log("INFO", "quit", "User quit during the Drive folder step")
+
+        if folder_ids_entries != original_folder_ids_entries:
             write_folder_ids(folder_ids_entries)
             log("INFO", "folder_ids", f"Wrote folder_ids.gs with {len(folder_ids_entries)} entries.")
 
         # Step 2: ensure every eligible, now-foldered group has a mailing list.
-        ensure_email_lists(
-            page, base_url, dir_service, settings_service, group_info, linked_group_ids,
-            folder_name_by_group_id, dry_run,
-        )
+        if not quit_requested:
+            try:
+                ensure_email_lists(
+                    page, base_url, dir_service, settings_service, group_info, linked_group_ids,
+                    folder_name_by_group_id, dry_run,
+                )
+            except QuitScript:
+                quit_requested = True
+                print("\nQuit requested — skipping remaining steps and saving progress so far.")
+                log("INFO", "quit", "User quit during the mailing list step")
 
-        sync_hierarchy(
-            root, group_info, documents_url_by_group_id, linked_group_ids,
-            excluded_ids, deactivated_ids, dry_run
-        )
-        add_missing_groups(root, group_info, documents_url_by_group_id, dry_run)
+        if not quit_requested:
+            try:
+                sync_hierarchy(
+                    root, group_info, documents_url_by_group_id, linked_group_ids,
+                    excluded_ids, deactivated_ids, dry_run
+                )
+                add_missing_groups(root, group_info, documents_url_by_group_id, dry_run)
+            except QuitScript:
+                quit_requested = True
+                print("\nQuit requested — saving progress made so far.")
+                log("INFO", "quit", "User quit during the hierarchy sync step")
 
         new_content = render_hierarchy(root)
         ok = ensure_hierarchy_page(page, base_url, new_content, dry_run)
