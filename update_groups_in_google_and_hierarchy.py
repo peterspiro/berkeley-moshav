@@ -85,6 +85,7 @@ from util.gdrive_config import (
     create_drive_folder,
     create_gdrive_item,
     dump_gdrive_config_row_html,
+    ensure_folder_name_available,
     folder_name_for_group_type,
     gdrive_item_url,
     load_gdrive_item_map,
@@ -402,6 +403,12 @@ def create_folder_for_group(
 
     try:
         parent_id = parent_folder_id_for_group_type(drive_service, drive_id, group_kind)
+    except ValueError as e:
+        print(f"  ERROR: {e}")
+        return None
+
+    try:
+        ensure_folder_name_available(drive_service, drive_id, parent_id, folder_name)
     except ValueError as e:
         print(f"  ERROR: {e}")
         return None

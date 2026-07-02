@@ -50,20 +50,34 @@ def walk_drive_folders(drive_service, drive_id: str) -> list[dict]:
     return folders
 
 
-def find_top_level_folder_id(drive_service, drive_id: str, name: str) -> str | None:
-    """Return the Drive folder ID of the top-level folder called name
-    (exact match), or None if no such folder exists."""
+def find_folder_id_under_parent(drive_service, drive_id: str, parent_id: str, name: str) -> str | None:
+    """Return the Drive folder ID of the folder called name (exact match)
+    directly under parent_id, or None if no such folder exists."""
     resp = drive_service.files().list(
         corpora="drive",
         driveId=drive_id,
         includeItemsFromAllDrives=True,
         supportsAllDrives=True,
         q=f"mimeType='application/vnd.google-apps.folder' and "
-          f"'{drive_id}' in parents and trashed=false and name='{name}'",
+          f"'{parent_id}' in parents and trashed=false and name='{name}'",
         fields="files(id,name)",
     ).execute()
     files = resp.get("files", [])
     return files[0]["id"] if files else None
+
+
+def find_top_level_folder_id(drive_service, drive_id: str, name: str) -> str | None:
+    """Return the Drive folder ID of the top-level folder called name
+    (exact match), or None if no such folder exists."""
+    return find_folder_id_under_parent(drive_service, drive_id, drive_id, name)
+
+
+def ensure_folder_name_available(drive_service, drive_id: str, parent_id: str, name: str) -> None:
+    """Raise ValueError if a folder named name already exists directly
+    under parent_id, to avoid silently creating a duplicate."""
+    existing_id = find_folder_id_under_parent(drive_service, drive_id, parent_id, name)
+    if existing_id is not None:
+        raise ValueError(f"A folder named {name!r} already exists here (id={existing_id})")
 
 
 def create_drive_folder(drive_service, name: str, parent_id: str) -> str:
