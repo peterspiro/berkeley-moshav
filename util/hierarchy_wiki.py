@@ -111,7 +111,7 @@ def ensure_hierarchy_page(page, base_url: str, content: str, dry_run: bool) -> b
         return False
 
 
-# ── Hierarchy tree parsing (for update_circle_hierarchy.py) ───────────────────
+# ── Hierarchy tree parsing (for update_groups_in_google_and_hierarchy.py) ─────
 
 _LINE_RE = re.compile(r"^(?P<indent>[ \t]*)-\s+(?P<rest>.+)$")
 _MEMBERS_RE = re.compile(r"\[Members\]\((?P<url>[^)]+)\)")

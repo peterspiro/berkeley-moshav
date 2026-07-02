@@ -1,41 +1,54 @@
 #!/usr/bin/env python3
 """
-Syncs the "Circle Hierarchy" wiki page with the current /groups list.
+Syncs Google (Drive folders + Groups) and the "Circle Hierarchy" wiki page
+with the current /groups list.
 
 For every circle/working group in Gather (kind "circle" or "committee"),
 excluding hidden groups:
-  - If it's already in the hierarchy but has been renamed, updates the
-    hierarchy line to the current name (matched by Gather group ID, embedded
-    in the [Members] link, so renames don't break the association).
-  - If it has a Drive folder linked (via /gdrive/config) but the hierarchy
-    line is missing a [Documents] link, adds one. If the linked folder has
-    changed, updates the existing link. If the folder has been unlinked
-    entirely, removes the [Documents] link.
-  - If it's missing from the hierarchy entirely, prompts for a prefix that
-    uniquely matches an existing hierarchy entry's name, and adds it as a
-    child of that entry — inserted alphabetically among its siblings.
-  - If a hierarchy entry's linked group no longer exists in Gather, asks
-    whether to delete it (reparenting any children to keep the tree intact).
+
+  0a. If the group has no associated Drive folder, searches for candidate
+      folders using the usual name-matching rules and prompts to select one,
+      create a new one, or skip. A new folder's name is standardized and
+      given the type's suffix ("Circle"/"Working Group"/"Club") if missing,
+      then created at the appropriate place in the Shared Drive (top-level
+      for circle/committee, under "Clubs" for club). Either way, the folder
+      is added to FOLDER_IDS and linked to the group on /gdrive/config with
+      Content manager access.
+  0b. If the group now has a folder but no mailing list configured, searches
+      existing Google Groups using the usual matching rules and prompts to
+      select one or create a new one (using the usual create-group logic),
+      then wires the result into Gather as the group's email list.
+  1.  If it's already in the hierarchy but has been renamed, updates the
+      hierarchy line to the current name (matched by Gather group ID, embedded
+      in the [Members] link, so renames don't break the association).
+  2.  If it has a Drive folder linked (via /gdrive/config) but the hierarchy
+      line is missing a [Documents] link, adds one. If the linked folder has
+      changed, updates the existing link. If the folder has been unlinked
+      entirely, removes the [Documents] link.
+  3.  If it's missing from the hierarchy entirely, prompts for a prefix that
+      uniquely matches an existing hierarchy entry's name, and adds it as a
+      child of that entry — inserted alphabetically among its siblings.
+  4.  If a hierarchy entry's linked group no longer exists in Gather, asks
+      whether to delete it (reparenting any children to keep the tree intact).
 
 Hidden groups are skipped entirely: not offered for addition, not flagged
 as stale if their hierarchy entry still references them.
 
-In dry-run mode (-n), missing/stale entries are only reported, never
-prompted for.
+In dry-run mode (-n), missing/stale entries and folder/email-list gaps are
+only reported, never prompted for.
 
-Resolving a group's linked Drive folder ID (for the [Documents] link)
-requires Google API access, since Gather's own /gdrive/config page doesn't
-reliably expose it:
+Requires Google API access (Drive, Admin Directory, Groups Settings):
   1. In Google Cloud Console, create a Desktop OAuth 2.0 client and download
      the JSON as client_secret.json (or pass a different path via -c).
-  2. Enable the Google Drive API for the project.
+  2. Enable the Google Drive API, Admin SDK (Directory API), and Groups
+     Settings API for the project.
   3. On first run the script prints an auth URL — paste it into a browser
      signed in as a Workspace super-admin. The token is cached at
      ~/.google_setup_token.pkl for subsequent runs.
 
 Usage:
-    python update_circle_hierarchy.py -e admin@example.com -p secret
-    python update_circle_hierarchy.py -u https://example.gather.coop -n
+    python update_groups_in_google_and_hierarchy.py -e admin@example.com -p secret
+    python update_groups_in_google_and_hierarchy.py -u https://example.gather.coop -n
 """
 
 import argparse
@@ -46,8 +59,9 @@ from pathlib import Path
 from googleapiclient.discovery import build
 from playwright.sync_api import sync_playwright
 
-from google_setup.match_google_groups_to_drive_folders import DEFAULT_DRIVE_ID
+from google_setup.match_google_groups_to_drive_folders import DEFAULT_DRIVE_ID, list_all_groups
 from util.credentials import load_credentials
+from util.folder_matching import find_matching_folders, folder_matches_group
 from util.gather_utils import (
     _codemirror_get,
     _fetch_group_detail,
@@ -58,15 +72,31 @@ from util.gather_utils import (
     launch_browser,
     log,
     login,
+    set_gather_group_email_list,
 )
 from util.gdrive_config import (
+    add_group_access_to_gdrive_item,
+    create_drive_folder,
+    create_gdrive_item,
     dump_gdrive_config_row_html,
+    folder_name_for_group_type,
     gdrive_item_url,
     load_gdrive_item_map,
+    parent_folder_id_for_group_type,
     scrape_gdrive_config,
     walk_drive_folders,
 )
-from util.google_group_utils import DEFAULT_CLIENT_SECRETS_PATH, get_credentials, read_folder_ids
+from util.google_group_utils import (
+    DEFAULT_CLIENT_SECRETS_PATH,
+    DOMAIN,
+    ensure_group_exists,
+    ensure_group_settings,
+    get_credentials,
+    group_display_name,
+    group_email,
+    read_folder_ids,
+    write_folder_ids,
+)
 from util.hierarchy_wiki import (
     WIKI_SLUG,
     HierarchyNode,
@@ -77,12 +107,12 @@ from util.hierarchy_wiki import (
     render_hierarchy,
 )
 
-_LOG_FILE = Path("debug/update_circle_hierarchy_log.csv")
-_SCREENSHOT_DIR = Path("debug/update_circle_hierarchy_screenshots")
+_LOG_FILE = Path("debug/update_groups_in_google_and_hierarchy_log.csv")
+_SCREENSHOT_DIR = Path("debug/update_groups_in_google_and_hierarchy_screenshots")
 
 configure(_LOG_FILE, _SCREENSHOT_DIR)
 
-ELIGIBLE_KINDS = {"circle", "committee"}
+ELIGIBLE_KINDS = {"circle", "committee", "club"}
 
 
 # ── Data gathering ─────────────────────────────────────────────────────────────
@@ -121,7 +151,7 @@ def _group_is_hidden(page, detail) -> bool:
 
 
 def fetch_group_info(page, base_url: str) -> tuple[dict[str, dict], set[str]]:
-    """Return ({group_id: {"name", "kind", "url"}}, hidden_group_ids).
+    """Return ({group_id: {"name", "kind", "url", "list_name"}}, hidden_group_ids).
 
     Hidden groups are reported separately (not included in info) so callers
     can skip them entirely — neither offered for addition nor flagged as
@@ -140,14 +170,17 @@ def fetch_group_info(page, base_url: str) -> tuple[dict[str, dict], set[str]]:
             "name": detail.name,
             "kind": (detail.kind or "").strip().lower(),
             "url": f"/groups/{group.group_id}",
+            "list_name": detail.list_name,
         }
     return info, hidden_ids
 
 
 def fetch_documents_url_by_group_id(
-    page, base_url: str, drive_service, drive_id: str
+    page, base_url: str, drive_id: str, config_entries: list[dict], drive_folders: list[dict],
 ) -> tuple[dict[str, str], set[str]]:
-    """Return ({group_id: documents_href}, linked_group_ids).
+    """Return ({group_id: documents_href}, linked_group_ids), given the
+    already-scraped /gdrive/config entries and an already-walked Shared
+    Drive folder tree (both fetched once in main() and reused across steps).
 
     linked_group_ids is every group_id that currently has a Drive folder
     linked via /gdrive/config, whether or not its URL could be resolved —
@@ -168,13 +201,11 @@ def fetch_documents_url_by_group_id(
          whenever create_gdrive_item() links a new folder.
       3. groups_drive_sync/folder_ids.gs — folder_id/folder_name pairs,
          populated by match_google_groups_to_drive_folders.py.
-      4. A live Google Drive API search of the Shared Drive tree, matching
-         by exact folder name (works regardless of nesting depth or of
-         how the folder was originally linked in Gather). Only performed
-         if something is still unresolved after the first three steps.
+      4. Matching by exact folder name against the already-walked Shared
+         Drive tree (works regardless of nesting depth or of how the
+         folder was originally linked in Gather).
     Folders resolved by none of these are logged as unresolved.
     """
-    config_entries = scrape_gdrive_config(page, base_url)
     linked_group_ids = {entry["group_id"] for entry in config_entries}
 
     item_id_to_google_file_id = {
@@ -199,10 +230,6 @@ def fetch_documents_url_by_group_id(
             unresolved.append(entry)
 
     if unresolved:
-        log("INFO", "documents_link",
-            f"{len(unresolved)} folder(s) unresolved via config/cache; "
-            f"searching Shared Drive {drive_id} by name…")
-        drive_folders = walk_drive_folders(drive_service, drive_id)
         by_name: dict[str, list[str]] = {}
         for f in drive_folders:
             by_name.setdefault(f["name"], []).append(f["id"])
@@ -255,6 +282,233 @@ def prompt_for_parent(group_name: str, all_nodes: list) -> "object | None":
 def prompt_yes_no(question: str) -> bool:
     answer = input(f"{question} [y/N]: ").strip().lower()
     return answer in ("y", "yes")
+
+
+# ── Step 1: ensure every eligible group has a Drive folder ────────────────────
+
+def prompt_folder_choice_for_group(
+    available: list[dict], taken: list[dict], folder_owner: dict[str, str],
+) -> tuple[str, dict | None]:
+    """Prompt the user to pick a candidate folder, create a new one, or skip.
+    Returns (action, folder) where action is "select", "create", or "skip"
+    (folder is None unless action == "select")."""
+    if taken:
+        print("  Already linked to a different group (not selectable):")
+        for f in taken:
+            owner = folder_owner.get(f["name"], "?")
+            print(f"    {' / '.join(f['path'])}   (linked to group {owner})")
+
+    if available:
+        print("  Candidate folders:")
+        for i, f in enumerate(available, start=1):
+            tag = "" if f["match_kind"] == "strict" else " [weak: shared term only]"
+            print(f"    {i}. {' / '.join(f['path'])}{tag}")
+        prompt = f"  Select folder [1-{len(available)}], 'c' to create a new folder, or Enter to skip: "
+    else:
+        print("  No candidate folders found.")
+        prompt = "  'c' to create a new folder, or Enter to skip: "
+
+    while True:
+        choice = input(prompt).strip()
+        if choice == "":
+            return "skip", None
+        if choice.lower() == "c":
+            return "create", None
+        if available and choice.isdigit() and 1 <= int(choice) <= len(available):
+            return "select", available[int(choice) - 1]
+        print("  Invalid choice.")
+
+
+def create_folder_for_group(
+    drive_service, drive_id: str, group_kind: str, dry_run: bool
+) -> tuple[str, str] | None:
+    """Interactively create a new Drive folder for a group of this kind.
+    Returns (folder_id, folder_name), or None if skipped/failed."""
+    raw_name = input("  Enter the new folder's name: ").strip()
+    if not raw_name:
+        print("  No name entered; skipping.")
+        return None
+
+    try:
+        folder_name = folder_name_for_group_type(raw_name, group_kind)
+    except ValueError as e:
+        print(f"  ERROR: {e}")
+        return None
+
+    try:
+        parent_id = parent_folder_id_for_group_type(drive_service, drive_id, group_kind)
+    except ValueError as e:
+        print(f"  ERROR: {e}")
+        return None
+
+    if dry_run:
+        print(f"  [dry-run] would create folder '{folder_name}'")
+        return None
+
+    folder_id = create_drive_folder(drive_service, folder_name, parent_id)
+    print(f"  Created folder '{folder_name}' ({folder_id})")
+    return folder_id, folder_name
+
+
+def ensure_group_folders(
+    page, base_url: str, drive_service, drive_id: str,
+    group_info: dict[str, dict], linked_group_ids: set[str],
+    documents_url_by_group_id: dict[str, str], drive_folders: list[dict],
+    folder_owner: dict[str, str], folder_name_by_group_id: dict[str, str],
+    folder_ids_entries: list[tuple[str, str]], dry_run: bool,
+) -> bool:
+    """For every eligible group with no Drive folder, interactively find,
+    create, or skip one. If resolved, links it on /gdrive/config with
+    Content manager access and records it in folder_ids_entries.
+
+    Mutates linked_group_ids, documents_url_by_group_id, folder_owner,
+    folder_name_by_group_id, and folder_ids_entries in place. Returns True
+    if folder_ids_entries was changed (caller should write folder_ids.gs).
+    """
+    missing = [
+        (gid, info) for gid, info in group_info.items()
+        if info["kind"] in ELIGIBLE_KINDS and gid not in linked_group_ids
+    ]
+    missing.sort(key=lambda item: item[1]["name"].casefold())
+
+    existing_folder_ids = {fid for fid, _ in folder_ids_entries}
+    folder_ids_dirty = False
+
+    for group_id, info in missing:
+        group_name = info["name"]
+        kind = info["kind"]
+        print(f"\nGroup '{group_name}' has no associated Drive folder.")
+
+        if dry_run:
+            print("  [dry-run] would search for/prompt for a Drive folder")
+            log("INFO", "would_ensure_folder", f"{group_name} (id={group_id})")
+            continue
+
+        matches = find_matching_folders(group_name, drive_folders)
+        available = [f for f in matches if folder_owner.get(f["name"]) in (None, group_id)]
+        taken = [f for f in matches if f not in available]
+
+        action, chosen = prompt_folder_choice_for_group(available, taken, folder_owner)
+
+        if action == "skip":
+            log("INFO", "skip_folder", f"{group_name} (id={group_id})")
+            continue
+
+        if action == "create":
+            result = create_folder_for_group(drive_service, drive_id, kind, dry_run)
+            if result is None:
+                continue
+            folder_id, folder_name = result
+        else:
+            folder_id, folder_name = chosen["id"], chosen["name"]
+
+        item_id, err = create_gdrive_item(page, base_url, folder_id, dry_run=dry_run)
+        if err:
+            print(f"  ERROR: folder already in /gdrive/config or failed to link — {err}")
+            log("ERROR", "link_folder", f"{group_name}: {folder_name} — {err}")
+            continue
+
+        ok = add_group_access_to_gdrive_item(page, base_url, item_id, group_name, dry_run)
+        if not ok:
+            print(f"  ERROR: folder linked, but failed to add '{group_name}' as Content manager")
+            log("ERROR", "add_group_access", f"{group_name}: {folder_name}")
+
+        if folder_id not in existing_folder_ids:
+            folder_ids_entries.append((folder_id, folder_name))
+            existing_folder_ids.add(folder_id)
+            folder_ids_dirty = True
+
+        linked_group_ids.add(group_id)
+        documents_url_by_group_id[group_id] = gdrive_item_url(folder_id)
+        folder_owner[folder_name] = group_id
+        folder_name_by_group_id[group_id] = folder_name
+        print(f"  Linked '{folder_name}' to '{group_name}'.")
+        log("INFO", "ensure_folder", f"{group_name} (id={group_id}) -> '{folder_name}' ({folder_id})")
+
+    return folder_ids_dirty
+
+
+# ── Step 2: ensure every eligible (foldered) group has a mailing list ─────────
+
+def prompt_group_choice_for_email_list(matches: list[dict]) -> tuple[str, dict | None]:
+    """Prompt to select an existing Google Group, or create a new one, or
+    skip. Returns (action, group) as with prompt_folder_choice_for_group."""
+    if matches:
+        print("  Candidate existing Google Groups:")
+        for i, g in enumerate(matches, start=1):
+            print(f"    {i}. {g['name']} <{g['email']}>")
+        prompt = f"  Select group [1-{len(matches)}], 'c' to create a new group, or Enter to skip: "
+    else:
+        print("  No candidate Google Groups found.")
+        prompt = "  'c' to create a new group, or Enter to skip: "
+
+    while True:
+        choice = input(prompt).strip()
+        if choice == "":
+            return "skip", None
+        if choice.lower() == "c":
+            return "create", None
+        if matches and choice.isdigit() and 1 <= int(choice) <= len(matches):
+            return "select", matches[int(choice) - 1]
+        print("  Invalid choice.")
+
+
+def ensure_email_lists(
+    page, base_url: str, dir_service, settings_service,
+    group_info: dict[str, dict], linked_group_ids: set[str],
+    folder_name_by_group_id: dict[str, str], dry_run: bool,
+) -> None:
+    """For every eligible, foldered group with no mailing list configured,
+    search existing Google Groups and prompt to select one or create a new
+    one, then wire the result into Gather as the group's email list."""
+    eligible = [
+        (gid, info) for gid, info in group_info.items()
+        if info["kind"] in ELIGIBLE_KINDS
+        and gid in linked_group_ids
+        and not info.get("list_name")
+    ]
+    eligible.sort(key=lambda item: item[1]["name"].casefold())
+    if not eligible:
+        return
+
+    all_groups = None if dry_run else list_all_groups(dir_service)
+
+    for group_id, info in eligible:
+        group_name = info["name"]
+        folder_name = folder_name_by_group_id.get(group_id)
+        if not folder_name:
+            log("WARN", "ensure_email_list", group_name, "no known folder name; skipping")
+            continue
+
+        print(f"\nGroup '{group_name}' has no mailing list configured.")
+
+        if dry_run:
+            print("  [dry-run] would search for/prompt for a matching Google Group")
+            log("INFO", "would_ensure_email_list", f"{group_name} (id={group_id})")
+            continue
+
+        matches = [g for g in all_groups if folder_matches_group(group_name, g["name"])]
+        action, chosen = prompt_group_choice_for_email_list(matches)
+
+        if action == "skip":
+            log("INFO", "skip_email_list", f"{group_name} (id={group_id})")
+            continue
+
+        if action == "create":
+            gemail = group_email(folder_name)
+            gdisplay = group_display_name(folder_name)
+            created = ensure_group_exists(dir_service, gemail, gdisplay)
+            updates = ensure_group_settings(settings_service, gemail)
+            log("INFO", "create_google_group",
+                f"{gemail} {'created' if created else 'already existed'}; settings updates={updates}")
+            email = gemail
+        else:
+            email = chosen["email"]
+
+        list_local = email.split("@")[0]
+        set_gather_group_email_list(page, base_url, group_id, list_local, DOMAIN, dry_run)
+        print(f"  Set mailing list for '{group_name}' to {email}")
+        log("INFO", "ensure_email_list", f"{group_name} (id={group_id}) -> {email}")
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -353,6 +607,8 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
 
     creds = get_credentials(credentials_path)
     drive_service = build("drive", "v3", credentials=creds)
+    dir_service = build("admin", "directory_v1", credentials=creds)
+    settings_service = build("groupssettings", "v1", credentials=creds)
 
     with sync_playwright() as pw:
         browser = launch_browser(pw)
@@ -370,8 +626,34 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
         root = parse_hierarchy(current_content)
 
         group_info, hidden_ids = fetch_group_info(page, base_url)
+
+        log("INFO", "walk_drive", f"Walking folder tree of Shared Drive {drive_id}…")
+        drive_folders = walk_drive_folders(drive_service, drive_id)
+        log("INFO", "walk_drive", f"{len(drive_folders)} folder(s) found")
+
+        config_entries = scrape_gdrive_config(page, base_url)
+        folder_owner = {e["folder_name"]: e["group_id"] for e in config_entries}
+        folder_name_by_group_id = {e["group_id"]: e["folder_name"] for e in config_entries}
+        folder_ids_entries = list(read_folder_ids())
+
         documents_url_by_group_id, linked_group_ids = fetch_documents_url_by_group_id(
-            page, base_url, drive_service, drive_id
+            page, base_url, drive_id, config_entries, drive_folders
+        )
+
+        # Step 1: ensure every eligible group has a Drive folder.
+        folder_ids_dirty = ensure_group_folders(
+            page, base_url, drive_service, drive_id, group_info, linked_group_ids,
+            documents_url_by_group_id, drive_folders, folder_owner, folder_name_by_group_id,
+            folder_ids_entries, dry_run,
+        )
+        if folder_ids_dirty:
+            write_folder_ids(folder_ids_entries)
+            log("INFO", "folder_ids", f"Wrote folder_ids.gs with {len(folder_ids_entries)} entries.")
+
+        # Step 2: ensure every eligible, now-foldered group has a mailing list.
+        ensure_email_lists(
+            page, base_url, dir_service, settings_service, group_info, linked_group_ids,
+            folder_name_by_group_id, dry_run,
         )
 
         sync_hierarchy(
@@ -391,7 +673,8 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
 
 def cli():
     parser = argparse.ArgumentParser(
-        description="Sync the Circle Hierarchy wiki page with the current /groups list",
+        description="Sync Google Drive folders/Groups and the Circle Hierarchy wiki page "
+                    "with the current /groups list",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
