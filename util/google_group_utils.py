@@ -154,6 +154,18 @@ def group_exists(dir_service, gemail: str) -> bool:
         raise
 
 
+def get_group_by_email(dir_service, gemail: str) -> dict | None:
+    """Return {'id', 'email', 'name'} for the Google Group at gemail, or
+    None if no such group exists. Read-only."""
+    try:
+        resp = dir_service.groups().get(groupKey=gemail).execute()
+    except Exception as err:
+        if "404" in str(err) or "Resource Not Found" in str(err):
+            return None
+        raise
+    return {"id": resp.get("id"), "email": resp.get("email"), "name": resp.get("name")}
+
+
 def ensure_group_exists(dir_service, gemail: str, display_name: str) -> bool:
     """Create the Google Group if it doesn't exist. Return True if created."""
     if group_exists(dir_service, gemail):

@@ -91,6 +91,20 @@ def create_drive_folder(drive_service, name: str, parent_id: str) -> str:
     return resp["id"]
 
 
+def get_drive_folder_by_id(drive_service, folder_id: str) -> dict | None:
+    """Return {"id", "name"} for folder_id, or None if it doesn't exist or
+    isn't a folder. Read-only."""
+    try:
+        resp = drive_service.files().get(
+            fileId=folder_id, fields="id,name,mimeType", supportsAllDrives=True,
+        ).execute()
+    except Exception:
+        return None
+    if resp.get("mimeType") != "application/vnd.google-apps.folder":
+        return None
+    return {"id": resp["id"], "name": resp["name"]}
+
+
 # ── Naming/placement for a newly created group folder ─────────────────────────
 
 _SMALL_WORDS = {"a", "an", "and", "at", "by", "for", "in", "of", "on", "or", "the", "to"}

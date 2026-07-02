@@ -88,6 +88,7 @@ from util.gdrive_config import (
     ensure_folder_name_available,
     folder_name_for_group_type,
     gdrive_item_url,
+    get_drive_folder_by_id,
     load_gdrive_item_map,
     parent_folder_id_for_group_type,
     scrape_gdrive_config,
@@ -99,6 +100,7 @@ from util.google_group_utils import (
     ensure_group_exists,
     ensure_group_settings,
     get_credentials,
+    get_group_by_email,
     group_display_name,
     group_email,
     read_folder_ids,
@@ -352,9 +354,10 @@ def prompt_yes_no(question: str) -> bool:
 def prompt_folder_choice_for_group(
     available: list[dict], taken: list[dict], folder_owner: dict[str, str],
 ) -> tuple[str, dict | None]:
-    """Prompt the user to pick a candidate folder, create a new one, or skip.
-    Returns (action, folder) where action is "select", "create", or "skip"
-    (folder is None unless action == "select")."""
+    """Prompt the user to pick a candidate folder, create a new one, enter
+    an existing folder's ID directly, or skip. Returns (action, folder)
+    where action is "select", "create", "id", or "skip" (folder is None
+    unless action == "select")."""
     if taken:
         print("  Already linked to a different group (not selectable):")
         for f in taken:
@@ -367,10 +370,11 @@ def prompt_folder_choice_for_group(
             tag = "" if f["match_kind"] == "strict" else " [weak: shared term only]"
             print(f"    {i}. {' / '.join(f['path'])}{tag}")
         prompt = (f"  Select folder [1-{len(available)}], 'c' to create a new folder, "
-                  f"Enter to skip, or 'q' to quit: ")
+                  f"'i' to enter an existing folder's ID, Enter to skip, or 'q' to quit: ")
     else:
         print("  No candidate folders found.")
-        prompt = "  'c' to create a new folder, Enter to skip, or 'q' to quit: "
+        prompt = ("  'c' to create a new folder, 'i' to enter an existing folder's ID, "
+                   "Enter to skip, or 'q' to quit: ")
 
     while True:
         choice = input(prompt).strip()
@@ -379,6 +383,8 @@ def prompt_folder_choice_for_group(
             return "skip", None
         if choice.lower() == "c":
             return "create", None
+        if choice.lower() == "i":
+            return "id", None
         if available and choice.isdigit() and 1 <= int(choice) <= len(available):
             return "select", available[int(choice) - 1]
         print("  Invalid choice.")
@@ -420,6 +426,23 @@ def create_folder_for_group(
     folder_id = create_drive_folder(drive_service, folder_name, parent_id)
     print(f"  Created folder '{folder_name}' ({folder_id})")
     return folder_id, folder_name
+
+
+def prompt_folder_id_for_group(drive_service) -> tuple[str, str] | None:
+    """Ask the user for an existing Drive folder's ID directly. Returns
+    (folder_id, folder_name), or None if skipped/invalid."""
+    folder_id = input("  Enter the existing Drive folder's ID: ").strip()
+    check_quit(folder_id)
+    if not folder_id:
+        print("  No ID entered; skipping.")
+        return None
+
+    folder = get_drive_folder_by_id(drive_service, folder_id)
+    if folder is None:
+        print(f"  ERROR: no folder found with ID {folder_id!r} (or it isn't a folder)")
+        return None
+
+    return folder["id"], folder["name"]
 
 
 def ensure_group_folders(
@@ -471,6 +494,11 @@ def ensure_group_folders(
             if result is None:
                 continue
             folder_id, folder_name = result
+        elif action == "id":
+            result = prompt_folder_id_for_group(drive_service)
+            if result is None:
+                continue
+            folder_id, folder_name = result
         else:
             folder_id, folder_name = chosen["id"], chosen["name"]
 
@@ -503,17 +531,20 @@ def ensure_group_folders(
 # ── Step 2: ensure every eligible (foldered) group has a mailing list ─────────
 
 def prompt_group_choice_for_email_list(matches: list[dict]) -> tuple[str, dict | None]:
-    """Prompt to select an existing Google Group, or create a new one, or
-    skip. Returns (action, group) as with prompt_folder_choice_for_group."""
+    """Prompt to select an existing Google Group, create a new one, enter
+    an existing group's address directly, or skip. Returns (action, group)
+    where action is "select", "create", "address", or "skip" (group is
+    None unless action == "select")."""
     if matches:
         print("  Candidate existing Google Groups:")
         for i, g in enumerate(matches, start=1):
             print(f"    {i}. {g['name']} <{g['email']}>")
         prompt = (f"  Select group [1-{len(matches)}], 'c' to create a new group, "
-                  f"Enter to skip, or 'q' to quit: ")
+                  f"'a' to enter an existing group's address, Enter to skip, or 'q' to quit: ")
     else:
         print("  No candidate Google Groups found.")
-        prompt = "  'c' to create a new group, Enter to skip, or 'q' to quit: "
+        prompt = ("  'c' to create a new group, 'a' to enter an existing group's address, "
+                   "Enter to skip, or 'q' to quit: ")
 
     while True:
         choice = input(prompt).strip()
@@ -522,9 +553,29 @@ def prompt_group_choice_for_email_list(matches: list[dict]) -> tuple[str, dict |
             return "skip", None
         if choice.lower() == "c":
             return "create", None
+        if choice.lower() == "a":
+            return "address", None
         if matches and choice.isdigit() and 1 <= int(choice) <= len(matches):
             return "select", matches[int(choice) - 1]
         print("  Invalid choice.")
+
+
+def prompt_group_address_for_email_list(dir_service) -> dict | None:
+    """Ask the user for an existing Google Group's email address directly.
+    Returns the group dict ({'id', 'email', 'name'}), or None if
+    skipped/invalid."""
+    gemail = input("  Enter the existing Google Group's email address: ").strip()
+    check_quit(gemail)
+    if not gemail:
+        print("  No address entered; skipping.")
+        return None
+
+    group = get_group_by_email(dir_service, gemail)
+    if group is None:
+        print(f"  ERROR: no Google Group found with address {gemail!r}")
+        return None
+
+    return group
 
 
 def ensure_email_lists(
@@ -576,6 +627,11 @@ def ensure_email_lists(
             log("INFO", "create_google_group",
                 f"{gemail} {'created' if created else 'already existed'}; settings updates={updates}")
             email = gemail
+        elif action == "address":
+            group = prompt_group_address_for_email_list(dir_service)
+            if group is None:
+                continue
+            email = group["email"]
         else:
             email = chosen["email"]
 
