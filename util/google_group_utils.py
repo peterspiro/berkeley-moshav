@@ -28,7 +28,9 @@ FOLDER_IDS_PATH = Path(__file__).parent.parent / "groups_drive_sync" / "folder_i
 DEFAULT_CLIENT_SECRETS_PATH = Path(__file__).parent.parent / "client_secret.json"
 
 SCOPES = [
-    "https://www.googleapis.com/auth/drive.readonly",
+    # Not drive.readonly: update_groups_in_google_and_hierarchy.py creates
+    # new Drive folders (files().create()), which needs write access.
+    "https://www.googleapis.com/auth/drive",
     "https://www.googleapis.com/auth/admin.directory.group",
     "https://www.googleapis.com/auth/apps.groups.settings",
 ]
@@ -55,13 +57,17 @@ class _AuthUrlFormatter:
 def get_credentials(client_secrets_file: str):
     """Return OAuth2 credentials, refreshing or re-running the flow as needed.
 
-    Note: if you add new API scopes, delete ~/.google_setup_token.pkl so the
-    token is refreshed with the updated scope set.
+    If the cached token was issued for a narrower scope set than SCOPES
+    currently requires (e.g. after adding a new API scope to this file),
+    it's discarded and the auth flow re-run automatically rather than
+    failing with a confusing 403 "insufficient authentication scopes".
     """
     creds = None
     if TOKEN_PATH.exists():
         with open(TOKEN_PATH, "rb") as f:
             creds = pickle.load(f)
+        if creds and set(SCOPES) - set(creds.scopes or []):
+            creds = None
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
