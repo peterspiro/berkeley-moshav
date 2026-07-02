@@ -28,6 +28,9 @@ excluding hidden groups:
   3.  If it's missing from the hierarchy entirely, prompts for a prefix that
       uniquely matches an existing hierarchy entry's name, and adds it as a
       child of that entry — inserted alphabetically among its siblings.
+      (Clubs are never offered here — steps 0a/0b still give them a Drive
+      folder, Google Group, and mailing list, but they're excluded from the
+      Circle Hierarchy entirely.)
   4.  If a hierarchy entry's linked group no longer exists in Gather, asks
       whether to delete it (reparenting any children to keep the tree intact).
 
@@ -129,6 +132,10 @@ _SCREENSHOT_DIR = Path("debug/update_groups_in_google_and_hierarchy_screenshots"
 configure(_LOG_FILE, _SCREENSHOT_DIR)
 
 ELIGIBLE_KINDS = {"circle", "committee", "club"}
+
+# Clubs get a Drive folder, Google Group, and mailing list like any other
+# group, but are never added to the Circle Hierarchy wiki page.
+HIERARCHY_ELIGIBLE_KINDS = {"circle", "committee"}
 
 QUIT_WORDS = ("q", "quit")
 
@@ -755,7 +762,7 @@ def add_missing_groups(
 
     missing = [
         (gid, info) for gid, info in group_info.items()
-        if info["kind"] in ELIGIBLE_KINDS and gid not in tree_group_ids
+        if info["kind"] in HIERARCHY_ELIGIBLE_KINDS and gid not in tree_group_ids
     ]
     missing.sort(key=lambda item: item[1]["name"].casefold())
 
