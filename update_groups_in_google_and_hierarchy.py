@@ -169,22 +169,30 @@ def _group_is_deactivated(page, detail) -> bool:
     return False
 
 
-def fetch_group_info(page, base_url: str) -> tuple[dict[str, dict], set[str]]:
-    """Return ({group_id: {"name", "kind", "url", "list_name"}}, excluded_group_ids).
+def fetch_group_info(page, base_url: str) -> tuple[dict[str, dict], set[str], set[str]]:
+    """Return ({group_id: {"name", "kind", "url", "list_name"}}, excluded_group_ids,
+    deactivated_group_ids).
 
     Hidden and deactivated/inactive groups are reported separately (not
     included in info) so callers can skip them entirely — neither offered
     for addition nor flagged as stale if a hierarchy entry still
-    references them.
+    references them. excluded_group_ids is the union of both (hidden and
+    deactivated); deactivated_group_ids is the subset that's deactivated —
+    unlike merely-hidden groups, deactivated groups should also be removed
+    from the hierarchy outright.
     """
     groups = fetch_all_gather_groups(page, base_url)
     log("INFO", "fetch_groups", f"{len(groups)} group(s) found")
     info: dict[str, dict] = {}
     excluded_ids: set[str] = set()
+    deactivated_ids: set[str] = set()
     for group in groups:
         detail = _fetch_group_detail(page, base_url, group)
-        if _group_is_hidden(page, detail) or _group_is_deactivated(page, detail):
+        is_deactivated = _group_is_deactivated(page, detail)
+        if is_deactivated or _group_is_hidden(page, detail):
             excluded_ids.add(group.group_id)
+            if is_deactivated:
+                deactivated_ids.add(group.group_id)
             continue
         info[group.group_id] = {
             "name": detail.name,
@@ -192,7 +200,7 @@ def fetch_group_info(page, base_url: str) -> tuple[dict[str, dict], set[str]]:
             "url": f"/groups/{group.group_id}",
             "list_name": detail.list_name,
         }
-    return info, excluded_ids
+    return info, excluded_ids, deactivated_ids
 
 
 def fetch_documents_url_by_group_id(
@@ -535,12 +543,30 @@ def ensure_email_lists(
 
 def sync_hierarchy(
     root, group_info: dict[str, dict], documents_url_by_group_id: dict[str, str],
-    linked_group_ids: set[str], excluded_ids: set[str], dry_run: bool,
+    linked_group_ids: set[str], excluded_ids: set[str], deactivated_ids: set[str], dry_run: bool,
 ) -> None:
     """Mutate the parsed hierarchy tree in place: rename, add/alter/remove
-    Documents links, prompt for deletion of stale entries."""
+    Documents links, prompt for deletion of stale entries.
+
+    Deactivated groups are removed from the hierarchy outright (no
+    prompt, since they're gone for good, not just excluded from
+    consideration). Merely-hidden groups are left untouched.
+    """
     for node in list(iter_nodes(root)):
-        if not node.group_id or node.group_id in excluded_ids:
+        if not node.group_id:
+            continue
+
+        if node.group_id in deactivated_ids:
+            if dry_run:
+                print(f"[dry-run] '{node.name}' (id={node.group_id}) is deactivated; "
+                      f"would remove from the hierarchy")
+                log("INFO", "would_remove_deactivated", f"{node.name} (id={node.group_id})")
+            else:
+                remove_node(node)
+                log("INFO", "remove_deactivated", f"{node.name} (id={node.group_id})")
+            continue
+
+        if node.group_id in excluded_ids:
             continue
 
         live = group_info.get(node.group_id)
@@ -645,7 +671,7 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
         current_content = fetch_current_hierarchy(page, base_url)
         root = parse_hierarchy(current_content)
 
-        group_info, excluded_ids = fetch_group_info(page, base_url)
+        group_info, excluded_ids, deactivated_ids = fetch_group_info(page, base_url)
 
         log("INFO", "walk_drive", f"Walking folder tree of Shared Drive {drive_id}…")
         drive_folders = walk_drive_folders(drive_service, drive_id)
@@ -677,7 +703,8 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
         )
 
         sync_hierarchy(
-            root, group_info, documents_url_by_group_id, linked_group_ids, excluded_ids, dry_run
+            root, group_info, documents_url_by_group_id, linked_group_ids,
+            excluded_ids, deactivated_ids, dry_run
         )
         add_missing_groups(root, group_info, documents_url_by_group_id, dry_run)
 
