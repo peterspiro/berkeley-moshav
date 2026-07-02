@@ -69,7 +69,6 @@ from google_setup.match_google_groups_to_drive_folders import DEFAULT_DRIVE_ID, 
 from util.credentials import load_credentials
 from util.folder_matching import find_matching_folders
 from util.gather_utils import (
-    _codemirror_get,
     _fetch_group_detail,
     close_log,
     configure,
@@ -110,6 +109,7 @@ from util.hierarchy_wiki import (
     WIKI_SLUG,
     HierarchyNode,
     ensure_hierarchy_page,
+    fetch_hierarchy_page_content,
     iter_nodes,
     parse_hierarchy,
     remove_node,
@@ -141,29 +141,6 @@ def check_quit(answer: str) -> None:
 
 
 # ── Data gathering ─────────────────────────────────────────────────────────────
-
-def fetch_current_hierarchy(page, base_url: str) -> str:
-    """Read the current Circle Hierarchy wiki page content, or exit with an
-    error if it doesn't exist yet."""
-    page.goto(f"{base_url}/wiki/{WIKI_SLUG}", wait_until="networkidle")
-    page_title = page.title()
-    page_exists = (
-        "Exception" not in page_title
-        and "Error" not in page_title
-        and "404" not in page_title
-        and page.locator("h1").count() > 0
-    )
-    if not page_exists:
-        sys.exit(
-            f"Error: the '{WIKI_SLUG}' wiki page doesn't exist yet. "
-            "Run import_groups.py first to create it."
-        )
-
-    page.goto(f"{base_url}/wiki/{WIKI_SLUG}/edit", wait_until="networkidle")
-    if page.locator(".CodeMirror").count() == 0:
-        sys.exit("Error: editor not found on the hierarchy wiki edit page.")
-    return _codemirror_get(page)
-
 
 def _group_is_hidden(page, detail) -> bool:
     """True if the group is hidden — either via a "Hidden" availability
@@ -771,7 +748,7 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
             browser.close()
             sys.exit(1)
 
-        current_content = fetch_current_hierarchy(page, base_url)
+        current_content = fetch_hierarchy_page_content(page, base_url)
         root = parse_hierarchy(current_content)
 
         group_info, excluded_ids, deactivated_ids = fetch_group_info(page, base_url)

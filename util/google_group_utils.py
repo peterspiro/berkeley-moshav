@@ -174,17 +174,23 @@ def ensure_group_exists(dir_service, gemail: str, display_name: str) -> bool:
     return True
 
 
-def compute_group_settings_updates(settings_service, gemail: str) -> dict:
-    """Return {field: new_value} for settings that differ from
-    REQUIRED_GROUP_SETTINGS, without applying them. Read-only — safe to
-    call from a dry run. Raises if the group doesn't exist."""
+CLUB_GROUP_SETTINGS = {**REQUIRED_GROUP_SETTINGS, "allowExternalMembers": "false"}
+
+
+def compute_group_settings_updates(settings_service, gemail: str, required: dict = None) -> dict:
+    """Return {field: new_value} for settings that differ from `required`
+    (default REQUIRED_GROUP_SETTINGS), without applying them. Read-only —
+    safe to call from a dry run. Raises if the group doesn't exist."""
+    if required is None:
+        required = REQUIRED_GROUP_SETTINGS
     current = settings_service.groups().get(groupUniqueId=gemail).execute()
-    return {k: v for k, v in REQUIRED_GROUP_SETTINGS.items() if current.get(k) != v}
+    return {k: v for k, v in required.items() if current.get(k) != v}
 
 
-def ensure_group_settings(settings_service, gemail: str) -> dict:
-    """Apply REQUIRED_GROUP_SETTINGS to the group. Return dict of {field: new_value} for changed fields."""
-    updates = compute_group_settings_updates(settings_service, gemail)
+def ensure_group_settings(settings_service, gemail: str, required: dict = None) -> dict:
+    """Apply `required` settings (default REQUIRED_GROUP_SETTINGS) to the
+    group. Return dict of {field: new_value} for changed fields."""
+    updates = compute_group_settings_updates(settings_service, gemail, required)
     if updates:
         settings_service.groups().update(groupUniqueId=gemail, body=updates).execute()
     return updates

@@ -101,12 +101,14 @@ def set_gather_group_email_list(
     domain: str,
     dry_run: bool,
     quiet: bool = False,
+    all_can_send: bool = True,
 ) -> None:
     """
     Open the Gather group edit page and configure the email list:
       - Set the list address local part and domain (only when fields are enabled,
         i.e. the list has not yet been created — Gather disables them after creation)
-      - Check "All community members can send to list?"
+      - Set "All community members can send to list?" to `all_can_send`
+        (clubs want this off; True/on for everything else)
     """
     page.goto(f"{base_url}/groups/{group_id}/edit", wait_until="networkidle")
 
@@ -144,8 +146,8 @@ def set_gather_group_email_list(
                 changes.append(f"domain → '{domain}'")
             else:
                 log("WARN", "set_email_list", f"group {group_id}: domain selector not found")
-        if not checked:
-            changes.append("everyone_can_post: False → True")
+        if checked != all_can_send:
+            changes.append(f"everyone_can_post: {checked} → {all_can_send}")
 
         if changes:
             log("INFO", "set_email_list",
@@ -171,11 +173,12 @@ def set_gather_group_email_list(
             f"group {group_id}: name field disabled but value '{current_name}' ≠ '{list_local_part}'")
 
     if everyone_checkbox.count() > 0:
-        if not everyone_checkbox.first.is_checked():
+        if everyone_checkbox.first.is_checked() != all_can_send:
             # The checkbox is CSS-hidden; set it directly via JS to bypass visibility checks.
+            js_bool = "true" if all_can_send else "false"
             page.evaluate(
                 "document.getElementById"
-                "('groups_group_mailman_list_attributes_all_cmty_members_can_send').checked = true"
+                f"('groups_group_mailman_list_attributes_all_cmty_members_can_send').checked = {js_bool}"
             )
             changed = True
     else:
@@ -195,6 +198,83 @@ def set_gather_group_email_list(
         log("ERROR", "set_email_list", f"group {group_id}: form error — {err}")
     else:
         log("INFO", "set_email_list", f"group {group_id}: email list settings updated")
+
+
+def fill_group_basics(
+    page: Page, name: str, kind: str, availability: str, description: str = ""
+) -> None:
+    """Fill the basic (non-member) fields of the group create/edit form."""
+    page.locator('input[name="groups_group[name]"]').fill(name)
+    page.locator('select[name="groups_group[kind]"]').select_option(kind)
+    page.locator('select[name="groups_group[availability]"]').select_option(availability)
+    desc_el = page.locator('textarea[name="groups_group[description]"]')
+    if desc_el.count() > 0:
+        desc_el.fill(description)
+
+
+def find_gather_group_id_by_name(page: Page, base_url: str, name: str) -> Optional[str]:
+    """Scan the groups list page (all pages) for a group whose name exactly
+    matches `name` (case-insensitive); return its group_id, or None."""
+    url: Optional[str] = f"{base_url}/groups"
+    while url:
+        page.goto(url, wait_until="networkidle")
+        for link in page.locator('a[href*="/groups/"]').all():
+            href = link.get_attribute("href") or ""
+            m = re.search(r"/groups/(\d+)$", href)
+            if not m:
+                continue
+            text = link.inner_text().strip()
+            if text.casefold() == name.casefold():
+                return m.group(1)
+        next_link = page.locator('a[rel="next"]')
+        next_href = next_link.get_attribute("href") if next_link.count() > 0 else None
+        url = f"{base_url}{next_href}" if next_href else None
+    return None
+
+
+def create_gather_group(
+    page: Page,
+    base_url: str,
+    name: str,
+    kind: str,
+    availability: str = "closed",
+    description: str = "",
+    dry_run: bool = False,
+) -> Optional[str]:
+    """Create a new Gather group (no members). Return its group_id, or
+    "dry-run" if dry_run, or None on failure."""
+    if dry_run:
+        log("DRY-RUN", "create_group", name)
+        return "dry-run"
+
+    try:
+        page.goto(f"{base_url}/groups/new", wait_until="networkidle")
+        fill_group_basics(page, name, kind, availability, description)
+        page.locator('input[name="commit"]').click()
+        page.wait_for_load_state("networkidle")
+        err = _check_submit_errors(page)
+        if err:
+            screenshot(page, f"group_form_err_{name[:20]}")
+            log("ERROR", "group_form", name, err[:200])
+            return None
+
+        post_submit_url = page.url
+        log("DEBUG", "create_group", f"Post-submit URL: {post_submit_url}")
+        screenshot(page, f"group_create_postsubmit_{name[:20]}")
+
+        group_id = find_gather_group_id_by_name(page, base_url, name)
+        if not group_id:
+            log("ERROR", "create_group", name,
+                f"Group not found in list after creation (post-submit URL: {post_submit_url})")
+            screenshot(page, f"group_create_notfound_{name[:20]}")
+            return None
+        log("INFO", "create_group", f"Created: {name} (id={group_id})")
+        return group_id
+
+    except Exception as e:
+        screenshot(page, f"group_create_exc_{name[:20]}")
+        log("ERROR", "create_group", name, str(e))
+        return None
 
 
 def select2_choose(page: Page, field_selector: str, search_text: str) -> None:

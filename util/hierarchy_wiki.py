@@ -10,6 +10,7 @@ Line format (4 spaces of indent per nesting depth):
 """
 
 import re
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -44,6 +45,29 @@ def apply_hierarchy_content(page_content: str, new_hierarchy: str) -> tuple[Opti
     base = page_content.strip()
     new_page = (base + "\n\n" if base else "") + block + "\n"
     return new_page, "add"
+
+
+def fetch_hierarchy_page_content(page, base_url: str) -> str:
+    """Read the current Circle Hierarchy wiki page content, or exit with an
+    error if it doesn't exist yet."""
+    page.goto(f"{base_url}/wiki/{WIKI_SLUG}", wait_until="networkidle")
+    page_title = page.title()
+    page_exists = (
+        "Exception" not in page_title
+        and "Error" not in page_title
+        and "404" not in page_title
+        and page.locator("h1").count() > 0
+    )
+    if not page_exists:
+        sys.exit(
+            f"Error: the '{WIKI_SLUG}' wiki page doesn't exist yet. "
+            "Run import_groups.py first to create it."
+        )
+
+    page.goto(f"{base_url}/wiki/{WIKI_SLUG}/edit", wait_until="networkidle")
+    if page.locator(".CodeMirror").count() == 0:
+        sys.exit("Error: editor not found on the hierarchy wiki edit page.")
+    return _codemirror_get(page)
 
 
 def ensure_hierarchy_page(page, base_url: str, content: str, dry_run: bool) -> bool:
@@ -217,6 +241,18 @@ def render_hierarchy(root: HierarchyNode) -> str:
 
     walk(root, 0)
     return "\n".join(lines) + "\n"
+
+
+def find_unique_node_by_prefix(nodes: list[HierarchyNode], prefix: str) -> HierarchyNode:
+    """Return the single node whose name starts with `prefix`
+    (case-insensitive). Raises ValueError if zero or more than one match."""
+    matches = [n for n in nodes if n.name.casefold().startswith(prefix.casefold())]
+    if not matches:
+        raise ValueError(f"No hierarchy entry found matching prefix {prefix!r}")
+    if len(matches) > 1:
+        names = ", ".join(repr(n.name) for n in matches)
+        raise ValueError(f"Prefix {prefix!r} matches multiple hierarchy entries: {names}")
+    return matches[0]
 
 
 def remove_node(node: HierarchyNode) -> None:
