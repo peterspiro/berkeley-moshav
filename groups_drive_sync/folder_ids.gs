@@ -12,6 +12,7 @@ const FOLDER_IDS = [
   '1NlflXGdWU5lZoUZE_wJtp63RjYAC2x0t', // Coordinating Circle
   '1l-HurF1r1VwqaEFrWtak85o83AnE-jAv', // Development, Finance, and Legal Circle (DF&L)
   '1zrv5q3cthYQn6fy8jUB5RI4sYjPG2Fe4', // Furnishings Working Group
+  '1RQZh0e3Op1meUDQ8Lp0UtLRA0-mWCSZc', // Hiking Club
   '1HFUj8-IJANJOEQTmhodY2PCJ_xQ0RxMl', // Jewish Life Circle (JLC)
   '1TkOjo3t6GxylJvWOO94bY04wkbjI3cPk', // Landscaping Working Group
   '1s5gARw-PSNdXJ_kA1lVjp22-rioE4JCi', // Meals Circle
