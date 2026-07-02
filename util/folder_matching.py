@@ -12,7 +12,7 @@ import re
 
 from util.google_group_utils import normalize_ampersand, strip_parens
 
-MATCH_SUFFIXES = ["working group", "circle"]
+MATCH_SUFFIXES = ["working group", "circle", "pod"]
 ABBREV_STOP_WORDS = {"a", "an", "and", "at", "by", "for", "in", "of", "on", "or", "the", "to"}
 MIN_TERM_LENGTH = 3
 

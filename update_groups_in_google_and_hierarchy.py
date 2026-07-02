@@ -67,7 +67,7 @@ from playwright.sync_api import sync_playwright
 
 from google_setup.match_google_groups_to_drive_folders import DEFAULT_DRIVE_ID, list_all_groups
 from util.credentials import load_credentials
-from util.folder_matching import find_matching_folders, folder_matches_group
+from util.folder_matching import find_matching_folders
 from util.gather_utils import (
     _codemirror_get,
     _fetch_group_detail,
@@ -538,7 +538,8 @@ def prompt_group_choice_for_email_list(matches: list[dict]) -> tuple[str, dict |
     if matches:
         print("  Candidate existing Google Groups:")
         for i, g in enumerate(matches, start=1):
-            print(f"    {i}. {g['name']} <{g['email']}>")
+            tag = "" if g["match_kind"] == "strict" else " [weak: shared term only]"
+            print(f"    {i}. {g['name']} <{g['email']}>{tag}")
         prompt = (f"  Select group [1-{len(matches)}], 'c' to create a new group, "
                   f"'a' to enter an existing group's address, Enter to skip, or 'q' to quit: ")
     else:
@@ -612,7 +613,7 @@ def ensure_email_lists(
             log("INFO", "would_ensure_email_list", f"{group_name} (id={group_id})")
             continue
 
-        matches = [g for g in all_groups if folder_matches_group(group_name, g["name"])]
+        matches = find_matching_folders(group_name, all_groups)
         action, chosen = prompt_group_choice_for_email_list(matches)
 
         if action == "skip":
