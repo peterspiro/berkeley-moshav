@@ -51,7 +51,21 @@ def _search(page: Page, base_url: str, path: str, query: str):
     page.locator('input[name="search"]').first.fill(query)
     page.keyboard.press("Enter")
     page.wait_for_load_state("networkidle")
-    page.wait_for_timeout(500)
+
+
+def _locator_after_search(page: Page, selector: str):
+    """Wait for search results matching `selector` to appear, retrying with
+    increasing delays — `networkidle` alone doesn't guarantee the results
+    list has finished client-side rendering, and a single short fixed wait
+    can misreport a real match as absent (leading callers to attempt a
+    duplicate create). Returns the first matching locator once found, or
+    None once every retry is exhausted (a genuine no-results case)."""
+    loc = page.locator(selector)
+    for wait_ms in (500, 1000, 2000):
+        page.wait_for_timeout(wait_ms)
+        if loc.count() > 0:
+            return loc.first
+    return None
 
 
 def _to_edit_url(base_url: str, href: str | None) -> str | None:
@@ -69,8 +83,8 @@ def find_household_edit_url(page: Page, base_url: str, name: str) -> str | None:
     Returns its edit URL if found, else None.
     """
     _search(page, base_url, "households", name)
-    link = page.locator(f'a:text-is("{name}")').first
-    if link.count() == 0:
+    link = _locator_after_search(page, f'a:text-is("{name}")')
+    if link is None:
         return None
     return _to_edit_url(base_url, link.get_attribute("href"))
 
@@ -84,11 +98,15 @@ def find_user_edit_url(page: Page, base_url: str, member: dict) -> str | None:
 
     _search(page, base_url, "users", full_name)
 
+    selector = f'a[href*="/users/"]:has-text("{full_name}")'
+    if _locator_after_search(page, selector) is None:
+        return None
+
     # Collect all candidate hrefs before navigating away.
     # Search results show user name links, not "Profile" links.
     candidate_hrefs = [
         link.get_attribute("href")
-        for link in page.locator(f'a[href*="/users/"]:has-text("{full_name}")').all()
+        for link in page.locator(selector).all()
         if link.get_attribute("href")
     ]
 
