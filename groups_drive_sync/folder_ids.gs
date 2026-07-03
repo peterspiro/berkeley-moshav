@@ -19,6 +19,7 @@ const FOLDER_IDS = {
   'hoa-launch-work-group@berkeleymoshav.org': '1N6F1oCxRLTYokcZ-iXxKi4ac8OjOIkOu',
   'jewish-life-circle@berkeleymoshav.org': '1HFUj8-IJANJOEQTmhodY2PCJ_xQ0RxMl',
   'landscaping-working-group@berkeleymoshav.org': '1TkOjo3t6GxylJvWOO94bY04wkbjI3cPk',
+  'maintenance-circle@berkeleymoshav.org': '10lQclCFeK0z9mm4vju_9ouIEnPci70PX',
   'meals-circle@berkeleymoshav.org': '1s5gARw-PSNdXJ_kA1lVjp22-rioE4JCi',
   'membership-circle@berkeleymoshav.org': '1IUgNgY72c3TWN4CB9RlaJyubVNYoYJuS',
   'parking-and-car-share-circle@berkeleymoshav.org': '1GlAyjUJWYbQhtAi2HEFouZ4hlcHMkuEH',
