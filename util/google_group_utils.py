@@ -23,6 +23,12 @@ REQUIRED_GROUP_SETTINGS = {
     "whoCanViewMembership": "ALL_IN_DOMAIN_CAN_VIEW",  # Entire organization can view members
     "allowExternalMembers": "true",               # Allow external members
 }
+
+# "Conversation history" toggle in the Groups UI. Enforced independently of
+# REQUIRED_GROUP_SETTINGS (which is only ever applied when a group is newly
+# created) since this should be turned on for every group a script touches,
+# whether or not it's the one that created it.
+CONVERSATION_HISTORY_SETTINGS = {"isArchived": "true"}
 TOKEN_PATH = Path.home() / ".google_setup_token.pkl"
 FOLDER_IDS_PATH = Path(__file__).parent.parent / "groups_drive_sync" / "folder_ids.gs"
 DEFAULT_CLIENT_SECRETS_PATH = Path(__file__).parent.parent / "client_secret.json"

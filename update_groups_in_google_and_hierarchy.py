@@ -16,7 +16,9 @@ excluding hidden groups:
   0b. If the group now has a folder but no mailing list configured, searches
       existing Google Groups using the usual matching rules and prompts to
       select one or create a new one (using the usual create-group logic),
-      then wires the result into Gather as the group's email list.
+      then wires the result into Gather as the group's email list. Either
+      way — newly created or pre-existing — the group's "Conversation
+      history" setting is turned on.
   0c. Once every group's folder and mailing-list state is settled, syncs
       FOLDER_IDS (folder_ids.gs, a {group_email: folder_id} map) to match:
       any group with both a linked folder and a mailing list gets its
@@ -110,6 +112,7 @@ from util.gdrive_config import (
     walk_drive_folders,
 )
 from util.google_group_utils import (
+    CONVERSATION_HISTORY_SETTINGS,
     DEFAULT_CLIENT_SECRETS_PATH,
     DOMAIN,
     ensure_group_exists,
@@ -630,6 +633,10 @@ def ensure_email_lists(
             email = group["email"]
         else:
             email = chosen["email"]
+
+        history_updates = ensure_group_settings(settings_service, email, CONVERSATION_HISTORY_SETTINGS)
+        if history_updates:
+            log("INFO", "conversation_history", f"{group_name} ({email}): turned on")
 
         list_local = email.split("@")[0]
         set_gather_group_email_list(page, base_url, group_id, list_local, DOMAIN, dry_run)
