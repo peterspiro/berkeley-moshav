@@ -115,6 +115,7 @@ from util.google_group_utils import (
     CONVERSATION_HISTORY_SETTINGS,
     DEFAULT_CLIENT_SECRETS_PATH,
     DOMAIN,
+    compute_group_settings_updates,
     ensure_group_exists,
     ensure_group_settings,
     get_credentials,
@@ -634,15 +635,44 @@ def ensure_email_lists(
         else:
             email = chosen["email"]
 
-        history_updates = ensure_group_settings(settings_service, email, CONVERSATION_HISTORY_SETTINGS)
-        if history_updates:
-            log("INFO", "conversation_history", f"{group_name} ({email}): turned on")
-
         list_local = email.split("@")[0]
         set_gather_group_email_list(page, base_url, group_id, list_local, DOMAIN, dry_run)
         info["list_name"] = list_local
         print(f"  Set mailing list for '{group_name}' to {email}")
         log("INFO", "ensure_email_list", f"{group_name} (id={group_id}) -> {email}")
+
+
+def ensure_conversation_history(
+    settings_service, group_info: dict[str, dict], dry_run: bool,
+) -> None:
+    """Turn on "Conversation history" for every eligible group's associated
+    Google Group — whether that group was just created/matched this run or
+    already had a mailing list configured from a previous run. Can't be
+    folded into ensure_email_lists(): that function only ever visits
+    groups with *no* mailing list configured yet, so a group that already
+    has one would never be checked there.
+    """
+    eligible = [
+        (gid, info) for gid, info in group_info.items()
+        if info["kind"] in ELIGIBLE_KINDS and info.get("list_name")
+    ]
+    eligible.sort(key=lambda item: item[1]["name"].casefold())
+
+    for group_id, info in eligible:
+        group_name = info["name"]
+        email = f"{info['list_name']}@{DOMAIN}"
+
+        if dry_run:
+            updates = compute_group_settings_updates(settings_service, email, CONVERSATION_HISTORY_SETTINGS)
+            if updates:
+                print(f"[dry-run] '{group_name}' ({email}): would turn on Conversation history")
+                log("INFO", "would_turn_on_conversation_history", f"{group_name} ({email})")
+            continue
+
+        updates = ensure_group_settings(settings_service, email, CONVERSATION_HISTORY_SETTINGS)
+        if updates:
+            print(f"Turned on Conversation history for '{group_name}' ({email})")
+            log("INFO", "conversation_history", f"{group_name} ({email}): turned on")
 
 
 # ── Step 3: keep FOLDER_IDS in sync with Gather's group ↔ folder ↔ email ───────
@@ -930,6 +960,10 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
                 quit_requested = True
                 print("\nQuit requested — skipping remaining steps and saving progress so far.")
                 log("INFO", "quit", "User quit during the mailing list step")
+
+        # Turn on "Conversation history" for every eligible group's Google Group,
+        # whether it was just newly associated above or already had one.
+        ensure_conversation_history(settings_service, group_info, dry_run)
 
         # Step 3: keep FOLDER_IDS in sync with Gather's folder/email associations.
         email_by_group_id = {
