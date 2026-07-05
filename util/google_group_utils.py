@@ -1,8 +1,10 @@
 """
 Shared Google API utilities for group management scripts.
 
-Provides auth, naming helpers (mirroring groups_drive_sync.gs), folder_ids.gs
-I/O, and thin wrappers around the Directory and Groups Settings APIs.
+Provides auth, naming helpers (mirroring groups_drive_sync.gs), and thin
+wrappers around the Directory and Groups Settings APIs. The
+folder-ID-to-group mapping itself lives in each group's own custom footer
+(see util/google_group_footer.py), not in this module.
 """
 
 import contextlib
@@ -30,7 +32,6 @@ REQUIRED_GROUP_SETTINGS = {
 # whether or not it's the one that created it.
 CONVERSATION_HISTORY_SETTINGS = {"isArchived": "true"}
 TOKEN_PATH = Path.home() / ".google_setup_token.pkl"
-FOLDER_IDS_PATH = Path(__file__).parent.parent / "groups_drive_sync" / "folder_ids.gs"
 DEFAULT_CLIENT_SECRETS_PATH = Path(__file__).parent.parent / "client_secret.json"
 
 SCOPES = [
@@ -104,48 +105,6 @@ def group_email(folder_name: str) -> str:
 
 def group_display_name(folder_name: str) -> str:
     return normalize_ampersand(strip_parens(folder_name))
-
-
-# ── folder_ids.gs I/O ─────────────────────────────────────────────────────────
-
-_FOLDER_IDS_HEADER = """\
-/**
- * Shared map of Google Group email address -> Drive folder ID to sync.
- * This file is maintained by multiple scripts — edit here only.
- *
- * Keying on the group's address (rather than deriving it from the
- * folder's name at sync time) lets an entry here override the usual
- * name-matching rules for a specific group/folder pair.
- *
- *   'group@example.org': '1AbCdEfGhIjKlMnOpQrStUvWxYz',
- */
-const FOLDER_IDS = {"""
-
-
-def read_folder_ids() -> dict[str, str]:
-    """Return {group_email: folder_id} parsed from folder_ids.gs.
-
-    Only parses entries inside the FOLDER_IDS object itself, so the example
-    entry in the file's leading doc comment isn't mistaken for real data.
-    """
-    if not FOLDER_IDS_PATH.exists():
-        return {}
-    text = FOLDER_IDS_PATH.read_text()
-    m = re.search(r"const FOLDER_IDS = \{(.*?)\};", text, re.DOTALL)
-    if not m:
-        return {}
-    return dict(re.findall(r"'([^']+)':\s*'([^']+)',?", m.group(1)))
-
-
-def write_folder_ids(mapping: dict[str, str]) -> None:
-    """Write folder_ids.gs with the given {group_email: folder_id} mapping,
-    sorted alphabetically (case-insensitive) by group email address."""
-    lines = _FOLDER_IDS_HEADER.splitlines()
-    for email in sorted(mapping, key=str.casefold):
-        lines.append(f"  '{email}': '{mapping[email]}',")
-    lines += ["};", ""]
-    FOLDER_IDS_PATH.write_text("\n".join(lines))
-    print(f"Wrote {FOLDER_IDS_PATH} with {len(mapping)} entr{'y' if len(mapping) == 1 else 'ies'}.")
 
 
 # ── Group API helpers ─────────────────────────────────────────────────────────

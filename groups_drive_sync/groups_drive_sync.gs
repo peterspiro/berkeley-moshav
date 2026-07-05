@@ -4,18 +4,28 @@
  * Keeps each Google Group's membership in sync with the "Content manager"
  * (fileOrganizer) permissions on its corresponding Google Drive folder.
  *
+ * The folder <-> group mapping isn't stored in this project at all: it
+ * enumerates every group in the workspace and reads the Drive folder ID
+ * straight out of each group's own custom footer (the "Google Docs
+ * folder" link in the "--- Auto-managed links ---" block — see
+ * util/google_group_footer.py, which writes it). Groups with no such link
+ * are skipped. This means adding/removing a group never requires
+ * redeploying this Apps Script project.
+ *
  * Setup:
- *   1. Edit FOLDER_IDS in folder_ids.gs (group email -> Drive folder ID).
- *   2. In the GAS editor: Extensions > Advanced Services > enable "Admin SDK Directory API" and "Drive API".
- *   3. Run syncAll() once manually to authorize and test.
- *   4. Run installTrigger() once to schedule daily execution.
+ *   1. In the GAS editor: Extensions > Advanced Services > enable
+ *      "Admin SDK Directory API", "Drive API", and "Groups Settings API".
+ *   2. Run syncAll() once manually to authorize and test.
+ *   3. Run installTrigger() once to schedule daily execution.
  */
 
 // ── Configuration ────────────────────────────────────────────────────────────
 
+const DOMAIN = 'berkeleymoshav.org';
 const SYNC_ROLE = 'fileOrganizer'; // Drive role for "Content manager"
 
-// FOLDER_IDS is defined in folder_ids.gs (shared with other scripts)
+// Matches util.google_group_footer.drive_folder_url()'s output.
+const FOOTER_FOLDER_URL_RE = /https:\/\/drive\.google\.com\/drive\/folders\/([a-zA-Z0-9_-]+)/;
 
 // ── Main entry point ─────────────────────────────────────────────────────────
 
@@ -23,23 +33,49 @@ function syncAll() {
   const runner = Session.getActiveUser().getEmail();
   console.log(`syncAll started — runner: ${runner}`);
 
-  const missing = [];
+  const groups = listAllGroups();
+  console.log(`Found ${groups.length} group(s) in ${DOMAIN}.`);
 
-  for (const groupEmail of Object.keys(FOLDER_IDS)) {
-    const folderId = FOLDER_IDS[groupEmail];
+  let synced = 0;
+  let skipped = 0;
+
+  for (const group of groups) {
     try {
-      const skipped = syncFolder(folderId, groupEmail, runner);
-      if (skipped) missing.push(groupEmail);
+      const folderId = getFooterFolderId(group.email);
+      if (!folderId) {
+        skipped++;
+        continue;
+      }
+      syncFolder(folderId, group.email, runner);
+      synced++;
     } catch (err) {
-      console.error(`Error processing ${groupEmail} (folder ${folderId}): ${err}`);
+      console.error(`Error processing ${group.email}: ${err}`);
     }
   }
 
-  if (missing.length > 0) {
-    throw new Error(`No matching group found for: ${missing.join(', ')}`);
-  }
+  console.log(`syncAll complete — synced ${synced}, skipped ${skipped} (no folder link in footer).`);
+}
 
-  console.log('syncAll complete.');
+function listAllGroups() {
+  const groups = [];
+  let pageToken;
+  do {
+    const response = AdminDirectory.Groups.list({
+      domain: DOMAIN,
+      maxResults: 200,
+      pageToken,
+    });
+    if (response.groups) groups.push(...response.groups);
+    pageToken = response.nextPageToken;
+  } while (pageToken);
+  return groups;
+}
+
+function getFooterFolderId(groupEmail) {
+  const settings = GroupsSettings.Groups.get(groupEmail);
+  const footer = settings.customFooterText || '';
+  const match = footer.match(FOOTER_FOLDER_URL_RE);
+  return match ? match[1] : null;
 }
 
 function syncFolder(folderId, groupEmail, runnerEmail) {
@@ -47,16 +83,6 @@ function syncFolder(folderId, groupEmail, runnerEmail) {
   const folderName = folder.getName();
 
   console.log(`Folder: "${folderName}" → group: ${groupEmail}`);
-
-  try {
-    AdminDirectory.Groups.get(groupEmail);
-  } catch (err) {
-    if (err.message && (err.message.includes('404') || err.message.includes('Resource Not Found'))) {
-      console.warn(`  No matching group found — skipping`);
-      return true;
-    }
-    throw err;
-  }
 
   const targetEmails = getContentManagerEmails(folderId);
   const { added, removed } = syncGroupMembership(groupEmail, targetEmails, runnerEmail);

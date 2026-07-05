@@ -2,12 +2,14 @@
 One-off setup script: reads Gather's Google Drive Settings (/gdrive/config)
 and for each folder listed there:
 
-  1. Reports whether the folder's group is already present in FOLDER_IDS
-     (folder_ids.gs) — this script has no Drive folder ID of its own to add
-     with, so it only informs; run update_groups_in_google_and_hierarchy.py
-     or match_google_groups_to_drive_folders.py to populate FOLDER_IDS.
-  2. Creates the corresponding Google Group if it doesn't exist.
-  3. Sets the group's "Who can post" to "Anyone on the web" if not already set.
+  1. Creates the corresponding Google Group if it doesn't exist.
+  2. Sets the group's "Who can post" to "Anyone on the web" if not already set.
+  3. If the folder's Drive ID is known (scraped straight from the
+     /gdrive/config row — not every row exposes one), ensures the group's
+     custom footer links to it (see util/google_group_footer.py). Rows
+     with no resolvable Drive ID are reported, not silently skipped; run
+     update_groups_in_google_and_hierarchy.py afterward to resolve those
+     via its fuller Drive-folder-ID resolution chain.
   4. Edits the Gather group to set the Google Group email as its email list,
      check "All community members can send to list?", and submit the form.
 
@@ -43,6 +45,7 @@ from util.gather_utils import (
     login,
     set_gather_group_email_list,
 )
+from util.google_group_footer import compute_group_footer_updates, ensure_group_footer
 from util.google_group_utils import (
     DEFAULT_CLIENT_SECRETS_PATH,
     DOMAIN,
@@ -54,7 +57,6 @@ from util.google_group_utils import (
     group_display_name,
     group_email,
     group_exists,
-    read_folder_ids,
 )
 from util.gdrive_config import scrape_gdrive_config
 
@@ -127,27 +129,17 @@ def main():
                 sys.exit(f"Error: {args.folder!r} is ambiguous — matches {names}")
             entries = matching
 
-        # Current FOLDER_IDS state, keyed the same way this script derives
-        # each entry's expected group email.
-        folder_ids_mapping = read_folder_ids()
-
         for entry in entries:
             fname = entry["folder_name"]
             gid = entry["group_id"]
+            folder_id = entry.get("google_file_id")
             gemail = group_email(fname)
             gdisplay = group_display_name(fname)
             list_local = to_slug_local(gemail)
 
             log_noop(args.quiet, "INFO", "process", f"Folder '{fname}' → group {gemail}")
 
-            # 1. Report FOLDER_IDS state for this group (populated by other
-            # scripts — this one has no Drive folder ID to add on its own).
-            if gemail in folder_ids_mapping:
-                log_noop(args.quiet, "INFO", "folder_ids", f"  '{gemail}' already in folder_ids.gs")
-            else:
-                log_noop(args.quiet, "INFO", "folder_ids", f"  '{gemail}' not yet in folder_ids.gs")
-
-            # 2. Ensure Google Group exists
+            # 1. Ensure Google Group exists
             if args.dry_run:
                 already_exists = group_exists(dir_service, gemail)
                 if already_exists:
@@ -162,7 +154,7 @@ def main():
                 else:
                     log("INFO", "google_group", f"  Group {gemail} created")
 
-            # 3. Ensure required group settings
+            # 2. Ensure required group settings
             if args.dry_run:
                 if already_exists:
                     updates = compute_group_settings_updates(settings_service, gemail)
@@ -180,6 +172,27 @@ def main():
                     log("INFO", "google_group", f"  Updated settings: {updates}")
                 else:
                     log_noop(args.quiet, "INFO", "google_group", "  Settings already correct")
+
+            # 3. Ensure the group's footer links to its Drive folder, if known
+            if not folder_id:
+                log_noop(args.quiet, "INFO", "footer",
+                          f"  No known Drive folder ID for '{fname}' — skipping footer link "
+                          "(run update_groups_in_google_and_hierarchy.py to resolve it)")
+            elif args.dry_run:
+                if already_exists:
+                    updates = compute_group_footer_updates(settings_service, gemail, gid, folder_id, BASE_URL)
+                    if updates:
+                        log("INFO", "footer", f"  [dry-run] would update footer: {updates}")
+                    else:
+                        log_noop(args.quiet, "INFO", "footer", "  Footer already correct (no change)")
+                else:
+                    log("INFO", "footer", "  [dry-run] would set footer once group is created")
+            else:
+                updates = ensure_group_footer(settings_service, gemail, gid, folder_id, BASE_URL)
+                if updates:
+                    log("INFO", "footer", f"  Updated footer: {updates}")
+                else:
+                    log_noop(args.quiet, "INFO", "footer", "  Footer already correct")
 
             # 4. Set Gather group email list
             set_gather_group_email_list(page, BASE_URL, gid, list_local, DOMAIN, args.dry_run, args.quiet)

@@ -5,11 +5,9 @@ together, and (unless --type=club) adds the new group to the Circle
 Hierarchy wiki page under its parent circle.
 
 Steps:
-  1. Validate: the new group's email isn't already a key in FOLDER_IDS
-     (folder_ids.gs, a {group_email: folder_id} map); the folder, Google
-     Group, and Gather group don't already exist; and (unless --type=club)
-     --parent-circle uniquely identifies a live entry in the Circle
-     Hierarchy.
+  1. Validate: the folder, Google Group, and Gather group don't already
+     exist; and (unless --type=club) --parent-circle uniquely identifies a
+     live entry in the Circle Hierarchy.
   2. Create the Drive folder, Google Group (with the usual settings), and
      Gather group (with the usual settings, except clubs get
      availability=open instead of closed).
@@ -18,7 +16,10 @@ Steps:
   4. Wire the Gather group's mailing list to the new Google Group.
   5. Unless --type=club, add a row for the new group to the Circle
      Hierarchy, alphabetically under its parent circle.
-  6. Update FOLDER_IDS and deploy it to the Apps Script project via `clasp`.
+  6. Write the new Google Group's custom footer with a "Gather Group" /
+     "Google Docs folder" link block (see util/google_group_footer.py) —
+     this is what groups_drive_sync.gs reads to sync membership, so no
+     Apps Script redeploy is needed for a new group to start syncing.
 
 Requires Google API access (Drive, Admin Directory, Groups Settings) —
 see update_groups_in_google_and_hierarchy.py's docstring for setup.
@@ -31,7 +32,6 @@ Usage:
 
 import argparse
 import os
-import subprocess
 import sys
 from enum import Enum
 from pathlib import Path
@@ -62,6 +62,7 @@ from util.gdrive_config import (
     gdrive_item_url,
     parent_folder_id_for_group_type,
 )
+from util.google_group_footer import ensure_group_footer
 from util.google_group_utils import (
     DEFAULT_CLIENT_SECRETS_PATH,
     DOMAIN,
@@ -71,8 +72,6 @@ from util.google_group_utils import (
     group_display_name,
     group_email,
     group_exists,
-    read_folder_ids,
-    write_folder_ids,
 )
 from util.hierarchy_wiki import (
     HierarchyNode,
@@ -88,8 +87,6 @@ _LOG_FILE = Path("debug/add_new_group_log.csv")
 _SCREENSHOT_DIR = Path("debug/add_new_group_screenshots")
 
 configure(_LOG_FILE, _SCREENSHOT_DIR)
-
-_GROUPS_DRIVE_SYNC_DIR = Path(__file__).parent / "groups_drive_sync"
 
 
 class GroupType(Enum):
@@ -136,11 +133,6 @@ def main(
     drive_service = build("drive", "v3", credentials=creds)
     dir_service = build("admin", "directory_v1", credentials=creds)
     settings_service = build("groupssettings", "v1", credentials=creds)
-
-    # ── FOLDER_IDS check (no network needed) ────────────────────────────────
-    folder_ids_mapping = read_folder_ids()
-    if gemail in folder_ids_mapping:
-        sys.exit(f"Error: '{gemail}' is already listed in FOLDER_IDS.")
 
     with sync_playwright() as pw:
         browser = launch_browser(pw)
@@ -272,6 +264,10 @@ def main(
         )
         print(f"Configured mailing list for '{gdisplay}'.")
 
+        # ── Write the Google Group's footer link block ───────────────────────
+        ensure_group_footer(settings_service, gemail, gather_group_id, folder_id, base_url)
+        print(f"Set footer links for '{gemail}'.")
+
         # ── Add to the Circle Hierarchy ──────────────────────────────────────
         if parent_node is not None:
             new_node = HierarchyNode(
@@ -292,36 +288,7 @@ def main(
 
         browser.close()
 
-    # ── Update and deploy FOLDER_IDS ─────────────────────────────────────────
-    folder_ids_mapping[gemail] = folder_id
-    write_folder_ids(folder_ids_mapping)
-    deploy_folder_ids_to_apps_script()
-
     close_log()
-
-
-def deploy_folder_ids_to_apps_script() -> None:
-    """Push the updated folder_ids.gs to the Apps Script project via clasp."""
-    try:
-        result = subprocess.run(
-            ["clasp", "push", "--force"],
-            cwd=_GROUPS_DRIVE_SYNC_DIR,
-            capture_output=True,
-            text=True,
-        )
-    except FileNotFoundError:
-        print("WARNING: `clasp` is not installed — skipping Apps Script deployment. "
-              "Run `clasp push` manually from groups_drive_sync/.")
-        log("WARN", "deploy", "clasp not installed")
-        return
-
-    if result.returncode != 0:
-        print(f"WARNING: `clasp push` failed — deploy manually.\n{result.stderr}")
-        log("ERROR", "deploy", "clasp push failed", result.stderr[:500])
-        return
-
-    print("Deployed folder_ids.gs to the Apps Script project.")
-    log("INFO", "deploy", "clasp push succeeded")
 
 
 def cli():

@@ -11,6 +11,11 @@
         "userSymbol": "Drive",
         "serviceId": "drive",
         "version": "v3"
+      },
+      {
+        "userSymbol": "GroupsSettings",
+        "serviceId": "groupssettings",
+        "version": "v1"
       }
     ]
   },
@@ -19,6 +24,7 @@
     "https://www.googleapis.com/auth/drive.readonly",
     "https://www.googleapis.com/auth/admin.directory.group",
     "https://www.googleapis.com/auth/admin.directory.group.member",
+    "https://www.googleapis.com/auth/apps.groups.settings",
     "https://www.googleapis.com/auth/script.scriptapp"
   ],
   "exceptionLogging": "STACKDRIVER",

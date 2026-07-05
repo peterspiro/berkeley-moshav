@@ -1,7 +1,14 @@
 """
 One-off setup script: match Google Groups to top-level Shared Drive folders,
-rename each group so its email and display name conform to the sync naming
-rules, and initialize folder_ids.gs with the matched folder IDs.
+and rename each group so its email and display name conform to the sync
+naming rules.
+
+This script has no notion of a Gather group ID, so it can't populate a
+group's custom footer (which needs both a Gather group link and a Drive
+folder link — see util/google_group_footer.py) on its own. Footer
+maintenance is owned by update_groups_in_google_and_hierarchy.py, which has
+the full Gather context; run that afterward to wire up the folder link for
+any group matched here.
 
 The naming rules mirror groups_drive_sync.gs:
   - Strip parenthesized expressions from the folder name
@@ -40,8 +47,6 @@ from util.google_group_utils import (
     get_credentials,
     group_display_name,
     group_email,
-    read_folder_ids,
-    write_folder_ids,
 )
 
 DEFAULT_DRIVE_ID = "0AFqC2xo9aTgPUk9PVA"
@@ -89,8 +94,8 @@ def list_top_level_folders(drive_service, drive_id: str) -> list[dict]:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Match Google Groups to Shared Drive folders, rename groups to conform "
-                    "to sync naming rules, and initialize folder_ids.gs.",
+        description="Match Google Groups to Shared Drive folders and rename groups to "
+                    "conform to sync naming rules.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
@@ -100,9 +105,9 @@ def main():
                         help=f"Path to OAuth client secrets JSON (default: {DEFAULT_CLIENT_SECRETS_PATH})")
     parser.add_argument("-g", "--group", metavar="PREFIX",
                         help="Process only the group whose name starts with this prefix "
-                             "(case-insensitive, must be unique); skips writing folder_ids.gs")
+                             "(case-insensitive, must be unique)")
     parser.add_argument("-n", "--dry-run", action="store_true",
-                        help="Print planned changes without renaming groups or writing folder_ids.gs")
+                        help="Print planned changes without renaming groups")
     args = parser.parse_args()
 
     if not os.path.exists(args.credentials):
@@ -198,36 +203,9 @@ def main():
         for g in unmatched_groups:
             print(f"  {g['name']} ({g['email']})")
 
-    if matched and not args.group:
-        existing_mapping = read_folder_ids()
-        new_mapping = {group_email(f["name"]): f["id"] for _, f in matched}
-
-        added = {
-            email: fid for email, fid in new_mapping.items()
-            if email not in existing_mapping
-        }
-        changed = {
-            email: (existing_mapping[email], fid) for email, fid in new_mapping.items()
-            if email in existing_mapping and existing_mapping[email] != fid
-        }
-
-        if not added and not changed:
-            print("\nfolder_ids.gs already up to date — no changes to write.")
-        else:
-            # Merge into the existing mapping (preserve entries not matched
-            # this run, e.g. filtered out by --group or not yet matchable)
-            # rather than clobbering the file with only this run's matches.
-            merged = dict(existing_mapping)
-            merged.update(new_mapping)
-
-            if args.dry_run:
-                print("\n[dry-run] Would update folder_ids.gs:")
-                for email, fid in added.items():
-                    print(f"  + '{email}': '{fid}'")
-                for email, (old_fid, fid) in changed.items():
-                    print(f"  ~ '{email}': {old_fid!r} → {fid!r}")
-            else:
-                write_folder_ids(merged)
+    if matched:
+        print("\nRun update_groups_in_google_and_hierarchy.py to wire up each matched "
+              "group's footer link to its folder.")
 
 
 if __name__ == "__main__":
