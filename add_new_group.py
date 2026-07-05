@@ -16,7 +16,7 @@ Steps:
   4. Wire the Gather group's mailing list to the new Google Group.
   5. Unless --type=club, add a row for the new group to the Circle
      Hierarchy, alphabetically under its parent circle.
-  6. Write the new Google Group's custom footer with a "Gather Group" /
+  6. Write the new Google Group's custom footer with a "Gather group" /
      "Google Docs folder" link block (see util/google_group_footer.py) —
      this is what groups_drive_sync.gs reads to sync membership, so no
      Apps Script redeploy is needed for a new group to start syncing.
@@ -267,7 +267,7 @@ def main(
         print(f"Configured mailing list for '{gdisplay}'.")
 
         # ── Write the Google Group's footer link block ───────────────────────
-        ensure_group_footer(settings_service, gemail, gather_group_id, folder_id, base_url)
+        ensure_group_footer(settings_service, gemail, gather_group_id, folder_id, base_url, gdisplay)
         print(f"Set footer links for '{gemail}'.")
 
         # ── Add to the Circle Hierarchy ──────────────────────────────────────

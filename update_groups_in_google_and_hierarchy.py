@@ -21,7 +21,7 @@ excluding hidden groups:
       history" setting is turned on.
   0c. Once every group's folder and mailing-list state is settled, ensures
       each associated Google Group's custom footer carries an up-to-date
-      "Gather Group"/"Google Docs folder" link block (this is what
+      "Gather group"/"Google Docs folder" link block (this is what
       groups_drive_sync.gs reads to know which folder to sync membership
       from — see util/google_group_footer.py). Any other footer content
       is preserved; the block is only touched when Gather itself
@@ -717,13 +717,15 @@ def ensure_group_footers(
         folder_id = google_file_id_by_group_id[group_id]
 
         if dry_run:
-            updates = compute_group_footer_updates(settings_service, email, group_id, folder_id, base_url)
+            updates = compute_group_footer_updates(
+                settings_service, email, group_id, folder_id, base_url, group_name
+            )
             if updates:
                 print(f"[dry-run] '{group_name}' ({email}): would update footer link to folder {folder_id}")
                 log("INFO", "would_update_footer", f"{group_name} ({email}) -> {folder_id}")
             continue
 
-        updates = ensure_group_footer(settings_service, email, group_id, folder_id, base_url)
+        updates = ensure_group_footer(settings_service, email, group_id, folder_id, base_url, group_name)
         if updates:
             print(f"  ~ footer: '{group_name}' ({email}) -> folder {folder_id}")
             log("INFO", "update_footer", f"{group_name} ({email}) -> {folder_id}")

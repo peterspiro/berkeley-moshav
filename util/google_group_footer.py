@@ -9,10 +9,15 @@ Script project has to be redeployed to pick up, each group carries its own
 folder link, so groups_drive_sync.gs can just enumerate every group in the
 workspace and read the folder ID straight off it.
 
-The block's link labels are fixed ("Gather Group" / "Google Docs folder"),
-never the group/folder's current display name, so renames never require
-touching the footer. Any other footer content a human wrote is preserved —
-this module only ever replaces its own marked block.
+The block's link labels are "<Group Name> Gather group" / "<Group Name>
+Google Docs folder" — the group's current display name is baked into the
+label text (there's no way to make a plain-text footer field render a
+link with custom anchor text separate from the URL, so the name has to
+appear alongside it). This means a rename isn't reflected until the next
+time a footer-writing step runs for that group — which happens whenever
+update_groups_in_google_and_hierarchy.py syncs it, same as any other
+rename. Any other footer content a human wrote is preserved — this module
+only ever replaces its own marked block.
 """
 
 import re
@@ -26,11 +31,11 @@ def drive_folder_url(folder_id: str) -> str:
     return f"https://drive.google.com/drive/folders/{folder_id}"
 
 
-def build_footer_block(gather_group_id: str, folder_id: str, base_url: str) -> str:
+def build_footer_block(gather_group_id: str, folder_id: str, base_url: str, group_name: str) -> str:
     return (
         f"{FOOTER_MARKER}\n"
-        f"Gather Group: {base_url}/groups/{gather_group_id}\n"
-        f"Google Docs folder: {drive_folder_url(folder_id)}"
+        f"{group_name} Gather group: {base_url}/groups/{gather_group_id}\n"
+        f"{group_name} Google Docs folder: {drive_folder_url(folder_id)}"
     )
 
 
@@ -53,6 +58,7 @@ def parse_footer_folder_id(footer_text: str) -> str | None:
 
 def compute_group_footer_updates(
     settings_service, gemail: str, gather_group_id: str, folder_id: str, base_url: str,
+    group_name: str,
 ) -> dict:
     """Return {field: new_value} for the group's customFooterText /
     includeCustomFooter settings, without applying them. Read-only — safe
@@ -60,7 +66,7 @@ def compute_group_footer_updates(
     current = settings_service.groups().get(groupUniqueId=gemail).execute()
     current_footer = current.get("customFooterText") or ""
     prefix, existing_block = split_footer(current_footer)
-    desired_block = build_footer_block(gather_group_id, folder_id, base_url)
+    desired_block = build_footer_block(gather_group_id, folder_id, base_url, group_name)
 
     updates = {}
     if existing_block != desired_block:
@@ -72,10 +78,13 @@ def compute_group_footer_updates(
 
 def ensure_group_footer(
     settings_service, gemail: str, gather_group_id: str, folder_id: str, base_url: str,
+    group_name: str,
 ) -> dict:
     """Apply the group's auto-managed footer block, preserving any other
     footer content. Return dict of {field: new_value} for changed fields."""
-    updates = compute_group_footer_updates(settings_service, gemail, gather_group_id, folder_id, base_url)
+    updates = compute_group_footer_updates(
+        settings_service, gemail, gather_group_id, folder_id, base_url, group_name
+    )
     if updates:
         settings_service.groups().update(groupUniqueId=gemail, body=updates).execute()
     return updates

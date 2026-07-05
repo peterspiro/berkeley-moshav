@@ -180,7 +180,9 @@ def main():
                           "(run update_groups_in_google_and_hierarchy.py to resolve it)")
             elif args.dry_run:
                 if already_exists:
-                    updates = compute_group_footer_updates(settings_service, gemail, gid, folder_id, BASE_URL)
+                    updates = compute_group_footer_updates(
+                        settings_service, gemail, gid, folder_id, BASE_URL, gdisplay
+                    )
                     if updates:
                         log("INFO", "footer", f"  [dry-run] would update footer: {updates}")
                     else:
@@ -188,7 +190,7 @@ def main():
                 else:
                     log("INFO", "footer", "  [dry-run] would set footer once group is created")
             else:
-                updates = ensure_group_footer(settings_service, gemail, gid, folder_id, BASE_URL)
+                updates = ensure_group_footer(settings_service, gemail, gid, folder_id, BASE_URL, gdisplay)
                 if updates:
                     log("INFO", "footer", f"  Updated footer: {updates}")
                 else:
