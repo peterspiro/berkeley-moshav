@@ -127,6 +127,7 @@ from util.google_group_utils import (
     get_group_by_email,
     group_display_name,
     group_email,
+    is_in_domain,
 )
 from util.hierarchy_wiki import (
     WIKI_SLUG,
@@ -205,6 +206,37 @@ def _group_is_deactivated(page, detail) -> bool:
         if checkbox.count() > 0 and checkbox.first.is_checked():
             return True
     return False
+
+
+def gather_group_email(info: dict) -> str | None:
+    """Return the Google Group email implied by a Gather group's mailing
+    list local part, or None if there's no mailing list configured, or
+    what's configured doesn't form a well-formed berkeleymoshav.org
+    address (e.g. someone pasted a full email into Gather's mailing-list
+    "name" field, which should only ever hold the local part) — logged as
+    a warning rather than silently constructing a bogus/wrong-domain
+    address that would 404 (or worse, resolve to some other group) when
+    later used against the Google APIs.
+    """
+    list_name = info.get("list_name")
+    if not list_name:
+        return None
+    email = f"{list_name}@{DOMAIN}"
+    if not is_in_domain(email):
+        log("WARN", "gather_group_email", info.get("name", ""),
+            f"mailing list local part {list_name!r} doesn't form a valid "
+            f"@{DOMAIN} address — skipping")
+        return None
+    return email
+
+
+def build_email_by_group_id(group_info: dict[str, dict]) -> dict[str, str]:
+    result = {}
+    for gid, info in group_info.items():
+        email = gather_group_email(info)
+        if email:
+            result[gid] = email
+    return result
 
 
 def fetch_group_info(page, base_url: str) -> tuple[dict[str, dict], set[str], set[str]]:
@@ -585,6 +617,12 @@ def prompt_group_address_for_email_list(dir_service) -> dict | None:
         print(f"  ERROR: no Google Group found with address {gemail!r}")
         return None
 
+    if not is_in_domain(group["email"]):
+        print(f"  ERROR: {group['email']!r} is not a @{DOMAIN} address — "
+              "Gather's mailing list field can only hold a local part, so a "
+              "different-domain group can't be recorded correctly here.")
+        return None
+
     return group
 
 
@@ -662,15 +700,17 @@ def ensure_conversation_history(
     groups with *no* mailing list configured yet, so a group that already
     has one would never be checked there.
     """
-    eligible = [
-        (gid, info) for gid, info in group_info.items()
-        if info["kind"] in ELIGIBLE_KINDS and info.get("list_name")
-    ]
+    eligible = []
+    for gid, info in group_info.items():
+        if info["kind"] not in ELIGIBLE_KINDS:
+            continue
+        email = gather_group_email(info)
+        if email:
+            eligible.append((gid, info, email))
     eligible.sort(key=lambda item: item[1]["name"].casefold())
 
-    for group_id, info in eligible:
+    for group_id, info, email in eligible:
         group_name = info["name"]
-        email = f"{info['list_name']}@{DOMAIN}"
 
         if dry_run:
             updates = compute_group_settings_updates(settings_service, email, CONVERSATION_HISTORY_SETTINGS)
@@ -925,10 +965,7 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
         folder_owner = {e["folder_name"]: e["group_id"] for e in config_entries}
         folder_name_by_group_id = {e["group_id"]: e["folder_name"] for e in config_entries}
 
-        email_by_group_id = {
-            gid: f"{info['list_name']}@{DOMAIN}"
-            for gid, info in group_info.items() if info.get("list_name")
-        }
+        email_by_group_id = build_email_by_group_id(group_info)
 
         documents_url_by_group_id, linked_group_ids, google_file_id_by_group_id = (
             fetch_documents_url_by_group_id(
@@ -968,10 +1005,7 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
         ensure_conversation_history(settings_service, group_info, dry_run)
 
         # Step 3: keep each Google Group's footer link in sync with Gather.
-        email_by_group_id = {
-            gid: f"{info['list_name']}@{DOMAIN}"
-            for gid, info in group_info.items() if info.get("list_name")
-        }
+        email_by_group_id = build_email_by_group_id(group_info)
         ensure_group_footers(
             settings_service, base_url, group_info, google_file_id_by_group_id,
             email_by_group_id, dry_run,

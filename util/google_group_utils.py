@@ -103,6 +103,12 @@ def to_slug(name: str) -> str:
 def group_email(folder_name: str) -> str:
     return f"{to_slug(folder_name)}@{DOMAIN}"
 
+def is_in_domain(email: str, domain: str = DOMAIN) -> bool:
+    """True if email is a well-formed address (exactly one '@') whose
+    domain matches `domain`, case-insensitively."""
+    parts = email.split("@")
+    return len(parts) == 2 and parts[1].lower() == domain.lower()
+
 def group_display_name(folder_name: str) -> str:
     return normalize_ampersand(strip_parens(folder_name))
 
