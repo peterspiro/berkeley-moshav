@@ -210,22 +210,30 @@ def _group_is_deactivated(page, detail) -> bool:
 
 def gather_group_email(info: dict) -> str | None:
     """Return the Google Group email implied by a Gather group's mailing
-    list local part, or None if there's no mailing list configured, or
-    what's configured doesn't form a well-formed berkeleymoshav.org
-    address (e.g. someone pasted a full email into Gather's mailing-list
-    "name" field, which should only ever hold the local part) — logged as
-    a warning rather than silently constructing a bogus/wrong-domain
-    address that would 404 (or worse, resolve to some other group) when
-    later used against the Google APIs.
+    list, or None if there's no mailing list configured, or what's
+    configured doesn't form a well-formed berkeleymoshav.org address.
+
+    Uses the *actual* domain selected in Gather's mailing-list domain
+    dropdown (list_domain) — not just an assumed DOMAIN — so a group whose
+    list is genuinely configured on a different domain (e.g.
+    "care-circle@some-other-domain.com") is caught rather than silently
+    treated as "@berkeleymoshav.org" just because that's what we'd default
+    to. Also catches the local part itself being malformed (e.g. someone
+    pasted a full email into Gather's mailing-list "name" field, which
+    should only ever hold the local part). Either way, logged as a warning
+    rather than silently constructing/using a bogus or wrong-domain
+    address against the Google APIs. If the domain dropdown couldn't be
+    read at all (list_domain unknown), DOMAIN is assumed, same as before —
+    there's nothing to flag a mismatch against.
     """
     list_name = info.get("list_name")
     if not list_name:
         return None
-    email = f"{list_name}@{DOMAIN}"
+    list_domain = info.get("list_domain") or DOMAIN
+    email = f"{list_name}@{list_domain}"
     if not is_in_domain(email):
         log("WARN", "gather_group_email", info.get("name", ""),
-            f"mailing list local part {list_name!r} doesn't form a valid "
-            f"@{DOMAIN} address — skipping")
+            f"mailing list is {email!r} — not a valid @{DOMAIN} address — skipping")
         return None
     return email
 
@@ -240,7 +248,7 @@ def build_email_by_group_id(group_info: dict[str, dict]) -> dict[str, str]:
 
 
 def fetch_group_info(page, base_url: str) -> tuple[dict[str, dict], set[str], set[str]]:
-    """Return ({group_id: {"name", "kind", "url", "list_name"}}, excluded_group_ids,
+    """Return ({group_id: {"name", "kind", "url", "list_name", "list_domain"}}, excluded_group_ids,
     deactivated_group_ids).
 
     Hidden and deactivated/inactive groups are reported separately (not
@@ -269,6 +277,7 @@ def fetch_group_info(page, base_url: str) -> tuple[dict[str, dict], set[str], se
             "kind": (detail.kind or "").strip().lower(),
             "url": f"/groups/{group.group_id}",
             "list_name": detail.list_name,
+            "list_domain": detail.list_domain,
         }
     return info, excluded_ids, deactivated_ids
 

@@ -413,6 +413,7 @@ class GatherGroup:
     description: str
     members: list[GatherGroupMember] = field(default_factory=list)
     list_name: Optional[str] = None
+    list_domain: Optional[str] = None
 
 
 # ── Gather I/O ────────────────────────────────────────────────────────────────
@@ -508,10 +509,22 @@ def _fetch_group_detail(page: Page, base_url: str, group: GatherGroup) -> Gather
     if mailman_name_el.count() > 0:
         list_name = mailman_name_el.first.input_value().strip() or None
 
+    # The local part (list_name, above) says nothing about which domain the
+    # list actually lives on — that's a separate <select>. Read its
+    # currently-selected option's label (the domain text itself, e.g.
+    # "berkeleymoshav.org" — matches how set_gather_group_email_list()
+    # selects it) so callers can catch a group whose mailing list is
+    # configured on a domain other than the one they assume.
+    domain_select_el = page.locator('#groups_group_mailman_list_attributes_domain_id')
+    list_domain: Optional[str] = None
+    if domain_select_el.count() > 0:
+        text = domain_select_el.evaluate("el => el.options[el.selectedIndex]?.text || ''").strip()
+        list_domain = text or None
+
     return GatherGroup(group_id=group.group_id, name=group.name,
                        kind=kind, availability=availability,
                        description=description, members=members,
-                       list_name=list_name)
+                       list_name=list_name, list_domain=list_domain)
 
 
 def _add_inline_member(page: Page, user: GatherUser, is_manager: bool) -> None:
