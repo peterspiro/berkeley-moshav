@@ -238,9 +238,30 @@ def gather_group_email(info: dict) -> str | None:
     return email
 
 
-def build_email_by_group_id(group_info: dict[str, dict]) -> dict[str, str]:
+def build_email_by_group_id(
+    group_info: dict[str, dict], checked: set[str] | None = None,
+) -> dict[str, str]:
+    """Return {group_id: email} for every well-formed, in-domain mailing
+    list found in group_info.
+
+    `checked` (if given) is a set of group_ids already evaluated (because
+    they already had a mailing list at the time) earlier in this run —
+    skipped here, and mutated in place to include every group_id newly
+    evaluated. Pass the same set across multiple calls (e.g. once before
+    ensure_email_lists() assigns new mailing lists, and again after) so a
+    group already evaluated — successfully or not — isn't re-derived, and
+    its gather_group_email() warning isn't logged twice, just because more
+    than one pipeline stage needs the mapping. A group with no mailing
+    list yet is never added to `checked`, so it's still picked up on a
+    later call once ensure_email_lists() assigns it one.
+    """
+    if checked is None:
+        checked = set()
     result = {}
     for gid, info in group_info.items():
+        if gid in checked or not info.get("list_name"):
+            continue
+        checked.add(gid)
         email = gather_group_email(info)
         if email:
             result[gid] = email
@@ -700,7 +721,8 @@ def ensure_email_lists(
 
 
 def ensure_conversation_history(
-    settings_service, group_info: dict[str, dict], dry_run: bool,
+    settings_service, group_info: dict[str, dict], email_by_group_id: dict[str, str],
+    dry_run: bool,
 ) -> None:
     """Turn on "Conversation history" for every eligible group's associated
     Google Group — whether that group was just created/matched this run or
@@ -708,14 +730,16 @@ def ensure_conversation_history(
     folded into ensure_email_lists(): that function only ever visits
     groups with *no* mailing list configured yet, so a group that already
     has one would never be checked there.
+
+    Takes the already-computed email_by_group_id (rather than deriving its
+    own via gather_group_email()) so a group with no valid email isn't
+    re-evaluated — and re-warned about — on top of the check already done
+    when email_by_group_id was built.
     """
-    eligible = []
-    for gid, info in group_info.items():
-        if info["kind"] not in ELIGIBLE_KINDS:
-            continue
-        email = gather_group_email(info)
-        if email:
-            eligible.append((gid, info, email))
+    eligible = [
+        (gid, info, email_by_group_id[gid]) for gid, info in group_info.items()
+        if info["kind"] in ELIGIBLE_KINDS and gid in email_by_group_id
+    ]
     eligible.sort(key=lambda item: item[1]["name"].casefold())
 
     for group_id, info, email in eligible:
@@ -974,7 +998,8 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
         folder_owner = {e["folder_name"]: e["group_id"] for e in config_entries}
         folder_name_by_group_id = {e["group_id"]: e["folder_name"] for e in config_entries}
 
-        email_by_group_id = build_email_by_group_id(group_info)
+        checked_email_ids: set[str] = set()
+        email_by_group_id = build_email_by_group_id(group_info, checked_email_ids)
 
         documents_url_by_group_id, linked_group_ids, google_file_id_by_group_id = (
             fetch_documents_url_by_group_id(
@@ -1009,12 +1034,16 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
                 print("\nQuit requested — skipping remaining steps and saving progress so far.")
                 log("INFO", "quit", "User quit during the mailing list step")
 
+        # Pick up any mailing lists newly assigned by ensure_email_lists() above
+        # (checked_email_ids keeps this from re-deriving/re-warning about groups
+        # already evaluated before Step 1).
+        email_by_group_id.update(build_email_by_group_id(group_info, checked_email_ids))
+
         # Turn on "Conversation history" for every eligible group's Google Group,
         # whether it was just newly associated above or already had one.
-        ensure_conversation_history(settings_service, group_info, dry_run)
+        ensure_conversation_history(settings_service, group_info, email_by_group_id, dry_run)
 
         # Step 3: keep each Google Group's footer link in sync with Gather.
-        email_by_group_id = build_email_by_group_id(group_info)
         ensure_group_footers(
             settings_service, base_url, group_info, google_file_id_by_group_id,
             email_by_group_id, dry_run,
