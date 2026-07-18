@@ -200,6 +200,51 @@ def set_gather_group_email_list(
         log("INFO", "set_email_list", f"group {group_id}: email list settings updated")
 
 
+def destroy_gather_group_email_list(page: Page, base_url: str, group_id: str, dry_run: bool) -> bool:
+    """Delete a group's existing mailing list entirely.
+
+    Needed before assigning a different address to a group that already
+    has a list configured: set_gather_group_email_list() can't do this —
+    Gather disables the name/domain fields once a list exists, so they
+    can't simply be edited in place. Returns True if a list was destroyed
+    (or none existed to begin with), False on failure.
+    """
+    page.goto(f"{base_url}/groups/{group_id}/edit", wait_until="networkidle")
+
+    name_input = page.locator('#groups_group_mailman_list_attributes_name')
+    if name_input.count() == 0:
+        log("WARN", "destroy_email_list", f"group {group_id}: mailman name field not found")
+        return False
+    if not name_input.first.input_value().strip():
+        return True  # no list configured — nothing to destroy
+
+    destroy_el = page.locator('input[name="groups_group[mailman_list_attributes][_destroy]"]')
+    if destroy_el.count() == 0:
+        log("ERROR", "destroy_email_list", f"group {group_id}",
+            "no [_destroy] field found for the mailing list — delete it "
+            "manually in the Gather UI, then re-run")
+        return False
+
+    if dry_run:
+        log("DRY-RUN", "destroy_email_list", f"group {group_id}: would delete existing mailing list")
+        return True
+
+    page.evaluate(
+        "document.querySelector('input[name=\"groups_group[mailman_list_attributes][_destroy]\"]').value = '1'"
+    )
+    page.locator('input[type="submit"]').first.click(timeout=10_000)
+    page.wait_for_load_state("networkidle", timeout=30_000)
+
+    err = _check_submit_errors(page)
+    if err:
+        screenshot(page, f"group_{group_id}_destroy_list_error")
+        log("ERROR", "destroy_email_list", f"group {group_id}", err[:200])
+        return False
+
+    log("INFO", "destroy_email_list", f"group {group_id}: mailing list deleted")
+    return True
+
+
 def fill_group_basics(
     page: Page, name: str, kind: str, availability: str, description: str = ""
 ) -> None:

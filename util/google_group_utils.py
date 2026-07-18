@@ -139,6 +139,21 @@ def get_group_by_email(dir_service, gemail: str) -> dict | None:
     return {"id": resp.get("id"), "email": resp.get("email"), "name": resp.get("name")}
 
 
+def list_group_aliases(dir_service, gemail: str) -> list[str]:
+    """Return the group's current alias addresses. Read-only."""
+    resp = dir_service.groups().aliases().list(groupKey=gemail).execute()
+    return [a["alias"] for a in resp.get("aliases", [])]
+
+
+def add_group_alias(dir_service, gemail: str, alias: str) -> bool:
+    """Add alias as an alias address of the group at gemail. Return True
+    if added, False if it was already an alias of this group."""
+    if alias.lower() in {a.lower() for a in list_group_aliases(dir_service, gemail)}:
+        return False
+    dir_service.groups().aliases().insert(groupKey=gemail, body={"alias": alias}).execute()
+    return True
+
+
 def ensure_group_exists(dir_service, gemail: str, display_name: str) -> bool:
     """Create the Google Group if it doesn't exist. Return True if created."""
     if group_exists(dir_service, gemail):
