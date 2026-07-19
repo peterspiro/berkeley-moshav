@@ -72,7 +72,7 @@ def screenshot(page: Page, name: str) -> None:
     _screenshot_dir.mkdir(parents=True, exist_ok=True)
     path = _screenshot_dir / f"{name}_{int(time.time())}.png"
     try:
-        page.screenshot(path=str(path))
+        page.screenshot(path=str(path), full_page=True)
         log("DEBUG", "screenshot", str(path))
     except Exception as e:
         log("WARN", "screenshot", f"Failed to save {path}: {e}")
@@ -264,6 +264,14 @@ def destroy_gather_group_email_list(page: Page, base_url: str, group_id: str, dr
     # unrelated one would submit successfully (no validation error to
     # catch) while silently never sending this checkbox's change at all.
     form = checkbox.first.locator("xpath=ancestor::form[1]")
+    try:
+        form_html = form.first.evaluate("el => el.outerHTML")
+        _screenshot_dir.mkdir(parents=True, exist_ok=True)
+        dump_path = _screenshot_dir / f"group_{group_id}_destroy_form_presubmit_{int(time.time())}.html"
+        dump_path.write_text(form_html)
+        log("DEBUG", "destroy_email_list", f"group {group_id}: dumped pre-submit form to {dump_path}")
+    except Exception as e:
+        log("WARN", "destroy_email_list", f"group {group_id}: couldn't dump pre-submit form: {e}")
     submit = form.locator('input[type="submit"][name="commit"]')
     if submit.count() == 0:
         submit = form.locator('input[type="submit"]')
