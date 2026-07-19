@@ -248,7 +248,19 @@ def destroy_gather_group_email_list(page: Page, base_url: str, group_id: str, dr
     if not checkbox.first.is_checked():
         checkbox.first.check()
 
-    page.locator('input[type="submit"][name="commit"]').first.click(timeout=10_000)
+    # Click the Save button belonging to *this* checkbox's own <form> —
+    # the page may have more than one form/submit button, and clicking an
+    # unrelated one would submit successfully (no validation error to
+    # catch) while silently never sending this checkbox's change at all.
+    form = checkbox.first.locator("xpath=ancestor::form[1]")
+    submit = form.locator('input[type="submit"][name="commit"]')
+    if submit.count() == 0:
+        submit = form.locator('input[type="submit"]')
+    if submit.count() == 0:
+        log("ERROR", "destroy_email_list", f"group {group_id}",
+            "found the \"Delete this list?\" checkbox but no Save button in its form")
+        return False
+    submit.first.click(timeout=10_000)
     page.wait_for_load_state("networkidle", timeout=30_000)
 
     err = _check_submit_errors(page)
