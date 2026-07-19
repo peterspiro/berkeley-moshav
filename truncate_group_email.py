@@ -4,26 +4,29 @@ Truncates a Google Group's email address by dropping its trailing
 "-circle"/"-work-group"/"-working-group" suffix, and switches the
 corresponding Gather group's mailing list over to the shorter address.
 
+Only berkeleymoshav.org addresses are supported — pass just the local
+part (no "@domain"); the domain is always berkeleymoshav.org.
+
 Steps:
-  1. Compute the truncated address from the given (full) group email —
-     errors if it doesn't end with a recognized suffix.
+  1. Compute the truncated local part — errors if it doesn't end with a
+     recognized suffix.
   2. Validate: the original address is a real Google Group; the truncated
      address isn't already in use by any *other* group.
   3. Add the truncated address as an alias of the Google Group (the
      original address is left as the group's primary address — this only
      adds a second, shorter way to reach the same group).
   4. Find the Gather group whose mailing list currently points at the
-     original address, delete that mailing list (Gather disables the
-     name/domain fields once a list exists, so they can't be edited in
-     place), and create a new one there using the truncated address's
-     local part.
+     original address, delete that mailing list (checking "Delete this
+     list?" and saving — Gather disables the name/domain fields once a
+     list exists, so they can't be edited in place), and create a new one
+     there using the truncated address's local part.
 
 Requires Google API access (Admin Directory) — see
 update_groups_in_google_and_hierarchy.py's docstring for setup.
 
 Usage:
-    python truncate_group_email.py care-circle@berkeleymoshav.org
-    python truncate_group_email.py landscaping-working-group@berkeleymoshav.org -n
+    python truncate_group_email.py care-circle
+    python truncate_group_email.py landscaping-working-group -n
 """
 
 import argparse
@@ -53,7 +56,6 @@ from util.google_group_utils import (
     add_group_alias,
     get_credentials,
     get_group_by_email,
-    is_in_domain,
 )
 
 _LOG_FILE = Path("debug/truncate_group_email_log.csv")
@@ -91,21 +93,24 @@ def find_gather_group_by_email(page, base_url: str, target_email: str) -> str | 
 
 
 def main(
-    original_email: str, base_url: str, email: str, password: str,
+    local_part: str, base_url: str, email: str, password: str,
     dry_run: bool, credentials_path: str,
 ) -> None:
     base_url = base_url.rstrip("/")
     init_log()
-    log("INFO", "start", f"original_email={original_email} dry_run={dry_run}")
+    log("INFO", "start", f"local_part={local_part} dry_run={dry_run}")
 
-    if not is_in_domain(original_email):
-        sys.exit(f"Error: {original_email!r} is not a @{DOMAIN} address.")
+    if "@" in local_part:
+        sys.exit(
+            f"Error: pass just the local part, not a full address ({local_part!r}) — "
+            f"the domain is always @{DOMAIN}."
+        )
 
-    local, _, _ = original_email.partition("@")
-    truncated_local = truncate_local_part(local)
+    original_email = f"{local_part}@{DOMAIN}"
+    truncated_local = truncate_local_part(local_part)
     if not truncated_local:
         sys.exit(
-            f"Error: {original_email!r} doesn't end with a recognized suffix "
+            f"Error: {local_part!r} doesn't end with a recognized suffix "
             f"({', '.join(SUFFIXES)}) — nothing to truncate."
         )
     truncated_email = f"{truncated_local}@{DOMAIN}"
@@ -184,7 +189,10 @@ def cli():
                     "corresponding Gather group's mailing list to it.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument("email", help="The group's current, full email address")
+    parser.add_argument(
+        "local_part",
+        help=f"The group's current email address, without the @{DOMAIN} domain",
+    )
     parser.add_argument(
         "-u", "--base-url", default="https://berkeley-moshav.gather.coop",
         help="Gather base URL",
@@ -206,7 +214,7 @@ def cli():
         )
 
     email, password = load_credentials()
-    main(args.email, args.base_url, email, password, args.dry_run, args.credentials)
+    main(args.local_part, args.base_url, email, password, args.dry_run, args.credentials)
 
 
 if __name__ == "__main__":

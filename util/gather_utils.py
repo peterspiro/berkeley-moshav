@@ -218,21 +218,37 @@ def destroy_gather_group_email_list(page: Page, base_url: str, group_id: str, dr
     if not name_input.first.input_value().strip():
         return True  # no list configured — nothing to destroy
 
-    destroy_el = page.locator('input[name="groups_group[mailman_list_attributes][_destroy]"]')
-    if destroy_el.count() == 0:
+    # "Delete this list?" checkbox at the bottom of the edit page — found
+    # by its label text rather than a guessed ID, since Rails' generated
+    # id/name for this checkbox isn't documented anywhere in this codebase.
+    label = page.locator('label:has-text("Delete this list?")')
+    if label.count() == 0:
         log("ERROR", "destroy_email_list", f"group {group_id}",
-            "no [_destroy] field found for the mailing list — delete it "
+            "no \"Delete this list?\" checkbox found — delete it "
             "manually in the Gather UI, then re-run")
+        return False
+
+    checkbox_id = label.first.get_attribute("for")
+    checkbox = (
+        page.locator(f"#{checkbox_id}") if checkbox_id
+        else label.first.locator(
+            'xpath=preceding-sibling::input[@type="checkbox"][1] | '
+            'following-sibling::input[@type="checkbox"][1]'
+        )
+    )
+    if checkbox.count() == 0:
+        log("ERROR", "destroy_email_list", f"group {group_id}",
+            "found the \"Delete this list?\" label but couldn't locate its checkbox")
         return False
 
     if dry_run:
         log("DRY-RUN", "destroy_email_list", f"group {group_id}: would delete existing mailing list")
         return True
 
-    page.evaluate(
-        "document.querySelector('input[name=\"groups_group[mailman_list_attributes][_destroy]\"]').value = '1'"
-    )
-    page.locator('input[type="submit"]').first.click(timeout=10_000)
+    if not checkbox.first.is_checked():
+        checkbox.first.check()
+
+    page.locator('input[type="submit"][name="commit"]').first.click(timeout=10_000)
     page.wait_for_load_state("networkidle", timeout=30_000)
 
     err = _check_submit_errors(page)
