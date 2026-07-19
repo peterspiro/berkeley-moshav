@@ -211,6 +211,28 @@ def set_gather_group_email_list(
         log("INFO", "set_email_list", f"group {group_id}: email list settings updated")
 
 
+def _confirm_gather_modal(page: Page, group_id: str, timeout: int = 3000) -> bool:
+    """If Gather's custom confirmation modal appears (a Stimulus-controlled
+    ".gather-modal-dialog" rendered inline in the page — NOT a native
+    browser dialog, so page.on("dialog") never sees it), click its "OK"
+    button. Returns True if a modal was found and confirmed."""
+    modal = page.locator(".gather-modal-dialog")
+    try:
+        modal.first.wait_for(state="visible", timeout=timeout)
+    except Exception:
+        return False  # no modal appeared within timeout — nothing to confirm
+
+    log("DEBUG", "destroy_email_list", f"group {group_id}: confirmation modal appeared")
+    ok_button = modal.locator('button:has-text("OK")')
+    if ok_button.count() == 0:
+        ok_button = modal.locator('[data-index="1"]')
+    if ok_button.count() == 0:
+        log("WARN", "destroy_email_list", f"group {group_id}: modal appeared but no OK button found")
+        return False
+    ok_button.first.click()
+    return True
+
+
 def destroy_gather_group_email_list(page: Page, base_url: str, group_id: str, dry_run: bool) -> bool:
     """Delete a group's existing mailing list entirely.
 
@@ -258,6 +280,9 @@ def destroy_gather_group_email_list(page: Page, base_url: str, group_id: str, dr
 
     if not checkbox.first.is_checked():
         checkbox.first.check()
+        # Some Stimulus-driven checkboxes pop the confirm modal immediately
+        # on change, before Save is even clicked.
+        _confirm_gather_modal(page, group_id, timeout=1500)
 
     # Click the Save button belonging to *this* checkbox's own <form> —
     # the page may have more than one form/submit button, and clicking an
@@ -293,6 +318,10 @@ def destroy_gather_group_email_list(page: Page, base_url: str, group_id: str, dr
     try:
         post_submit_url = page.url
         submit.first.click(timeout=10_000)
+        # Gather's own confirm modal (custom HTML, not a native dialog —
+        # page.on("dialog") above doesn't catch this one) may appear here
+        # instead of/in addition to on the checkbox change.
+        _confirm_gather_modal(page, group_id, timeout=3000)
         page.wait_for_load_state("networkidle", timeout=30_000)
     finally:
         page.remove_listener("dialog", _accept_dialog)
