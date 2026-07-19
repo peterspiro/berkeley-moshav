@@ -132,8 +132,10 @@ def set_gather_group_email_list(
     if dry_run:
         checked = everyone_checkbox.first.is_checked() if everyone_checkbox.count() > 0 else False
         changes = []
+        address_blocked = False
         if name_disabled:
             if current_name != list_local_part:
+                address_blocked = True
                 log("WARN", "set_email_list",
                     f"group {group_id}: name field disabled but value '{current_name}' ≠ '{list_local_part}'")
         else:
@@ -152,6 +154,15 @@ def set_gather_group_email_list(
         if changes:
             log("INFO", "set_email_list",
                 f"[dry-run] group {group_id}: would change {', '.join(changes)}")
+        elif address_blocked:
+            # Distinct from the "already correct" case below: the address
+            # itself is wrong, but this function can't fix it while the
+            # field stays disabled (see the WARN above) — nothing else here
+            # needed changing, but calling that "already correct" would
+            # contradict the WARN sitting right above it.
+            log_noop(quiet, "INFO", "set_email_list",
+                      f"group {group_id}: no other email list settings need changing "
+                      "(address mismatch noted above can't be fixed while disabled)")
         else:
             log_noop(quiet, "INFO", "set_email_list",
                       f"group {group_id}: email list settings already correct")
