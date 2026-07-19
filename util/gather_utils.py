@@ -279,9 +279,23 @@ def destroy_gather_group_email_list(page: Page, base_url: str, group_id: str, dr
         log("ERROR", "destroy_email_list", f"group {group_id}",
             "found the \"Delete this list?\" checkbox but no Save button in its form")
         return False
-    post_submit_url = page.url
-    submit.first.click(timeout=10_000)
-    page.wait_for_load_state("networkidle", timeout=30_000)
+    # Deleting a mailing list very likely triggers a JS confirm() dialog
+    # ("Are you sure?"). Playwright silently dismisses (cancels) any
+    # dialog by default, which would cancel the submission entirely —
+    # matching exactly what was observed (submit "succeeds" with no
+    # error, but the page URL never changes, meaning no navigation/POST
+    # actually happened). Accept any dialog for the duration of this click.
+    def _accept_dialog(dialog):
+        log("DEBUG", "destroy_email_list", f"group {group_id}: accepting dialog: {dialog.message!r}")
+        dialog.accept()
+
+    page.on("dialog", _accept_dialog)
+    try:
+        post_submit_url = page.url
+        submit.first.click(timeout=10_000)
+        page.wait_for_load_state("networkidle", timeout=30_000)
+    finally:
+        page.remove_listener("dialog", _accept_dialog)
     log("DEBUG", "destroy_email_list", f"group {group_id}: pre-submit URL was {post_submit_url}, "
         f"post-submit URL is {page.url}")
 
