@@ -271,13 +271,31 @@ def destroy_gather_group_email_list(page: Page, base_url: str, group_id: str, dr
         log("ERROR", "destroy_email_list", f"group {group_id}",
             "found the \"Delete this list?\" checkbox but no Save button in its form")
         return False
+    post_submit_url = page.url
     submit.first.click(timeout=10_000)
     page.wait_for_load_state("networkidle", timeout=30_000)
+    log("DEBUG", "destroy_email_list", f"group {group_id}: pre-submit URL was {post_submit_url}, "
+        f"post-submit URL is {page.url}")
 
     err = _check_submit_errors(page)
     if err:
         screenshot(page, f"group_{group_id}_destroy_list_error")
         log("ERROR", "destroy_email_list", f"group {group_id}", err[:200])
+        return False
+
+    # A "successful" submit (no validation error) doesn't guarantee the
+    # destroy actually applied — e.g. the wrong form, a misrouted submit,
+    # or a silently-ignored param would look identical here. Reload the
+    # edit page fresh and check the list is actually gone before claiming
+    # success.
+    page.goto(f"{base_url}/groups/{group_id}/edit", wait_until="networkidle")
+    name_input_after = page.locator('#groups_group_mailman_list_attributes_name')
+    if name_input_after.count() > 0 and name_input_after.first.input_value().strip():
+        screenshot(page, f"group_{group_id}_destroy_list_still_present")
+        log("ERROR", "destroy_email_list", f"group {group_id}",
+            "submitted with no validation error, but the mailing list still exists "
+            f"afterward (name={name_input_after.first.input_value().strip()!r}) — "
+            "see screenshot")
         return False
 
     log("INFO", "destroy_email_list", f"group {group_id}: mailing list deleted")
