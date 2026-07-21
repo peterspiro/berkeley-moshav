@@ -1,32 +1,38 @@
 #!/usr/bin/env python3
 """
-Truncates a Google Group's email address by dropping its trailing
-"-circle"/"-work-group"/"-working-group" suffix, and switches the
-corresponding Gather group's mailing list over to the shorter address.
+Changes the alias a Google Group's email address is reachable at, and
+switches the corresponding Gather group's mailing list over to it.
+
+By default the new alias is derived from the current address by dropping
+its trailing "-circle"/"-work-group"/"-working-group" suffix. Pass
+--new-alias to specify the new alias explicitly instead (e.g. to rename
+to something unrelated to the old address).
 
 Only berkeleymoshav.org addresses are supported — pass just the local
-part (no "@domain"); the domain is always berkeleymoshav.org.
+part (no "@domain") for both the current address and --new-alias; the
+domain is always berkeleymoshav.org.
 
 Steps:
-  1. Compute the truncated local part — errors if it doesn't end with a
-     recognized suffix.
-  2. Validate: the original address is a real Google Group; the truncated
+  1. Determine the new local part — from --new-alias, or by truncating a
+     recognized suffix off the current one (errors if neither applies).
+  2. Validate: the original address is a real Google Group; the new
      address isn't already in use by any *other* group.
-  3. Add the truncated address as an alias of the Google Group (the
-     original address is left as the group's primary address — this only
-     adds a second, shorter way to reach the same group).
+  3. Add the new address as an alias of the Google Group (the original
+     address is left as the group's primary address — this only adds a
+     second way to reach the same group).
   4. Find the Gather group whose mailing list currently points at the
      original address, delete that mailing list (checking "Delete this
      list?" and saving — Gather disables the name/domain fields once a
      list exists, so they can't be edited in place), and create a new one
-     there using the truncated address's local part.
+     there using the new address's local part.
 
 Requires Google API access (Admin Directory) — see
 update_groups_in_google_and_hierarchy.py's docstring for setup.
 
 Usage:
-    python truncate_group_email.py care-circle
-    python truncate_group_email.py landscaping-working-group -n
+    python change_group_email_alias.py care-circle
+    python change_group_email_alias.py landscaping-working-group -n
+    python change_group_email_alias.py grounds-committee --new-alias landscaping
 """
 
 import argparse
@@ -58,8 +64,8 @@ from util.google_group_utils import (
     get_group_by_email,
 )
 
-_LOG_FILE = Path("debug/truncate_group_email_log.csv")
-_SCREENSHOT_DIR = Path("debug/truncate_group_email_screenshots")
+_LOG_FILE = Path("debug/change_group_email_alias_log.csv")
+_SCREENSHOT_DIR = Path("debug/change_group_email_alias_screenshots")
 
 configure(_LOG_FILE, _SCREENSHOT_DIR)
 
@@ -93,12 +99,12 @@ def find_gather_group_by_email(page, base_url: str, target_email: str) -> str | 
 
 
 def main(
-    local_part: str, base_url: str, email: str, password: str,
+    local_part: str, new_alias: str | None, base_url: str, email: str, password: str,
     dry_run: bool, credentials_path: str,
 ) -> None:
     base_url = base_url.rstrip("/")
     init_log()
-    log("INFO", "start", f"local_part={local_part} dry_run={dry_run}")
+    log("INFO", "start", f"local_part={local_part} new_alias={new_alias} dry_run={dry_run}")
 
     if "@" in local_part:
         sys.exit(
@@ -107,13 +113,25 @@ def main(
         )
 
     original_email = f"{local_part}@{DOMAIN}"
-    truncated_local = truncate_local_part(local_part)
-    if not truncated_local:
-        sys.exit(
-            f"Error: {local_part!r} doesn't end with a recognized suffix "
-            f"({', '.join(SUFFIXES)}) — nothing to truncate."
-        )
-    truncated_email = f"{truncated_local}@{DOMAIN}"
+
+    if new_alias is not None:
+        if "@" in new_alias:
+            sys.exit(
+                f"Error: --new-alias should be just the local part, not a full address "
+                f"({new_alias!r}) — the domain is always @{DOMAIN}."
+            )
+        if new_alias == local_part:
+            sys.exit(f"Error: --new-alias {new_alias!r} is the same as the current address.")
+        new_local = new_alias
+    else:
+        new_local = truncate_local_part(local_part)
+        if not new_local:
+            sys.exit(
+                f"Error: {local_part!r} doesn't end with a recognized suffix "
+                f"({', '.join(SUFFIXES)}) — nothing to truncate. Use --new-alias to "
+                "specify the new address explicitly."
+            )
+    new_email = f"{new_local}@{DOMAIN}"
 
     creds = get_credentials(credentials_path)
     dir_service = build("admin", "directory_v1", credentials=creds)
@@ -122,27 +140,27 @@ def main(
     if original_group is None:
         sys.exit(f"Error: no Google Group found with address {original_email!r}.")
 
-    existing = get_group_by_email(dir_service, truncated_email)
+    existing = get_group_by_email(dir_service, new_email)
     if existing is not None and existing["id"] != original_group["id"]:
         sys.exit(
-            f"Error: {truncated_email!r} is already in use by a different "
+            f"Error: {new_email!r} is already in use by a different "
             f"Google Group ({existing['email']!r}, id={existing['id']})."
         )
 
-    print(f"'{original_email}' -> '{truncated_email}'")
+    print(f"'{original_email}' -> '{new_email}'")
 
     if dry_run:
         if existing is None:
-            print(f"[dry-run] Would add '{truncated_email}' as an alias of '{original_email}'.")
+            print(f"[dry-run] Would add '{new_email}' as an alias of '{original_email}'.")
         else:
-            print(f"[dry-run] '{truncated_email}' is already an alias of '{original_email}'.")
+            print(f"[dry-run] '{new_email}' is already an alias of '{original_email}'.")
     else:
-        added = add_group_alias(dir_service, original_email, truncated_email)
+        added = add_group_alias(dir_service, original_email, new_email)
         if added:
-            print(f"Added '{truncated_email}' as an alias of '{original_email}'.")
-            log("INFO", "add_alias", f"{original_email} -> +{truncated_email}")
+            print(f"Added '{new_email}' as an alias of '{original_email}'.")
+            log("INFO", "add_alias", f"{original_email} -> +{new_email}")
         else:
-            print(f"'{truncated_email}' is already an alias of '{original_email}'.")
+            print(f"'{new_email}' is already an alias of '{original_email}'.")
 
     with sync_playwright() as pw:
         browser = launch_browser(pw)
@@ -174,8 +192,8 @@ def main(
             close_log()
             sys.exit("Error: failed to delete the existing mailing list — see log.")
 
-        print(f"Setting mailing list to '{truncated_email}'…")
-        set_gather_group_email_list(page, base_url, group_id, truncated_local, DOMAIN, dry_run)
+        print(f"Setting mailing list to '{new_email}'…")
+        set_gather_group_email_list(page, base_url, group_id, new_local, DOMAIN, dry_run)
 
         browser.close()
 
@@ -184,14 +202,20 @@ def main(
 
 def cli():
     parser = argparse.ArgumentParser(
-        description="Truncate a Google Group's email address (drop its "
-                    "-circle/-work-group/-working-group suffix) and switch the "
-                    "corresponding Gather group's mailing list to it.",
+        description="Change the alias a Google Group's email address is reachable at "
+                    "(by default dropping its -circle/-work-group/-working-group suffix, "
+                    "or an explicit --new-alias) and switch the corresponding Gather "
+                    "group's mailing list to it.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
         "local_part",
         help=f"The group's current email address, without the @{DOMAIN} domain",
+    )
+    parser.add_argument(
+        "-a", "--new-alias", default=None,
+        help=f"The new alias's local part (without the @{DOMAIN} domain). "
+             "Default: the current address with its recognized suffix truncated.",
     )
     parser.add_argument(
         "-u", "--base-url", default="https://berkeley-moshav.gather.coop",
@@ -214,7 +238,8 @@ def cli():
         )
 
     email, password = load_credentials()
-    main(args.local_part, args.base_url, email, password, args.dry_run, args.credentials)
+    main(args.local_part, args.new_alias, args.base_url, email, password,
+         args.dry_run, args.credentials)
 
 
 if __name__ == "__main__":
