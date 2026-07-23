@@ -46,6 +46,10 @@ SCOPES = [
     # So the role-sync step can identify the authenticated account and never
     # change its own role (mirrors groups_drive_sync.gs's self-protection).
     "https://www.googleapis.com/auth/userinfo.email",
+    # Google always grants "openid" alongside userinfo.email; list it here
+    # so the granted scopes match what we request and oauthlib doesn't warn
+    # "Scope has changed …" on every auth.
+    "openid",
 ]
 
 
