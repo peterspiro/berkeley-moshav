@@ -833,7 +833,12 @@ def sync_group_roles(
 
     Never touches anyone whose current Google role is OWNER (reserved for
     human admins), nor the authenticated script-runner account.
-    Emails are matched exactly, case-insensitively.
+
+    `email_by_user_id` maps each Gather user_id to its "Google ID"
+    (google_email) — not the contact "Email Address" — since that's the
+    address Gather propagates to Drive folder permissions and thus what
+    the Google Group's membership is keyed on. Addresses are matched
+    exactly, case-insensitively.
     """
     eligible = [
         (gid, info, email_by_group_id[gid]) for gid, info in group_info.items()
@@ -846,9 +851,9 @@ def sync_group_roles(
     for group_id, info, gemail in eligible:
         group_name = info["name"]
 
-        # Emails of this Gather group's managers, mapped from Gather user_id.
+        # Google IDs of this Gather group's managers, mapped from Gather user_id.
         desired_managers = set()
-        managers_without_email = 0
+        managers_without_id = 0
         for member in info.get("members", []):
             if not member.is_manager:
                 continue
@@ -856,10 +861,10 @@ def sync_group_roles(
             if user_email:
                 desired_managers.add(user_email.casefold())
             else:
-                managers_without_email += 1
-        if managers_without_email:
+                managers_without_id += 1
+        if managers_without_id:
             log("WARN", "sync_roles", f"{group_name} ({gemail})",
-                f"{managers_without_email} Gather manager(s) have no directory email; ignored")
+                f"{managers_without_id} Gather manager(s) have no Google ID; ignored")
 
         current_members = list_group_members(dir_service, gemail)
         current_member_emails = {m["email"].casefold() for m in current_members}
@@ -1080,8 +1085,12 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
         group_info, excluded_ids, deactivated_ids = fetch_group_info(page, base_url)
 
         gather_users = fetch_all_gather_users(page, base_url)
-        email_by_user_id = {u.user_id: u.email for u in gather_users if u.email}
-        log("INFO", "fetch_users", f"{len(gather_users)} Gather user(s) found")
+        # Match on the "Google ID" field (google_email), not the contact
+        # "Email Address": that's the address Gather syncs to Drive folder
+        # permissions, so it's what the Google Group's membership is keyed on.
+        email_by_user_id = {u.user_id: u.google_email for u in gather_users if u.google_email}
+        log("INFO", "fetch_users",
+            f"{len(gather_users)} Gather user(s) found; {len(email_by_user_id)} with a Google ID")
 
         log("INFO", "walk_drive", f"Walking folder tree of Shared Drive {drive_id}…")
         drive_folders = walk_drive_folders(drive_service, drive_id)
