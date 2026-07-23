@@ -39,7 +39,13 @@ SCOPES = [
     # new Drive folders (files().create()), which needs write access.
     "https://www.googleapis.com/auth/drive",
     "https://www.googleapis.com/auth/admin.directory.group",
+    # Member-level writes (patching a member's role) need the .member scope
+    # in addition to the group scope above.
+    "https://www.googleapis.com/auth/admin.directory.group.member",
     "https://www.googleapis.com/auth/apps.groups.settings",
+    # So the role-sync step can identify the authenticated account and never
+    # change its own role (mirrors groups_drive_sync.gs's self-protection).
+    "https://www.googleapis.com/auth/userinfo.email",
 ]
 
 
@@ -152,6 +158,50 @@ def add_group_alias(dir_service, gemail: str, alias: str) -> bool:
         return False
     dir_service.groups().aliases().insert(groupKey=gemail, body={"alias": alias}).execute()
     return True
+
+
+def get_authenticated_email(creds) -> str | None:
+    """Return the email address of the account `creds` authenticated as,
+    or None if it can't be determined. Used to avoid changing the
+    script-runner's own group role."""
+    try:
+        from googleapiclient.discovery import build
+        info = build("oauth2", "v2", credentials=creds).userinfo().get().execute()
+        return info.get("email")
+    except Exception:
+        return None
+
+
+def list_group_members(dir_service, gemail: str) -> list[dict]:
+    """Return [{'email', 'role', 'id'}, ...] for the group's members,
+    paginating through all pages. Read-only — safe from a dry run.
+
+    Members without an email (rare — e.g. a member added by id only) are
+    skipped, since every caller here matches on email."""
+    members: list[dict] = []
+    page_token = None
+    while True:
+        resp = dir_service.members().list(
+            groupKey=gemail,
+            maxResults=200,
+            pageToken=page_token,
+            fields="nextPageToken,members(id,email,role)",
+        ).execute()
+        for m in resp.get("members", []):
+            if m.get("email"):
+                members.append({"email": m["email"], "role": m.get("role", ""), "id": m.get("id")})
+        page_token = resp.get("nextPageToken")
+        if not page_token:
+            break
+    return members
+
+
+def set_member_role(dir_service, gemail: str, member_email: str, role: str) -> None:
+    """Set member_email's role in the group to `role` (one of MEMBER,
+    MANAGER, OWNER)."""
+    dir_service.members().patch(
+        groupKey=gemail, memberKey=member_email, body={"role": role}
+    ).execute()
 
 
 def ensure_group_exists(dir_service, gemail: str, display_name: str) -> bool:
