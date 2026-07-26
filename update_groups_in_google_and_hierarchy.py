@@ -16,22 +16,18 @@ excluding hidden groups:
   0b. If the group now has a folder but no mailing list configured, searches
       existing Google Groups using the usual matching rules and prompts to
       select one or create a new one (using the usual create-group logic),
-      then wires the result into Gather as the group's email list. Either
-      way — newly created or pre-existing — the group's "Conversation
-      history" setting is turned on.
-  0c. Once every group's folder and mailing-list state is settled, ensures
+      then wires the result into Gather as the group's email list.
+  0c. Enforces per-group Google Group settings on every associated group
+      (newly created or pre-existing): "Conversation history" turned on,
+      and content moderation open to all members (so any group member can
+      moderate content, not just owners/managers).
+  0d. Once every group's folder and mailing-list state is settled, ensures
       each associated Google Group's custom footer carries an up-to-date
       "Gather group"/"Google Docs folder" link block (this is what
       groups_drive_sync.gs reads to know which folder to sync membership
       from — see util/google_group_footer.py). Any other footer content
       is preserved; the block is only touched when Gather itself
       currently implies a (possibly different) pairing for that email.
-  0d. Syncs each Gather group's roles to its Google Group: a member who is
-      a manager in Gather is made a MANAGER in the Google Group, everyone
-      else a MEMBER. Only roles of people who are *already* Google Group
-      members are changed (membership itself comes from Drive-folder
-      permissions via groups_drive_sync.gs, not from here); OWNERs and the
-      authenticated account are left untouched.
   1.  If it's already in the hierarchy but has been renamed, updates the
       hierarchy line to the current name (matched by Gather group ID, embedded
       in the [Members] link, so renames don't break the association).
@@ -97,7 +93,6 @@ from util.gather_utils import (
     close_log,
     configure,
     fetch_all_gather_groups,
-    fetch_all_gather_users,
     init_log,
     launch_browser,
     log,
@@ -127,17 +122,15 @@ from util.google_group_utils import (
     CONVERSATION_HISTORY_SETTINGS,
     DEFAULT_CLIENT_SECRETS_PATH,
     DOMAIN,
+    MODERATION_SETTINGS,
     compute_group_settings_updates,
     ensure_group_exists,
     ensure_group_settings,
-    get_authenticated_email,
     get_credentials,
     get_group_by_email,
     group_display_name,
     group_email,
     is_in_domain,
-    list_group_members,
-    set_member_role,
 )
 from util.hierarchy_wiki import (
     WIKI_SLUG,
@@ -309,7 +302,6 @@ def fetch_group_info(page, base_url: str) -> tuple[dict[str, dict], set[str], se
             "url": f"/groups/{group.group_id}",
             "list_name": detail.list_name,
             "list_domain": detail.list_domain,
-            "members": detail.members,  # [GatherGroupMember(user_id, is_manager)]
         }
     return info, excluded_ids, deactivated_ids
 
@@ -731,16 +723,23 @@ def ensure_email_lists(
         log("INFO", "ensure_email_list", f"{group_name} (id={group_id}) -> {email}")
 
 
-def ensure_conversation_history(
+# Group-settings enforced on every eligible group each run (in addition to
+# REQUIRED_GROUP_SETTINGS, which is only applied when a group is first
+# created): Conversation history on, and content moderation open to all
+# members so any member can moderate content.
+ENFORCED_GROUP_SETTINGS = {**CONVERSATION_HISTORY_SETTINGS, **MODERATION_SETTINGS}
+
+
+def enforce_group_settings(
     settings_service, group_info: dict[str, dict], email_by_group_id: dict[str, str],
     dry_run: bool,
 ) -> None:
-    """Turn on "Conversation history" for every eligible group's associated
-    Google Group — whether that group was just created/matched this run or
-    already had a mailing list configured from a previous run. Can't be
-    folded into ensure_email_lists(): that function only ever visits
-    groups with *no* mailing list configured yet, so a group that already
-    has one would never be checked there.
+    """Apply ENFORCED_GROUP_SETTINGS (Conversation history + members-can-
+    moderate-content) to every eligible group's Google Group — whether it
+    was just created/matched this run or already had a mailing list from a
+    previous run. Can't be folded into ensure_email_lists(): that function
+    only ever visits groups with *no* mailing list configured yet, so a
+    group that already has one would never be checked there.
 
     Takes the already-computed email_by_group_id (rather than deriving its
     own via gather_group_email()) so a group with no valid email isn't
@@ -757,16 +756,16 @@ def ensure_conversation_history(
         group_name = info["name"]
 
         if dry_run:
-            updates = compute_group_settings_updates(settings_service, email, CONVERSATION_HISTORY_SETTINGS)
+            updates = compute_group_settings_updates(settings_service, email, ENFORCED_GROUP_SETTINGS)
             if updates:
-                print(f"[dry-run] '{group_name}' ({email}): would turn on Conversation history")
-                log("INFO", "would_turn_on_conversation_history", f"{group_name} ({email})")
+                print(f"[dry-run] '{group_name}' ({email}): would update settings {updates}")
+                log("INFO", "would_update_group_settings", f"{group_name} ({email}): {updates}")
             continue
 
-        updates = ensure_group_settings(settings_service, email, CONVERSATION_HISTORY_SETTINGS)
+        updates = ensure_group_settings(settings_service, email, ENFORCED_GROUP_SETTINGS)
         if updates:
-            print(f"Turned on Conversation history for '{group_name}' ({email})")
-            log("INFO", "conversation_history", f"{group_name} ({email}): turned on")
+            print(f"Updated settings for '{group_name}' ({email}): {updates}")
+            log("INFO", "group_settings", f"{group_name} ({email}): {updates}")
 
 
 # ── Step 3: keep each Google Group's footer link in sync with Gather ──────────
@@ -813,89 +812,6 @@ def ensure_group_footers(
         if updates:
             print(f"  ~ footer: '{group_name}' ({email}) -> folder {folder_id}")
             log("INFO", "update_footer", f"{group_name} ({email}) -> {folder_id}")
-
-
-# ── Step 4: sync each Gather group's roles to its Google Group ─────────────────
-
-def sync_group_roles(
-    dir_service, group_info: dict[str, dict], email_by_group_id: dict[str, str],
-    email_by_user_id: dict[str, str], protected_emails: set[str], dry_run: bool,
-) -> None:
-    """Make each Google Group member's role reflect the corresponding
-    Gather group member's manager status: Gather managers become MANAGER,
-    everyone else MEMBER.
-
-    Membership itself is NOT managed here — the Google Group's members come
-    from Drive folder permissions (via groups_drive_sync.gs), so this only
-    ever adjusts the role of people who are *already* members of both. A
-    Gather manager who isn't a Google Group member (e.g. no Content-manager
-    access on the folder) is logged, not added.
-
-    Never touches anyone whose current Google role is OWNER (reserved for
-    human admins), nor the authenticated script-runner account.
-
-    `email_by_user_id` maps each Gather user_id to its "Google ID"
-    (google_email) — not the contact "Email Address" — since that's the
-    address Gather propagates to Drive folder permissions and thus what
-    the Google Group's membership is keyed on. Addresses are matched
-    exactly, case-insensitively.
-    """
-    eligible = [
-        (gid, info, email_by_group_id[gid]) for gid, info in group_info.items()
-        if info["kind"] in ELIGIBLE_KINDS and gid in email_by_group_id
-    ]
-    eligible.sort(key=lambda item: item[1]["name"].casefold())
-
-    protected = {e.casefold() for e in protected_emails if e}
-
-    for group_id, info, gemail in eligible:
-        group_name = info["name"]
-
-        # Google IDs of this Gather group's managers, mapped from Gather user_id.
-        desired_managers = set()
-        managers_without_id = 0
-        for member in info.get("members", []):
-            if not member.is_manager:
-                continue
-            user_email = email_by_user_id.get(member.user_id)
-            if user_email:
-                desired_managers.add(user_email.casefold())
-            else:
-                managers_without_id += 1
-        if managers_without_id:
-            log("WARN", "sync_roles", f"{group_name} ({gemail})",
-                f"{managers_without_id} Gather manager(s) have no Google ID; ignored")
-
-        current_members = list_group_members(dir_service, gemail)
-        current_member_emails = {m["email"].casefold() for m in current_members}
-
-        # Gather managers who aren't members of the Google Group at all —
-        # informational (they likely lack Content-manager access on the folder).
-        for mgr_email in sorted(desired_managers - current_member_emails):
-            log("INFO", "sync_roles", f"{group_name} ({gemail})",
-                f"Gather manager {mgr_email} is not a member of the Google Group — skipping")
-
-        for m in current_members:
-            member_email = m["email"]
-            folded = member_email.casefold()
-            current_role = (m["role"] or "").upper()
-            if folded in protected:
-                continue
-            if current_role == "OWNER":
-                continue
-            desired_role = "MANAGER" if folded in desired_managers else "MEMBER"
-            if current_role == desired_role:
-                continue
-
-            if dry_run:
-                print(f"[dry-run] '{group_name}' ({gemail}): would set {member_email} "
-                      f"{current_role or '?'} -> {desired_role}")
-                log("INFO", "would_set_role", f"{group_name}: {member_email} -> {desired_role}")
-            else:
-                set_member_role(dir_service, gemail, member_email, desired_role)
-                print(f"  ~ role: '{group_name}' ({gemail}): {member_email} "
-                      f"{current_role or '?'} -> {desired_role}")
-                log("INFO", "set_role", f"{group_name}: {member_email} -> {desired_role}")
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -1084,14 +1000,6 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
 
         group_info, excluded_ids, deactivated_ids = fetch_group_info(page, base_url)
 
-        gather_users = fetch_all_gather_users(page, base_url)
-        # Match on the "Google ID" field (google_email), not the contact
-        # "Email Address": that's the address Gather syncs to Drive folder
-        # permissions, so it's what the Google Group's membership is keyed on.
-        email_by_user_id = {u.user_id: u.google_email for u in gather_users if u.google_email}
-        log("INFO", "fetch_users",
-            f"{len(gather_users)} Gather user(s) found; {len(email_by_user_id)} with a Google ID")
-
         log("INFO", "walk_drive", f"Walking folder tree of Shared Drive {drive_id}…")
         drive_folders = walk_drive_folders(drive_service, drive_id)
         log("INFO", "walk_drive", f"{len(drive_folders)} folder(s) found")
@@ -1141,26 +1049,15 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
         # already evaluated before Step 1).
         email_by_group_id.update(build_email_by_group_id(group_info, checked_email_ids))
 
-        # Turn on "Conversation history" for every eligible group's Google Group,
-        # whether it was just newly associated above or already had one.
-        ensure_conversation_history(settings_service, group_info, email_by_group_id, dry_run)
+        # Enforce per-group settings (Conversation history on, content
+        # moderation open to all members) on every eligible group's Google
+        # Group, whether it was just newly associated above or already had one.
+        enforce_group_settings(settings_service, group_info, email_by_group_id, dry_run)
 
         # Step 3: keep each Google Group's footer link in sync with Gather.
         ensure_group_footers(
             settings_service, base_url, group_info, google_file_id_by_group_id,
             email_by_group_id, dry_run,
-        )
-
-        # Step 4: sync each Gather group's manager/member roles to its Google Group.
-        runner_email = get_authenticated_email(creds)
-        if runner_email:
-            log("INFO", "sync_roles", f"authenticated as {runner_email} (its role won't be changed)")
-        else:
-            log("WARN", "sync_roles", "couldn't determine the authenticated account; "
-                "its own role is not specially protected this run")
-        sync_group_roles(
-            dir_service, group_info, email_by_group_id, email_by_user_id,
-            {runner_email} if runner_email else set(), dry_run,
         )
 
         if not quit_requested:

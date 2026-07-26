@@ -9,8 +9,9 @@ Steps:
      exist; and (unless --type=club) --parent-circle uniquely identifies a
      live entry in the Circle Hierarchy.
   2. Create the Drive folder, Google Group (with the usual settings, plus
-     "Conversation history" turned on), and Gather group (with the usual
-     settings, except clubs get availability=open instead of closed).
+     "Conversation history" on and content moderation open to all members),
+     and Gather group (with the usual settings, except clubs get
+     availability=open instead of closed).
   3. Link the folder on /gdrive/config and grant the new Gather group
      Content manager access.
   4. Wire the Gather group's mailing list to the new Google Group.
@@ -67,6 +68,7 @@ from util.google_group_utils import (
     CONVERSATION_HISTORY_SETTINGS,
     DEFAULT_CLIENT_SECRETS_PATH,
     DOMAIN,
+    MODERATION_SETTINGS,
     REQUIRED_GROUP_SETTINGS,
     ensure_group_settings,
     get_credentials,
@@ -235,6 +237,7 @@ def main(
 
         ensure_group_settings(settings_service, gemail, REQUIRED_GROUP_SETTINGS)
         ensure_group_settings(settings_service, gemail, CONVERSATION_HISTORY_SETTINGS)
+        ensure_group_settings(settings_service, gemail, MODERATION_SETTINGS)
 
         # ── Create Gather group ──────────────────────────────────────────────
         availability = "open" if group_type == GroupType.CLUB else "closed"

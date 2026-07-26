@@ -548,11 +548,7 @@ class GatherUser:
     last_name: str
     full_name: str
     child: bool = False
-    email: str = ""          # contact "Email Address"
-    google_email: str = ""   # the "Google ID" field (user[google_email]) —
-                             # the address Gather syncs to Drive folder
-                             # permissions, hence what a Google Group's
-                             # membership is keyed on.
+    email: str = ""
 
 
 @dataclass
@@ -575,21 +571,6 @@ class GatherGroup:
 
 # ── Gather I/O ────────────────────────────────────────────────────────────────
 
-# Candidate column headers for the "Google ID" (user[google_email]) field in
-# the /users.csv export, in priority order — the exact header wording has
-# varied, so try the most specific match first.
-_GOOGLE_ID_COLUMNS = ["Google ID", "Google Email", "Google Email Address", "Google Account"]
-
-
-def _first_present(row: dict, columns: list[str]) -> str:
-    """Return the first non-empty value among `columns` in `row`, or ""."""
-    for col in columns:
-        val = row.get(col)
-        if val and val.strip():
-            return val
-    return ""
-
-
 def fetch_all_gather_users(page: Page, base_url: str) -> list[GatherUser]:
     """Download all users from the Gather directory CSV export."""
     csv_text: str = page.evaluate(
@@ -604,7 +585,6 @@ def fetch_all_gather_users(page: Page, base_url: str) -> list[GatherUser]:
         last = row.get("Last Name", "").strip()
         is_child = row.get("Is Child", "").strip().lower() == "true"
         email = (row.get("Email", "") or row.get("Email Address", "")).strip().lower()
-        google_email = _first_present(row, _GOOGLE_ID_COLUMNS).strip().lower()
         if not uid:
             continue
         users.append(GatherUser(
@@ -614,7 +594,6 @@ def fetch_all_gather_users(page: Page, base_url: str) -> list[GatherUser]:
             full_name=f"{first} {last}".strip(),
             child=is_child,
             email=email,
-            google_email=google_email,
         ))
     return users
 
