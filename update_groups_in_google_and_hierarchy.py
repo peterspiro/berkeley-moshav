@@ -20,7 +20,10 @@ excluding hidden groups:
   0c. Enforces per-group Google Group settings on every associated group
       (newly created or pre-existing): "Conversation history" turned on,
       and content moderation open to all members (so any group member can
-      moderate content, not just owners/managers).
+      moderate content, not just owners/managers). Also demotes any Google
+      Group member still holding the MANAGER role back to a regular MEMBER
+      (OWNERs untouched) — roles aren't used for anything, so membership is
+      kept flat.
   0d. Once every group's folder and mailing-list state is settled, ensures
       each associated Google Group's custom footer carries an up-to-date
       "Gather group"/"Google Docs folder" link block (this is what
@@ -131,6 +134,8 @@ from util.google_group_utils import (
     group_display_name,
     group_email,
     is_in_domain,
+    list_group_members,
+    set_member_role,
 )
 from util.hierarchy_wiki import (
     WIKI_SLUG,
@@ -768,6 +773,38 @@ def enforce_group_settings(
             log("INFO", "group_settings", f"{group_name} ({email}): {updates}")
 
 
+def demote_managers_to_members(
+    dir_service, group_info: dict[str, dict], email_by_group_id: dict[str, str],
+    dry_run: bool,
+) -> None:
+    """Set every eligible Google Group member currently holding the MANAGER
+    role back to a regular MEMBER. OWNERs are left untouched (reserved for
+    human admins); MEMBERs are already correct. This undoes any manager
+    promotions (e.g. from the retired role-sync) and keeps membership flat —
+    moderation is governed by the group's whoCanModerateContent setting, not
+    by per-member roles.
+    """
+    eligible = [
+        (gid, info, email_by_group_id[gid]) for gid, info in group_info.items()
+        if info["kind"] in ELIGIBLE_KINDS and gid in email_by_group_id
+    ]
+    eligible.sort(key=lambda item: item[1]["name"].casefold())
+
+    for group_id, info, gemail in eligible:
+        group_name = info["name"]
+        for m in list_group_members(dir_service, gemail):
+            if (m["role"] or "").upper() != "MANAGER":
+                continue
+            member_email = m["email"]
+            if dry_run:
+                print(f"[dry-run] '{group_name}' ({gemail}): would demote {member_email} MANAGER -> MEMBER")
+                log("INFO", "would_demote_manager", f"{group_name}: {member_email}")
+            else:
+                set_member_role(dir_service, gemail, member_email, "MEMBER")
+                print(f"  ~ role: '{group_name}' ({gemail}): {member_email} MANAGER -> MEMBER")
+                log("INFO", "demote_manager", f"{group_name}: {member_email}")
+
+
 # ── Step 3: keep each Google Group's footer link in sync with Gather ──────────
 
 def ensure_group_footers(
@@ -1053,6 +1090,11 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
         # moderation open to all members) on every eligible group's Google
         # Group, whether it was just newly associated above or already had one.
         enforce_group_settings(settings_service, group_info, email_by_group_id, dry_run)
+
+        # Demote any lingering MANAGER members back to regular MEMBER — roles
+        # aren't used for anything (moderation is governed by the group
+        # setting above), so membership is kept flat.
+        demote_managers_to_members(dir_service, group_info, email_by_group_id, dry_run)
 
         # Step 3: keep each Google Group's footer link in sync with Gather.
         ensure_group_footers(
