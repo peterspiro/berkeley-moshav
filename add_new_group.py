@@ -14,7 +14,8 @@ Steps:
      availability=open instead of closed).
   3. Link the folder on /gdrive/config and grant the new Gather group
      Content manager access.
-  4. Wire the Gather group's mailing list to the new Google Group.
+  4. Wire the Gather group's mailing list to the new Google Group (to the
+     --alias address if given, else the full-name address).
   5. Unless --type=club, add a row for the new group to the Circle
      Hierarchy, alphabetically under its parent circle.
   6. Write the new Google Group's custom footer with a "Gather group" /
@@ -31,10 +32,15 @@ pass -t/--type explicitly only when the name has no such suffix.
 
 The name may be given as multiple unquoted words.
 
+Pass --alias to also give the new Google Group a shorter second address
+and point the Gather group's mailing list at it — the same effect as
+running change_group_email_alias.py afterward.
+
 Usage:
     python add_new_group.py Landscape Circle --parent-circle Property
     python add_new_group.py Tech Support -t w -p Operations
     python add_new_group.py Book Club
+    python add_new_group.py Landscape Circle -p Property --alias landscape
 """
 
 import argparse
@@ -78,6 +84,7 @@ from util.google_group_utils import (
     DOMAIN,
     MODERATION_SETTINGS,
     REQUIRED_GROUP_SETTINGS,
+    add_group_alias,
     ensure_group_settings,
     get_credentials,
     group_display_name,
@@ -140,15 +147,24 @@ def main(
     dry_run: bool,
     credentials_path: str,
     drive_id: str,
+    alias: str | None = None,
 ) -> None:
     base_url = base_url.rstrip("/")
     init_log()
-    log("INFO", "start", f"type={group_type.kind} name={raw_name!r} dry_run={dry_run}")
+    log("INFO", "start",
+        f"type={group_type.kind} name={raw_name!r} alias={alias!r} dry_run={dry_run}")
 
     kind = group_type.kind
     folder_name = folder_name_for_group_type(raw_name, kind)
     gemail = group_email(folder_name)
     gdisplay = group_display_name(folder_name)
+
+    # The Google Group's primary address is always the full name; --alias
+    # adds a second (shorter) address to reach it, and makes the Gather
+    # group's mailing list use that alias instead of the full-name local
+    # part — mirroring what change_group_email_alias.py does after the fact.
+    alias_email = f"{alias}@{DOMAIN}" if alias else None
+    list_local = alias if alias else gemail.split("@")[0]
 
     creds = get_credentials(credentials_path)
     drive_service = build("drive", "v3", credentials=creds)
@@ -186,6 +202,16 @@ def main(
             close_log()
             browser.close()
             sys.exit(f"Error: Google Group '{gemail}' already exists.")
+
+        if alias_email:
+            if alias_email.lower() == gemail.lower():
+                close_log()
+                browser.close()
+                sys.exit(f"Error: --alias {alias!r} is the same as the group's primary address.")
+            if group_exists(dir_service, alias_email):
+                close_log()
+                browser.close()
+                sys.exit(f"Error: '{alias_email}' is already in use by another Google Group.")
 
         # ── Validate: Gather group ──────────────────────────────────────────
         existing_gather_id = find_gather_group_id_by_name(page, base_url, gdisplay)
@@ -234,6 +260,9 @@ def main(
         if dry_run:
             print(f"[dry-run] Would create Drive folder '{folder_name}', Google Group "
                   f"'{gemail}', and Gather group '{gdisplay}' (type={group_type.label}).")
+            if alias_email:
+                print(f"[dry-run] Would add alias '{alias_email}' to the Google Group and "
+                      f"set the Gather group's mailing list to '{list_local}@{DOMAIN}'.")
             if parent_node is not None:
                 print(f"[dry-run] Would add it to the Circle Hierarchy under "
                       f"'{parent_node.name}'.")
@@ -256,6 +285,11 @@ def main(
         ensure_group_settings(settings_service, gemail, REQUIRED_GROUP_SETTINGS)
         ensure_group_settings(settings_service, gemail, CONVERSATION_HISTORY_SETTINGS)
         ensure_group_settings(settings_service, gemail, MODERATION_SETTINGS)
+
+        if alias_email:
+            add_group_alias(dir_service, gemail, alias_email)
+            log("INFO", "add_alias", f"{gemail} -> +{alias_email}")
+            print(f"Added alias '{alias_email}' to Google Group '{gemail}'.")
 
         # ── Create Gather group ──────────────────────────────────────────────
         availability = "open" if group_type == GroupType.CLUB else "closed"
@@ -280,12 +314,12 @@ def main(
             else:
                 print(f"ERROR: folder linked, but failed to add '{gdisplay}' — see log.")
 
-        # ── Wire the mailing list ────────────────────────────────────────────
+        # ── Wire the mailing list (to the alias, if given) ───────────────────
         set_gather_group_email_list(
-            page, base_url, gather_group_id, gemail.split("@")[0], DOMAIN,
+            page, base_url, gather_group_id, list_local, DOMAIN,
             dry_run=False, all_can_send=True,
         )
-        print(f"Configured mailing list for '{gdisplay}'.")
+        print(f"Configured mailing list for '{gdisplay}' as '{list_local}@{DOMAIN}'.")
 
         # ── Write the Google Group's footer link block ───────────────────────
         ensure_group_footer(settings_service, gemail, gather_group_id, folder_id, base_url, gdisplay)
@@ -337,6 +371,14 @@ def cli():
              "Circle Hierarchy (required unless --type=club)",
     )
     parser.add_argument(
+        "-a", "--alias", default=None,
+        help=f"A shorter alias's local part (without the @{DOMAIN} domain). The "
+             "Google Group is still created at its full-name address; this alias "
+             "is added as a second address for it, and the Gather group's mailing "
+             "list is set to the alias — same effect as running "
+             "change_group_email_alias.py afterward.",
+    )
+    parser.add_argument(
         "-u", "--base-url", default="https://berkeley-moshav.gather.coop",
         help="Gather base URL",
     )
@@ -362,6 +404,12 @@ def cli():
             "with 'Circle', 'Working Group', or 'Club'. Pass -t/--type explicitly."
         )
 
+    if args.alias and "@" in args.alias:
+        sys.exit(
+            f"Error: --alias should be just the local part, not a full address "
+            f"({args.alias!r}) — the domain is always @{DOMAIN}."
+        )
+
     if not os.path.exists(args.credentials):
         sys.exit(
             f"Error: credentials file not found: {args.credentials}\n"
@@ -371,7 +419,7 @@ def cli():
     email, password = load_credentials()
     main(
         group_type, name, args.parent_circle, args.base_url, email, password,
-        args.dry_run, args.credentials, args.drive_id,
+        args.dry_run, args.credentials, args.drive_id, alias=args.alias,
     )
 
 
