@@ -11,6 +11,7 @@ import contextlib
 import pickle
 import re
 import sys
+import time
 from pathlib import Path
 
 from google.auth.transport.requests import Request
@@ -150,13 +151,32 @@ def list_group_aliases(dir_service, gemail: str) -> list[str]:
     return [a["alias"] for a in resp.get("aliases", [])]
 
 
-def add_group_alias(dir_service, gemail: str, alias: str) -> bool:
+def add_group_alias(dir_service, gemail: str, alias: str, max_wait: float = 60.0) -> bool:
     """Add alias as an alias address of the group at gemail. Return True
-    if added, False if it was already an alias of this group."""
-    if alias.lower() in {a.lower() for a in list_group_aliases(dir_service, gemail)}:
-        return False
-    dir_service.groups().aliases().insert(groupKey=gemail, body={"alias": alias}).execute()
-    return True
+    if added, False if it was already an alias of this group.
+
+    A group created moments earlier isn't always immediately available for
+    alias operations — the Directory API can return a transient 403/404
+    until it propagates — so 403/404 responses are retried with backoff
+    for up to max_wait seconds before giving up.
+    """
+    deadline = time.monotonic() + max_wait
+    delay = 2.0
+    while True:
+        try:
+            if alias.lower() in {a.lower() for a in list_group_aliases(dir_service, gemail)}:
+                return False
+            dir_service.groups().aliases().insert(
+                groupKey=gemail, body={"alias": alias}
+            ).execute()
+            return True
+        except Exception as err:
+            transient = "403" in str(err) or "404" in str(err) or "Not Authorized" in str(err)
+            if transient and time.monotonic() < deadline:
+                time.sleep(delay)
+                delay = min(delay * 2, 15.0)
+                continue
+            raise
 
 
 def list_group_members(dir_service, gemail: str) -> list[dict]:
