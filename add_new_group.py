@@ -173,6 +173,8 @@ def main(
     # adds a second (shorter) address to reach it, and makes the Gather
     # group's mailing list use that alias instead of the full-name local
     # part — mirroring what change_group_email_alias.py does after the fact.
+    # Email local parts are case-insensitive, so normalize to lowercase.
+    alias = alias.lower() if alias else None
     alias_email = f"{alias}@{DOMAIN}" if alias else None
     list_local = alias if alias else gemail.split("@")[0]
 
