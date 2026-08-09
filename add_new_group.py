@@ -29,10 +29,12 @@ The group type (circle / working group / club) is inferred from a name
 ending in the matching suffix ("Circle" / "Working Group" / "Club");
 pass -t/--type explicitly only when the name has no such suffix.
 
+The name may be given as multiple unquoted words.
+
 Usage:
-    python add_new_group.py "Landscape Circle" --parent-circle "Property"
-    python add_new_group.py "Tech Support" -t w -p "Operations"
-    python add_new_group.py "Book Club"
+    python add_new_group.py Landscape Circle --parent-circle Property
+    python add_new_group.py Tech Support -t w -p Operations
+    python add_new_group.py Book Club
 """
 
 import argparse
@@ -318,7 +320,11 @@ def cli():
                     "all linked together, and add it to the Circle Hierarchy.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument("name", help="Name of the folder and the groups")
+    parser.add_argument(
+        "name", nargs="+",
+        help="Name of the folder and the groups (multiple words are joined "
+             "with spaces, so quotes aren't needed)",
+    )
     parser.add_argument(
         "-t", "--type", type=GroupType.parse, default=None,
         help="Group type — 'c'/'circle', 'w'/'working group', or 'b'/'club'. "
@@ -348,10 +354,11 @@ def cli():
     )
     args = parser.parse_args()
 
-    group_type = args.type or GroupType.from_name_suffix(args.name)
+    name = " ".join(args.name)
+    group_type = args.type or GroupType.from_name_suffix(name)
     if group_type is None:
         sys.exit(
-            f"Error: couldn't infer the group type from {args.name!r} — it doesn't end "
+            f"Error: couldn't infer the group type from {name!r} — it doesn't end "
             "with 'Circle', 'Working Group', or 'Club'. Pass -t/--type explicitly."
         )
 
@@ -363,7 +370,7 @@ def cli():
 
     email, password = load_credentials()
     main(
-        group_type, args.name, args.parent_circle, args.base_url, email, password,
+        group_type, name, args.parent_circle, args.base_url, email, password,
         args.dry_run, args.credentials, args.drive_id,
     )
 
