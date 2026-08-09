@@ -25,14 +25,19 @@ Steps:
 Requires Google API access (Drive, Admin Directory, Groups Settings) —
 see update_groups_in_google_and_hierarchy.py's docstring for setup.
 
+The group type (circle / working group / club) is inferred from a name
+ending in the matching suffix ("Circle" / "Working Group" / "Club");
+pass -t/--type explicitly only when the name has no such suffix.
+
 Usage:
-    python add_new_group.py c "Landscape" --parent-circle "Property"
-    python add_new_group.py w "Tech Support" -p "Operations"
-    python add_new_group.py b "Book Club"
+    python add_new_group.py "Landscape Circle" --parent-circle "Property"
+    python add_new_group.py "Tech Support" -t w -p "Operations"
+    python add_new_group.py "Book Club"
 """
 
 import argparse
 import os
+import re
 import sys
 from enum import Enum
 from pathlib import Path
@@ -55,6 +60,7 @@ from util.gather_utils import (
     set_gather_group_email_list,
 )
 from util.gdrive_config import (
+    FOLDER_TYPE_SUFFIXES,
     add_group_access_to_gdrive_item,
     create_drive_folder,
     create_gdrive_item,
@@ -110,6 +116,16 @@ class GroupType(Enum):
                 return member
         choices = ", ".join(f"{m.letter} ({m.label})" for m in cls)
         raise argparse.ArgumentTypeError(f"invalid type {raw!r} — choose one of: {choices}")
+
+    @classmethod
+    def from_name_suffix(cls, name: str) -> "GroupType | None":
+        """Infer the type from a name ending in the type's folder suffix
+        ("Circle"/"Working Group"/"Club"), or None if it ends with none."""
+        for member in cls:
+            suffix = FOLDER_TYPE_SUFFIXES[member.kind]
+            if re.search(r"\b" + re.escape(suffix) + r"\s*$", name, re.IGNORECASE):
+                return member
+        return None
 
 
 def main(
@@ -302,11 +318,13 @@ def cli():
                     "all linked together, and add it to the Circle Hierarchy.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument(
-        "type", type=GroupType.parse,
-        help="Group type — 'c'/'circle', 'w'/'working group', or 'b'/'club'",
-    )
     parser.add_argument("name", help="Name of the folder and the groups")
+    parser.add_argument(
+        "-t", "--type", type=GroupType.parse, default=None,
+        help="Group type — 'c'/'circle', 'w'/'working group', or 'b'/'club'. "
+             "Only required if the name doesn't end with a type suffix "
+             "('Circle'/'Working Group'/'Club'), from which it's otherwise inferred.",
+    )
     parser.add_argument(
         "-p", "--parent-circle", default=None,
         help="A prefix uniquely identifying the parent circle's entry in the "
@@ -330,6 +348,13 @@ def cli():
     )
     args = parser.parse_args()
 
+    group_type = args.type or GroupType.from_name_suffix(args.name)
+    if group_type is None:
+        sys.exit(
+            f"Error: couldn't infer the group type from {args.name!r} — it doesn't end "
+            "with 'Circle', 'Working Group', or 'Club'. Pass -t/--type explicitly."
+        )
+
     if not os.path.exists(args.credentials):
         sys.exit(
             f"Error: credentials file not found: {args.credentials}\n"
@@ -338,7 +363,7 @@ def cli():
 
     email, password = load_credentials()
     main(
-        args.type, args.name, args.parent_circle, args.base_url, email, password,
+        group_type, args.name, args.parent_circle, args.base_url, email, password,
         args.dry_run, args.credentials, args.drive_id,
     )
 
