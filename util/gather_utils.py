@@ -434,6 +434,53 @@ def create_gather_group(
         return None
 
 
+def ensure_gather_group_manager(
+    page: Page, base_url: str, group_id: str, user: "GatherUser", dry_run: bool = False
+) -> str:
+    """Ensure `user` is a manager of the existing Gather group `group_id`.
+
+    Idempotent: if they're already a manager, nothing is submitted and
+    "already_manager" is returned. If they're a member but not a manager,
+    they're promoted ("promoted"). If they're not a member at all, they're
+    added as a manager ("added"). Returns "dry-run" without changes if
+    dry_run.
+    """
+    if dry_run:
+        log("DRY-RUN", "ensure_manager", f"group={group_id} user={user.full_name}")
+        return "dry-run"
+
+    page.goto(f"{base_url}/groups/{group_id}/edit", wait_until="networkidle")
+
+    matching_sel = None
+    for sel in page.locator('select[name*="[user_id]"]').all():
+        if sel.input_value() == user.user_id:
+            matching_sel = sel
+            break
+
+    if matching_sel is not None:
+        name_attr = matching_sel.get_attribute("name") or ""
+        kind_name = name_attr.replace("[user_id]", "[kind]")
+        kind_el = page.locator(f'select[name="{kind_name}"]')
+        if kind_el.input_value() == "manager":
+            log("INFO", "ensure_manager", f"{user.full_name} already manager of {group_id}")
+            return "already_manager"
+        kind_el.select_option("manager")
+        outcome = "promoted"
+    else:
+        _add_inline_member(page, user, is_manager=True)
+        outcome = "added"
+
+    page.locator('input[name="commit"]').click()
+    page.wait_for_load_state("networkidle")
+    err = _check_submit_errors(page)
+    if err:
+        screenshot(page, f"ensure_manager_err_{group_id}")
+        log("ERROR", "ensure_manager", f"group={group_id}", err[:200])
+        raise RuntimeError(f"Failed to make {user.full_name} a manager of group {group_id}: {err}")
+    log("INFO", "ensure_manager", f"{outcome} {user.full_name} for group {group_id}")
+    return outcome
+
+
 def select2_choose(page: Page, field_selector: str, search_text: str) -> None:
     """Open a Select2 dropdown, search, and click the first matching option."""
     container = page.locator(

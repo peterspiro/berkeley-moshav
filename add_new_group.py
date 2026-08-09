@@ -42,6 +42,10 @@ running change_group_email_alias.py afterward.
 --manager (required) is a prefix of a member's first name, last name, or
 email uniquely identifying them; they're made a manager of the new group.
 
+Pass --idempotent to reuse any artifacts that already exist (folder,
+Google Group, Gather group, alias, folder link, hierarchy entry) rather
+than aborting — useful for re-running after a partial failure.
+
 Usage:
     python add_new_group.py Landscape Circle -p Property -m jsmith
     python add_new_group.py Tech Support -t w -p Operations -m Dana
@@ -65,6 +69,7 @@ from util.gather_utils import (
     close_log,
     configure,
     create_gather_group,
+    ensure_gather_group_manager,
     fetch_all_gather_groups,
     fetch_all_gather_users,
     find_gather_group_id_by_name,
@@ -81,9 +86,11 @@ from util.gdrive_config import (
     create_drive_folder,
     create_gdrive_item,
     ensure_folder_name_available,
+    find_folder_id_under_parent,
     folder_name_for_group_type,
     gdrive_item_url,
     parent_folder_id_for_group_type,
+    scrape_gdrive_config,
 )
 from util.google_group_footer import ensure_group_footer
 from util.google_group_utils import (
@@ -95,6 +102,7 @@ from util.google_group_utils import (
     add_group_alias,
     ensure_group_settings,
     get_credentials,
+    get_group_by_email,
     group_display_name,
     group_email,
     group_exists,
@@ -157,12 +165,13 @@ def main(
     credentials_path: str,
     drive_id: str,
     alias: str | None = None,
+    idempotent: bool = False,
 ) -> None:
     base_url = base_url.rstrip("/")
     init_log()
     log("INFO", "start",
         f"type={group_type.kind} name={raw_name!r} manager={manager_prefix!r} "
-        f"alias={alias!r} dry_run={dry_run}")
+        f"alias={alias!r} dry_run={dry_run} idempotent={idempotent}")
 
     kind = group_type.kind
     folder_name = folder_name_for_group_type(raw_name, kind)
@@ -195,45 +204,51 @@ def main(
             browser.close()
             sys.exit(1)
 
+        # In idempotent mode, artifacts that already exist are reused instead
+        # of aborting — so a re-run after a partial failure can finish the
+        # remaining steps. These flags record what was found up front.
+        def fail(msg: str) -> None:
+            close_log()
+            browser.close()
+            sys.exit(f"Error: {msg}")
+
         # ── Validate: Drive folder ──────────────────────────────────────────
         try:
             parent_id = parent_folder_id_for_group_type(drive_service, drive_id, kind)
         except ValueError as e:
-            close_log()
-            browser.close()
-            sys.exit(f"Error: {e}")
-        try:
-            ensure_folder_name_available(drive_service, drive_id, parent_id, folder_name)
-        except ValueError as e:
-            close_log()
-            browser.close()
-            sys.exit(f"Error: {e}")
+            fail(str(e))
+
+        existing_folder_id = find_folder_id_under_parent(
+            drive_service, drive_id, parent_id, folder_name)
+        if existing_folder_id and not idempotent:
+            fail(f"A folder named {folder_name!r} already exists here "
+                 f"(id={existing_folder_id})")
 
         # ── Validate: Google Group ──────────────────────────────────────────
-        if group_exists(dir_service, gemail):
-            close_log()
-            browser.close()
-            sys.exit(f"Error: Google Group '{gemail}' already exists.")
+        google_group_exists = group_exists(dir_service, gemail)
+        if google_group_exists and not idempotent:
+            fail(f"Google Group '{gemail}' already exists.")
 
         if alias_email:
             if alias_email.lower() == gemail.lower():
-                close_log()
-                browser.close()
-                sys.exit(f"Error: --alias {alias!r} is the same as the group's primary address.")
-            if group_exists(dir_service, alias_email):
-                close_log()
-                browser.close()
-                sys.exit(f"Error: '{alias_email}' is already in use by another Google Group.")
+                fail(f"--alias {alias!r} is the same as the group's primary address.")
+            alias_group = get_group_by_email(dir_service, alias_email)
+            if alias_group:
+                primary_group = get_group_by_email(dir_service, gemail)
+                # An alias that already resolves to *this* group is fine to
+                # reuse in idempotent mode; one pointing elsewhere never is.
+                same_group = (
+                    idempotent and primary_group
+                    and alias_group.get("id") == primary_group.get("id")
+                )
+                if not same_group:
+                    fail(f"'{alias_email}' is already in use by another Google Group.")
 
         # ── Validate: Gather group ──────────────────────────────────────────
         existing_gather_id = find_gather_group_id_by_name(page, base_url, gdisplay)
-        if existing_gather_id:
-            close_log()
-            browser.close()
-            sys.exit(
-                f"Error: a Gather group named '{gdisplay}' already exists "
-                f"(id={existing_gather_id})."
-            )
+        if existing_gather_id and not idempotent:
+            fail(f"a Gather group named '{gdisplay}' already exists "
+                 f"(id={existing_gather_id}).")
 
         # ── Validate: parent circle ──────────────────────────────────────────
         parent_node = None
@@ -286,6 +301,13 @@ def main(
         manager = matches[0]
 
         if dry_run:
+            if idempotent and (existing_folder_id or google_group_exists or existing_gather_id):
+                reused = ", ".join(filter(None, [
+                    "Drive folder" if existing_folder_id else "",
+                    "Google Group" if google_group_exists else "",
+                    "Gather group" if existing_gather_id else "",
+                ]))
+                print(f"[dry-run] Would reuse existing: {reused}.")
             print(f"[dry-run] Would create Drive folder '{folder_name}', Google Group "
                   f"'{gemail}', and Gather group '{gdisplay}' (type={group_type.label}).")
             print(f"[dry-run] Would add {manager.full_name} <{manager.email}> as a manager "
@@ -300,17 +322,26 @@ def main(
             browser.close()
             return
 
-        # ── Create Drive folder ──────────────────────────────────────────────
-        folder_id = create_drive_folder(drive_service, folder_name, parent_id)
-        log("INFO", "create_folder", f"Created '{folder_name}' (id={folder_id})")
-        print(f"Created Drive folder '{folder_name}' (id={folder_id}).")
+        # ── Create Drive folder (or reuse an existing one) ───────────────────
+        if existing_folder_id:
+            folder_id = existing_folder_id
+            log("INFO", "reuse_folder", f"Reusing '{folder_name}' (id={folder_id})")
+            print(f"Reusing existing Drive folder '{folder_name}' (id={folder_id}).")
+        else:
+            folder_id = create_drive_folder(drive_service, folder_name, parent_id)
+            log("INFO", "create_folder", f"Created '{folder_name}' (id={folder_id})")
+            print(f"Created Drive folder '{folder_name}' (id={folder_id}).")
 
-        # ── Create Google Group ──────────────────────────────────────────────
-        dir_service.groups().insert(
-            body={"email": gemail, "name": gdisplay}
-        ).execute()
-        log("INFO", "create_google_group", gemail)
-        print(f"Created Google Group '{gemail}'.")
+        # ── Create Google Group (or reuse an existing one) ───────────────────
+        if google_group_exists:
+            log("INFO", "reuse_google_group", gemail)
+            print(f"Reusing existing Google Group '{gemail}'.")
+        else:
+            dir_service.groups().insert(
+                body={"email": gemail, "name": gdisplay}
+            ).execute()
+            log("INFO", "create_google_group", gemail)
+            print(f"Created Google Group '{gemail}'.")
 
         ensure_group_settings(settings_service, gemail, REQUIRED_GROUP_SETTINGS)
         ensure_group_settings(settings_service, gemail, CONVERSATION_HISTORY_SETTINGS)
@@ -325,28 +356,48 @@ def main(
         # Adding the manager now — before the Drive folder is linked below —
         # lets Gather auto-sync their folder permission when the link is made.
         availability = "open" if group_type == GroupType.CLUB else "closed"
-        gather_group_id = create_gather_group(
-            page, base_url, gdisplay, kind, availability=availability,
-            members=[(manager, True)], dry_run=False,
-        )
-        if not gather_group_id:
-            close_log()
-            browser.close()
-            sys.exit("Error: failed to create the Gather group — see log.")
-        print(f"Created Gather group '{gdisplay}' (id={gather_group_id}) "
-              f"with manager {manager.full_name}.")
-
-        # ── Link folder on /gdrive/config ────────────────────────────────────
-        item_id, err = create_gdrive_item(page, base_url, folder_id, dry_run=False)
-        if err:
-            log("ERROR", "link_folder", f"{folder_name}: {err}")
-            print(f"ERROR: failed to link folder on /gdrive/config — {err}")
+        if existing_gather_id:
+            gather_group_id = existing_gather_id
+            ensure_gather_group_manager(page, base_url, gather_group_id, manager, dry_run=False)
+            print(f"Reusing existing Gather group '{gdisplay}' (id={gather_group_id}); "
+                  f"ensured {manager.full_name} is a manager.")
         else:
-            ok = add_group_access_to_gdrive_item(page, base_url, item_id, gdisplay, dry_run=False)
+            gather_group_id = create_gather_group(
+                page, base_url, gdisplay, kind, availability=availability,
+                members=[(manager, True)], dry_run=False,
+            )
+            if not gather_group_id:
+                fail("failed to create the Gather group — see log.")
+            print(f"Created Gather group '{gdisplay}' (id={gather_group_id}) "
+                  f"with manager {manager.full_name}.")
+
+        # ── Link folder on /gdrive/config (or reuse an existing link) ────────
+        existing_item_id = None
+        if idempotent:
+            for entry in scrape_gdrive_config(page, base_url):
+                if entry.get("google_file_id") == folder_id:
+                    existing_item_id = entry.get("item_id")
+                    break
+        if existing_item_id:
+            print(f"Folder '{folder_name}' is already linked on /gdrive/config "
+                  f"(item_id={existing_item_id}).")
+            ok = add_group_access_to_gdrive_item(
+                page, base_url, existing_item_id, gdisplay, dry_run=False)
             if ok:
-                print(f"Linked '{folder_name}' and added '{gdisplay}' as Content manager.")
+                print(f"Ensured '{gdisplay}' has Content manager access.")
             else:
-                print(f"ERROR: folder linked, but failed to add '{gdisplay}' — see log.")
+                print(f"ERROR: failed to add '{gdisplay}' to the linked folder — see log.")
+        else:
+            item_id, err = create_gdrive_item(page, base_url, folder_id, dry_run=False)
+            if err:
+                log("ERROR", "link_folder", f"{folder_name}: {err}")
+                print(f"ERROR: failed to link folder on /gdrive/config — {err}")
+            else:
+                ok = add_group_access_to_gdrive_item(page, base_url, item_id, gdisplay, dry_run=False)
+                if ok:
+                    print(f"Linked '{folder_name}' and added '{gdisplay}' as Content manager.")
+                else:
+                    print(f"ERROR: folder linked, but failed to add '{gdisplay}' — see log.")
 
         # ── Wire the mailing list (to the alias, if given) ───────────────────
         set_gather_group_email_list(
@@ -360,7 +411,12 @@ def main(
         print(f"Set footer links for '{gemail}'.")
 
         # ── Add to the Circle Hierarchy ──────────────────────────────────────
-        if parent_node is not None:
+        already_in_hierarchy = root is not None and any(
+            n.group_id == gather_group_id for n in iter_nodes(root)
+        )
+        if parent_node is not None and already_in_hierarchy:
+            print(f"'{gdisplay}' is already in the Circle Hierarchy — leaving it as is.")
+        elif parent_node is not None:
             new_node = HierarchyNode(
                 name=gdisplay,
                 group_id=gather_group_id,
@@ -428,6 +484,12 @@ def cli():
         help="Validate and report what would be created, without creating anything",
     )
     parser.add_argument(
+        "-i", "--idempotent", action="store_true",
+        help="Reuse any artifacts (Drive folder, Google Group, Gather group, "
+             "alias, folder link, hierarchy entry) that already exist instead "
+             "of aborting — lets a re-run finish after a partial failure.",
+    )
+    parser.add_argument(
         "-c", "--credentials", default=str(DEFAULT_CLIENT_SECRETS_PATH),
         help=f"Path to OAuth client secrets JSON (default: {DEFAULT_CLIENT_SECRETS_PATH})",
     )
@@ -461,6 +523,7 @@ def cli():
     main(
         group_type, name, args.parent_circle, args.manager, args.base_url, email,
         password, args.dry_run, args.credentials, args.drive_id, alias=args.alias,
+        idempotent=args.idempotent,
     )
 
 
