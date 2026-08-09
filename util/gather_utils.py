@@ -392,10 +392,12 @@ def create_gather_group(
     kind: str,
     availability: str = "closed",
     description: str = "",
+    members: Optional[list[tuple["GatherUser", bool]]] = None,
     dry_run: bool = False,
 ) -> Optional[str]:
-    """Create a new Gather group (no members). Return its group_id, or
-    "dry-run" if dry_run, or None on failure."""
+    """Create a new Gather group, optionally with inline members (each a
+    (GatherUser, is_manager) pair). Return its group_id, or "dry-run" if
+    dry_run, or None on failure."""
     if dry_run:
         log("DRY-RUN", "create_group", name)
         return "dry-run"
@@ -403,6 +405,8 @@ def create_gather_group(
     try:
         page.goto(f"{base_url}/groups/new", wait_until="networkidle")
         fill_group_basics(page, name, kind, availability, description)
+        for user, is_manager in (members or []):
+            _add_inline_member(page, user, is_manager)
         page.locator('input[name="commit"]').click()
         page.wait_for_load_state("networkidle")
         err = _check_submit_errors(page)
@@ -596,6 +600,21 @@ def fetch_all_gather_users(page: Page, base_url: str) -> list[GatherUser]:
             email=email,
         ))
     return users
+
+
+def find_users_by_prefix(users: list[GatherUser], prefix: str) -> list[GatherUser]:
+    """Return the users whose first name, last name, or email starts with
+    `prefix` (case-insensitive). Useful for uniquely identifying a member
+    from a short prefix (the caller decides how to handle 0 / >1 matches)."""
+    p = prefix.strip().casefold()
+    if not p:
+        return []
+    return [
+        u for u in users
+        if u.first_name.casefold().startswith(p)
+        or u.last_name.casefold().startswith(p)
+        or (u.email and u.email.casefold().startswith(p))
+    ]
 
 
 def fetch_all_gather_groups(page: Page, base_url: str) -> list[GatherGroup]:

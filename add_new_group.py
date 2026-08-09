@@ -6,12 +6,15 @@ Hierarchy wiki page under its parent circle.
 
 Steps:
   1. Validate: the folder, Google Group, and Gather group don't already
-     exist; and (unless --type=club) --parent-circle uniquely identifies a
-     live entry in the Circle Hierarchy.
+     exist; (unless --type=club) --parent-circle uniquely identifies a
+     live entry in the Circle Hierarchy; and --manager uniquely identifies
+     a community member.
   2. Create the Drive folder, Google Group (with the usual settings, plus
      "Conversation history" on and content moderation open to all members),
      and Gather group (with the usual settings, except clubs get
-     availability=open instead of closed).
+     availability=open instead of closed) — the --manager member is added
+     to the Gather group as a manager at creation, before the folder is
+     linked, so Gather auto-syncs their Content-manager permission.
   3. Link the folder on /gdrive/config and grant the new Gather group
      Content manager access.
   4. Wire the Gather group's mailing list to the new Google Group (to the
@@ -36,11 +39,14 @@ Pass --alias to also give the new Google Group a shorter second address
 and point the Gather group's mailing list at it — the same effect as
 running change_group_email_alias.py afterward.
 
+--manager (required) is a prefix of a member's first name, last name, or
+email uniquely identifying them; they're made a manager of the new group.
+
 Usage:
-    python add_new_group.py Landscape Circle --parent-circle Property
-    python add_new_group.py Tech Support -t w -p Operations
-    python add_new_group.py Book Club
-    python add_new_group.py Landscape Circle -p Property --alias landscape
+    python add_new_group.py Landscape Circle -p Property -m jsmith
+    python add_new_group.py Tech Support -t w -p Operations -m Dana
+    python add_new_group.py Book Club -m alice@example.org
+    python add_new_group.py Landscape Circle -p Property -m jsmith --alias landscape
 """
 
 import argparse
@@ -60,7 +66,9 @@ from util.gather_utils import (
     configure,
     create_gather_group,
     fetch_all_gather_groups,
+    fetch_all_gather_users,
     find_gather_group_id_by_name,
+    find_users_by_prefix,
     init_log,
     launch_browser,
     log,
@@ -141,6 +149,7 @@ def main(
     group_type: GroupType,
     raw_name: str,
     parent_circle_prefix: str | None,
+    manager_prefix: str,
     base_url: str,
     email: str,
     password: str,
@@ -152,7 +161,8 @@ def main(
     base_url = base_url.rstrip("/")
     init_log()
     log("INFO", "start",
-        f"type={group_type.kind} name={raw_name!r} alias={alias!r} dry_run={dry_run}")
+        f"type={group_type.kind} name={raw_name!r} manager={manager_prefix!r} "
+        f"alias={alias!r} dry_run={dry_run}")
 
     kind = group_type.kind
     folder_name = folder_name_for_group_type(raw_name, kind)
@@ -257,9 +267,27 @@ def main(
                     f"{parent_node.group_id}) no longer exists in Gather."
                 )
 
+        # ── Validate: manager ────────────────────────────────────────────────
+        matches = find_users_by_prefix(fetch_all_gather_users(page, base_url), manager_prefix)
+        if not matches:
+            close_log()
+            browser.close()
+            sys.exit(f"Error: no community member's first name, last name, or email "
+                     f"starts with {manager_prefix!r}.")
+        if len(matches) > 1:
+            names = ", ".join(f"{u.full_name} <{u.email}>" for u in matches[:10])
+            more = "" if len(matches) <= 10 else f", … ({len(matches)} total)"
+            close_log()
+            browser.close()
+            sys.exit(f"Error: {manager_prefix!r} matches multiple members: {names}{more}. "
+                     "Use a longer, unique prefix.")
+        manager = matches[0]
+
         if dry_run:
             print(f"[dry-run] Would create Drive folder '{folder_name}', Google Group "
                   f"'{gemail}', and Gather group '{gdisplay}' (type={group_type.label}).")
+            print(f"[dry-run] Would add {manager.full_name} <{manager.email}> as a manager "
+                  "of the new Gather group.")
             if alias_email:
                 print(f"[dry-run] Would add alias '{alias_email}' to the Google Group and "
                       f"set the Gather group's mailing list to '{list_local}@{DOMAIN}'.")
@@ -291,16 +319,20 @@ def main(
             log("INFO", "add_alias", f"{gemail} -> +{alias_email}")
             print(f"Added alias '{alias_email}' to Google Group '{gemail}'.")
 
-        # ── Create Gather group ──────────────────────────────────────────────
+        # ── Create Gather group (with the manager as an inline member) ───────
+        # Adding the manager now — before the Drive folder is linked below —
+        # lets Gather auto-sync their folder permission when the link is made.
         availability = "open" if group_type == GroupType.CLUB else "closed"
         gather_group_id = create_gather_group(
-            page, base_url, gdisplay, kind, availability=availability, dry_run=False
+            page, base_url, gdisplay, kind, availability=availability,
+            members=[(manager, True)], dry_run=False,
         )
         if not gather_group_id:
             close_log()
             browser.close()
             sys.exit("Error: failed to create the Gather group — see log.")
-        print(f"Created Gather group '{gdisplay}' (id={gather_group_id}).")
+        print(f"Created Gather group '{gdisplay}' (id={gather_group_id}) "
+              f"with manager {manager.full_name}.")
 
         # ── Link folder on /gdrive/config ────────────────────────────────────
         item_id, err = create_gdrive_item(page, base_url, folder_id, dry_run=False)
@@ -371,6 +403,13 @@ def cli():
              "Circle Hierarchy (required unless --type=club)",
     )
     parser.add_argument(
+        "-m", "--manager", required=True,
+        help="A prefix of a community member's first name, last name, or email "
+             "that uniquely identifies them. They're added to the new Gather "
+             "group as a manager (and thus given Content-manager access to the "
+             "Drive folder when it's linked).",
+    )
+    parser.add_argument(
         "-a", "--alias", default=None,
         help=f"A shorter alias's local part (without the @{DOMAIN} domain). The "
              "Google Group is still created at its full-name address; this alias "
@@ -418,8 +457,8 @@ def cli():
 
     email, password = load_credentials()
     main(
-        group_type, name, args.parent_circle, args.base_url, email, password,
-        args.dry_run, args.credentials, args.drive_id, alias=args.alias,
+        group_type, name, args.parent_circle, args.manager, args.base_url, email,
+        password, args.dry_run, args.credentials, args.drive_id, alias=args.alias,
     )
 
 
