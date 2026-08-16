@@ -106,8 +106,10 @@ notification per matching reader group.
 
 Plain-text body **plus a light HTML version**, built entirely from the event
 object, formatted in the calendar's timezone. Sent from the **admin account's
-default sender**, addressed **to the reader group** (never to individuals, so no
-personal Gmail addresses are exposed).
+default sender**, addressed **to the reader group** (never in the `To:` line,
+so no personal Gmail addresses are exposed there). The **`Reply-To` is set to
+the event's organizer**, so when a group member replies, the reply goes to the
+community member who created the event rather than to the admin account.
 
 **Subject:** `New community event: {title}`
 
@@ -463,8 +465,12 @@ function sendCancellation(event, _prev) {
 
 function send_(groupEmail, subject, lead, event) {
   const { text, html } = renderEmail(lead, event, groupEmail);
-  MailApp.sendEmail({ to: groupEmail, subject, body: text, htmlBody: html, name: 'Berkeley Moshav Calendar' });
-  console.log(`Emailed ${groupEmail}: ${subject}`);
+  const options = { body: text, htmlBody: html, name: 'Berkeley Moshav Calendar' };
+  // Replies go to the event's organizer, not the admin account.
+  const organizer = organizerEmail(event);
+  if (organizer) options.replyTo = organizer;
+  MailApp.sendEmail(Object.assign({ to: groupEmail, subject }, options));
+  console.log(`Emailed ${groupEmail} (reply-to ${organizer || 'default'}): ${subject}`);
 }
 
 function renderEmail(lead, event, groupEmail) {
@@ -675,6 +681,12 @@ after each.
 - **Sender identity.** Mail is sent from the admin account's default address. To
   appear as `share@`, that alias must be a configured send-as alias and the
   group must accept posts from it (out of scope for the default setup).
+- **Reply-To exposes the organizer's address.** Setting `Reply-To` to the
+  organizer means their personal Gmail appears in that header (and on replies) —
+  which is the point (replies reach the event creator), but it is a mild privacy
+  trade-off. The organizer already chose to invite `share@`, so this is normally
+  fine; drop the `replyTo` option if you'd rather keep organizer addresses out
+  of the notification entirely.
 
 ---
 
