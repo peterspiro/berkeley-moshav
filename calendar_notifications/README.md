@@ -24,12 +24,17 @@ npm install -g @google/clasp
 # 2. Authorize as the ADMIN account (opens a browser)
 clasp login
 
-# 3. From this folder, create a standalone project
+# 3. From this folder, create a standalone project.
+#    NOTE: clasp create pulls the new (blank) project's manifest and OVERWRITES
+#    the local appsscript.json with a bare default — losing our advanced
+#    services and scopes. Restore ours in step 4 before pushing.
 cd calendar_notifications
 clasp create --type standalone --title "Calendar Notifications"
 
-# 4. Push the .gs + appsscript.json
-clasp push
+# 4. Restore our manifest, then push the .gs + appsscript.json.
+#    -f skips the "manifest changed" confirmation prompt.
+git checkout -- appsscript.json
+clasp push -f
 
 # 5. Open the project, then run installTrigger() once (see below)
 clasp open
