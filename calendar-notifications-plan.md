@@ -402,11 +402,11 @@ function listAcl(calendarId) {
 
 /** Lowercased Set of a group's member emails (external Gmail members included). */
 function listMemberSet(groupEmail) {
-  const set = new Set();
+  const emails = new Set();
   for (const m of listAllMembers(groupEmail)) {
-    if (m.email) set.add(m.email.toLowerCase());
+    if (m.email) emails.add(m.email.toLowerCase());
   }
-  return set;
+  return emails;
 }
 
 function listAllMembers(groupEmail) {
