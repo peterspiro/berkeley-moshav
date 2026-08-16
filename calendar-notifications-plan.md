@@ -221,7 +221,7 @@ function onCalendarUpdate(e) {
  * Fetch the incremental set of changed events via a stored sync token and act
  * on each. Safe to run manually.
  */
-function processChanges() {
+function processChanges(isRetry) {
   const props = PropertiesService.getScriptProperties();
   let syncToken = props.getProperty(PROP_SYNC_TOKEN);
   const seeding = !syncToken;
@@ -247,10 +247,13 @@ function processChanges() {
     try {
       resp = Calendar.Events.list(CALENDAR_ID, params);
     } catch (err) {
-      if (isExpiredSyncToken(err)) {
+      if (isExpiredSyncToken(err) && !isRetry) {
+        // Reset once and reseed. The retry runs without a sync token (a seed),
+        // which cannot raise this error again; the isRetry guard caps it at a
+        // single re-entry so a misclassified/persistent error can't loop.
         props.deleteProperty(PROP_SYNC_TOKEN);
         console.warn('Sync token expired; resetting and reseeding.');
-        return processChanges();
+        return processChanges(true);
       }
       throw err;
     }
