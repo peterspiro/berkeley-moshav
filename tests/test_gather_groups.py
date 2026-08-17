@@ -23,9 +23,7 @@ from data_import.import_groups import (
     _apply_hierarchy_content,
     _canonical_group_name,
     _filter_circles,
-    _needs_wiki,
     find_gdrive_link,
-    _circle_wiki_slug,
     _effective_description,
     _group_kind,
     _group_needs_update,
@@ -1138,26 +1136,6 @@ class TestCircleNameToListName:
         assert _circle_name_to_list_name("&&&") == ""
 
 
-# ── _circle_wiki_slug ─────────────────────────────────────────────────────────
-
-class TestCircleWikiSlug:
-    def test_basic(self):
-        assert _circle_wiki_slug("Membership") == "membership-wiki"
-
-    def test_multi_word(self):
-        assert _circle_wiki_slug("Landscape Working Group") == "landscape-working-group-wiki"
-
-    def test_accents_folded(self):
-        assert _circle_wiki_slug("Café") == "cafe-wiki"
-
-    def test_ampersand_becomes_dash(self):
-        assert _circle_wiki_slug("Process & Governance") == "process-governance-wiki"
-
-    def test_always_ends_in_wiki(self):
-        slug = _circle_wiki_slug("Alpha Circle")
-        assert slug.endswith("-wiki")
-
-
 # ── _group_kind ───────────────────────────────────────────────────────────────
 
 class TestGroupKind:
@@ -1180,30 +1158,6 @@ class TestGroupKind:
     def test_work_group_not_at_end_is_circle(self):
         c = make_circle(name="Work Group Liaison", col_index=0)
         assert _group_kind(c) == "circle"
-
-
-# ── _needs_wiki ───────────────────────────────────────────────────────────────
-
-class TestNeedsWiki:
-    def test_circle_needs_wiki(self):
-        assert _needs_wiki(make_circle(name="Membership"))
-
-    def test_work_group_needs_wiki(self):
-        assert _needs_wiki(make_circle(name="Landscape Work Group"))
-
-    def test_working_group_needs_wiki(self):
-        assert _needs_wiki(make_circle(name="Landscape Working Group"))
-
-    def test_furnishings_work_group_needs_wiki(self):
-        assert _needs_wiki(make_circle(name="Furnishings Work Group"))
-
-    def test_other_committee_does_not_need_wiki(self):
-        # A circle that is a committee for reasons other than its name
-        # (col_index=1 still maps to "circle" in GROUP_KINDS, so this
-        # just tests the kind override path is respected for non-work-groups)
-        c = make_circle(name="Some Committee", col_index=0)
-        # "Some Committee" has kind "circle" (no work group suffix), so it gets a wiki
-        assert _needs_wiki(c)
 
 
 # ── _canonical_group_name ─────────────────────────────────────────────────────

@@ -7,10 +7,12 @@ Line format (4 spaces of indent per nesting depth):
     - Name
     - Name: [Members](/groups/123)
     - Name: [Members](/groups/123) | [Documents](/gdrive/item/456)
+    - Name: [Members](/groups/123) | [Documents](/gdrive/item/456) | [Wiki](/wiki/name-wiki)
 
-The [Members] and [Documents] links are the only parts the script manages.
-Any other "| …"-separated segments on a line (extra links or notes added by
-hand) are preserved verbatim and re-emitted after the managed links.
+The [Members], [Documents], and [Wiki] links are the only parts the script
+manages, and are always emitted in that order. Any other "| …"-separated
+segments on a line (extra links or notes added by hand) are preserved
+verbatim and re-emitted after the managed links.
 """
 
 import re
@@ -151,6 +153,7 @@ def ensure_hierarchy_page(page, base_url: str, content: str, dry_run: bool) -> b
 _LINE_RE = re.compile(r"^(?P<indent>[ \t]*)-\s+(?P<rest>.+)$")
 _MEMBERS_RE = re.compile(r"\[Members\]\((?P<url>[^)]+)\)")
 _DOCUMENTS_RE = re.compile(r"\[Documents\]\((?P<url>[^)]+)\)")
+_WIKI_RE = re.compile(r"\[Wiki\]\((?P<url>[^)]+)\)")
 _GROUP_ID_RE = re.compile(r"/groups/(\d+)")
 
 
@@ -160,23 +163,24 @@ class HierarchyNode:
     group_id: Optional[str] = None
     members_url: str = ""
     documents_url: str = ""
+    wiki_url: str = ""
     # Any "| …"-separated segments in the links portion that the script
-    # doesn't manage (i.e. aren't the [Members] or [Documents] link) —
-    # extra links or notes a human added by hand. Preserved verbatim,
-    # in order, and re-emitted after the managed links on render.
+    # doesn't manage (i.e. aren't the [Members], [Documents], or [Wiki]
+    # link) — extra links or notes a human added by hand. Preserved
+    # verbatim, in order, and re-emitted after the managed links on render.
     extras: list[str] = field(default_factory=list)
     children: list["HierarchyNode"] = field(default_factory=list)
     parent: Optional["HierarchyNode"] = None
 
 
-def _parse_rest(rest: str) -> tuple[str, str, str, list[str]]:
+def _parse_rest(rest: str) -> tuple[str, str, str, str, list[str]]:
     """Split a bullet line's text into
-    (name, members_url, documents_url, extras).
+    (name, members_url, documents_url, wiki_url, extras).
 
     extras holds every "| …"-separated segment of the links portion that
-    isn't the [Members] or [Documents] link, kept verbatim and in order so
-    unmanaged content a human added by hand survives the parse/render
-    round-trip.
+    isn't one of the managed [Members]/[Documents]/[Wiki] links, kept
+    verbatim and in order so unmanaged content a human added by hand
+    survives the parse/render round-trip.
     """
     if ": [" in rest:
         name, _, links_part = rest.partition(": ")
@@ -184,15 +188,20 @@ def _parse_rest(rest: str) -> tuple[str, str, str, list[str]]:
         name, links_part = rest, ""
     members_m = _MEMBERS_RE.search(links_part)
     documents_m = _DOCUMENTS_RE.search(links_part)
+    wiki_m = _WIKI_RE.search(links_part)
     segments = [s.strip() for s in links_part.split("|")] if links_part else []
     extras = [
         s for s in segments
-        if s and not _MEMBERS_RE.search(s) and not _DOCUMENTS_RE.search(s)
+        if s
+        and not _MEMBERS_RE.search(s)
+        and not _DOCUMENTS_RE.search(s)
+        and not _WIKI_RE.search(s)
     ]
     return (
         name.strip(),
         members_m.group("url") if members_m else "",
         documents_m.group("url") if documents_m else "",
+        wiki_m.group("url") if wiki_m else "",
         extras,
     )
 
@@ -213,13 +222,14 @@ def parse_hierarchy(markdown: str) -> HierarchyNode:
         if not m:
             continue
         indent_len = len(m.group("indent"))
-        name, members_url, documents_url, extras = _parse_rest(m.group("rest"))
+        name, members_url, documents_url, wiki_url, extras = _parse_rest(m.group("rest"))
         group_id_m = _GROUP_ID_RE.search(members_url) if members_url else None
         node = HierarchyNode(
             name=name,
             group_id=group_id_m.group(1) if group_id_m else None,
             members_url=members_url,
             documents_url=documents_url,
+            wiki_url=wiki_url,
             extras=extras,
         )
 
@@ -248,7 +258,8 @@ def iter_nodes(root: HierarchyNode):
 
 
 def _render_line(
-    name: str, members_url: str, documents_url: str, extras: list[str], depth: int
+    name: str, members_url: str, documents_url: str, wiki_url: str,
+    extras: list[str], depth: int,
 ) -> str:
     pad = "    " * depth
     parts = [name]
@@ -256,6 +267,8 @@ def _render_line(
         parts.append(f"[Members]({members_url})")
     if documents_url:
         parts.append(f"[Documents]({documents_url})")
+    if wiki_url:
+        parts.append(f"[Wiki]({wiki_url})")
     # Unmanaged segments (extra links, notes) are re-emitted after the
     # managed links so hand-added content isn't dropped on rewrite.
     parts.extend(extras)
@@ -271,7 +284,10 @@ def render_hierarchy(root: HierarchyNode) -> str:
 
     def walk(node: HierarchyNode, depth: int) -> None:
         lines.append(
-            _render_line(node.name, node.members_url, node.documents_url, node.extras, depth)
+            _render_line(
+                node.name, node.members_url, node.documents_url,
+                node.wiki_url, node.extras, depth,
+            )
         )
         for child in sorted(node.children, key=lambda c: c.name.casefold()):
             walk(child, depth + 1)

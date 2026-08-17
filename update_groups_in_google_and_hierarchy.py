@@ -190,6 +190,15 @@ class QuitScript(Exception):
     whatever progress was already made (footer links, the hierarchy page)."""
 
 
+class HierarchyIntegrityError(Exception):
+    """Raised when the hierarchy is in a state the script won't silently
+    resolve — specifically, a row whose Gather group is gone (deleted or
+    deactivated) but which still carries a [Wiki] link, meaning a wiki page
+    is listed for it that a human must delete (along with the link) first.
+    Aborts the run rather than dropping the row out from under a live wiki
+    page."""
+
+
 def check_quit(answer: str) -> None:
     """Raise QuitScript if answer is a quit command. Call this on every
     raw input() result before doing anything else with it."""
@@ -979,6 +988,22 @@ def ensure_root_node(root, group_info: dict[str, dict], dry_run: bool) -> None:
     log("INFO", "update_root", "; ".join(changes))
 
 
+def _guard_wiki_link_on_removal(node, reason: str) -> None:
+    """Refuse to drop a hierarchy row that still has a [Wiki] link.
+
+    Removing such a row would orphan the group's wiki page (which this
+    script never deletes). Raise so a human deletes the wiki page and its
+    [Wiki] link first. Applies whether the group was fully deleted or just
+    deactivated.
+    """
+    if node.wiki_url:
+        raise HierarchyIntegrityError(
+            f"'{node.name}' (id={node.group_id}) {reason}, but its hierarchy row "
+            f"still lists a wiki page ([Wiki]({node.wiki_url})). Delete that wiki "
+            "page and remove its [Wiki] link from the hierarchy, then re-run."
+        )
+
+
 def sync_hierarchy(
     root, group_info: dict[str, dict], documents_url_by_group_id: dict[str, str],
     linked_group_ids: set[str], excluded_ids: set[str], deactivated_ids: set[str], dry_run: bool,
@@ -990,6 +1015,10 @@ def sync_hierarchy(
     prompt, since they're gone for good, not just excluded from
     consideration). Merely-hidden groups are left untouched.
 
+    A row whose group is gone (deleted or deactivated) but which still
+    carries a [Wiki] link is never dropped: it raises HierarchyIntegrityError
+    so a human deletes the orphaned wiki page and its link first.
+
     The root node itself is skipped — its name/links are forced by
     ensure_root_node(), not by the generic rename/link-sync rules here.
     """
@@ -998,6 +1027,7 @@ def sync_hierarchy(
             continue
 
         if node.group_id in deactivated_ids:
+            _guard_wiki_link_on_removal(node, "deactivated")
             if dry_run:
                 print(f"[dry-run] '{node.name}' (id={node.group_id}) is deactivated; "
                       f"would remove from the hierarchy")
@@ -1012,6 +1042,7 @@ def sync_hierarchy(
 
         live = group_info.get(node.group_id)
         if live is None:
+            _guard_wiki_link_on_removal(node, "no longer exists in Gather")
             if dry_run:
                 print(f"[dry-run] '{node.name}' (id={node.group_id}) no longer exists "
                       f"in Gather; would prompt to delete")
@@ -1196,6 +1227,13 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
                 quit_requested = True
                 print("\nQuit requested — saving progress made so far.")
                 log("INFO", "quit", "User quit during the hierarchy sync step")
+            except HierarchyIntegrityError as e:
+                # The tree is in a state we refuse to persist — abort without
+                # writing the hierarchy page so the offending row is left intact.
+                log("ERROR", "hierarchy_integrity", str(e))
+                browser.close()
+                close_log()
+                sys.exit(f"Error: {e}")
 
         new_content = render_hierarchy(root)
         ok = ensure_hierarchy_page(page, base_url, new_content, dry_run)

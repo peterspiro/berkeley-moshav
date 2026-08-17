@@ -21,38 +21,56 @@ from util.hierarchy_wiki import (
 
 class TestParseRest:
     def test_managed_links_extracted(self):
-        name, members, docs, extras = _parse_rest(
+        name, members, docs, wiki, extras = _parse_rest(
             "Care Circle: [Members](/groups/1) | [Documents](/gdrive/item/2)"
         )
         assert name == "Care Circle"
         assert members == "/groups/1"
         assert docs == "/gdrive/item/2"
+        assert wiki == ""
+        assert extras == []
+
+    def test_wiki_link_extracted(self):
+        name, members, docs, wiki, extras = _parse_rest(
+            "Care Circle: [Members](/groups/1) | [Documents](/gdrive/item/2) "
+            "| [Wiki](/wiki/care-circle-wiki)"
+        )
+        assert wiki == "/wiki/care-circle-wiki"
         assert extras == []
 
     def test_extra_link_captured(self):
-        _, _, _, extras = _parse_rest(
+        *_, extras = _parse_rest(
             "Care Circle: [Members](/groups/1) | [Documents](/gdrive/item/2) "
             "| [Notes](/wiki/care-notes)"
         )
         assert extras == ["[Notes](/wiki/care-notes)"]
 
+    def test_wiki_not_captured_as_extra(self):
+        # The managed [Wiki] link goes to wiki_url, not extras; a genuinely
+        # unmanaged link alongside it still lands in extras.
+        _, _, _, wiki, extras = _parse_rest(
+            "Care Circle: [Members](/groups/1) | [Wiki](/wiki/care-circle-wiki) "
+            "| [Notes](/wiki/care-notes)"
+        )
+        assert wiki == "/wiki/care-circle-wiki"
+        assert extras == ["[Notes](/wiki/care-notes)"]
+
     def test_extra_link_without_managed_links(self):
-        name, members, docs, extras = _parse_rest("Care Circle: [Notes](/wiki/care-notes)")
+        name, members, docs, wiki, extras = _parse_rest("Care Circle: [Notes](/wiki/care-notes)")
         assert name == "Care Circle"
-        assert members == ""
-        assert docs == ""
+        assert (members, docs, wiki) == ("", "", "")
         assert extras == ["[Notes](/wiki/care-notes)"]
 
     def test_multiple_extras_kept_in_order(self):
-        _, _, _, extras = _parse_rest(
+        *_, extras = _parse_rest(
             "Care Circle: [Members](/groups/1) | [A](/a) | [B](/b)"
         )
         assert extras == ["[A](/a)", "[B](/b)"]
 
     def test_plain_name_has_no_extras(self):
-        name, members, docs, extras = _parse_rest("Care Circle")
+        name, members, docs, wiki, extras = _parse_rest("Care Circle")
         assert name == "Care Circle"
-        assert (members, docs, extras) == ("", "", [])
+        assert (members, docs, wiki, extras) == ("", "", "", [])
 
 
 # ── Round-trip: extras survive parse -> render ───────────────────────────────
@@ -105,6 +123,55 @@ class TestRoundTrip:
         md = textwrap.dedent("""\
             - Root: [Members](/groups/0)
                 - Care Circle: [Notes](/wiki/care-notes) | [Members](/groups/1)
+        """)
+        once = render_hierarchy(parse_hierarchy(md))
+        twice = render_hierarchy(parse_hierarchy(once))
+        assert once == twice
+
+
+# ── The managed [Wiki] link ──────────────────────────────────────────────────
+
+class TestWikiLink:
+    def test_wiki_url_round_trips(self):
+        md = textwrap.dedent("""\
+            - Root: [Members](/groups/0)
+                - Care Circle: [Members](/groups/1) | [Documents](/gdrive/item/2) | [Wiki](/wiki/care-circle-wiki)
+        """)
+        out = render_hierarchy(parse_hierarchy(md))
+        assert "[Wiki](/wiki/care-circle-wiki)" in out
+
+    def test_wiki_rendered_after_documents_before_extras(self):
+        md = textwrap.dedent("""\
+            - Root: [Members](/groups/0)
+                - Care Circle: [Notes](/x) | [Wiki](/wiki/care-circle-wiki) | [Members](/groups/1) | [Documents](/gdrive/item/2)
+        """)
+        out = render_hierarchy(parse_hierarchy(md))
+        line = next(l for l in out.splitlines() if "Care Circle" in l)
+        assert (
+            line.index("[Members]")
+            < line.index("[Documents]")
+            < line.index("[Wiki]")
+            < line.index("[Notes]")
+        )
+
+    def test_wiki_added_to_node_renders_in_slot(self):
+        md = textwrap.dedent("""\
+            - Root: [Members](/groups/0)
+                - Care Circle: [Members](/groups/1) | [Documents](/gdrive/item/2) | [Notes](/x)
+        """)
+        root = parse_hierarchy(md)
+        care = next(n for n in iter_nodes(root) if n.name == "Care Circle")
+        care.wiki_url = "/wiki/care-circle-wiki"
+        line = next(l for l in render_hierarchy(root).splitlines() if "Care Circle" in l)
+        assert line == (
+            "    - Care Circle: [Members](/groups/1) | [Documents](/gdrive/item/2) "
+            "| [Wiki](/wiki/care-circle-wiki) | [Notes](/x)"
+        )
+
+    def test_idempotent_with_wiki_and_extras(self):
+        md = textwrap.dedent("""\
+            - Root: [Members](/groups/0)
+                - Care Circle: [Members](/groups/1) | [Documents](/gdrive/item/2) | [Wiki](/wiki/care-circle-wiki) | [Notes](/x)
         """)
         once = render_hierarchy(parse_hierarchy(md))
         twice = render_hierarchy(parse_hierarchy(once))

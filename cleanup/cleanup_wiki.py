@@ -48,11 +48,20 @@ from util.gather_utils import (
 from data_import.import_groups import (
     DEFAULT_SHEET_URL,
     _canonical_group_name,
-    _circle_wiki_slug,
-    _needs_wiki,
+    _group_kind,
     group_names_match,
     parse_sheet,
 )
+from util.wiki_utils import wiki_slug
+
+
+def _needs_wiki(circle) -> bool:
+    """Return True if this circle had a per-circle wiki page under the old
+    gather_groups.py (all circles, plus working groups). Kept local to this
+    one-off cleanup script, which is the only remaining consumer."""
+    return _group_kind(circle) != "committee" or re.search(
+        r"\bwork(?:ing)?\s+group$", circle.name, flags=re.IGNORECASE
+    ) is not None
 
 _LOG_FILE = Path("debug/cleanup_wiki_log.csv")
 _SCREENSHOT_DIR = Path("debug/cleanup_screenshots")
@@ -227,7 +236,7 @@ def delete_circle_wiki_pages(
     stats = {"deleted": 0, "not_found": 0, "failed": 0}
 
     target_slugs: set[str] = {
-        _circle_wiki_slug(_gather_name_for_circle(circle, gather_groups))
+        wiki_slug(_gather_name_for_circle(circle, gather_groups))
         for circle in circles
         if _needs_wiki(circle)
     }
@@ -242,7 +251,7 @@ def delete_circle_wiki_pages(
         if not _needs_wiki(circle):
             continue
         gather_name = _gather_name_for_circle(circle, gather_groups)
-        slug = _circle_wiki_slug(gather_name)
+        slug = wiki_slug(gather_name)
         title = f"{gather_name} Wiki"
         ok = _delete_wiki_page(page, base_url, slug, title, dry_run)
         if ok:

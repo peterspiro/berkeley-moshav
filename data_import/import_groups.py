@@ -186,16 +186,6 @@ def _circle_name_to_list_name(name: str) -> str:
     return s[:50]
 
 
-def _circle_wiki_slug(name: str) -> str:
-    """Convert a circle name to a wiki page slug, appending '-wiki'.
-
-    E.g. 'Landscape Work Group' → 'landscape-work-group-wiki'.
-    """
-    s = _fold_accents(name).lower()
-    s = re.sub(r"[^a-z0-9]+", "-", s)
-    return s.strip("-") + "-wiki"
-
-
 def _canonical_group_name(name: str) -> str:
     """Return name with 'Work Group' replaced by 'Working Group'."""
     return re.sub(r"\bWork\s+Group\b", "Working Group", name, flags=re.IGNORECASE)
@@ -207,17 +197,6 @@ def _group_kind(circle: Circle) -> str:
     if re.search(r"\bwork(?:ing)?\s+group$", circle.name, flags=re.IGNORECASE):
         kind = "committee"
     return kind
-
-
-def _needs_wiki(circle: Circle) -> bool:
-    """Return True if this circle should get a wiki page.
-
-    All circles get wiki pages, plus working groups (which are committees in
-    Gather but are still substantive circles that warrant a wiki page).
-    """
-    return _group_kind(circle) != "committee" or re.search(
-        r"\bwork(?:ing)?\s+group$", circle.name, flags=re.IGNORECASE
-    ) is not None
 
 
 # ── Sheet parsing ─────────────────────────────────────────────────────────────
@@ -1019,53 +998,6 @@ def _effective_description(existing_desc: str, desired_desc: str) -> str:
     If the existing description is empty, desired_desc is used as-is.
     """
     return existing_desc if existing_desc.strip() else desired_desc
-
-
-def _ensure_circle_wiki_page(
-    page: Page, base_url: str, circle_name: str, dry_run: bool
-) -> bool:
-    """Create a blank wiki page for a circle if one does not already exist."""
-    slug = _circle_wiki_slug(circle_name)
-    title = f"{circle_name} Wiki"
-    try:
-        page.goto(f"{base_url}/wiki/{slug}", wait_until="networkidle")
-        page_title = page.title()
-        page_exists = (
-            "Exception" not in page_title
-            and "Error" not in page_title
-            and "404" not in page_title
-            and page.locator("h1").count() > 0
-        )
-        if page_exists:
-            log("INFO", "circle_wiki", f"'{title}' already exists, skipping")
-            return True
-        if dry_run:
-            log("DRY-RUN", "create_circle_wiki", title)
-            return True
-        page.goto(f"{base_url}/wiki/new", wait_until="networkidle")
-        if page.locator("form").count() == 0:
-            log("ERROR", "create_circle_wiki", title, "New wiki page form not found")
-            return False
-        title_el = page.locator('input[name="wiki_page[title]"], #wiki_page_title')
-        if title_el.count() > 0:
-            title_el.fill(title)
-        if page.locator(".CodeMirror").count() == 0:
-            log("ERROR", "create_circle_wiki", title, "Editor not found on new page form")
-            return False
-        _codemirror_set(page, "")
-        page.locator('input[name="commit"]').click()
-        page.wait_for_load_state("networkidle")
-        err = _check_submit_errors(page)
-        if err:
-            screenshot(page, f"wiki_circle_err_{slug[:20]}")
-            log("ERROR", "create_circle_wiki", title, err[:200])
-            return False
-        log("INFO", "create_circle_wiki", f"Created: '{title}'")
-        return True
-    except Exception as e:
-        screenshot(page, f"wiki_circle_exc_{slug[:20]}")
-        log("ERROR", "create_circle_wiki", title, str(e))
-        return False
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
