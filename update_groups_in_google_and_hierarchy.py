@@ -23,7 +23,9 @@ excluding hidden groups:
       moderate content, not just owners/managers). Also demotes any Google
       Group member still holding the MANAGER role back to a regular MEMBER
       (OWNERs untouched) — roles aren't used for anything, so membership is
-      kept flat.
+      kept flat. Groups with Availability = Everybody are exempt from both
+      the moderation setting and the role demotion: their
+      whoCanModerateContent and members' roles are left untouched.
   0d. Once every group's folder and mailing-list state is settled, ensures
       each associated Google Group's custom footer carries an up-to-date
       "Gather group"/Drive-item link block (this is what
@@ -166,6 +168,17 @@ ELIGIBLE_KINDS = {"circle", "committee", "club"}
 # group, but are never added to the Circle Hierarchy wiki page.
 HIERARCHY_ELIGIBLE_KINDS = {"circle", "committee"}
 
+# Gather "Availability" value for a group open to the whole community. For
+# these groups we leave the Google Group's whoCanModerateContent setting and
+# its members' roles alone (see enforce_group_settings/
+# demote_managers_to_members), rather than forcing members-can-moderate and a
+# flat membership as we do for the closed circles/working groups.
+EVERYBODY_AVAILABILITY = "everybody"
+
+
+def _is_everybody(info: dict) -> bool:
+    return info.get("availability", "") == EVERYBODY_AVAILABILITY
+
 QUIT_WORDS = ("q", "quit")
 
 
@@ -284,8 +297,8 @@ def build_email_by_group_id(
 
 
 def fetch_group_info(page, base_url: str) -> tuple[dict[str, dict], set[str], set[str]]:
-    """Return ({group_id: {"name", "kind", "url", "list_name", "list_domain"}}, excluded_group_ids,
-    deactivated_group_ids).
+    """Return ({group_id: {"name", "kind", "availability", "url", "list_name",
+    "list_domain"}}, excluded_group_ids, deactivated_group_ids).
 
     Hidden and deactivated/inactive groups are reported separately (not
     included in info) so callers can skip them entirely — neither offered
@@ -311,6 +324,7 @@ def fetch_group_info(page, base_url: str) -> tuple[dict[str, dict], set[str], se
         info[group.group_id] = {
             "name": detail.name,
             "kind": (detail.kind or "").strip().lower(),
+            "availability": (detail.availability or "").strip().lower(),
             "url": f"/groups/{group.group_id}",
             "list_name": detail.list_name,
             "list_domain": detail.list_domain,
@@ -779,6 +793,11 @@ def enforce_group_settings(
     only ever visits groups with *no* mailing list configured yet, so a
     group that already has one would never be checked there.
 
+    Groups with Availability = Everybody are an exception: their
+    whoCanModerateContent setting is left untouched (only Conversation
+    history is enforced), since members-can-moderate is meant for the closed
+    circles/working groups, not community-wide lists.
+
     Takes the already-computed email_by_group_id (rather than deriving its
     own via gather_group_email()) so a group with no valid email isn't
     re-evaluated — and re-warned about — on top of the check already done
@@ -792,15 +811,20 @@ def enforce_group_settings(
 
     for group_id, info, email in eligible:
         group_name = info["name"]
+        # Everybody groups keep their own whoCanModerateContent.
+        settings = (
+            CONVERSATION_HISTORY_SETTINGS if _is_everybody(info)
+            else ENFORCED_GROUP_SETTINGS
+        )
 
         if dry_run:
-            updates = compute_group_settings_updates(settings_service, email, ENFORCED_GROUP_SETTINGS)
+            updates = compute_group_settings_updates(settings_service, email, settings)
             if updates:
                 print(f"[dry-run] '{group_name}' ({email}): would update settings {updates}")
                 log("INFO", "would_update_group_settings", f"{group_name} ({email}): {updates}")
             continue
 
-        updates = ensure_group_settings(settings_service, email, ENFORCED_GROUP_SETTINGS)
+        updates = ensure_group_settings(settings_service, email, settings)
         if updates:
             print(f"Updated settings for '{group_name}' ({email}): {updates}")
             log("INFO", "group_settings", f"{group_name} ({email}): {updates}")
@@ -816,10 +840,14 @@ def demote_managers_to_members(
     promotions (e.g. from the retired role-sync) and keeps membership flat —
     moderation is governed by the group's whoCanModerateContent setting, not
     by per-member roles.
+
+    Groups with Availability = Everybody are skipped entirely — their
+    members' roles are left exactly as they are.
     """
     eligible = [
         (gid, info, email_by_group_id[gid]) for gid, info in group_info.items()
         if info["kind"] in ELIGIBLE_KINDS and gid in email_by_group_id
+        and not _is_everybody(info)
     ]
     eligible.sort(key=lambda item: item[1]["name"].casefold())
 
