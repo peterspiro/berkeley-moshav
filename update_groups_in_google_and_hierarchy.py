@@ -119,6 +119,7 @@ from util.gdrive_config import (
     folder_name_for_group_type,
     gdrive_item_url,
     get_drive_folder_by_id,
+    list_shared_drives,
     load_gdrive_item_map,
     parent_folder_id_for_group_type,
     scrape_gdrive_config,
@@ -334,7 +335,7 @@ def fetch_group_info(page, base_url: str) -> tuple[dict[str, dict], set[str], se
 
 def fetch_documents_url_by_group_id(
     page, base_url: str, drive_id: str, config_entries: list[dict], drive_folders: list[dict],
-    settings_service, email_by_group_id: dict[str, str],
+    shared_drives: list[dict], settings_service, email_by_group_id: dict[str, str],
 ) -> tuple[dict[str, str], set[str], dict[str, str], dict[str, str]]:
     """Return ({group_id: documents_href}, linked_group_ids,
     {group_id: google_file_id}, {group_id: item_type}), given the
@@ -368,10 +369,11 @@ def fetch_documents_url_by_group_id(
          customFooterText), keyed by the group's own email address (via
          email_by_group_id) — populated by ensure_group_footers()/
          add_new_group.py.
-      4. Matching by exact folder name against the already-walked Shared
-         Drive tree (works regardless of nesting depth or of how the
-         folder was originally linked in Gather).
-    Folders resolved by none of these are logged as unresolved.
+      4. Matching by exact name: a folder-linked row against the
+         already-walked Shared Drive folder tree, or a shared-drive-linked
+         row against the domain's shared drives (shared_drives) — a shared
+         drive isn't in any drive's folder tree, so it has its own lookup.
+    Items resolved by none of these are logged as unresolved.
     """
     linked_group_ids = {entry["group_id"] for entry in config_entries}
 
@@ -406,19 +408,25 @@ def fetch_documents_url_by_group_id(
             unresolved.append(entry)
 
     if unresolved:
-        by_name: dict[str, list[str]] = {}
+        # A folder-linked row is matched by name against the walked drive
+        # tree; a shared-drive-linked row against the domain's shared drives
+        # (a shared drive isn't a descendant folder of any drive, so it
+        # needs its own by-name lookup — otherwise a group linked to a
+        # shared drive with no /gdrive/item link and no footer yet could
+        # never resolve, and its footer would never get written).
+        folders_by_name: dict[str, list[str]] = {}
         for f in drive_folders:
-            by_name.setdefault(f["name"], []).append(f["id"])
+            folders_by_name.setdefault(f["name"], []).append(f["id"])
+        drives_by_name: dict[str, list[str]] = {}
+        for d in shared_drives:
+            drives_by_name.setdefault(d["name"], []).append(d["id"])
 
         still_unresolved: list[dict] = []
         for entry in unresolved:
-            # The name-match fallback only walks folders under the Shared
-            # Drive, so it can only rescue folder-linked items — a shared
-            # drive isn't one of its own descendant folders.
-            matches = (
-                by_name.get(entry["folder_name"], [])
-                if entry["item_type"] == ITEM_TYPE_FOLDER else []
-            )
+            is_folder = entry["item_type"] == ITEM_TYPE_FOLDER
+            by_name = folders_by_name if is_folder else drives_by_name
+            source = "Shared Drive folder tree" if is_folder else "domain shared drives"
+            matches = by_name.get(entry["folder_name"], [])
             if len(matches) == 1:
                 documents_url_by_group_id[entry["group_id"]] = gdrive_item_url(matches[0])
                 google_file_id_by_group_id[entry["group_id"]] = matches[0]
@@ -427,16 +435,19 @@ def fetch_documents_url_by_group_id(
                 still_unresolved.append(entry)
                 if len(matches) > 1:
                     log("WARN", "documents_link", entry["folder_name"],
-                        f"{len(matches)} Drive folders share this name — ambiguous, skipping")
+                        f"{len(matches)} {source} share this name — ambiguous, skipping")
         unresolved = still_unresolved
 
     for entry in unresolved:
+        kind_label = "folder" if entry["item_type"] == ITEM_TYPE_FOLDER else "shared drive"
+        where = (f"Shared Drive {drive_id}" if entry["item_type"] == ITEM_TYPE_FOLDER
+                 else "the domain's shared drives")
         dump_path = dump_gdrive_config_row_html(page, base_url, entry["folder_name"])
         dump_note = f"row HTML dumped to {dump_path}" if dump_path else \
             "row HTML dump also failed — no matching row found"
         log("WARN", "documents_link", entry["folder_name"],
-            f"no known Drive folder ID for item_id={entry['item_id']!r}, and no "
-            f"exact name match found in Shared Drive {drive_id} ({dump_note})")
+            f"no known Drive ID for this {kind_label} (item_id={entry['item_id']!r}), and no "
+            f"exact name match found in {where} ({dump_note})")
 
     return (
         documents_url_by_group_id, linked_group_ids,
@@ -905,7 +916,7 @@ def ensure_group_footers(
                 settings_service, email, group_id, item_id, base_url, group_name, item_type
             )
             if updates:
-                print(f"[dry-run] '{group_name}' ({email}): would update footer link to {item_type} {item_id}")
+                print(f"[dry-run] '{group_name}' ({email}): would set footer link to {item_type} {item_id}")
                 log("INFO", "would_update_footer", f"{group_name} ({email}) -> {item_type} {item_id}")
             continue
 
@@ -1107,6 +1118,9 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
         drive_folders = walk_drive_folders(drive_service, drive_id)
         log("INFO", "walk_drive", f"{len(drive_folders)} folder(s) found")
 
+        shared_drives = list_shared_drives(drive_service)
+        log("INFO", "list_shared_drives", f"{len(shared_drives)} shared drive(s) found")
+
         config_entries = scrape_gdrive_config(page, base_url)
         check_single_link_per_group(config_entries)
         folder_owner = {e["folder_name"]: e["group_id"] for e in config_entries}
@@ -1119,7 +1133,7 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
          google_file_id_by_group_id, item_type_by_group_id) = (
             fetch_documents_url_by_group_id(
                 page, base_url, drive_id, config_entries, drive_folders,
-                settings_service, email_by_group_id,
+                shared_drives, settings_service, email_by_group_id,
             )
         )
 

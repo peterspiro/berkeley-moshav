@@ -51,6 +51,29 @@ def walk_drive_folders(drive_service, drive_id: str) -> list[dict]:
     return folders
 
 
+def list_shared_drives(drive_service) -> list[dict]:
+    """Return [{"id", "name"}] for every shared drive in the domain, via the
+    Drive API's drives.list with domain-admin access (the caller runs as a
+    Workspace super-admin). Used to resolve a shared drive linked in Gather
+    to its driveId by name, when the /gdrive/config row doesn't expose the
+    ID and no footer carries it yet."""
+    drives: list[dict] = []
+    page_token = None
+    while True:
+        resp = drive_service.drives().list(
+            useDomainAdminAccess=True,
+            pageSize=100,
+            fields="nextPageToken,drives(id,name)",
+            pageToken=page_token,
+        ).execute()
+        for d in resp.get("drives", []):
+            drives.append({"id": d["id"], "name": d["name"]})
+        page_token = resp.get("nextPageToken")
+        if not page_token:
+            break
+    return drives
+
+
 def find_folder_id_under_parent(drive_service, drive_id: str, parent_id: str, name: str) -> str | None:
     """Return the Drive folder ID of the folder called name (exact match)
     directly under parent_id, or None if no such folder exists."""
