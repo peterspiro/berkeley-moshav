@@ -7,6 +7,10 @@ Line format (4 spaces of indent per nesting depth):
     - Name
     - Name: [Members](/groups/123)
     - Name: [Members](/groups/123) | [Documents](/gdrive/item/456)
+
+The [Members] and [Documents] links are the only parts the script manages.
+Any other "| …"-separated segments on a line (extra links or notes added by
+hand) are preserved verbatim and re-emitted after the managed links.
 """
 
 import re
@@ -156,22 +160,40 @@ class HierarchyNode:
     group_id: Optional[str] = None
     members_url: str = ""
     documents_url: str = ""
+    # Any "| …"-separated segments in the links portion that the script
+    # doesn't manage (i.e. aren't the [Members] or [Documents] link) —
+    # extra links or notes a human added by hand. Preserved verbatim,
+    # in order, and re-emitted after the managed links on render.
+    extras: list[str] = field(default_factory=list)
     children: list["HierarchyNode"] = field(default_factory=list)
     parent: Optional["HierarchyNode"] = None
 
 
-def _parse_rest(rest: str) -> tuple[str, str, str]:
-    """Split a bullet line's text into (name, members_url, documents_url)."""
+def _parse_rest(rest: str) -> tuple[str, str, str, list[str]]:
+    """Split a bullet line's text into
+    (name, members_url, documents_url, extras).
+
+    extras holds every "| …"-separated segment of the links portion that
+    isn't the [Members] or [Documents] link, kept verbatim and in order so
+    unmanaged content a human added by hand survives the parse/render
+    round-trip.
+    """
     if ": [" in rest:
         name, _, links_part = rest.partition(": ")
     else:
         name, links_part = rest, ""
     members_m = _MEMBERS_RE.search(links_part)
     documents_m = _DOCUMENTS_RE.search(links_part)
+    segments = [s.strip() for s in links_part.split("|")] if links_part else []
+    extras = [
+        s for s in segments
+        if s and not _MEMBERS_RE.search(s) and not _DOCUMENTS_RE.search(s)
+    ]
     return (
         name.strip(),
         members_m.group("url") if members_m else "",
         documents_m.group("url") if documents_m else "",
+        extras,
     )
 
 
@@ -191,13 +213,14 @@ def parse_hierarchy(markdown: str) -> HierarchyNode:
         if not m:
             continue
         indent_len = len(m.group("indent"))
-        name, members_url, documents_url = _parse_rest(m.group("rest"))
+        name, members_url, documents_url, extras = _parse_rest(m.group("rest"))
         group_id_m = _GROUP_ID_RE.search(members_url) if members_url else None
         node = HierarchyNode(
             name=name,
             group_id=group_id_m.group(1) if group_id_m else None,
             members_url=members_url,
             documents_url=documents_url,
+            extras=extras,
         )
 
         while stack and stack[-1][0] >= indent_len:
@@ -224,13 +247,18 @@ def iter_nodes(root: HierarchyNode):
         yield from iter_nodes(child)
 
 
-def _render_line(name: str, members_url: str, documents_url: str, depth: int) -> str:
+def _render_line(
+    name: str, members_url: str, documents_url: str, extras: list[str], depth: int
+) -> str:
     pad = "    " * depth
     parts = [name]
     if members_url:
         parts.append(f"[Members]({members_url})")
     if documents_url:
         parts.append(f"[Documents]({documents_url})")
+    # Unmanaged segments (extra links, notes) are re-emitted after the
+    # managed links so hand-added content isn't dropped on rewrite.
+    parts.extend(extras)
     text = parts[0] + ": " + " | ".join(parts[1:]) if len(parts) > 1 else parts[0]
     return f"{pad}- {text}"
 
@@ -242,7 +270,9 @@ def render_hierarchy(root: HierarchyNode) -> str:
     lines: list[str] = []
 
     def walk(node: HierarchyNode, depth: int) -> None:
-        lines.append(_render_line(node.name, node.members_url, node.documents_url, depth))
+        lines.append(
+            _render_line(node.name, node.members_url, node.documents_url, node.extras, depth)
+        )
         for child in sorted(node.children, key=lambda c: c.name.casefold()):
             walk(child, depth + 1)
 
