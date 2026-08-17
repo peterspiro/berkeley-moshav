@@ -10,6 +10,7 @@ from collections import deque
 from pathlib import Path
 
 from util.gather_utils import _check_submit_errors, log, screenshot, select2_choose
+from util.google_group_footer import ITEM_TYPE_FOLDER, ITEM_TYPE_SHARED_DRIVE
 
 GDRIVE_MAP_FILE = Path(__file__).parent.parent / "groups_drive_sync" / "gdrive_item_map.json"
 
@@ -187,21 +188,33 @@ def save_gdrive_item_map(mapping: dict[str, str]) -> None:
 
 # ── /gdrive/config scraping ────────────────────────────────────────────────────
 
+# Maps a /gdrive/config section heading to the item_type it links.
+# "Files" (and any other section) is ignored — this sync only cares about
+# Drive items whose membership can be mirrored into a Google Group.
+_SECTION_ITEM_TYPES = {
+    "Shared Drives": ITEM_TYPE_SHARED_DRIVE,
+    "Folders": ITEM_TYPE_FOLDER,
+}
+
+
 def scrape_gdrive_config(page, base_url: str) -> list[dict]:
     """
-    Navigate to /gdrive/config and return a list of entries for the Folders
-    section only (not Shared Drives), each a dict with:
-      folder_name    – display name of the folder
-      group_id       – Gather group ID associated with this folder
+    Navigate to /gdrive/config and return a list of entries for the Shared
+    Drives and Folders sections (Files are skipped), each a dict with:
+      folder_name    – display name of the folder or shared drive
+      group_id       – Gather group ID associated with this item
       group_name     – Gather group name
+      item_type      – ITEM_TYPE_FOLDER for a Folders-section row,
+                       ITEM_TYPE_SHARED_DRIVE for a Shared Drives-section row
       item_id        – Gather's internal numeric ID for this linked item, or
                        None if no item-groups/new link was found in the row
-      google_file_id – the underlying Google Drive folder ID, parsed from a
-                       /gdrive/item/{id} link on the folder name, or None if
-                       the folder name isn't rendered as a link
+      google_file_id – the underlying Google Drive ID (a folder ID, or a
+                       shared drive's ID), parsed from a /gdrive/item/{id}
+                       link on the name, or None if the name isn't rendered
+                       as a link
 
     The page has a single <table> with <tr class="heading"> rows separating
-    sections (Shared Drives / Folders / Files).  Each data row has the folder
+    sections (Shared Drives / Folders / Files).  Each data row has the item
     name in the first <td> (sometimes a plain-text label, sometimes a link
     to /gdrive/item/{google_file_id}) and a /groups/{id} link in the
     third <td>.
@@ -209,16 +222,16 @@ def scrape_gdrive_config(page, base_url: str) -> list[dict]:
     page.goto(f"{base_url}/gdrive/config", wait_until="networkidle")
 
     entries = []
-    in_folders_section = False
+    section_item_type = None
 
     for row in page.locator("table tbody tr").all():
         # Section heading row — track which section we're in
         heading = row.locator("h2")
         if heading.count() > 0:
-            in_folders_section = heading.first.inner_text().strip() == "Folders"
+            section_item_type = _SECTION_ITEM_TYPES.get(heading.first.inner_text().strip())
             continue
 
-        if not in_folders_section:
+        if section_item_type is None:
             continue
 
         # Group link — rows without one are header/empty rows
@@ -259,11 +272,40 @@ def scrape_gdrive_config(page, base_url: str) -> list[dict]:
             folder_name=folder_name,
             group_id=group_id,
             group_name=group_name,
+            item_type=section_item_type,
             item_id=item_id,
             google_file_id=google_file_id,
         ))
 
     return entries
+
+
+def check_single_link_per_group(config_entries: list[dict]) -> None:
+    """Raise ValueError if any Gather group is linked to more than one
+    Drive item (folder and/or shared drive) on /gdrive/config.
+
+    Membership sync mirrors a single item's permissions into a group, so a
+    group tied to two items is ambiguous — fail loudly rather than silently
+    pick one. The message lists every offending group and its linked items."""
+    by_group: dict[str, list[dict]] = {}
+    for entry in config_entries:
+        by_group.setdefault(entry["group_id"], []).append(entry)
+
+    offenders = []
+    for group_id, group_entries in sorted(by_group.items()):
+        if len(group_entries) > 1:
+            group_name = group_entries[0].get("group_name") or ""
+            items = ", ".join(
+                f"{e['folder_name']!r} ({e['item_type']})" for e in group_entries
+            )
+            offenders.append(f"{group_name!r} (group_id={group_id}) → {items}")
+
+    if offenders:
+        raise ValueError(
+            "Each Gather group may be linked to at most one Drive folder or "
+            "shared drive, but these are linked to several:\n  "
+            + "\n  ".join(offenders)
+        )
 
 
 _DUMP_DIR = Path("debug/gdrive_config_row_dumps")

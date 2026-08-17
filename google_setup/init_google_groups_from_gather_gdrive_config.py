@@ -59,6 +59,7 @@ from util.google_group_utils import (
     group_exists,
 )
 from util.gdrive_config import scrape_gdrive_config
+from util.google_group_footer import ITEM_TYPE_FOLDER
 
 BASE_URL = "https://berkeley-moshav.gather.coop"
 
@@ -112,7 +113,10 @@ def main():
         login(page, BASE_URL, gather_email, gather_password)
 
         log("INFO", "scrape", f"Reading {BASE_URL}/gdrive/config…")
-        entries = scrape_gdrive_config(page, BASE_URL)
+        # This bootstrap creates a Google Group per Drive folder; shared
+        # drives are managed separately, so only the Folders section applies.
+        entries = [e for e in scrape_gdrive_config(page, BASE_URL)
+                   if e["item_type"] == ITEM_TYPE_FOLDER]
         log("INFO", "scrape", f"Found {len(entries)} folder(s) in Drive config.")
 
         if not entries:

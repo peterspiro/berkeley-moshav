@@ -26,11 +26,16 @@ excluding hidden groups:
       kept flat.
   0d. Once every group's folder and mailing-list state is settled, ensures
       each associated Google Group's custom footer carries an up-to-date
-      "Gather group"/"Google Docs folder" link block (this is what
-      groups_drive_sync.gs reads to know which folder to sync membership
-      from — see util/google_group_footer.py). Any other footer content
-      is preserved; the block is only touched when Gather itself
-      currently implies a (possibly different) pairing for that email.
+      "Gather group"/Drive-item link block (this is what
+      groups_drive_sync.gs reads to know which item to sync membership
+      from — see util/google_group_footer.py). The Drive link is labeled
+      "Google Docs folder" for a group linked to a folder, or "Shared
+      Drive" for a group linked to a shared drive on /gdrive/config; the
+      former syncs the folder's Content managers into the group, the latter
+      the shared drive's Viewers. A group linked to more than one item is a
+      hard error. Any other footer content is preserved; the block is only
+      touched when Gather itself currently implies a (possibly different)
+      pairing for that email.
   1.  If it's already in the hierarchy but has been renamed, updates the
       hierarchy line to the current name (matched by Gather group ID, embedded
       in the [Members] link, so renames don't break the association).
@@ -104,6 +109,7 @@ from util.gather_utils import (
 )
 from util.gdrive_config import (
     add_group_access_to_gdrive_item,
+    check_single_link_per_group,
     create_drive_folder,
     create_gdrive_item,
     dump_gdrive_config_row_html,
@@ -117,9 +123,10 @@ from util.gdrive_config import (
     walk_drive_folders,
 )
 from util.google_group_footer import (
+    ITEM_TYPE_FOLDER,
     compute_group_footer_updates,
     ensure_group_footer,
-    fetch_footer_folder_id,
+    fetch_footer_link,
 )
 from util.google_group_utils import (
     CONVERSATION_HISTORY_SETTINGS,
@@ -314,11 +321,17 @@ def fetch_group_info(page, base_url: str) -> tuple[dict[str, dict], set[str], se
 def fetch_documents_url_by_group_id(
     page, base_url: str, drive_id: str, config_entries: list[dict], drive_folders: list[dict],
     settings_service, email_by_group_id: dict[str, str],
-) -> tuple[dict[str, str], set[str], dict[str, str]]:
+) -> tuple[dict[str, str], set[str], dict[str, str], dict[str, str]]:
     """Return ({group_id: documents_href}, linked_group_ids,
-    {group_id: google_file_id}), given the already-scraped /gdrive/config
-    entries and an already-walked Shared Drive folder tree (both fetched
-    once in main() and reused across steps).
+    {group_id: google_file_id}, {group_id: item_type}), given the
+    already-scraped /gdrive/config entries and an already-walked Shared
+    Drive folder tree (both fetched once in main() and reused across steps).
+
+    item_type is ITEM_TYPE_FOLDER or ITEM_TYPE_SHARED_DRIVE, taken from the
+    /gdrive/config section the item was linked under — it tells
+    ensure_group_footers()/groups_drive_sync.gs whether a group's
+    membership mirrors a folder's Content managers or a shared drive's
+    Viewers.
 
     linked_group_ids is every group_id that currently has a Drive folder
     linked via /gdrive/config, whether or not its URL could be resolved —
@@ -355,6 +368,7 @@ def fetch_documents_url_by_group_id(
 
     documents_url_by_group_id: dict[str, str] = {}
     google_file_id_by_group_id: dict[str, str] = {}
+    item_type_by_group_id: dict[str, str] = {}
     unresolved: list[dict] = []
     for entry in config_entries:
         gid = entry["group_id"]
@@ -365,13 +379,15 @@ def fetch_documents_url_by_group_id(
         )
         if not google_file_id and email:
             try:
-                google_file_id = fetch_footer_folder_id(settings_service, email)
+                link = fetch_footer_link(settings_service, email)
+                google_file_id = link[0] if link else None
             except Exception as e:
                 log("WARN", "documents_link", entry["folder_name"],
                     f"couldn't read footer for {email}: {e}")
         if google_file_id:
             documents_url_by_group_id[gid] = gdrive_item_url(google_file_id)
             google_file_id_by_group_id[gid] = google_file_id
+            item_type_by_group_id[gid] = entry["item_type"]
         else:
             unresolved.append(entry)
 
@@ -382,10 +398,17 @@ def fetch_documents_url_by_group_id(
 
         still_unresolved: list[dict] = []
         for entry in unresolved:
-            matches = by_name.get(entry["folder_name"], [])
+            # The name-match fallback only walks folders under the Shared
+            # Drive, so it can only rescue folder-linked items — a shared
+            # drive isn't one of its own descendant folders.
+            matches = (
+                by_name.get(entry["folder_name"], [])
+                if entry["item_type"] == ITEM_TYPE_FOLDER else []
+            )
             if len(matches) == 1:
                 documents_url_by_group_id[entry["group_id"]] = gdrive_item_url(matches[0])
                 google_file_id_by_group_id[entry["group_id"]] = matches[0]
+                item_type_by_group_id[entry["group_id"]] = entry["item_type"]
             else:
                 still_unresolved.append(entry)
                 if len(matches) > 1:
@@ -401,7 +424,10 @@ def fetch_documents_url_by_group_id(
             f"no known Drive folder ID for item_id={entry['item_id']!r}, and no "
             f"exact name match found in Shared Drive {drive_id} ({dump_note})")
 
-    return documents_url_by_group_id, linked_group_ids, google_file_id_by_group_id
+    return (
+        documents_url_by_group_id, linked_group_ids,
+        google_file_id_by_group_id, item_type_by_group_id,
+    )
 
 
 # ── Interactive parent selection ───────────────────────────────────────────────
@@ -534,6 +560,7 @@ def ensure_group_folders(
     page, base_url: str, drive_service, drive_id: str,
     group_info: dict[str, dict], linked_group_ids: set[str],
     documents_url_by_group_id: dict[str, str], google_file_id_by_group_id: dict[str, str],
+    item_type_by_group_id: dict[str, str],
     drive_folders: list[dict], folder_owner: dict[str, str],
     folder_name_by_group_id: dict[str, str], dry_run: bool,
 ) -> None:
@@ -541,9 +568,14 @@ def ensure_group_folders(
     create, or skip one. If resolved, links it on /gdrive/config with
     Content manager access.
 
+    Only ever creates/links plain folders (never shared drives), so anything
+    resolved here is recorded as ITEM_TYPE_FOLDER. Groups already linked to
+    a shared drive are in linked_group_ids and so aren't offered a folder.
+
     Mutates linked_group_ids, documents_url_by_group_id,
-    google_file_id_by_group_id, folder_owner, and folder_name_by_group_id
-    in place. Google Group footers aren't touched here — they're synced
+    google_file_id_by_group_id, item_type_by_group_id, folder_owner, and
+    folder_name_by_group_id in place. Google Group footers aren't touched
+    here — they're synced
     separately in ensure_group_footers(), once every group's folder *and*
     mailing list state is final, since a footer link needs both a folder
     and a group email to be meaningful.
@@ -601,6 +633,7 @@ def ensure_group_folders(
         linked_group_ids.add(group_id)
         documents_url_by_group_id[group_id] = gdrive_item_url(folder_id)
         google_file_id_by_group_id[group_id] = folder_id
+        item_type_by_group_id[group_id] = ITEM_TYPE_FOLDER
         folder_owner[folder_name] = group_id
         folder_name_by_group_id[group_id] = folder_name
         print(f"  Linked '{folder_name}' to '{group_name}'.")
@@ -809,15 +842,17 @@ def demote_managers_to_members(
 
 def ensure_group_footers(
     settings_service, base_url: str, group_info: dict[str, dict],
-    google_file_id_by_group_id: dict[str, str], email_by_group_id: dict[str, str],
-    dry_run: bool,
+    google_file_id_by_group_id: dict[str, str], item_type_by_group_id: dict[str, str],
+    email_by_group_id: dict[str, str], dry_run: bool,
 ) -> None:
     """Keep each eligible Google Group's custom footer in sync with
     Gather's own state: for every eligible group that currently has both a
-    linked Drive folder and a configured mailing list, that pairing
-    implies one footer link block (see util/google_group_footer.py),
-    added or updated to match. groups_drive_sync.gs reads this footer to
-    know which folder to sync a group's membership from.
+    linked Drive item (folder or shared drive) and a configured mailing
+    list, that pairing implies one footer link block (see
+    util/google_group_footer.py), added or updated to match — labeled as a
+    folder or shared-drive link per item_type_by_group_id.
+    groups_drive_sync.gs reads this footer to know which item, and which
+    permission role, to sync a group's membership from.
 
     A footer is only ever added/updated here, never blanked out — a group
     Gather can't currently derive a pairing for is left alone, and any
@@ -834,21 +869,24 @@ def ensure_group_footers(
     for group_id, info in eligible:
         group_name = info["name"]
         email = email_by_group_id[group_id]
-        folder_id = google_file_id_by_group_id[group_id]
+        item_id = google_file_id_by_group_id[group_id]
+        item_type = item_type_by_group_id.get(group_id, ITEM_TYPE_FOLDER)
 
         if dry_run:
             updates = compute_group_footer_updates(
-                settings_service, email, group_id, folder_id, base_url, group_name
+                settings_service, email, group_id, item_id, base_url, group_name, item_type
             )
             if updates:
-                print(f"[dry-run] '{group_name}' ({email}): would update footer link to folder {folder_id}")
-                log("INFO", "would_update_footer", f"{group_name} ({email}) -> {folder_id}")
+                print(f"[dry-run] '{group_name}' ({email}): would update footer link to {item_type} {item_id}")
+                log("INFO", "would_update_footer", f"{group_name} ({email}) -> {item_type} {item_id}")
             continue
 
-        updates = ensure_group_footer(settings_service, email, group_id, folder_id, base_url, group_name)
+        updates = ensure_group_footer(
+            settings_service, email, group_id, item_id, base_url, group_name, item_type
+        )
         if updates:
-            print(f"  ~ footer: '{group_name}' ({email}) -> folder {folder_id}")
-            log("INFO", "update_footer", f"{group_name} ({email}) -> {folder_id}")
+            print(f"  ~ footer: '{group_name}' ({email}) -> {item_type} {item_id}")
+            log("INFO", "update_footer", f"{group_name} ({email}) -> {item_type} {item_id}")
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -1042,13 +1080,15 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
         log("INFO", "walk_drive", f"{len(drive_folders)} folder(s) found")
 
         config_entries = scrape_gdrive_config(page, base_url)
+        check_single_link_per_group(config_entries)
         folder_owner = {e["folder_name"]: e["group_id"] for e in config_entries}
         folder_name_by_group_id = {e["group_id"]: e["folder_name"] for e in config_entries}
 
         checked_email_ids: set[str] = set()
         email_by_group_id = build_email_by_group_id(group_info, checked_email_ids)
 
-        documents_url_by_group_id, linked_group_ids, google_file_id_by_group_id = (
+        (documents_url_by_group_id, linked_group_ids,
+         google_file_id_by_group_id, item_type_by_group_id) = (
             fetch_documents_url_by_group_id(
                 page, base_url, drive_id, config_entries, drive_folders,
                 settings_service, email_by_group_id,
@@ -1061,8 +1101,8 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
         try:
             ensure_group_folders(
                 page, base_url, drive_service, drive_id, group_info, linked_group_ids,
-                documents_url_by_group_id, google_file_id_by_group_id, drive_folders,
-                folder_owner, folder_name_by_group_id, dry_run,
+                documents_url_by_group_id, google_file_id_by_group_id, item_type_by_group_id,
+                drive_folders, folder_owner, folder_name_by_group_id, dry_run,
             )
         except QuitScript:
             quit_requested = True
@@ -1099,7 +1139,7 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
         # Step 3: keep each Google Group's footer link in sync with Gather.
         ensure_group_footers(
             settings_service, base_url, group_info, google_file_id_by_group_id,
-            email_by_group_id, dry_run,
+            item_type_by_group_id, email_by_group_id, dry_run,
         )
 
         if not quit_requested:
