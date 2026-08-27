@@ -147,12 +147,15 @@ def _set_member_type(page: Page, label: str = "Member"):
         sel.select_option(label=label)
 
 
-def create_household(page: Page, base_url: str, household: dict, dry_run: bool) -> bool:
+def create_household(page: Page, base_url: str, household: dict, dry_run: bool,
+                     any_contact_list_status: bool = False) -> bool:
     name = household["household_name"]
     unit = _household_unit_str(household)
+    member_type_label = "[None]" if any_contact_list_status else "Member"
 
     if dry_run:
-        log("DRY-RUN", "create_household", f"{name} (unit {unit or 'none'})")
+        log("DRY-RUN", "create_household",
+            f"{name} (unit {unit or 'none'}, member_type {member_type_label})")
         return True
 
     try:
@@ -160,7 +163,7 @@ def create_household(page: Page, base_url: str, household: dict, dry_run: bool) 
         page.fill('input[name="household[name]"]', name)
         if unit:
             page.fill('input[name="household[unit_num_and_suffix]"]', unit)
-        _set_member_type(page)
+        _set_member_type(page, label=member_type_label)
         page.click('button[type="submit"], input[type="submit"]')
         page.wait_for_load_state("networkidle")
 
@@ -179,11 +182,15 @@ def create_household(page: Page, base_url: str, household: dict, dry_run: bool) 
         return False
 
 
-def update_household(page: Page, edit_url: str, household: dict, dry_run: bool) -> str:
+def update_household(page: Page, edit_url: str, household: dict, dry_run: bool,
+                     any_contact_list_status: bool = False) -> str:
     """Navigate to the household edit page, compare fields, and update if changed.
     Returns 'skipped', 'updated', or 'failed'."""
     name = household["household_name"]
     desired_unit = _household_unit_str(household)
+    # "" is what _get_member_type_label reports for the [None] option.
+    desired_member_type = "" if any_contact_list_status else "Member"
+    desired_member_type_label = "[None]" if any_contact_list_status else "Member"
 
     try:
         page.goto(edit_url, wait_until="networkidle")
@@ -193,8 +200,9 @@ def update_household(page: Page, edit_url: str, household: dict, dry_run: bool) 
         changes = []
         if current_unit != desired_unit:
             changes.append(f"unit: {current_unit!r} → {desired_unit!r}")
-        if current_member_type != "Member":
-            changes.append(f"member_type: {current_member_type!r} → 'Member'")
+        if current_member_type != desired_member_type:
+            changes.append(
+                f"member_type: {current_member_type!r} → {desired_member_type_label!r}")
 
         if not changes:
             log("INFO", "household", f"Up to date, skipping: {name}")
@@ -207,7 +215,7 @@ def update_household(page: Page, edit_url: str, household: dict, dry_run: bool) 
             return "skipped"
 
         page.fill('input[name="household[unit_num_and_suffix]"]', desired_unit)
-        _set_member_type(page)
+        _set_member_type(page, label=desired_member_type_label)
         page.click('button[type="submit"], input[type="submit"]')
         page.wait_for_load_state("networkidle")
 
@@ -388,11 +396,14 @@ def update_user(page: Page, edit_url: str, member: dict, dry_run: bool) -> str:
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main(sheet_url: str, base_url: str, email: str, password: str,
-         dry_run: bool = False, household_prefix: str | None = None):
+         dry_run: bool = False, household_prefix: str | None = None,
+         any_contact_list_status: bool = False):
     base_url = base_url.rstrip("/")
     init_log()
 
-    log("INFO", "start", f"sheet_url={sheet_url} base_url={base_url} dry_run={dry_run}")
+    log("INFO", "start",
+        f"sheet_url={sheet_url} base_url={base_url} dry_run={dry_run} "
+        f"any_contact_list_status={any_contact_list_status}")
 
     tsv_text = fetch_sheet(sheet_url)
     households = parse_households_from_text(tsv_text)
@@ -430,13 +441,15 @@ def main(sheet_url: str, base_url: str, email: str, password: str,
             # ── Household ──
             edit_url = find_household_edit_url(page, base_url, hh_name)
             if edit_url:
-                result = update_household(page, edit_url, household, dry_run)
+                result = update_household(page, edit_url, household, dry_run,
+                                          any_contact_list_status)
                 stats[f"hh_{result}"] += 1
                 if result == "failed":
                     log("WARN", "household", f"Skipping members of failed household: {hh_name}")
                     continue
             else:
-                ok = create_household(page, base_url, household, dry_run)
+                ok = create_household(page, base_url, household, dry_run,
+                                      any_contact_list_status)
                 stats["hh_created" if ok else "hh_failed"] += 1
                 if not ok:
                     log("WARN", "household", f"Skipping members of failed household: {hh_name}")
@@ -473,9 +486,17 @@ def cli():
                         help="Log what would happen without making any changes")
     parser.add_argument("-H", "--household", default=None, metavar="PREFIX",
                         help="Process only the household whose name starts with PREFIX")
+    parser.add_argument("--any-contact-list-status", action="store_true",
+                        help="Create/update the household with no member type ([None]) "
+                             "instead of Member. Requires --household.")
     args = parser.parse_args()
+
+    if args.any_contact_list_status and args.household is None:
+        parser.error("--any-contact-list-status requires --household")
+
     email, password = load_credentials()
-    main(args.sheet_url, args.base_url, email, password, args.dry_run, args.household)
+    main(args.sheet_url, args.base_url, email, password, args.dry_run, args.household,
+         args.any_contact_list_status)
 
 
 if __name__ == "__main__":
