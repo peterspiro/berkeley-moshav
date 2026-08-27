@@ -486,7 +486,7 @@ def cli():
                         help="Log what would happen without making any changes")
     parser.add_argument("-H", "--household", default=None, metavar="PREFIX",
                         help="Process only the household whose name starts with PREFIX")
-    parser.add_argument("--any-contact-list-status", action="store_true",
+    parser.add_argument("-a", "--any-contact-list-status", action="store_true",
                         help="Create/update the household with no member type ([None]) "
                              "instead of Member. Requires --household.")
     args = parser.parse_args()
