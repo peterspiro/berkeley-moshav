@@ -208,8 +208,14 @@ def resolve_adult_name(
 
 # ── Main parsing logic ────────────────────────────────────────────────────────
 
-def parse_households_from_text(tsv_text: str) -> list[dict]:
-    """Parse TSV text (already loaded as a string) into household dicts."""
+def parse_households_from_text(tsv_text: str,
+                               include_all_statuses: bool = False) -> list[dict]:
+    """Parse TSV text (already loaded as a string) into household dicts.
+
+    By default only rows whose Status starts with "member" are kept. Pass
+    include_all_statuses=True to keep rows of any status (e.g. "Explorer"),
+    used when importing a household that has no Member status.
+    """
     all_rows = list(csv.reader(io.StringIO(tsv_text), delimiter="\t"))
     header_idx = find_header_row_index(all_rows)
     fieldnames = [cell.strip() for cell in all_rows[header_idx]]
@@ -222,7 +228,9 @@ def parse_households_from_text(tsv_text: str) -> list[dict]:
         return []
 
     # Include Member status; "Member & Consultant" and similar variants qualify.
-    rows = [r for r in rows if r.get("Status", "").lower().startswith("member")]
+    # When include_all_statuses is set, keep every status (e.g. "Explorer").
+    if not include_all_statuses:
+        rows = [r for r in rows if r.get("Status", "").lower().startswith("member")]
 
     if not rows:
         return []
@@ -366,10 +374,10 @@ def parse_households_from_text(tsv_text: str) -> list[dict]:
     return households
 
 
-def parse_households(tsv_path: str) -> list[dict]:
+def parse_households(tsv_path: str, include_all_statuses: bool = False) -> list[dict]:
     """Read a TSV file from disk and return household dicts."""
     with open(tsv_path, newline="", encoding="utf-8-sig") as f:
-        return parse_households_from_text(f.read())
+        return parse_households_from_text(f.read(), include_all_statuses)
 
 
 def main():

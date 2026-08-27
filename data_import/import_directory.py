@@ -406,7 +406,8 @@ def main(sheet_url: str, base_url: str, email: str, password: str,
         f"any_contact_list_status={any_contact_list_status}")
 
     tsv_text = fetch_sheet(sheet_url)
-    households = parse_households_from_text(tsv_text)
+    households = parse_households_from_text(
+        tsv_text, include_all_statuses=any_contact_list_status)
     log("INFO", "parse_households", f"{len(households)} households parsed")
 
     if household_prefix is not None:
