@@ -20,6 +20,16 @@
  * single item). This means adding/removing a group never requires
  * redeploying this Apps Script project.
  *
+ * Change alerts: after each run, one email goes to ALERT_EMAIL listing every
+ * membership change since the previous run, in two sections:
+ *   - changes made outside the sync (someone edited the group directly) —
+ *     detected by comparing the group's membership against a snapshot saved
+ *     at the end of the previous run (Script Properties); the sync then
+ *     reverts them, and
+ *   - changes the sync itself made to match the Drive item's permissions.
+ * No email is sent when nothing changed. A group's first run only records a
+ * snapshot, so it reports no outside changes.
+ *
  * Setup:
  *   1. In the GAS editor: Extensions > Advanced Services > enable
  *      "Admin SDK Directory API", "Drive API", and "Groups Settings API".
@@ -32,6 +42,10 @@
 const DOMAIN = 'berkeleymoshav.org';
 const FOLDER_SYNC_ROLE = 'fileOrganizer'; // Drive role for a folder's "Content manager"
 const SHARED_DRIVE_SYNC_ROLE = 'reader';  // Drive role for a shared drive's "Viewer"
+const ALERT_EMAIL = 'group-sync-alerts@berkeleymoshav.org';
+
+// Script Properties key prefix for each group's end-of-run membership snapshot.
+const SNAPSHOT_KEY_PREFIX = 'members:';
 
 // Item kinds a footer can encode (matches util.google_group_footer).
 const ITEM_TYPE_FOLDER = 'folder';
@@ -62,6 +76,7 @@ function syncAll() {
 
   let synced = 0;
   let skipped = 0;
+  const reports = [];
 
   for (const group of groups) {
     try {
@@ -70,7 +85,8 @@ function syncAll() {
         skipped++;
         continue;
       }
-      syncItem(link.itemId, link.itemType, group.email, runner);
+      const report = syncItem(link.itemId, link.itemType, group.email, runner);
+      if (hasChanges(report)) reports.push(report);
       synced++;
     } catch (err) {
       console.error(`Error processing ${group.email}: ${err}`);
@@ -78,6 +94,8 @@ function syncAll() {
   }
 
   console.log(`syncAll complete — synced ${synced}, skipped ${skipped} (no item link in footer).`);
+
+  if (reports.length) sendChangeAlert(reports);
 }
 
 function listAllGroups() {
@@ -124,9 +142,10 @@ function syncItem(itemId, itemType, groupEmail, runnerEmail) {
   console.log(`${label}: ${itemId} → group: ${groupEmail}`);
 
   const targetEmails = getSyncTargetEmails(itemId, itemType);
-  const { added, removed } = syncGroupMembership(groupEmail, targetEmails, runnerEmail);
+  const report = syncGroupMembership(groupEmail, targetEmails, runnerEmail);
 
-  console.log(`  Done — added: ${added}, removed: ${removed}`);
+  console.log(`  Done — added: ${report.syncAdded.length}, removed: ${report.syncRemoved.length}`);
+  return report;
 }
 
 // ── Drive helpers ─────────────────────────────────────────────────────────────
@@ -168,32 +187,54 @@ function getSyncTargetEmails(itemId, itemType) {
 
 // ── Group helpers ─────────────────────────────────────────────────────────────
 
+/**
+ * Bring the group's membership in line with targetEmails, and return a
+ * report of { groupEmail, outsideAdded, outsideRemoved, syncAdded,
+ * syncRemoved } (arrays of emails). The outside* lists compare the group's
+ * current membership against the snapshot saved at the end of the previous
+ * run; the resulting membership is saved as the new snapshot even if a
+ * change fails partway, so the sync's own edits are never later mistaken
+ * for outside ones.
+ */
 function syncGroupMembership(groupEmail, targetEmails, runnerEmail) {
   const currentMembers = listAllMembers(groupEmail);
   const currentEmails = new Set(currentMembers.map(m => m.email.toLowerCase()));
 
-  let added = 0;
-  let removed = 0;
+  const previous = loadSnapshot(groupEmail);
+  const report = {
+    groupEmail,
+    outsideAdded: previous ? [...currentEmails].filter(e => !previous.has(e)) : [],
+    outsideRemoved: previous ? [...previous].filter(e => !currentEmails.has(e)) : [],
+    syncAdded: [],
+    syncRemoved: [],
+  };
 
-  for (const email of targetEmails) {
-    if (!currentEmails.has(email)) {
-      AdminDirectory.Members.insert({ email, role: 'MEMBER' }, groupEmail);
-      console.log(`  + ${email}`);
-      added++;
+  const finalEmails = new Set(currentEmails);
+  try {
+    for (const email of targetEmails) {
+      if (!currentEmails.has(email)) {
+        AdminDirectory.Members.insert({ email, role: 'MEMBER' }, groupEmail);
+        console.log(`  + ${email}`);
+        finalEmails.add(email);
+        report.syncAdded.push(email);
+      }
     }
+
+    for (const email of currentEmails) {
+      // Never remove the script runner — they may be an owner/manager
+      if (email === runnerEmail.toLowerCase()) continue;
+      if (!targetEmails.has(email)) {
+        AdminDirectory.Members.remove(groupEmail, email);
+        console.log(`  - ${email}`);
+        finalEmails.delete(email);
+        report.syncRemoved.push(email);
+      }
+    }
+  } finally {
+    saveSnapshot(groupEmail, finalEmails);
   }
 
-  for (const email of currentEmails) {
-    // Never remove the script runner — they may be an owner/manager
-    if (email === runnerEmail.toLowerCase()) continue;
-    if (!targetEmails.has(email)) {
-      AdminDirectory.Members.remove(groupEmail, email);
-      console.log(`  - ${email}`);
-      removed++;
-    }
-  }
-
-  return { added, removed };
+  return report;
 }
 
 function listAllMembers(groupEmail) {
@@ -210,6 +251,51 @@ function listAllMembers(groupEmail) {
     pageToken = response.nextPageToken;
   } while (pageToken);
   return members;
+}
+
+// ── Change alerts ─────────────────────────────────────────────────────────────
+
+function loadSnapshot(groupEmail) {
+  const json = PropertiesService.getScriptProperties()
+    .getProperty(SNAPSHOT_KEY_PREFIX + groupEmail.toLowerCase());
+  return json ? new Set(JSON.parse(json)) : null;
+}
+
+function saveSnapshot(groupEmail, emails) {
+  PropertiesService.getScriptProperties().setProperty(
+    SNAPSHOT_KEY_PREFIX + groupEmail.toLowerCase(),
+    JSON.stringify([...emails].sort()));
+}
+
+function hasChanges(report) {
+  return report.outsideAdded.length || report.outsideRemoved.length ||
+    report.syncAdded.length || report.syncRemoved.length;
+}
+
+function sendChangeAlert(reports) {
+  const lines = [];
+  for (const r of reports) {
+    lines.push(r.groupEmail);
+    if (r.outsideAdded.length || r.outsideRemoved.length) {
+      lines.push('  Changed outside the sync (being reverted to match Drive):');
+      r.outsideAdded.forEach(e => lines.push(`    + ${e}`));
+      r.outsideRemoved.forEach(e => lines.push(`    - ${e}`));
+    }
+    if (r.syncAdded.length || r.syncRemoved.length) {
+      lines.push('  Changed by the sync (to match Drive permissions):');
+      r.syncAdded.forEach(e => lines.push(`    + ${e}`));
+      r.syncRemoved.forEach(e => lines.push(`    - ${e}`));
+    }
+    lines.push('');
+  }
+
+  const n = reports.length;
+  MailApp.sendEmail({
+    to: ALERT_EMAIL,
+    subject: `Group membership changes (${n} group${n === 1 ? '' : 's'})`,
+    body: lines.join('\n'),
+  });
+  console.log(`Sent change alert for ${n} group(s) to ${ALERT_EMAIL}.`);
 }
 
 // ── Trigger setup (run once manually) ────────────────────────────────────────
