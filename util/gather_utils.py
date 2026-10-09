@@ -664,6 +664,19 @@ def find_users_by_prefix(users: list[GatherUser], prefix: str) -> list[GatherUse
     ]
 
 
+def resolve_group_by_prefix(groups: list[GatherGroup], prefix: str) -> GatherGroup:
+    """Return the single group whose name starts with `prefix`
+    (case-insensitive). Raises ValueError if zero or more than one match."""
+    p = prefix.strip().casefold()
+    matches = [g for g in groups if g.name.casefold().startswith(p)]
+    if len(matches) == 1:
+        return matches[0]
+    if not matches:
+        raise ValueError(f"No Gather group name starts with {prefix!r}.")
+    names = ", ".join(repr(g.name) for g in matches)
+    raise ValueError(f"Prefix {prefix!r} matches multiple groups: {names}")
+
+
 def fetch_all_gather_groups(page: Page, base_url: str) -> list[GatherGroup]:
     """Scrape the group list page, returning basic info (members fetched later)."""
     groups: list[GatherGroup] = []

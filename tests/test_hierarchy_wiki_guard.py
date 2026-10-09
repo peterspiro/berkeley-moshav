@@ -69,3 +69,23 @@ class TestLiveGroupNotGuarded:
         # Group 1 still exists in Gather → not a removal → guard doesn't fire.
         _sync(root, group_info={"1": {"name": "Care Circle"}})
         assert any(n.name == "Care Circle" for n in iter_nodes(root))
+
+
+class TestSingleGroupMode:
+    def test_other_rows_untouched_when_only_group_id_set(self):
+        # Group 1 is absent from group_info (as in a -g run on another group);
+        # with only_group_id set it must not be treated as deleted.
+        root = parse_hierarchy(_MD_WITH_WIKI)
+        sync_hierarchy(
+            root, {"2": {"name": "Other"}}, {}, set(), set(), set(),
+            dry_run=True, only_group_id="2",
+        )
+        assert any(n.name == "Care Circle" for n in iter_nodes(root))
+
+    def test_target_row_still_renamed(self):
+        root = parse_hierarchy(_MD_WITHOUT_WIKI)
+        sync_hierarchy(
+            root, {"1": {"name": "Caring Circle"}}, {}, set(), set(), set(),
+            dry_run=True, only_group_id="1",
+        )
+        assert any(n.name == "Caring Circle" for n in iter_nodes(root))

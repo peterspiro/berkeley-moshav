@@ -65,6 +65,17 @@ linked to the root Shared Drive page (/gdrive) via [Documents]. This
 happens unconditionally on every run, overwriting any manual edits to that
 line.
 
+With -g/--group PREFIX, only the one group whose name starts with PREFIX
+(case-insensitive; it must match exactly one Gather group, which mustn't be
+hidden or deactivated) is processed: steps 0a-0d run for just that group,
+and in the hierarchy only that group's own row is renamed/re-linked (or
+added if missing). Hierarchy-wide passes — forcing the root entry, and
+removing entries for deleted/deactivated groups — are skipped, since they
+need every group's state. To keep the run fast, only that group's detail
+page and footer are read, and the Shared Drive folder tree is only walked
+if it's actually needed (the group has no folder yet, or its linked folder
+can only be resolved by name).
+
 In dry-run mode (-n), missing/stale entries and folder/email-list gaps are
 only reported, never prompted for.
 
@@ -84,12 +95,15 @@ Requires Google API access (Drive, Admin Directory, Groups Settings):
 Usage:
     python update_groups_in_google_and_hierarchy.py -e admin@example.com -p secret
     python update_groups_in_google_and_hierarchy.py -u https://example.gather.coop -n
+    python update_groups_in_google_and_hierarchy.py -g landscape
 """
 
 import argparse
+import functools
 import os
 import re
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 from googleapiclient.discovery import build
@@ -107,6 +121,7 @@ from util.gather_utils import (
     launch_browser,
     log,
     login,
+    resolve_group_by_prefix,
     set_gather_group_email_list,
 )
 from util.gdrive_config import (
@@ -331,25 +346,47 @@ def fetch_group_info(page, base_url: str) -> tuple[dict[str, dict], set[str], se
             if is_deactivated:
                 deactivated_ids.add(group.group_id)
             continue
-        info[group.group_id] = {
-            "name": detail.name,
-            "kind": (detail.kind or "").strip().lower(),
-            "availability": (detail.availability or "").strip().lower(),
-            "url": f"/groups/{group.group_id}",
-            "list_name": detail.list_name,
-            "list_domain": detail.list_domain,
-        }
+        info[group.group_id] = _group_info_entry(group.group_id, detail)
     return info, excluded_ids, deactivated_ids
 
 
+def fetch_single_group_info(page, base_url: str, prefix: str) -> dict[str, dict]:
+    """Return {group_id: info} (same shape as fetch_group_info()) for just
+    the one group whose name uniquely starts with `prefix`, fetching only
+    that group's detail page. Raises ValueError if the prefix matches zero
+    or several groups, or the group is hidden or deactivated (a full run
+    skips those too)."""
+    group = resolve_group_by_prefix(fetch_all_gather_groups(page, base_url), prefix)
+    detail = _fetch_group_detail(page, base_url, group)
+    if _group_is_deactivated(page, detail):
+        raise ValueError(f"Group '{detail.name}' (id={group.group_id}) is deactivated.")
+    if _group_is_hidden(page, detail):
+        raise ValueError(f"Group '{detail.name}' (id={group.group_id}) is hidden.")
+    return {group.group_id: _group_info_entry(group.group_id, detail)}
+
+
+def _group_info_entry(group_id: str, detail) -> dict:
+    return {
+        "name": detail.name,
+        "kind": (detail.kind or "").strip().lower(),
+        "availability": (detail.availability or "").strip().lower(),
+        "url": f"/groups/{group_id}",
+        "list_name": detail.list_name,
+        "list_domain": detail.list_domain,
+    }
+
+
 def fetch_documents_url_by_group_id(
-    page, base_url: str, drive_id: str, config_entries: list[dict], drive_folders: list[dict],
-    shared_drives: list[dict], settings_service, email_by_group_id: dict[str, str],
+    page, base_url: str, drive_id: str, config_entries: list[dict],
+    get_drive_folders: Callable[[], list[dict]], get_shared_drives: Callable[[], list[dict]],
+    settings_service, email_by_group_id: dict[str, str],
 ) -> tuple[dict[str, str], set[str], dict[str, str], dict[str, str]]:
     """Return ({group_id: documents_href}, linked_group_ids,
     {group_id: google_file_id}, {group_id: item_type}), given the
-    already-scraped /gdrive/config entries and an already-walked Shared
-    Drive folder tree (both fetched once in main() and reused across steps).
+    already-scraped /gdrive/config entries. The Shared Drive folder tree and
+    the domain's shared drives are fetched through get_drive_folders() /
+    get_shared_drives() (cached in main() and reused across steps), and
+    only called when some entry can't be resolved without a name match.
 
     item_type is ITEM_TYPE_FOLDER or ITEM_TYPE_SHARED_DRIVE, taken from the
     /gdrive/config section the item was linked under — it tells
@@ -380,7 +417,7 @@ def fetch_documents_url_by_group_id(
          add_new_group.py.
       4. Matching by exact name: a folder-linked row against the
          already-walked Shared Drive folder tree, or a shared-drive-linked
-         row against the domain's shared drives (shared_drives) — a shared
+         row against the domain's shared drives (get_shared_drives()) — a shared
          drive isn't in any drive's folder tree, so it has its own lookup.
     Items resolved by none of these are logged as unresolved.
     """
@@ -424,11 +461,13 @@ def fetch_documents_url_by_group_id(
         # shared drive with no /gdrive/item link and no footer yet could
         # never resolve, and its footer would never get written).
         folders_by_name: dict[str, list[str]] = {}
-        for f in drive_folders:
-            folders_by_name.setdefault(f["name"], []).append(f["id"])
+        if any(e["item_type"] == ITEM_TYPE_FOLDER for e in unresolved):
+            for f in get_drive_folders():
+                folders_by_name.setdefault(f["name"], []).append(f["id"])
         drives_by_name: dict[str, list[str]] = {}
-        for d in shared_drives:
-            drives_by_name.setdefault(d["name"], []).append(d["id"])
+        if any(e["item_type"] != ITEM_TYPE_FOLDER for e in unresolved):
+            for d in get_shared_drives():
+                drives_by_name.setdefault(d["name"], []).append(d["id"])
 
         still_unresolved: list[dict] = []
         for entry in unresolved:
@@ -595,7 +634,7 @@ def ensure_group_folders(
     group_info: dict[str, dict], linked_group_ids: set[str],
     documents_url_by_group_id: dict[str, str], google_file_id_by_group_id: dict[str, str],
     item_type_by_group_id: dict[str, str],
-    drive_folders: list[dict], folder_owner: dict[str, str],
+    get_drive_folders: Callable[[], list[dict]], folder_owner: dict[str, str],
     folder_name_by_group_id: dict[str, str], dry_run: bool,
 ) -> None:
     """For every eligible group with no Drive folder, interactively find,
@@ -630,7 +669,7 @@ def ensure_group_folders(
             log("INFO", "would_ensure_folder", f"{group_name} (id={group_id})")
             continue
 
-        matches = find_matching_folders(group_name, drive_folders)
+        matches = find_matching_folders(group_name, get_drive_folders())
         available = [f for f in matches if folder_owner.get(f["name"]) in (None, group_id)]
         taken = [f for f in matches if f not in available]
 
@@ -1007,6 +1046,7 @@ def _guard_wiki_link_on_removal(node, reason: str) -> None:
 def sync_hierarchy(
     root, group_info: dict[str, dict], documents_url_by_group_id: dict[str, str],
     linked_group_ids: set[str], excluded_ids: set[str], deactivated_ids: set[str], dry_run: bool,
+    only_group_id: str | None = None,
 ) -> None:
     """Mutate the parsed hierarchy tree in place: rename, add/alter/remove
     Documents links, prompt for deletion of stale entries.
@@ -1021,9 +1061,14 @@ def sync_hierarchy(
 
     The root node itself is skipped — its name/links are forced by
     ensure_root_node(), not by the generic rename/link-sync rules here.
+
+    If only_group_id is given, every other row is left untouched (group_info
+    then holds only that group, so it can't tell which others still exist).
     """
     for node in list(iter_nodes(root)):
         if node is root or not node.group_id:
+            continue
+        if only_group_id is not None and node.group_id != only_group_id:
             continue
 
         if node.group_id in deactivated_ids:
@@ -1118,10 +1163,10 @@ def add_missing_groups(
 
 
 def main(base_url: str, email: str, password: str, dry_run: bool,
-         credentials_path: str, drive_id: str):
+         credentials_path: str, drive_id: str, group_prefix: str | None = None):
     base_url = base_url.rstrip("/")
     init_log()
-    log("INFO", "start", f"base_url={base_url} dry_run={dry_run}")
+    log("INFO", "start", f"base_url={base_url} dry_run={dry_run} group={group_prefix!r}")
 
     creds = get_credentials(credentials_path)
     drive_service = build("drive", "v3", credentials=creds)
@@ -1143,14 +1188,43 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
         current_content = fetch_hierarchy_page_content(page, base_url)
         root = parse_hierarchy(current_content)
 
-        group_info, excluded_ids, deactivated_ids = fetch_group_info(page, base_url)
+        # Single-group mode (-g): target_id is that group, and group_info
+        # holds only it. Otherwise target_id is None and every group is
+        # processed.
+        if group_prefix:
+            try:
+                group_info = fetch_single_group_info(page, base_url, group_prefix)
+            except ValueError as e:
+                log("ERROR", "resolve_group", str(e))
+                close_log()
+                browser.close()
+                sys.exit(f"Error: {e}")
+            target_id = next(iter(group_info))
+            target = group_info[target_id]
+            print(f"Resolved '{group_prefix}' → '{target['name']}' (id={target_id})")
+            if target["kind"] not in ELIGIBLE_KINDS:
+                log("WARN", "resolve_group",
+                    f"'{target['name']}' is of kind {target['kind']!r}, not one of "
+                    f"{sorted(ELIGIBLE_KINDS)} — its Google setup will be left alone")
+            excluded_ids: set[str] = set()
+            deactivated_ids: set[str] = set()
+        else:
+            group_info, excluded_ids, deactivated_ids = fetch_group_info(page, base_url)
+            target_id = None
 
-        log("INFO", "walk_drive", f"Walking folder tree of Shared Drive {drive_id}…")
-        drive_folders = walk_drive_folders(drive_service, drive_id)
-        log("INFO", "walk_drive", f"{len(drive_folders)} folder(s) found")
+        # Fetched on first use only — a single-group run often needs neither.
+        @functools.cache
+        def get_drive_folders() -> list[dict]:
+            log("INFO", "walk_drive", f"Walking folder tree of Shared Drive {drive_id}…")
+            folders = walk_drive_folders(drive_service, drive_id)
+            log("INFO", "walk_drive", f"{len(folders)} folder(s) found")
+            return folders
 
-        shared_drives = list_shared_drives(drive_service)
-        log("INFO", "list_shared_drives", f"{len(shared_drives)} shared drive(s) found")
+        @functools.cache
+        def get_shared_drives() -> list[dict]:
+            drives = list_shared_drives(drive_service)
+            log("INFO", "list_shared_drives", f"{len(drives)} shared drive(s) found")
+            return drives
 
         config_entries = scrape_gdrive_config(page, base_url)
         check_single_link_per_group(config_entries)
@@ -1163,8 +1237,9 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
         (documents_url_by_group_id, linked_group_ids,
          google_file_id_by_group_id, item_type_by_group_id) = (
             fetch_documents_url_by_group_id(
-                page, base_url, drive_id, config_entries, drive_folders,
-                shared_drives, settings_service, email_by_group_id,
+                page, base_url, drive_id,
+                [e for e in config_entries if target_id is None or e["group_id"] == target_id],
+                get_drive_folders, get_shared_drives, settings_service, email_by_group_id,
             )
         )
 
@@ -1175,7 +1250,7 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
             ensure_group_folders(
                 page, base_url, drive_service, drive_id, group_info, linked_group_ids,
                 documents_url_by_group_id, google_file_id_by_group_id, item_type_by_group_id,
-                drive_folders, folder_owner, folder_name_by_group_id, dry_run,
+                get_drive_folders, folder_owner, folder_name_by_group_id, dry_run,
             )
         except QuitScript:
             quit_requested = True
@@ -1217,10 +1292,13 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
 
         if not quit_requested:
             try:
-                ensure_root_node(root, group_info, dry_run)
+                # The root and stale-entry passes need every group's state,
+                # so a single-group run skips them.
+                if target_id is None:
+                    ensure_root_node(root, group_info, dry_run)
                 sync_hierarchy(
                     root, group_info, documents_url_by_group_id, linked_group_ids,
-                    excluded_ids, deactivated_ids, dry_run
+                    excluded_ids, deactivated_ids, dry_run, only_group_id=target_id,
                 )
                 add_missing_groups(root, group_info, documents_url_by_group_id, dry_run)
             except QuitScript:
@@ -1268,6 +1346,11 @@ def cli():
         "-d", "--drive-id", default=DEFAULT_DRIVE_ID,
         help="Shared Drive ID to search when a folder's ID can't be found any other way",
     )
+    parser.add_argument(
+        "-g", "--group", metavar="PREFIX",
+        help="Process only the Gather group whose name starts with this prefix "
+             "(case-insensitive; must match exactly one group)",
+    )
     args = parser.parse_args()
 
     if not os.path.exists(args.credentials):
@@ -1277,7 +1360,8 @@ def cli():
         )
 
     email, password = load_credentials()
-    main(args.base_url, email, password, args.dry_run, args.credentials, args.drive_id)
+    main(args.base_url, email, password, args.dry_run, args.credentials, args.drive_id,
+         args.group)
 
 
 if __name__ == "__main__":

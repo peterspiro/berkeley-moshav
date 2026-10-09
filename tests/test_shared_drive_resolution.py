@@ -71,8 +71,8 @@ class TestFetchDocumentsSharedDrive:
 
         docs, linked, gfids, itypes = m.fetch_documents_url_by_group_id(
             page=None, base_url="", drive_id="D",
-            config_entries=config_entries, drive_folders=[],
-            shared_drives=shared_drives, settings_service=None,
+            config_entries=config_entries, get_drive_folders=lambda: [],
+            get_shared_drives=lambda: shared_drives, settings_service=None,
             email_by_group_id={},
         )
 
@@ -87,8 +87,8 @@ class TestFetchDocumentsSharedDrive:
                                  google_file_id="ROWID")]
         docs, linked, gfids, itypes = m.fetch_documents_url_by_group_id(
             page=None, base_url="", drive_id="D",
-            config_entries=config_entries, drive_folders=[],
-            shared_drives=[{"id": "OTHER", "name": "Community Drive"}],
+            config_entries=config_entries, get_drive_folders=lambda: [],
+            get_shared_drives=lambda: [{"id": "OTHER", "name": "Community Drive"}],
             settings_service=None, email_by_group_id={},
         )
         assert gfids["1"] == "ROWID"
@@ -100,8 +100,36 @@ class TestFetchDocumentsSharedDrive:
         drive_folders = [{"id": "FID", "name": "Alpha Circle", "path": ["Alpha Circle"]}]
         docs, linked, gfids, itypes = m.fetch_documents_url_by_group_id(
             page=None, base_url="", drive_id="D",
-            config_entries=config_entries, drive_folders=drive_folders,
-            shared_drives=[], settings_service=None, email_by_group_id={},
+            config_entries=config_entries, get_drive_folders=lambda: drive_folders,
+            get_shared_drives=lambda: [], settings_service=None, email_by_group_id={},
         )
         assert gfids["2"] == "FID"
         assert itypes["2"] == ITEM_TYPE_FOLDER
+
+
+def _unexpected():
+    raise AssertionError("drive data fetched although every entry resolved without it")
+
+
+class TestDriveDataFetchedLazily:
+    def test_not_fetched_when_row_exposes_id(self):
+        config_entries = [
+            _entry("1", "Alpha Circle", ITEM_TYPE_FOLDER, google_file_id="FID"),
+            _entry("2", "Community Drive", ITEM_TYPE_SHARED_DRIVE, google_file_id="DID"),
+        ]
+        docs, linked, gfids, itypes = m.fetch_documents_url_by_group_id(
+            page=None, base_url="", drive_id="D",
+            config_entries=config_entries, get_drive_folders=_unexpected,
+            get_shared_drives=_unexpected, settings_service=None, email_by_group_id={},
+        )
+        assert gfids == {"1": "FID", "2": "DID"}
+
+    def test_only_folder_tree_fetched_for_unresolved_folder(self):
+        config_entries = [_entry("2", "Alpha Circle", ITEM_TYPE_FOLDER)]
+        drive_folders = [{"id": "FID", "name": "Alpha Circle", "path": ["Alpha Circle"]}]
+        docs, linked, gfids, itypes = m.fetch_documents_url_by_group_id(
+            page=None, base_url="", drive_id="D",
+            config_entries=config_entries, get_drive_folders=lambda: drive_folders,
+            get_shared_drives=_unexpected, settings_service=None, email_by_group_id={},
+        )
+        assert gfids["2"] == "FID"

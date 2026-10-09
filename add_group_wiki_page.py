@@ -33,7 +33,6 @@ from playwright.sync_api import sync_playwright
 
 from util.credentials import load_credentials
 from util.gather_utils import (
-    GatherGroup,
     close_log,
     configure,
     fetch_all_gather_groups,
@@ -41,6 +40,7 @@ from util.gather_utils import (
     launch_browser,
     log,
     login,
+    resolve_group_by_prefix,
 )
 from util.hierarchy_wiki import (
     HierarchyNode,
@@ -56,19 +56,6 @@ _LOG_FILE = Path("debug/add_group_wiki_page_log.csv")
 _SCREENSHOT_DIR = Path("debug/add_group_wiki_page_screenshots")
 
 configure(_LOG_FILE, _SCREENSHOT_DIR)
-
-
-def resolve_group_by_prefix(groups: list[GatherGroup], prefix: str) -> GatherGroup:
-    """Return the single group whose name starts with `prefix`
-    (case-insensitive). Raises ValueError if zero or more than one match."""
-    p = prefix.strip().casefold()
-    matches = [g for g in groups if g.name.casefold().startswith(p)]
-    if len(matches) == 1:
-        return matches[0]
-    if not matches:
-        raise ValueError(f"No Gather group name starts with {prefix!r}.")
-    names = ", ".join(repr(g.name) for g in matches)
-    raise ValueError(f"Prefix {prefix!r} matches multiple groups: {names}")
 
 
 def find_node_by_group_id(root: HierarchyNode, group_id: str) -> Optional[HierarchyNode]:
