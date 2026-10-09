@@ -830,6 +830,12 @@ def ensure_email_lists(
         list_local = email.split("@")[0]
         set_gather_group_email_list(page, base_url, group_id, list_local, DOMAIN, dry_run)
         info["list_name"] = list_local
+        # Also record the domain just written: list_domain was read from
+        # Gather's domain dropdown while no list existed, so it holds
+        # whatever that dropdown defaulted to (not necessarily DOMAIN), which
+        # would make gather_group_email() reject the new address and skip
+        # this group's footer until the next run.
+        info["list_domain"] = DOMAIN
         print(f"  Set mailing list for '{group_name}' to {email}")
         log("INFO", "ensure_email_list", f"{group_name} (id={group_id}) -> {email}")
 
