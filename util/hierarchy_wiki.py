@@ -23,8 +23,8 @@ from typing import Optional
 
 from util.gather_utils import _check_submit_errors, _codemirror_get, _codemirror_set, log, screenshot
 
-WIKI_TITLE = "Circle Hierarchy"
-WIKI_SLUG = "circle-hierarchy"
+WIKI_TITLE = "Circle Structure"
+WIKI_SLUG = "circle-structure"
 # The root line's full name is managed by ensure_root_node() in
 # update_groups_in_google_and_hierarchy.py and may change over time, but it
 # always contains this substring — used below to locate the block

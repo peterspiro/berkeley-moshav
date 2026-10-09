@@ -12,7 +12,7 @@ What it does:
      that suffix is stripped and the group is updated.
   2. Reads the circle spreadsheet to find expected per-circle wiki slugs
      (e.g. 'membership-wiki'), navigates to each, and deletes it.
-     The main 'circle-hierarchy' wiki page is left untouched.
+     The main 'circle-structure' wiki page is left untouched.
      Other wiki pages (not matching any circle slug) are also left untouched.
 
 Usage:
