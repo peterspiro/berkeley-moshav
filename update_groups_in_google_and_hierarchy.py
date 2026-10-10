@@ -667,6 +667,13 @@ def ensure_group_folders(
         if dry_run:
             print("  [dry-run] would search for/prompt for a Drive folder")
             log("INFO", "would_ensure_folder", f"{group_name} (id={group_id})")
+            # ensure_email_lists() only visits foldered groups, and a dry run
+            # links no folder, so report the missing mailing list here — a
+            # real run would prompt for it once the folder is set up.
+            if not info.get("list_name"):
+                print(f"  Group '{group_name}' also has no mailing list configured.")
+                print("  [dry-run] would then search for/prompt for a matching Google Group")
+                log("INFO", "would_ensure_email_list", f"{group_name} (id={group_id})")
             continue
 
         matches = find_matching_folders(group_name, get_drive_folders())
