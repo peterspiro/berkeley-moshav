@@ -203,6 +203,20 @@ def list_group_members(dir_service, gemail: str) -> list[dict]:
     return members
 
 
+def ensure_group_member(dir_service, gemail: str, member_email: str) -> bool:
+    """Add member_email to the group as a regular MEMBER. Return True if
+    added, False if they were already a member."""
+    try:
+        dir_service.members().insert(
+            groupKey=gemail, body={"email": member_email, "role": "MEMBER"}
+        ).execute()
+        return True
+    except Exception as err:
+        if "409" in str(err) or "Member already exists" in str(err):
+            return False
+        raise
+
+
 def set_member_role(dir_service, gemail: str, member_email: str, role: str) -> None:
     """Set member_email's role in the group to `role` (one of MEMBER,
     MANAGER, OWNER)."""

@@ -1,0 +1,63 @@
+"""
+Tests for add_new_group.py's welcome message to a new group's list and the
+mailto: link that opens it as a draft.
+
+All names and addresses are fictional.
+"""
+
+from urllib.parse import parse_qs, unquote, urlsplit
+
+from add_new_group import build_welcome_message, mailto_url
+
+
+def _msg(**kw):
+    args = dict(group_name="Landscape Circle", list_address="landscape@example.org",
+                manager_first_name="Dana", sender_first_name="Sam")
+    args.update(kw)
+    return build_welcome_message(**args)
+
+
+class TestBuildWelcomeMessage:
+    def test_subject_names_group(self):
+        subject, _ = _msg()
+        assert subject == "Your new group: Landscape Circle"
+
+    def test_body_covers_required_points(self):
+        _, body = _msg()
+        assert body.startswith("Hi Dana,\n")
+        assert "Landscape Circle group has been created in Gather" in body
+        assert "Google Drive folder" in body and "footer" in body
+        assert "landscape@example.org" in body
+        assert "add and edit files in the folder" in body
+        assert "add members to it and make other members managers" in body
+        assert "different address for the list" in body
+        assert "different name for the group" in body
+        assert body.rstrip().endswith("Sam")
+
+    def test_no_rename_instructions(self):
+        # Renames are requested from the sender, not done by the recipient.
+        _, body = _msg()
+        assert "can rename" not in body
+
+    def test_missing_names_degrade_gracefully(self):
+        _, body = _msg(manager_first_name="", sender_first_name="")
+        assert body.startswith("Hi,\n")
+
+
+class TestMailtoUrl:
+    def test_round_trips_fields(self):
+        subject, body = _msg(group_name="Café & Garden Club")
+        url = mailto_url("landscape@example.org", subject, body)
+        parts = urlsplit(url)
+        assert parts.scheme == "mailto"
+        assert unquote(parts.path) == "landscape@example.org"
+        q = parse_qs(parts.query)
+        assert q["subject"] == [subject]
+        assert q["body"] == [body.replace("\n", "\r\n")]
+
+    def test_reserved_characters_encoded(self):
+        url = mailto_url("a@example.org", "x & y? #1", "line1\nline2")
+        query = urlsplit(url).query
+        assert "&" not in query.split("&body=")[0].replace("subject=", "", 1)
+        assert "#" not in url and " " not in url
+        assert "%0D%0A" in url

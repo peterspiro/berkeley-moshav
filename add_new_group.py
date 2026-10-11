@@ -25,6 +25,14 @@ Steps:
      "Google Docs folder" link block (see util/google_group_footer.py) —
      this is what groups_drive_sync.gs reads to sync membership, so no
      Apps Script redeploy is needed for a new group to start syncing.
+  7. Add the manager to the Google Group directly, so the list reaches
+     them right away rather than after groups_drive_sync.gs's next run.
+  8. Unless --no-email, open a welcome message to the new list as a draft
+     in the default mail program (via a mailto: link), for the person
+     running the script to review, edit if they like, and send from their
+     own account. It tells the manager what was created and what they can
+     do, and that they can ask the sender for a different list address or
+     group name. A dry run prints the draft instead.
 
 Requires Google API access (Drive, Admin Directory, Groups Settings) —
 see update_groups_in_google_and_hierarchy.py's docstring for setup.
@@ -44,7 +52,9 @@ email uniquely identifying them; they're made a manager of the new group.
 
 Pass --idempotent to reuse any artifacts that already exist (folder,
 Google Group, Gather group, alias, folder link, hierarchy entry) rather
-than aborting — useful for re-running after a partial failure.
+than aborting — useful for re-running after a partial failure. Combine it
+with --no-email if the first run already opened (and you sent) the welcome
+message.
 
 Usage:
     python add_new_group.py Landscape Circle -p Property -m jsmith
@@ -57,8 +67,10 @@ import argparse
 import os
 import re
 import sys
+import webbrowser
 from enum import Enum
 from pathlib import Path
+from urllib.parse import quote
 
 from googleapiclient.discovery import build
 from playwright.sync_api import sync_playwright
@@ -100,6 +112,7 @@ from util.google_group_utils import (
     MODERATION_SETTINGS,
     REQUIRED_GROUP_SETTINGS,
     add_group_alias,
+    ensure_group_member,
     ensure_group_settings,
     get_credentials,
     get_group_by_email,
@@ -153,6 +166,56 @@ class GroupType(Enum):
         return None
 
 
+def build_welcome_message(
+    group_name: str, list_address: str, manager_first_name: str, sender_first_name: str,
+) -> tuple[str, str]:
+    """Return (subject, body) of the welcome message to a new group's list.
+    The links it refers to are in the Google Group's custom footer, which
+    Google Groups appends when it delivers the message."""
+    subject = f"Your new group: {group_name}"
+    greeting = f"Hi {manager_first_name}," if manager_first_name else "Hi,"
+    body = (
+        f"{greeting}\n"
+        "\n"
+        f"The {group_name} group has been created in Gather, along with a Google "
+        "Drive folder for its documents. Links to both are in the footer at the "
+        "bottom of this message.\n"
+        "\n"
+        f"This email list, {list_address}, has also been created and is linked to "
+        "the Gather group and the folder. Everyone in the Gather group can post to "
+        "the list and can add and edit files in the folder.\n"
+        "\n"
+        "You're a manager of the Gather group, so you can add members to it and "
+        "make other members managers.\n"
+        "\n"
+        "If you'd like a different address for the list, such as a shorter one, "
+        "or a different name for the group, just let me know.\n"
+        "\n"
+        f"{sender_first_name}\n"
+    )
+    return subject, body
+
+
+def mailto_url(to: str, subject: str, body: str) -> str:
+    """Return a mailto: URL that opens a draft with these fields filled in.
+    Line breaks are sent as CRLF, as RFC 6068 requires."""
+    return (
+        f"mailto:{quote(to, safe='@')}"
+        f"?subject={quote(subject, safe='')}"
+        f"&body={quote(body.replace(chr(10), chr(13) + chr(10)), safe='')}"
+    )
+
+
+def print_welcome_message(to: str, subject: str, body: str) -> None:
+    print(f"To: {to}")
+    print(f"Subject: {subject}")
+    print()
+    print(body.rstrip("\n"))
+    print()
+    print("(Google Groups appends the footer, with the Gather group and Drive "
+          "folder links, when it delivers the message.)")
+
+
 def main(
     group_type: GroupType,
     raw_name: str,
@@ -166,12 +229,14 @@ def main(
     drive_id: str,
     alias: str | None = None,
     idempotent: bool = False,
+    send_email: bool = True,
 ) -> None:
     base_url = base_url.rstrip("/")
     init_log()
     log("INFO", "start",
         f"type={group_type.kind} name={raw_name!r} manager={manager_prefix!r} "
-        f"alias={alias!r} dry_run={dry_run} idempotent={idempotent}")
+        f"alias={alias!r} dry_run={dry_run} idempotent={idempotent} "
+        f"send_email={send_email}")
 
     kind = group_type.kind
     folder_name = folder_name_for_group_type(raw_name, kind)
@@ -285,7 +350,8 @@ def main(
                 )
 
         # ── Validate: manager ────────────────────────────────────────────────
-        matches = find_users_by_prefix(fetch_all_gather_users(page, base_url), manager_prefix)
+        gather_users = fetch_all_gather_users(page, base_url)
+        matches = find_users_by_prefix(gather_users, manager_prefix)
         if not matches:
             close_log()
             browser.close()
@@ -299,6 +365,15 @@ def main(
             sys.exit(f"Error: {manager_prefix!r} matches multiple members: {names}{more}. "
                      "Use a longer, unique prefix.")
         manager = matches[0]
+
+        # ── Welcome message ──────────────────────────────────────────────────
+        # Signed with the first name of the Gather user running the script
+        # (left blank to fill in if their login email matches no member).
+        sender = next(
+            (u for u in gather_users if u.email and u.email.lower() == email.lower()), None)
+        list_address = f"{list_local}@{DOMAIN}"
+        subject, body = build_welcome_message(
+            gdisplay, list_address, manager.first_name, sender.first_name if sender else "")
 
         if dry_run:
             if idempotent and (existing_folder_id or google_group_exists or existing_gather_id):
@@ -318,6 +393,11 @@ def main(
             if parent_node is not None:
                 print(f"[dry-run] Would add it to the Circle Hierarchy under "
                       f"'{parent_node.name}'.")
+            print(f"[dry-run] Would add {manager.email} to the Google Group.")
+            if send_email:
+                print("[dry-run] Would open this welcome message as a draft in your "
+                      "mail program:\n")
+                print_welcome_message(list_address, subject, body)
             close_log()
             browser.close()
             return
@@ -433,6 +513,37 @@ def main(
                 log("ERROR", "hierarchy", "Failed to write hierarchy wiki page — see log")
                 print("ERROR: failed to update the Circle Hierarchy wiki page — see log.")
 
+        # ── Add the manager to the Google Group ──────────────────────────────
+        # groups_drive_sync.gs would add them on its next hourly run (they're
+        # a Content manager of the folder via the Gather group); doing it now
+        # means the list reaches them straight away, welcome message included.
+        if not manager.email:
+            log("WARN", "add_manager_to_google_group", f"{manager.full_name} has no email")
+            print(f"WARNING: {manager.full_name} has no email in Gather, so they weren't "
+                  f"added to '{gemail}'.")
+        else:
+            try:
+                added = ensure_group_member(dir_service, gemail, manager.email)
+                log("INFO", "add_manager_to_google_group",
+                    f"{manager.email} -> {gemail} ({'added' if added else 'already a member'})")
+                print(f"{'Added' if added else 'Already a member:'} {manager.email} "
+                      f"{'to' if added else 'of'} '{gemail}'.")
+            except Exception as e:
+                log("ERROR", "add_manager_to_google_group", f"{manager.email} -> {gemail}: {e}")
+                print(f"ERROR: failed to add {manager.email} to '{gemail}': {e}")
+
+        # ── Open the welcome message as a draft ──────────────────────────────
+        if send_email:
+            if webbrowser.open(mailto_url(list_address, subject, body)):
+                log("INFO", "welcome_draft", f"opened draft to {list_address}")
+                print(f"Opened a draft to {list_address} in your mail program — "
+                      "review it and click Send.")
+            else:
+                log("WARN", "welcome_draft", "couldn't open a mail program")
+                print("Couldn't open a draft in a mail program. Send this message "
+                      "yourself:\n")
+                print_welcome_message(list_address, subject, body)
+
         browser.close()
 
     close_log()
@@ -490,6 +601,11 @@ def cli():
              "of aborting — lets a re-run finish after a partial failure.",
     )
     parser.add_argument(
+        "-E", "--no-email", action="store_true",
+        help="Don't open the welcome message to the new list as a draft (e.g. on "
+             "an --idempotent re-run after the first run's message was sent)",
+    )
+    parser.add_argument(
         "-c", "--credentials", default=str(DEFAULT_CLIENT_SECRETS_PATH),
         help=f"Path to OAuth client secrets JSON (default: {DEFAULT_CLIENT_SECRETS_PATH})",
     )
@@ -523,7 +639,7 @@ def cli():
     main(
         group_type, name, args.parent_circle, args.manager, args.base_url, email,
         password, args.dry_run, args.credentials, args.drive_id, alias=args.alias,
-        idempotent=args.idempotent,
+        idempotent=args.idempotent, send_email=not args.no_email,
     )
 
 
