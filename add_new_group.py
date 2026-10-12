@@ -41,7 +41,7 @@ The group type (circle / working group / club) is inferred from a name
 ending in the matching suffix ("Circle" / "Working Group" / "Club");
 pass -t/--type explicitly only when the name has no such suffix.
 
-The name may be given as multiple unquoted words.
+The name (-N/--name, required) may be given as multiple unquoted words.
 
 Pass --alias to also give the new Google Group a shorter second address
 and point the Gather group's mailing list at it — the same effect as
@@ -57,10 +57,10 @@ with --no-email if the first run already opened (and you sent) the welcome
 message.
 
 Usage:
-    python add_new_group.py Landscape Circle -p Property -m jsmith
-    python add_new_group.py Tech Support -t w -p Operations -m Dana
-    python add_new_group.py Book Club -m alice@example.org
-    python add_new_group.py Landscape Circle -p Property -m jsmith --alias landscape
+    python add_new_group.py -N Landscape Circle -p Property -m jsmith
+    python add_new_group.py -N Tech Support -t w -p Operations -m Dana
+    python add_new_group.py -N Book Club -m alice@example.org
+    python add_new_group.py -N Landscape Circle -p Property -m jsmith --alias landscape
 """
 
 import argparse
@@ -556,7 +556,7 @@ def cli():
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
-        "name", nargs="+",
+        "-N", "--name", nargs="+", required=True,
         help="Name of the folder and the groups (multiple words are joined "
              "with spaces, so quotes aren't needed)",
     )
