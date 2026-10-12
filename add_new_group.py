@@ -18,7 +18,7 @@ Steps:
   3. Link the folder on /gdrive/config and grant the new Gather group
      Content manager access.
   4. Wire the Gather group's mailing list to the new Google Group (to the
-     --alias address if given, else the full-name address).
+     --alias address if given, else the group's primary address).
   5. Unless --type=club, add a row for the new group to the Circle
      Hierarchy, alphabetically under its parent circle.
   6. Write the new Google Group's custom footer with a "Gather group" /
@@ -46,6 +46,12 @@ The name (-N/--name, required) may be given as multiple unquoted words.
 Pass --alias to also give the new Google Group a shorter second address
 and point the Gather group's mailing list at it — the same effect as
 running change_group_email_alias.py afterward.
+
+Pass --short-address to make the Google Group's primary address the name
+without its "Circle"/"Working Group" suffix (e.g. landscape@ rather than
+landscape-circle@), with the full-name address added as an alias. The
+Gather group's mailing list then uses the short address. Not available
+for clubs, and can't be combined with --alias.
 
 --manager (required) is a prefix of a member's first name, last name, or
 email uniquely identifying them; they're made a manager of the new group.
@@ -119,6 +125,7 @@ from util.google_group_utils import (
     group_display_name,
     group_email,
     group_exists,
+    truncate_local_part,
 )
 from util.hierarchy_wiki import (
     HierarchyNode,
@@ -228,6 +235,7 @@ def main(
     credentials_path: str,
     drive_id: str,
     alias: str | None = None,
+    short_address: bool = False,
     idempotent: bool = False,
     send_email: bool = True,
 ) -> None:
@@ -235,7 +243,7 @@ def main(
     init_log()
     log("INFO", "start",
         f"type={group_type.kind} name={raw_name!r} manager={manager_prefix!r} "
-        f"alias={alias!r} dry_run={dry_run} idempotent={idempotent} "
+        f"alias={alias!r} short_address={short_address} dry_run={dry_run} idempotent={idempotent} "
         f"send_email={send_email}")
 
     kind = group_type.kind
@@ -243,14 +251,26 @@ def main(
     gemail = group_email(folder_name)
     gdisplay = group_display_name(folder_name)
 
-    # The Google Group's primary address is always the full name; --alias
+    # The Google Group's primary address is normally the full name; --alias
     # adds a second (shorter) address to reach it, and makes the Gather
     # group's mailing list use that alias instead of the full-name local
     # part — mirroring what change_group_email_alias.py does after the fact.
     # Email local parts are case-insensitive, so normalize to lowercase.
-    alias = alias.lower() if alias else None
-    alias_email = f"{alias}@{DOMAIN}" if alias else None
-    list_local = alias if alias else gemail.split("@")[0]
+    #
+    # --short-address instead makes the truncated name the primary address,
+    # with the full name as the alias; the mailing list uses the primary.
+    if short_address:
+        short_local = truncate_local_part(gemail.split("@")[0])
+        if not short_local:
+            sys.exit(f"Error: --short-address: {gemail!r} has no 'Circle'/'Working "
+                     "Group' suffix to drop.")
+        alias_email = gemail
+        gemail = f"{short_local}@{DOMAIN}"
+        list_local = short_local
+    else:
+        alias = alias.lower() if alias else None
+        alias_email = f"{alias}@{DOMAIN}" if alias else None
+        list_local = alias if alias else gemail.split("@")[0]
 
     creds = get_credentials(credentials_path)
     drive_service = build("drive", "v3", credentials=creds)
@@ -296,7 +316,7 @@ def main(
 
         if alias_email:
             if alias_email.lower() == gemail.lower():
-                fail(f"--alias {alias!r} is the same as the group's primary address.")
+                fail(f"alias '{alias_email}' is the same as the group's primary address.")
             alias_group = get_group_by_email(dir_service, alias_email)
             if alias_group:
                 primary_group = get_group_by_email(dir_service, gemail)
@@ -587,6 +607,14 @@ def cli():
              "change_group_email_alias.py afterward.",
     )
     parser.add_argument(
+        "-s", "--short-address", action="store_true",
+        help="Make the Google Group's primary address the name without its "
+             "'Circle'/'Working Group' suffix (e.g. landscape@ rather than "
+             "landscape-circle@), and add the full-name address as an alias. The "
+             "Gather group's mailing list uses the short address. Not for clubs; "
+             "can't be combined with --alias.",
+    )
+    parser.add_argument(
         "-u", "--base-url", default="https://berkeley-moshav.gather.coop",
         help="Gather base URL",
     )
@@ -623,6 +651,11 @@ def cli():
             "with 'Circle', 'Working Group', or 'Club'. Pass -t/--type explicitly."
         )
 
+    if args.short_address and args.alias:
+        sys.exit("Error: --short-address and --alias can't be combined.")
+    if args.short_address and group_type == GroupType.CLUB:
+        sys.exit("Error: --short-address only applies to circles and working groups.")
+
     if args.alias and "@" in args.alias:
         sys.exit(
             f"Error: --alias should be just the local part, not a full address "
@@ -639,7 +672,7 @@ def cli():
     main(
         group_type, name, args.parent_circle, args.manager, args.base_url, email,
         password, args.dry_run, args.credentials, args.drive_id, alias=args.alias,
-        idempotent=args.idempotent, send_email=not args.no_email,
+        short_address=args.short_address, idempotent=args.idempotent, send_email=not args.no_email,
     )
 
 

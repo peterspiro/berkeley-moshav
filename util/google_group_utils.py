@@ -109,6 +109,21 @@ def to_slug(name: str) -> str:
 def group_email(folder_name: str) -> str:
     return f"{to_slug(folder_name)}@{DOMAIN}"
 
+# Type suffixes that truncate_local_part() drops from a group address's
+# local part. Longest first, so e.g. "-working-group" is tried before any
+# shorter suffix that might otherwise coincidentally match a substring of it.
+SUFFIXES = ["-working-group", "-work-group", "-circle"]
+
+
+def truncate_local_part(local: str) -> str | None:
+    """Return local with a recognized suffix removed, or None if it
+    doesn't end with one of SUFFIXES."""
+    for suffix in SUFFIXES:
+        if local.endswith(suffix):
+            truncated = local[: -len(suffix)]
+            return truncated or None
+    return None
+
 def is_in_domain(email: str, domain: str = DOMAIN) -> bool:
     """True if email is a well-formed address (exactly one '@') whose
     domain matches `domain`, case-insensitively."""
