@@ -25,7 +25,9 @@ class TestBuildWelcomeMessage:
     def test_body_covers_required_points(self):
         _, body = _msg()
         assert body.startswith("Hi Dana,\n")
-        assert "Landscape Circle group has been created in Gather" in body
+        assert "I've created the Landscape Circle group in Gather" in body
+        assert "I've also created this email list, landscape@example.org, which" in body
+        assert "I've made you a manager of the Gather group" in body
         assert "Google Drive folder" in body and "footer" in body
         assert "landscape@example.org" in body
         assert "add and edit files in the folder" in body
