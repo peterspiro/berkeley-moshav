@@ -31,7 +31,8 @@ class TestBuildWelcomeMessage:
         assert "Google Drive folder" in body and "footer" in body
         assert "landscape@example.org" in body
         assert "add and edit files in the folder" in body
-        assert "add members to it and make other members managers" in body
+        assert ("I've made you a manager of the Gather group, which allows you to add "
+                "members to it, and to make other members managers.") in body
         assert "different address for the list" in body
         assert "different name for the group" in body
         assert body.rstrip().endswith("Sam")
