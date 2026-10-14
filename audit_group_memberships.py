@@ -189,7 +189,8 @@ def compare_group(state: GroupState, users: UserIndex, ignore: set[str]) -> list
     Addresses belonging to a Gather user are merged into that user's row;
     others get a row of their own. Addresses in `ignore` (normalized) are
     left out."""
-    # key -> {"label", "user", "gather", "drive", "google", "inherited"}
+    # key -> {"label", "user", "address", "gather", "drive", "google", "inherited"}
+    # ("address" is set only for a row not belonging to a Gather user)
     people: dict[str, dict] = {}
 
     def entry_for_address(email: str) -> dict | None:
@@ -200,7 +201,8 @@ def compare_group(state: GroupState, users: UserIndex, ignore: set[str]) -> list
         key = _person_key(user) if user else f"addr:{norm}"
         if key not in people:
             people[key] = {"label": _user_label(user) if user else email.lower(),
-                           "user": user, "gather": False, "drive": False,
+                           "user": user, "address": None if user else email,
+                           "gather": False, "drive": False,
                            "google": False, "inherited": False}
         return people[key]
 
@@ -251,11 +253,13 @@ def compare_group(state: GroupState, users: UserIndex, ignore: set[str]) -> list
         user = p["user"]
         if p["inherited"]:
             notes.append("Drive access inherited from the shared drive")
-        if p["gather"] and has_drive and not p["drive"]:
-            other_role = _other_drive_role(user, state.drive_roles)
+        if has_drive and not p["drive"]:
+            addresses = ([user.google_email, user.email] if user is not None
+                         else [p.get("address")])
+            other_role = _other_drive_role(addresses, state.drive_roles)
             if other_role:
                 notes.append(f"has Drive role {other_role!r} instead")
-            elif user is not None and not user.google_email:
+            elif p["gather"] and user is not None and not user.google_email:
                 notes.append("no Google email in Gather")
         if (state.everybody and p["gather"]
                 and not (has_drive and p["drive"]) and not (has_google and p["google"])):
@@ -270,10 +274,9 @@ def compare_group(state: GroupState, users: UserIndex, ignore: set[str]) -> list
     return rows
 
 
-def _other_drive_role(user: GatherUser | None, drive_roles: dict[str, str]) -> str | None:
-    if user is None:
-        return None
-    for addr in (user.google_email, user.email):
+def _other_drive_role(addresses: list[str | None], drive_roles: dict[str, str]) -> str | None:
+    """Return the Drive role held by the first of `addresses` that has one."""
+    for addr in addresses:
         if addr:
             role = drive_roles.get(normalize_email(addr))
             if role:

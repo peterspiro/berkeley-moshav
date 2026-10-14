@@ -80,6 +80,23 @@ class TestCompareGroup:
         [row] = compare_group(state, USERS, set())
         assert "has Drive role 'writer' instead" in row.notes
 
+    def test_other_drive_role_note_for_non_member(self):
+        # Not in Gather, but in the Google Group with a non-syncing Drive role.
+        state = _state(gather_member_ids=set(), google_members=["old@example.org"],
+                       drive_roles={"old@example.org": "organizer"})
+        [row] = compare_group(state, USERS, set())
+        assert (row.in_gather, row.in_drive, row.in_google) == (False, False, True)
+        assert "has Drive role 'organizer' instead" in row.notes
+
+    def test_other_drive_role_note_for_non_member_user(self):
+        # A Gather user who isn't a member of this group.
+        state = _state(gather_member_ids=set(), google_members=["pat@gmail.com"],
+                       drive_roles={"pat@gmail.com": "writer"})
+        [row] = compare_group(state, USERS, set())
+        assert row.label.startswith("Pat Jones")
+        assert "has Drive role 'writer' instead" in row.notes
+        assert "no Google email in Gather" not in row.notes
+
     def test_inherited_note(self):
         state = _state(gather_member_ids=set(),
                        drive_members=[DriveMember("admin@example.org", inherited=True)],
