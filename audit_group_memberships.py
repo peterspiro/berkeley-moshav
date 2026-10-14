@@ -26,8 +26,13 @@ groups skipped), it reports:
     three, with a ✓/✗ per source. People are matched by email address —
     a Gather user by both their Email and Google Email (the address Gather
     shares Drive items with) — with Gmail's ignored dots and "+suffix"
-    treated as the same address. Drive permissions inherited from the
-    shared drive (rather than granted on the folder itself) are marked.
+    treated as the same address.
+  * Other access: anyone else with a role on the Drive item who isn't a
+    member of the Gather group (and so isn't synced to its list) — e.g. a
+    shared drive's Managers.
+
+For a folder, only access granted on the folder itself counts; access
+inherited from the shared drive is ignored throughout.
 
 Groups with nothing to report are left out.
 
@@ -106,6 +111,22 @@ _GMAIL_DOMAINS = {"gmail.com", "googlemail.com"}
 
 CHECK, CROSS, NA = "✓", "✗", "–"
 
+# Drive API role -> the name Drive's sharing dialog uses for it, lowest
+# access first (the order is used to pick a person's highest direct role).
+ROLE_LABELS = {
+    "reader": "Viewer",
+    "commenter": "Commenter",
+    "writer": "Contributor",
+    "fileOrganizer": "Content manager",
+    "organizer": "Manager",
+    "owner": "Owner",
+}
+_ROLE_RANK = list(ROLE_LABELS)
+
+
+def role_label(role: str) -> str:
+    return ROLE_LABELS.get(role, role)
+
 
 def normalize_email(email: str) -> str:
     """Lowercase, and for Gmail addresses drop the dots and any "+suffix"
@@ -124,12 +145,6 @@ def normalize_email(email: str) -> str:
 # ── Data model ────────────────────────────────────────────────────────────────
 
 @dataclass
-class DriveMember:
-    email: str
-    inherited: bool = False
-
-
-@dataclass
 class GroupState:
     """Everything gathered about one Gather group. A source that couldn't be
     read is None (e.g. drive_members when no Drive item is linked) and is
@@ -140,10 +155,12 @@ class GroupState:
     gather_member_ids: set[str]
     list_email: str | None = None
     item_label: str | None = None
-    drive_members: list[DriveMember] | None = None
-    # Lowercased email -> role, for every user permission on the item —
-    # lets a missing member's different role be noted.
-    drive_roles: dict[str, str] = field(default_factory=dict)
+    # Addresses holding the item's sync role.
+    drive_members: list[str] | None = None
+    # (address, role) for every user with access to the item (for a folder,
+    # access granted on the folder itself) — for the other-role notes and
+    # the "Other access" list.
+    drive_access: list[tuple[str, str]] = field(default_factory=list)
     google_members: list[str] | None = None
     problems: list[str] = field(default_factory=list)
 
@@ -183,13 +200,22 @@ def _user_label(user: GatherUser) -> str:
     return f"{user.full_name} <{addr}>" if addr else user.full_name
 
 
-def compare_group(state: GroupState, users: UserIndex, ignore: set[str]) -> list[PersonRow]:
-    """Return a row for every person missing from at least one of the
-    group's readable sources (Gather, Drive, Google Group), sorted by label.
+def compare_group(
+    state: GroupState, users: UserIndex, ignore: set[str],
+) -> tuple[list[PersonRow], list[tuple[str, str]]]:
+    """Return (rows, other_access).
+
+    rows: one for every person missing from at least one of the group's
+    readable sources (Gather, Drive, Google Group), sorted by label.
     Addresses belonging to a Gather user are merged into that user's row;
-    others get a row of their own. Addresses in `ignore` (normalized) are
-    left out."""
-    # key -> {"label", "user", "address", "gather", "drive", "google", "inherited"}
+    others get a row of their own.
+
+    other_access: (label, role label) for everyone else with access to the
+    Drive item — not a member of the Gather group, not in the Google Group,
+    and without the sync role — sorted by label.
+
+    Addresses in `ignore` (normalized) are left out of both."""
+    # key -> {"label", "user", "address", "gather", "drive", "google"}
     # ("address" is set only for a row not belonging to a Gather user)
     people: dict[str, dict] = {}
 
@@ -202,8 +228,7 @@ def compare_group(state: GroupState, users: UserIndex, ignore: set[str]) -> list
         if key not in people:
             people[key] = {"label": _user_label(user) if user else email.lower(),
                            "user": user, "address": None if user else email,
-                           "gather": False, "drive": False,
-                           "google": False, "inherited": False}
+                           "gather": False, "drive": False, "google": False}
         return people[key]
 
     if state.everybody:
@@ -214,8 +239,7 @@ def compare_group(state: GroupState, users: UserIndex, ignore: set[str]) -> list
             user = users.by_id.get(uid)
             if user is None:
                 people[f"id:{uid}"] = {"label": f"Gather user #{uid}", "user": None,
-                                       "gather": True, "drive": False, "google": False,
-                                       "inherited": False}
+                                       "gather": True, "drive": False, "google": False}
             else:
                 gather_users.append(user)
     for user in gather_users:
@@ -223,19 +247,33 @@ def compare_group(state: GroupState, users: UserIndex, ignore: set[str]) -> list
             continue
         key = _person_key(user)
         people.setdefault(key, {"label": _user_label(user), "user": user, "gather": False,
-                                "drive": False, "google": False, "inherited": False})
+                                "drive": False, "google": False})
         people[key]["gather"] = True
 
-    for dm in state.drive_members or []:
-        entry = entry_for_address(dm.email)
+    for email in state.drive_members or []:
+        entry = entry_for_address(email)
         if entry is not None:
             entry["drive"] = True
-            entry["inherited"] = entry["inherited"] or dm.inherited
 
     for email in state.google_members or []:
         entry = entry_for_address(email)
         if entry is not None:
             entry["google"] = True
+
+    drive_roles = {normalize_email(e): r for e, r in state.drive_access}
+
+    # Everyone else with access to the item gets no row (they're in none of
+    # the three), so list them separately.
+    other_access = []
+    for email, role in state.drive_access:
+        norm = normalize_email(email)
+        if norm in ignore:
+            continue
+        user = users.by_address.get(norm)
+        if (_person_key(user) if user else f"addr:{norm}") in people:
+            continue
+        other_access.append((_user_label(user) if user else email.lower(), role_label(role)))
+    other_access.sort(key=lambda item: item[0].casefold())
 
     has_drive = state.drive_members is not None
     has_google = state.google_members is not None
@@ -251,17 +289,16 @@ def compare_group(state: GroupState, users: UserIndex, ignore: set[str]) -> list
 
         notes = []
         user = p["user"]
-        if p["inherited"]:
-            notes.append("Drive access inherited from the shared drive")
         if has_drive and not p["drive"]:
             addresses = ([user.google_email, user.email] if user is not None
                          else [p.get("address")])
-            other_role = _other_drive_role(addresses, state.drive_roles)
+            other_role = _other_drive_role(addresses, drive_roles)
             if other_role:
-                notes.append(f"has Drive role {other_role!r} instead")
+                notes.append(f"has Drive role {role_label(other_role)} instead")
             elif p["gather"] and user is not None and not user.google_email:
                 notes.append("no Google email in Gather")
-        if (state.everybody and p["gather"]
+        # (Not when a different Drive role already explains the gap.)
+        if (state.everybody and p["gather"] and not any("Drive role" in n for n in notes)
                 and not (has_drive and p["drive"]) and not (has_google and p["google"])):
             notes.append("may have opted out")
         rows.append(PersonRow(
@@ -271,7 +308,7 @@ def compare_group(state: GroupState, users: UserIndex, ignore: set[str]) -> list
             notes=notes,
         ))
     rows.sort(key=lambda r: r.label.casefold())
-    return rows
+    return rows, other_access
 
 
 def _other_drive_role(addresses: list[str | None], drive_roles: dict[str, str]) -> str | None:
@@ -284,8 +321,10 @@ def _other_drive_role(addresses: list[str | None], drive_roles: dict[str, str]) 
     return None
 
 
-def format_group_report(state: GroupState, rows: list[PersonRow]) -> str:
-    """Render one group's problems and membership differences."""
+def format_group_report(
+    state: GroupState, rows: list[PersonRow], other_access: list[tuple[str, str]] = (),
+) -> str:
+    """Render one group's problems, membership differences, and other access."""
     details = [d for d in (state.list_email, state.item_label) if d]
     lines = [state.name + (f"   ({' · '.join(details)})" if details else "")]
     for problem in state.problems:
@@ -306,19 +345,35 @@ def format_group_report(state: GroupState, rows: list[PersonRow]) -> str:
             if r.notes:
                 line += "  " + "; ".join(r.notes)
             lines.append(line.rstrip())
+    if other_access:
+        lines.append("  Other access (not Gather members, not synced to the list):")
+        width = max(len(label) for label, _ in other_access)
+        for label, role in other_access:
+            lines.append(f"    {label:<{width}}  {role}")
     return "\n".join(lines)
 
 
 # ── Data gathering ────────────────────────────────────────────────────────────
 
-def fetch_drive_members(
-    drive_service, item_id: str, item_type: str,
-) -> tuple[list[DriveMember], dict[str, str]]:
-    """Return (members, roles): the users holding the item's sync role, and
-    {normalized email: role} for every user permission on it."""
-    sync_role = SYNC_ROLE_FOR_TYPE[item_type]
-    members: list[DriveMember] = []
-    roles: dict[str, str] = {}
+def direct_role(permission: dict) -> str | None:
+    """Return the highest role a permission grants on the item itself, or
+    None if all of its access is inherited from the shared drive. Items
+    outside a shared drive carry no permissionDetails, so their role is
+    taken as is."""
+    details = permission.get("permissionDetails")
+    if not details:
+        return permission.get("role")
+    roles = [d.get("role") for d in details if not d.get("inherited")]
+    if not roles:
+        return None
+    return max(roles, key=lambda r: _ROLE_RANK.index(r) if r in _ROLE_RANK else -1)
+
+
+def fetch_drive_access(drive_service, item_id: str, item_type: str) -> list[tuple[str, str]]:
+    """Return (address, role) for every user with access to the item. For a
+    folder, only access granted on the folder itself counts (see
+    direct_role()); a shared drive's own permissions are taken as is."""
+    access: list[tuple[str, str]] = []
     page_token = None
     while True:
         resp = drive_service.permissions().list(
@@ -333,17 +388,13 @@ def fetch_drive_members(
         for p in resp.get("permissions", []):
             if p.get("type") != "user" or not p.get("emailAddress"):
                 continue
-            email = p["emailAddress"].lower()
-            roles[normalize_email(email)] = p.get("role", "")
-            if p.get("role") == sync_role:
-                details = [d for d in p.get("permissionDetails", [])
-                           if d.get("role") == sync_role]
-                inherited = bool(details) and all(d.get("inherited") for d in details)
-                members.append(DriveMember(email=email, inherited=inherited))
+            role = direct_role(p) if item_type == ITEM_TYPE_FOLDER else p.get("role")
+            if role:
+                access.append((p["emailAddress"].lower(), role))
         page_token = resp.get("nextPageToken")
         if not page_token:
             break
-    return members, roles
+    return access
 
 
 def main(base_url: str, email: str, password: str, credentials_path: str,
@@ -462,8 +513,9 @@ def main(base_url: str, email: str, password: str, credentials_path: str,
                                   f"{entry['folder_name']!r}")
             continue
         try:
-            state.drive_members, state.drive_roles = fetch_drive_members(
-                drive_service, item_id, item_type)
+            state.drive_access = fetch_drive_access(drive_service, item_id, item_type)
+            sync_role = SYNC_ROLE_FOR_TYPE[item_type]
+            state.drive_members = [e for e, r in state.drive_access if r == sync_role]
         except Exception as e:
             state.problems.append(f"couldn't read the {kind}'s permissions: {e}")
 
@@ -490,12 +542,12 @@ def main(base_url: str, email: str, password: str, credentials_path: str,
 
     reported = 0
     for state in sorted(states.values(), key=lambda s: s.name.casefold()):
-        rows = compare_group(state, users, ignore_set)
-        if not state.problems and not rows:
+        rows, other_access = compare_group(state, users, ignore_set)
+        if not state.problems and not rows and not other_access:
             continue
         reported += 1
         print()
-        print(format_group_report(state, rows))
+        print(format_group_report(state, rows, other_access))
 
     print()
     if reported:
