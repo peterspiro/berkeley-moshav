@@ -1,27 +1,42 @@
 # berkeley-moshav
 
 Administration scripts for the Berkeley Moshav community's online setup.
-They keep four things linked together and consistent:
 
-- **Gather groups** at [berkeley-moshav.gather.coop](https://berkeley-moshav.gather.coop)
-  (circles, working groups, and clubs, with their members and managers)
-- **Google Drive** folders and shared drives in the community's Shared Drive,
-  linked to Gather groups through Gather's Google Drive settings (`/gdrive/config`)
-- **Google Groups** in the `berkeleymoshav.org` Workspace, which serve as each
-  Gather group's email list
-- The **Circle Structure** wiki page in Gather, a tree of the circles and working
-  groups with links to each one's members, documents, and wiki page
+Their main job is keeping four things linked together and consistent:
 
-The repo also holds the one-off scripts used to migrate the community into
-Gather (members, households, groups, photos), cleanup scripts from that
-migration, and two Google Apps Script projects that run on a schedule inside
-Google Workspace.
+- **[Gather groups](https://berkeley-moshav.gather.coop/groups)** (circles,
+  working groups, and clubs, with their members and managers)
+- **Google Drive** folders and shared drives in the community's
+  [Shared Drive](https://drive.google.com/drive/folders/0AFqC2xo9aTgPUk9PVA),
+  linked to Gather groups through Gather's
+  [Google Drive settings](https://berkeley-moshav.gather.coop/gdrive/config)
+- **[Google Groups](https://groups.google.com/a/berkeleymoshav.org)** in the
+  `berkeleymoshav.org` Workspace, which serve as each Gather group's email list
+- The **[Circle Structure](https://berkeley-moshav.gather.coop/wiki/circle-structure)**
+  wiki page in Gather, a tree of the circles and working groups with links to
+  each one's members, documents, and wiki page
+
+Two Google Apps Script projects run inside Google Workspace alongside the
+Python scripts:
+
+- **`groups_drive_sync`** keeps each Google Group's membership in step with its
+  Drive folder or shared drive, hourly, and emails a report of any changes.
+- **`calendar_notifications`** looks after the shared community calendar: it
+  emails a community group when one of its members adds an event, and removes
+  invitations from anyone who isn't allowed to add events.
+
+The repo also holds the one-off scripts that were used to migrate the
+community into Gather (members, households, groups, photos), and cleanup
+scripts from that migration.
 
 Gather has no API for any of this, so most scripts drive its web UI with
 [Playwright](https://playwright.dev/python/). Google is reached through its
 APIs.
 
-## How the pieces fit together
+## How the group linking fits together
+
+This section covers only the linking of Gather groups, Drive, and Google
+Groups; the calendar script is separate.
 
 ```
 Gather group members ──(Gather's Drive sync)──▶ folder Content managers / shared-drive Viewers
@@ -65,9 +80,9 @@ screenshots go to `debug/` (git-ignored).
 | Directory | Used for |
 |---|---|
 | `.` (root) | The scripts used day to day to create and maintain groups, plus setup files and design notes |
-| `data_import/` | One-off scripts that populated Gather from the community's spreadsheets and website |
-| `google_setup/` | One-off scripts that set up the Google Groups and Drive links for the existing groups |
-| `cleanup/` | One-off scripts that undid earlier approaches (old wiki pages, Mailman lists, Drive group permissions) |
+| `data_import/` | One-off scripts that were used to populate Gather from the community's spreadsheets and website |
+| `google_setup/` | One-off scripts that were used to set up the Google Groups and Drive links for the existing groups |
+| `cleanup/` | One-off scripts that were used to undo earlier approaches (old wiki pages, Mailman lists, Drive group permissions) |
 | `groups_drive_sync/` | Apps Script project that syncs each Google Group's membership from its Drive item |
 | `calendar_notifications/` | Apps Script project that announces and gatekeeps events on the shared community calendar |
 | `util/` | Shared Python modules used by the scripts |
@@ -100,15 +115,16 @@ screenshots go to `debug/` (git-ignored).
 
 ### `data_import/`
 
-- **`import_directory.py`** creates households and members in Gather from a
+- **`import_directory.py`** created households and members in Gather from a
   spreadsheet of community members.
-- **`parse_households.py`** groups the members spreadsheet into households;
-  used by `import_directory.py`, and runnable alone to check the grouping.
-- **`import_groups.py`** creates Gather groups from the circle spreadsheet and
-  builds the Circle Structure page from it.
-- **`import_photos.py`** adds profile photos to Gather members from the
+- **`parse_households.py`** grouped the members spreadsheet into households;
+  it was used by `import_directory.py`, and could be run alone to check the
+  grouping.
+- **`import_groups.py`** created Gather groups from the circle spreadsheet and
+  built the Circle Structure page from it.
+- **`import_photos.py`** added profile photos to Gather members from the
   community website.
-- **`sync_group_memberships_from_sheet.py`** sets each member's Gather group
+- **`sync_group_memberships_from_sheet.py`** set each member's Gather group
   memberships to match the circles listed for them in the member roster.
 
 ### `google_setup/`
@@ -125,12 +141,12 @@ screenshots go to `debug/` (git-ignored).
 ### `cleanup/`
 
 - **`cleanup_wiki.py`** removed the wiki links an older version of the group
-  import added to group descriptions, and deleted the per-circle wiki pages it
-  created.
+  import had added to group descriptions, and deleted the per-circle wiki pages
+  it had created.
 - **`delete_mailman_lists.py`** deleted the Gather-hosted (Mailman) email lists
   from every group, before the switch to Google Groups.
 - **`remove_drive_group_permissions.py`** removed `@berkeleymoshav.org` group
-  permissions from every folder in a Shared Drive. It uses its own Google
+  permissions from every folder in a Shared Drive. It used its own Google
   sign-in, saved to `~/.google_drive_token.json`.
 
 ### Apps Script projects
