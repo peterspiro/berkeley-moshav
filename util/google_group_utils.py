@@ -136,6 +136,25 @@ def group_display_name(folder_name: str) -> str:
 
 # ── Group API helpers ─────────────────────────────────────────────────────────
 
+def list_all_groups(dir_service) -> list[dict]:
+    """Return [{'id', 'email', 'name'}, ...] for every Google Group in
+    DOMAIN, paginating through all pages. Read-only."""
+    groups = []
+    page_token = None
+    while True:
+        resp = dir_service.groups().list(
+            domain=DOMAIN,
+            maxResults=200,
+            pageToken=page_token,
+            fields="nextPageToken,groups(id,email,name)",
+        ).execute()
+        groups.extend(resp.get("groups", []))
+        page_token = resp.get("nextPageToken")
+        if not page_token:
+            break
+    return groups
+
+
 def group_exists(dir_service, gemail: str) -> bool:
     """Return True if gemail already exists as a Google Group. Read-only —
     safe to call from a dry run."""

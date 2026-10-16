@@ -63,7 +63,6 @@ from pathlib import Path
 from googleapiclient.discovery import build
 from playwright.sync_api import sync_playwright
 
-from google_setup.match_google_groups_to_drive_folders import DEFAULT_DRIVE_ID
 from update_groups_in_google_and_hierarchy import (
     ELIGIBLE_KINDS,
     EVERYBODY_AVAILABILITY,
@@ -86,7 +85,12 @@ from util.gather_utils import (
     login,
     resolve_group_by_prefix,
 )
-from util.gdrive_config import list_shared_drives, scrape_gdrive_config, walk_drive_folders
+from util.gdrive_config import (
+    DEFAULT_DRIVE_ID,
+    list_shared_drives,
+    scrape_gdrive_config,
+    walk_drive_folders,
+)
 from util.google_group_footer import ITEM_TYPE_FOLDER, ITEM_TYPE_SHARED_DRIVE, fetch_footer_link
 from util.google_group_utils import (
     DEFAULT_CLIENT_SECRETS_PATH,

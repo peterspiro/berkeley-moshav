@@ -14,6 +14,9 @@ from util.google_group_footer import ITEM_TYPE_FOLDER, ITEM_TYPE_SHARED_DRIVE
 
 GDRIVE_MAP_FILE = Path(__file__).parent.parent / "groups_drive_sync" / "gdrive_item_map.json"
 
+# ID of the community's Shared Drive, which holds the groups' folders.
+DEFAULT_DRIVE_ID = "0AFqC2xo9aTgPUk9PVA"
+
 
 # ── Google Drive API traversal ─────────────────────────────────────────────────
 

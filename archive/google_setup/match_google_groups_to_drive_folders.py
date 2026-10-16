@@ -34,7 +34,7 @@ import os
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from googleapiclient.discovery import build
 
@@ -47,28 +47,11 @@ from util.google_group_utils import (
     get_credentials,
     group_display_name,
     group_email,
+    list_all_groups,
 )
-
-DEFAULT_DRIVE_ID = "0AFqC2xo9aTgPUk9PVA"
+from util.gdrive_config import DEFAULT_DRIVE_ID
 
 # ── Google API helpers ────────────────────────────────────────────────────────
-
-def list_all_groups(dir_service) -> list[dict]:
-    groups = []
-    page_token = None
-    while True:
-        resp = dir_service.groups().list(
-            domain=DOMAIN,
-            maxResults=200,
-            pageToken=page_token,
-            fields="nextPageToken,groups(id,email,name)",
-        ).execute()
-        groups.extend(resp.get("groups", []))
-        page_token = resp.get("nextPageToken")
-        if not page_token:
-            break
-    return groups
-
 
 def list_top_level_folders(drive_service, drive_id: str) -> list[dict]:
     folders = []

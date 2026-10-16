@@ -12,12 +12,12 @@ import argparse
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from playwright.sync_api import Page, sync_playwright
 
 from util.credentials import load_credentials
-from data_import.parse_households import parse_households_from_text
+from archive.data_import.parse_households import parse_households_from_text
 from util.gather_utils import (
     _check_submit_errors,
     close_log,

@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Optional
 
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from playwright.sync_api import Page, sync_playwright
 
@@ -69,7 +69,7 @@ DEFAULT_SHEET_URL = (
 )
 
 MAX_DESC = 255
-_REPO_ROOT = Path(__file__).parent.parent
+_REPO_ROOT = Path(__file__).parent.parent.parent
 _LOG_FILE = _REPO_ROOT / "debug" / "groups_log.csv"
 _SCREENSHOT_DIR = _REPO_ROOT / "debug" / "import_screenshots"
 

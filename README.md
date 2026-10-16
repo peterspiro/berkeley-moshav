@@ -25,9 +25,9 @@ Python scripts:
   emails a community group when one of its members adds an event, and removes
   invitations from anyone who isn't allowed to add events.
 
-The repo also holds the one-off scripts that were used to migrate the
-community into Gather (members, households, groups, photos), and cleanup
-scripts from that migration.
+The repo also keeps, in `archive/`, the one-off scripts that were used to
+migrate the community into Gather (members, households, groups, photos) and
+to set up the Google side, along with cleanup scripts from that migration.
 
 Gather has no API for any of this, so most scripts drive its web UI with
 [Playwright](https://playwright.dev/python/). Google is reached through its
@@ -71,7 +71,7 @@ playwright install chromium
   super-admin. The sign-in is saved to `~/.google_setup_token.pkl`.
 
 Run scripts from the repo root, e.g. `python add_new_group.py ...` or
-`python google_setup/match_google_groups_to_drive_folders.py ...`. Every script
+`python archive/data_import/parse_households.py ...`. Every script
 supports `-h` for its options, and most support `-n`/`--dry-run`. Logs and
 screenshots go to `debug/` (git-ignored).
 
@@ -80,13 +80,14 @@ screenshots go to `debug/` (git-ignored).
 | Directory | Used for |
 |---|---|
 | `.` (root) | The scripts used day to day to create and maintain groups, plus setup files and design notes |
-| `data_import/` | One-off scripts that were used to populate Gather from the community's spreadsheets and website |
-| `google_setup/` | One-off scripts that were used to set up the Google Groups and Drive links for the existing groups |
-| `cleanup/` | One-off scripts that were used to undo earlier approaches (old wiki pages, Mailman lists, Drive group permissions) |
 | `groups_drive_sync/` | Apps Script project that syncs each Google Group's membership from its Drive item |
 | `calendar_notifications/` | Apps Script project that announces and gatekeeps events on the shared community calendar |
 | `util/` | Shared Python modules used by the scripts |
 | `tests/` | Unit tests (`pytest`) |
+| `archive/` | One-off scripts and plans that are no longer in use, kept for reference |
+| `archive/data_import/` | Scripts that were used to populate Gather from the community's spreadsheets and website |
+| `archive/google_setup/` | Scripts that were used to set up the Google Groups and Drive links for the existing groups |
+| `archive/cleanup/` | Scripts that were used to undo earlier approaches (old wiki pages, Mailman lists, Drive group permissions) |
 | `debug/` | Created at run time for logs and screenshots; not in git |
 
 ## Scripts
@@ -112,42 +113,6 @@ screenshots go to `debug/` (git-ignored).
   shorter, address and moves the Gather group's email list over to it.
 - **`setup.sh`** installs and starts a local Gather development instance, for
   trying scripts out safely before running them against the real site.
-
-### `data_import/`
-
-- **`import_directory.py`** created households and members in Gather from a
-  spreadsheet of community members.
-- **`parse_households.py`** grouped the members spreadsheet into households;
-  it was used by `import_directory.py`, and could be run alone to check the
-  grouping.
-- **`import_groups.py`** created Gather groups from the circle spreadsheet and
-  built the Circle Structure page from it.
-- **`import_photos.py`** added profile photos to Gather members from the
-  community website.
-- **`sync_group_memberships_from_sheet.py`** set each member's Gather group
-  memberships to match the circles listed for them in the member roster.
-
-### `google_setup/`
-
-- **`match_google_groups_to_drive_folders.py`** matched existing Google Groups
-  to Shared Drive folders and renamed them to the standard naming scheme.
-- **`init_google_groups_from_gather_gdrive_config.py`** created a Google Group
-  for each folder linked in Gather, wrote its footer link, and set it as the
-  Gather group's email list.
-- **`find_drive_folders_for_groups_without_mailing_list.py`** searched the
-  Shared Drive for folders matching groups that had no email list, and linked
-  the ones you picked.
-
-### `cleanup/`
-
-- **`cleanup_wiki.py`** removed the wiki links an older version of the group
-  import had added to group descriptions, and deleted the per-circle wiki pages
-  it had created.
-- **`delete_mailman_lists.py`** deleted the Gather-hosted (Mailman) email lists
-  from every group, before the switch to Google Groups.
-- **`remove_drive_group_permissions.py`** removed `@berkeleymoshav.org` group
-  permissions from every folder in a Shared Drive. It used its own Google
-  sign-in, saved to `~/.google_drive_token.json`.
 
 ### Apps Script projects
 
@@ -183,12 +148,50 @@ Both are deployed to Google with [`clasp`](https://github.com/google/clasp)
   Google Group names
 - **`credentials.py`**: reading `~/.gather`
 
+### `archive/`: no longer in use
+
+#### `archive/data_import/`
+
+- **`import_directory.py`** created households and members in Gather from a
+  spreadsheet of community members.
+- **`parse_households.py`** grouped the members spreadsheet into households;
+  it was used by `import_directory.py`, and could be run alone to check the
+  grouping.
+- **`import_groups.py`** created Gather groups from the circle spreadsheet and
+  built the Circle Structure page from it.
+- **`import_photos.py`** added profile photos to Gather members from the
+  community website.
+- **`sync_group_memberships_from_sheet.py`** set each member's Gather group
+  memberships to match the circles listed for them in the member roster.
+
+#### `archive/google_setup/`
+
+- **`match_google_groups_to_drive_folders.py`** matched existing Google Groups
+  to Shared Drive folders and renamed them to the standard naming scheme.
+- **`init_google_groups_from_gather_gdrive_config.py`** created a Google Group
+  for each folder linked in Gather, wrote its footer link, and set it as the
+  Gather group's email list.
+- **`find_drive_folders_for_groups_without_mailing_list.py`** searched the
+  Shared Drive for folders matching groups that had no email list, and linked
+  the ones you picked.
+
+#### `archive/cleanup/`
+
+- **`cleanup_wiki.py`** removed the wiki links an older version of the group
+  import had added to group descriptions, and deleted the per-circle wiki pages
+  it had created.
+- **`delete_mailman_lists.py`** deleted the Gather-hosted (Mailman) email lists
+  from every group, before the switch to Google Groups.
+- **`remove_drive_group_permissions.py`** removed `@berkeleymoshav.org` group
+  permissions from every folder in a Shared Drive. It used its own Google
+  sign-in, saved to `~/.google_drive_token.json`.
+
 ## Design notes
 
-- `gather-sandbox-plan.md` and `gather-import-plan.md`: plans for the local
-  Gather test instance and the member import
 - `calendar-notifications-plan.md`: design of the calendar notifications
   script
+- `archive/gather-sandbox-plan.md` and `archive/gather-import-plan.md`: plans
+  for the local Gather test instance and the member import
 
 ## Tests
 

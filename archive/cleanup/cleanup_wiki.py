@@ -27,7 +27,7 @@ import re
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from playwright.sync_api import sync_playwright
 
@@ -45,7 +45,7 @@ from util.gather_utils import (
     login,
     screenshot,
 )
-from data_import.import_groups import (
+from archive.data_import.import_groups import (
     DEFAULT_SHEET_URL,
     _canonical_group_name,
     _group_kind,
