@@ -10,7 +10,7 @@ Their main job is keeping four things linked together and consistent:
   [Shared Drive](https://drive.google.com/drive/folders/0AFqC2xo9aTgPUk9PVA),
   linked to Gather groups through Gather's
   [Google Drive settings](https://berkeley-moshav.gather.coop/gdrive/config)
-- **[Google Groups](https://groups.google.com/a/berkeleymoshav.org)** in the
+- **[Google Groups](https://groups.google.com/all-groups)** in the
   `berkeleymoshav.org` Workspace, which serve as each Gather group's email list
 - The **[Circle Structure](https://berkeley-moshav.gather.coop/wiki/circle-structure)**
   wiki page in Gather, a tree of the circles and working groups with links to
