@@ -20,12 +20,10 @@ same commit:
 README.md names a script that no longer exists. It can't tell whether a
 description is still accurate, so check that yourself.
 
-Scripts in `data_import/`, `google_setup/`, and `cleanup/` were one-offs and
-are described in the past tense; describe current scripts in the present
-tense.
+Scripts in `archive/` were one-offs that are no longer used, and are
+described in the past tense; describe current scripts in the present tense.
+Current scripts must not import from `archive/`; put shared code in `util/`.
 
 ## Tests
 
-Run `python -m pytest` before committing. `tests/test_gather_groups.py` and
-`tests/test_gather_photos.py` currently fail because they import modules that
-were since renamed; any other failure is new.
+Run `python -m pytest` before committing; all tests should pass.

@@ -24,7 +24,7 @@ SCOPES = ["https://www.googleapis.com/auth/drive"]
 TOKEN_PATH = Path.home() / ".google_drive_token.json"
 DEFAULT_DRIVE_ID = "0AFqC2xo9aTgPUk9PVA"
 TARGET_DOMAIN = "berkeleymoshav.org"
-DEFAULT_CLIENT_SECRETS_PATH = Path(__file__).parent.parent / "client_secret.json"
+DEFAULT_CLIENT_SECRETS_PATH = Path(__file__).parent.parent.parent / "client_secret.json"
 
 
 def get_credentials(client_secrets_file: str):

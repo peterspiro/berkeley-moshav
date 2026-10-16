@@ -81,7 +81,6 @@ from urllib.parse import quote
 from googleapiclient.discovery import build
 from playwright.sync_api import sync_playwright
 
-from google_setup.match_google_groups_to_drive_folders import DEFAULT_DRIVE_ID
 from util.credentials import load_credentials
 from util.gather_utils import (
     close_log,
@@ -99,6 +98,7 @@ from util.gather_utils import (
     set_gather_group_email_list,
 )
 from util.gdrive_config import (
+    DEFAULT_DRIVE_ID,
     FOLDER_TYPE_SUFFIXES,
     add_group_access_to_gdrive_item,
     create_drive_folder,

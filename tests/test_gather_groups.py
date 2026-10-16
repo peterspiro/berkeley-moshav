@@ -11,7 +11,7 @@ import pytest
 
 import re
 
-from data_import.import_groups import (
+from archive.data_import.import_groups import (
     Circle,
     GatherGroup,
     GatherGroupMember,
@@ -446,16 +446,16 @@ class TestParseMemberLine:
 
 class TestFirstNameAliases:
     def test_annie_matches_ann(self):
-        from gather_groups import first_name_matches
+        from util.gather_utils import first_name_matches
         assert first_name_matches("Annie", "Ann")
         assert first_name_matches("Ann", "Annie")
 
     def test_annie_does_not_match_unrelated(self):
-        from gather_groups import first_name_matches
+        from util.gather_utils import first_name_matches
         assert not first_name_matches("Annie", "Alex")
 
     def test_yocab_matches_yacov(self):
-        from gather_groups import first_name_matches
+        from util.gather_utils import first_name_matches
         assert first_name_matches("Yocab", "Yacov")
         assert first_name_matches("Yacov", "Yocab")
 

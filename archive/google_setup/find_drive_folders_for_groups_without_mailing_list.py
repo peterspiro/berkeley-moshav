@@ -35,12 +35,12 @@ import os
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from googleapiclient.discovery import build
 from playwright.sync_api import sync_playwright
 
-from google_setup.match_google_groups_to_drive_folders import DEFAULT_DRIVE_ID
+from util.gdrive_config import DEFAULT_DRIVE_ID
 from util.credentials import load_credentials
 from util.folder_matching import find_matching_folders
 from util.gather_utils import (

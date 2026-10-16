@@ -11,7 +11,7 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-SCRIPT_DIRS = ["data_import", "google_setup", "cleanup"]
+SCRIPT_DIRS = ["archive/data_import", "archive/google_setup", "archive/cleanup"]
 APPS_SCRIPT_DIRS = ["groups_drive_sync", "calendar_notifications"]
 
 

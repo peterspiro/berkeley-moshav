@@ -2,7 +2,7 @@
 
 import pytest
 
-from data_import.import_photos import (
+from archive.data_import.import_photos import (
     _H2Parser,
     _PhotoLinkParser,
     find_members_for_names,
@@ -45,7 +45,7 @@ class TestH2Parser:
 class TestGetFirstNamesFromPage:
     def _names(self, html):
         """Parse first names from HTML without an HTTP request."""
-        from gather_photos import _H2Parser
+        from archive.data_import.import_photos import _H2Parser
         import re
 
         p = _H2Parser()

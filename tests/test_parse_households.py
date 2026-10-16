@@ -8,7 +8,7 @@ import sys
 import tempfile
 import unittest
 
-from data_import.parse_households import (
+from archive.data_import.parse_households import (
     UnionFind,
     derive_household_name,
     is_international_phone,
@@ -504,7 +504,7 @@ class TestPreprocess(unittest.TestCase):
                 "Status": "Member",
             }])
         )
-        from data_import.parse_households import parse_households_from_text
+        from archive.data_import.parse_households import parse_households_from_text
         result = parse_households_from_text(tsv)
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0]["members"][0]["first_name"], "Alex")

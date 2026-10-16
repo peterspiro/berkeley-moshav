@@ -109,7 +109,6 @@ from pathlib import Path
 from googleapiclient.discovery import build
 from playwright.sync_api import sync_playwright
 
-from google_setup.match_google_groups_to_drive_folders import DEFAULT_DRIVE_ID, list_all_groups
 from util.credentials import load_credentials
 from util.folder_matching import find_matching_folders
 from util.gather_utils import (
@@ -125,6 +124,7 @@ from util.gather_utils import (
     set_gather_group_email_list,
 )
 from util.gdrive_config import (
+    DEFAULT_DRIVE_ID,
     add_group_access_to_gdrive_item,
     check_single_link_per_group,
     create_drive_folder,
@@ -159,6 +159,7 @@ from util.google_group_utils import (
     group_display_name,
     group_email,
     is_in_domain,
+    list_all_groups,
     list_group_members,
     set_member_role,
 )
