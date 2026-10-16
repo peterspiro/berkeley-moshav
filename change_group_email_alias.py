@@ -59,30 +59,17 @@ from util.gather_utils import (
 from util.google_group_utils import (
     DEFAULT_CLIENT_SECRETS_PATH,
     DOMAIN,
+    SUFFIXES,
     add_group_alias,
     get_credentials,
     get_group_by_email,
+    truncate_local_part,
 )
 
 _LOG_FILE = Path("debug/change_group_email_alias_log.csv")
 _SCREENSHOT_DIR = Path("debug/change_group_email_alias_screenshots")
 
 configure(_LOG_FILE, _SCREENSHOT_DIR)
-
-# Longest first, so e.g. "-working-group" is tried before any shorter
-# suffix that might otherwise coincidentally match a substring of it.
-SUFFIXES = ["-working-group", "-work-group", "-circle"]
-
-
-def truncate_local_part(local: str) -> str | None:
-    """Return local with a recognized suffix removed, or None if it
-    doesn't end with one of SUFFIXES."""
-    for suffix in SUFFIXES:
-        if local.endswith(suffix):
-            truncated = local[: -len(suffix)]
-            return truncated or None
-    return None
-
 
 def find_gather_group_by_email(page, base_url: str, target_email: str) -> str | None:
     """Scan every Gather group for one whose mailing list currently

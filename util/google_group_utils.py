@@ -109,6 +109,21 @@ def to_slug(name: str) -> str:
 def group_email(folder_name: str) -> str:
     return f"{to_slug(folder_name)}@{DOMAIN}"
 
+# Type suffixes that truncate_local_part() drops from a group address's
+# local part. Longest first, so e.g. "-working-group" is tried before any
+# shorter suffix that might otherwise coincidentally match a substring of it.
+SUFFIXES = ["-working-group", "-work-group", "-circle"]
+
+
+def truncate_local_part(local: str) -> str | None:
+    """Return local with a recognized suffix removed, or None if it
+    doesn't end with one of SUFFIXES."""
+    for suffix in SUFFIXES:
+        if local.endswith(suffix):
+            truncated = local[: -len(suffix)]
+            return truncated or None
+    return None
+
 def is_in_domain(email: str, domain: str = DOMAIN) -> bool:
     """True if email is a well-formed address (exactly one '@') whose
     domain matches `domain`, case-insensitively."""
@@ -201,6 +216,20 @@ def list_group_members(dir_service, gemail: str) -> list[dict]:
         if not page_token:
             break
     return members
+
+
+def ensure_group_member(dir_service, gemail: str, member_email: str) -> bool:
+    """Add member_email to the group as a regular MEMBER. Return True if
+    added, False if they were already a member."""
+    try:
+        dir_service.members().insert(
+            groupKey=gemail, body={"email": member_email, "role": "MEMBER"}
+        ).execute()
+        return True
+    except Exception as err:
+        if "409" in str(err) or "Member already exists" in str(err):
+            return False
+        raise
 
 
 def set_member_role(dir_service, gemail: str, member_email: str, role: str) -> None:

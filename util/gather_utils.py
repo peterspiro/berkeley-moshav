@@ -600,6 +600,9 @@ class GatherUser:
     full_name: str
     child: bool = False
     email: str = ""
+    # The address Gather shares Google Drive items with ("Google Email" in
+    # the directory), which may differ from `email`; "" if not set.
+    google_email: str = ""
 
 
 @dataclass
@@ -636,6 +639,7 @@ def fetch_all_gather_users(page: Page, base_url: str) -> list[GatherUser]:
         last = row.get("Last Name", "").strip()
         is_child = row.get("Is Child", "").strip().lower() == "true"
         email = (row.get("Email", "") or row.get("Email Address", "")).strip().lower()
+        google_email = (row.get("Google Email", "") or "").strip().lower()
         if not uid:
             continue
         users.append(GatherUser(
@@ -645,6 +649,7 @@ def fetch_all_gather_users(page: Page, base_url: str) -> list[GatherUser]:
             full_name=f"{first} {last}".strip(),
             child=is_child,
             email=email,
+            google_email=google_email,
         ))
     return users
 
