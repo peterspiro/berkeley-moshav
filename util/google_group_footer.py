@@ -197,20 +197,19 @@ def parse_footer_folder_id(footer_text: str) -> str | None:
     return link[0] if link else None
 
 
-def compute_group_footer_updates(
-    settings_service, gemail: str, gather_group_id: str, item_id: str, base_url: str,
+def footer_updates(
+    current_settings: dict, gather_group_id: str, item_id: str, base_url: str,
     group_name: str, item_type: str = ITEM_TYPE_FOLDER, calendar_id: str | None = None,
     zoom_url: str | None = None,
 ) -> dict:
-    """Return {field: new_value} for the group's customFooterText /
-    includeCustomFooter settings, without applying them. Read-only — safe
-    to call from a dry run. Raises if the group doesn't exist.
+    """Return {field: new_value} for the customFooterText /
+    includeCustomFooter settings, given the group's current settings (a
+    Groups Settings API groups().get() result). Pure — no API calls.
 
     A calendar_id or zoom_url left as None keeps whatever calendar or Zoom
     link the footer already has, so a caller that doesn't know them never
     drops them."""
-    current = settings_service.groups().get(groupUniqueId=gemail).execute()
-    current_footer = current.get("customFooterText") or ""
+    current_footer = current_settings.get("customFooterText") or ""
     prefix, existing_block = split_footer(current_footer)
     if calendar_id is None:
         calendar_id = parse_footer_calendar_id(existing_block)
@@ -223,9 +222,73 @@ def compute_group_footer_updates(
     updates = {}
     if existing_block != desired_block:
         updates["customFooterText"] = f"{prefix}\n\n{desired_block}" if prefix else desired_block
-    if current.get("includeCustomFooter") != "true":
+    if current_settings.get("includeCustomFooter") != "true":
         updates["includeCustomFooter"] = "true"
     return updates
+
+
+def compute_group_footer_updates(
+    settings_service, gemail: str, gather_group_id: str, item_id: str, base_url: str,
+    group_name: str, item_type: str = ITEM_TYPE_FOLDER, calendar_id: str | None = None,
+    zoom_url: str | None = None,
+) -> dict:
+    """footer_updates() for the group's current settings, fetched from the
+    API. Read-only — safe to call from a dry run. Raises if the group
+    doesn't exist."""
+    current = settings_service.groups().get(groupUniqueId=gemail).execute()
+    return footer_updates(
+        current, gather_group_id, item_id, base_url, group_name, item_type, calendar_id, zoom_url
+    )
+
+
+_GATHER_LINK_RE = re.compile(r"Gather group:\s*(\S+)")
+_HEADER_RE = re.compile(r"^(.*)'s:$", re.MULTILINE)
+
+
+def _safe_parse_footer_link(footer_text: str) -> tuple[str, str] | None | str:
+    try:
+        return parse_footer_link(footer_text)
+    except ValueError:
+        return "ambiguous"
+
+
+def describe_footer_updates(current_footer: str | None, updates: dict) -> str:
+    """A short, human-readable account of what footer_updates() would
+    change, e.g. "Drive link -> folder <id>; turn footer on", or
+    "new layout (links unchanged)". Empty if updates is empty."""
+    parts = []
+    if "customFooterText" in updates:
+        new_text = updates["customFooterText"]
+        _, old_block = split_footer(current_footer or "")
+        _, new_block = split_footer(new_text)
+        if not old_block:
+            parts.append("add link block")
+        else:
+            old_link = _safe_parse_footer_link(old_block)
+            new_link = parse_footer_link(new_block)
+            if old_link != new_link:
+                item_id, item_type = new_link
+                parts.append(f"Drive link -> {item_type} {item_id}")
+            old_gather = _GATHER_LINK_RE.search(old_block)
+            new_gather = _GATHER_LINK_RE.search(new_block)
+            if (old_gather and old_gather.group(1)) != (new_gather and new_gather.group(1)):
+                parts.append(f"Gather link -> {new_gather.group(1)}")
+            if parse_footer_calendar_id(old_block) != parse_footer_calendar_id(new_block):
+                parts.append("calendar link")
+            if parse_footer_zoom_url(old_block) != parse_footer_zoom_url(new_block):
+                parts.append("Zoom link")
+            if not parts:
+                old_header = _HEADER_RE.search(old_block)
+                new_name = _HEADER_RE.search(new_block).group(1)
+                if not old_header:
+                    parts.append("new layout (links unchanged)")
+                elif old_header.group(1) != new_name:
+                    parts.append(f"group name -> {new_name!r}")
+                else:
+                    parts.append("rewrite link block")
+    if "includeCustomFooter" in updates:
+        parts.append("turn footer on")
+    return "; ".join(parts)
 
 
 def ensure_group_footer(

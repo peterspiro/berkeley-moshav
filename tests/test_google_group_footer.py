@@ -20,6 +20,8 @@ from util.google_group_footer import (
     calendar_id_from_cid,
     calendar_url,
     compute_group_footer_updates,
+    describe_footer_updates,
+    footer_updates,
     parse_footer_calendar_id,
     parse_footer_folder_id,
     parse_footer_link,
@@ -275,6 +277,115 @@ class TestComputeGroupFooterUpdates:
         assert parse_footer_calendar_id(footer) == "other@group.calendar.google.com"
         assert parse_footer_zoom_url(footer) == new_zoom
         assert ZOOM_URL not in footer
+
+
+def _old_layout(name="Foo", gather_id="9", item_id="FID"):
+    return (
+        f"{FOOTER_MARKER}\n"
+        f"{name} Gather group: https://x.coop/groups/{gather_id}\n"
+        f"{name} Google Docs folder: https://drive.google.com/drive/folders/{item_id}"
+    )
+
+
+class TestDescribeFooterUpdates:
+    def _describe(self, current_footer, *args, include="true", **kwargs):
+        current = {"customFooterText": current_footer, "includeCustomFooter": include}
+        updates = footer_updates(current, *args, **kwargs)
+        return describe_footer_updates(current_footer, updates)
+
+    def test_old_layout_same_links(self):
+        assert self._describe(_old_layout(), "9", "FID", "https://x.coop", "Foo") == \
+            "new layout (links unchanged)"
+
+    def test_drive_link_change(self):
+        assert self._describe(_old_layout(), "9", "NEW", "https://x.coop", "Foo",
+                              ITEM_TYPE_SHARED_DRIVE) == "Drive link -> shared_drive NEW"
+
+    def test_gather_link_change(self):
+        assert self._describe(_old_layout(), "10", "FID", "https://x.coop", "Foo") == \
+            "Gather link -> https://x.coop/groups/10"
+
+    def test_rename(self):
+        block = build_footer_block("9", "FID", "https://x.coop", "Foo")
+        assert self._describe(block, "9", "FID", "https://x.coop", "Bar") == \
+            "group name -> 'Bar'"
+
+    def test_calendar_and_zoom(self):
+        block = build_footer_block("9", "FID", "https://x.coop", "Foo")
+        assert self._describe(block, "9", "FID", "https://x.coop", "Foo",
+                              calendar_id=CAL_ID, zoom_url=ZOOM_URL) == \
+            "calendar link; Zoom link"
+
+    def test_new_block_and_footer_turned_on(self):
+        assert self._describe("Human text", "9", "FID", "https://x.coop", "Foo",
+                              include="false") == "add link block; turn footer on"
+
+    def test_nothing_to_change(self):
+        block = build_footer_block("9", "FID", "https://x.coop", "Foo")
+        assert self._describe(block, "9", "FID", "https://x.coop", "Foo") == ""
+
+
+class _RecordingSettingsService:
+    """Groups Settings stand-in that serves per-group settings and records
+    update() bodies."""
+
+    def __init__(self, settings_by_email):
+        self._settings = settings_by_email
+        self.updated = {}
+        self._pending = None
+
+    def groups(self):
+        return self
+
+    def get(self, groupUniqueId):
+        self._pending = ("get", groupUniqueId, None)
+        return self
+
+    def update(self, groupUniqueId, body):
+        self._pending = ("update", groupUniqueId, body)
+        return self
+
+    def execute(self):
+        op, email, body = self._pending
+        if op == "get":
+            return self._settings[email]
+        self.updated[email] = body
+        return body
+
+
+class TestEnsureGroupFooters:
+    def _run(self, svc, dry_run, capsys):
+        import update_groups_in_google_and_hierarchy as m
+        m.ensure_group_footers(
+            svc, "https://x.coop",
+            {"9": {"name": "Foo", "kind": "circle"}},
+            {"9": "FID"}, {"9": ITEM_TYPE_FOLDER}, {"9": "foo@x.coop"}, dry_run,
+        )
+        return capsys.readouterr().out
+
+    def test_dry_run_reports_layout_only_change(self, capsys):
+        svc = _RecordingSettingsService(
+            {"foo@x.coop": {"customFooterText": _old_layout(), "includeCustomFooter": "true"}})
+        out = self._run(svc, True, capsys)
+        assert "would update footer: new layout (links unchanged)" in out
+        assert svc.updated == {}
+
+    def test_applies_update_and_keeps_calendar_and_zoom(self, capsys):
+        block = build_footer_block("9", "FID", "https://x.coop", "Old",
+                                   calendar_id=CAL_ID, zoom_url=ZOOM_URL)
+        svc = _RecordingSettingsService(
+            {"foo@x.coop": {"customFooterText": block, "includeCustomFooter": "true"}})
+        out = self._run(svc, False, capsys)
+        assert "group name -> 'Foo'" in out
+        assert svc.updated["foo@x.coop"]["customFooterText"] == build_footer_block(
+            "9", "FID", "https://x.coop", "Foo", calendar_id=CAL_ID, zoom_url=ZOOM_URL)
+
+    def test_silent_when_up_to_date(self, capsys):
+        block = build_footer_block("9", "FID", "https://x.coop", "Foo")
+        svc = _RecordingSettingsService(
+            {"foo@x.coop": {"customFooterText": block, "includeCustomFooter": "true"}})
+        assert self._run(svc, False, capsys) == ""
+        assert svc.updated == {}
 
 
 def _entry(group_id, folder_name, item_type, group_name="Grp"):

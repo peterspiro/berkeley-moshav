@@ -143,9 +143,9 @@ from util.gdrive_config import (
 )
 from util.google_group_footer import (
     ITEM_TYPE_FOLDER,
-    compute_group_footer_updates,
-    ensure_group_footer,
+    describe_footer_updates,
     fetch_footer_link,
+    footer_updates,
 )
 from util.google_group_utils import (
     CONVERSATION_HISTORY_SETTINGS,
@@ -974,21 +974,20 @@ def ensure_group_footers(
         item_id = google_file_id_by_group_id[group_id]
         item_type = item_type_by_group_id.get(group_id, ITEM_TYPE_FOLDER)
 
+        current = settings_service.groups().get(groupUniqueId=email).execute()
+        updates = footer_updates(current, group_id, item_id, base_url, group_name, item_type)
+        if not updates:
+            continue
+        change = describe_footer_updates(current.get("customFooterText"), updates)
+
         if dry_run:
-            updates = compute_group_footer_updates(
-                settings_service, email, group_id, item_id, base_url, group_name, item_type
-            )
-            if updates:
-                print(f"[dry-run] '{group_name}' ({email}): would set footer link to {item_type} {item_id}")
-                log("INFO", "would_update_footer", f"{group_name} ({email}) -> {item_type} {item_id}")
+            print(f"[dry-run] '{group_name}' ({email}): would update footer: {change}")
+            log("INFO", "would_update_footer", f"{group_name} ({email}): {change}")
             continue
 
-        updates = ensure_group_footer(
-            settings_service, email, group_id, item_id, base_url, group_name, item_type
-        )
-        if updates:
-            print(f"  ~ footer: '{group_name}' ({email}) -> {item_type} {item_id}")
-            log("INFO", "update_footer", f"{group_name} ({email}) -> {item_type} {item_id}")
+        settings_service.groups().update(groupUniqueId=email, body=updates).execute()
+        print(f"  ~ footer: '{group_name}' ({email}): {change}")
+        log("INFO", "update_footer", f"{group_name} ({email}): {change}")
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
