@@ -35,7 +35,8 @@ excluding hidden groups:
       Drive" for a group linked to a shared drive on /gdrive/config; the
       former syncs the folder's Content managers into the group, the latter
       the shared drive's Viewers. A group linked to more than one item is a
-      hard error. Any other footer content is preserved; the block is only
+      hard error. Any other footer content is preserved, and so are the
+      block's "Google calendar" and "Zoom meeting" links; the block is only
       touched when Gather itself currently implies a (possibly different)
       pairing for that email.
   1.  If it's already in the hierarchy but has been renamed, updates the
