@@ -47,9 +47,23 @@ Gather group members ──(Gather's Drive sync)──▶ folder Content manager
 ```
 
 Each Google Group's custom footer carries an auto-managed block linking to its
-Gather group and its Drive item. `groups_drive_sync.gs` reads that footer to
-know which item's permissions to copy into the group, so a new group starts
-syncing as soon as its footer is written, with no redeploy.
+Gather group and its Drive item, and, once the group has them, its Google
+calendar and Zoom meeting room:
+
+```
+--- Auto-managed links ---
+Technology Circle's:
+Gather group: https://berkeley-moshav.gather.coop/groups/1093
+Google Docs folder: https://drive.google.com/drive/folders/...
+Google calendar: https://calendar.google.com/calendar/u/0?cid=...
+Zoom meeting: https://us06web.zoom.us/j/...
+```
+
+A group linked to a shared drive has a "Shared Drive:" line instead of
+"Google Docs folder:". `groups_drive_sync.gs` reads that footer to know which
+item's permissions to copy into the group, so a new group starts syncing as
+soon as its footer is written, with no redeploy. Rewriting the block keeps any
+calendar and Zoom links already in it, along with anything written above it.
 
 ## Setup
 

@@ -35,7 +35,8 @@ excluding hidden groups:
       Drive" for a group linked to a shared drive on /gdrive/config; the
       former syncs the folder's Content managers into the group, the latter
       the shared drive's Viewers. A group linked to more than one item is a
-      hard error. Any other footer content is preserved; the block is only
+      hard error. Any other footer content is preserved, and so are the
+      block's "Google calendar" and "Zoom meeting" links; the block is only
       touched when Gather itself currently implies a (possibly different)
       pairing for that email.
   1.  If it's already in the hierarchy but has been renamed, updates the
@@ -142,9 +143,9 @@ from util.gdrive_config import (
 )
 from util.google_group_footer import (
     ITEM_TYPE_FOLDER,
-    compute_group_footer_updates,
-    ensure_group_footer,
+    describe_footer_updates,
     fetch_footer_link,
+    footer_updates,
 )
 from util.google_group_utils import (
     CONVERSATION_HISTORY_SETTINGS,
@@ -973,21 +974,20 @@ def ensure_group_footers(
         item_id = google_file_id_by_group_id[group_id]
         item_type = item_type_by_group_id.get(group_id, ITEM_TYPE_FOLDER)
 
+        current = settings_service.groups().get(groupUniqueId=email).execute()
+        updates = footer_updates(current, group_id, item_id, base_url, group_name, item_type)
+        if not updates:
+            continue
+        change = describe_footer_updates(current.get("customFooterText"), updates)
+
         if dry_run:
-            updates = compute_group_footer_updates(
-                settings_service, email, group_id, item_id, base_url, group_name, item_type
-            )
-            if updates:
-                print(f"[dry-run] '{group_name}' ({email}): would set footer link to {item_type} {item_id}")
-                log("INFO", "would_update_footer", f"{group_name} ({email}) -> {item_type} {item_id}")
+            print(f"[dry-run] '{group_name}' ({email}): would update footer: {change}")
+            log("INFO", "would_update_footer", f"{group_name} ({email}): {change}")
             continue
 
-        updates = ensure_group_footer(
-            settings_service, email, group_id, item_id, base_url, group_name, item_type
-        )
-        if updates:
-            print(f"  ~ footer: '{group_name}' ({email}) -> {item_type} {item_id}")
-            log("INFO", "update_footer", f"{group_name} ({email}) -> {item_type} {item_id}")
+        settings_service.groups().update(groupUniqueId=email, body=updates).execute()
+        print(f"  ~ footer: '{group_name}' ({email}): {change}")
+        log("INFO", "update_footer", f"{group_name} ({email}): {change}")
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -1114,27 +1114,49 @@ def sync_hierarchy(
                 log("INFO", "remove", f"{node.name} (id={node.group_id})")
             continue
 
+        # In a dry run the tree is still edited in memory (it's never saved),
+        # so later steps see the same names and links a real run would.
         if node.name != live["name"]:
-            log("INFO", "rename", f"{node.name!r} -> {live['name']!r} (id={node.group_id})")
-            print(f"Renaming '{node.name}' -> '{live['name']}'")
+            _report_hierarchy_edit(
+                dry_run, "rename", f"{node.name!r} -> {live['name']!r} (id={node.group_id})",
+                f"rename '{node.name}' -> '{live['name']}'",
+            )
             node.name = live["name"]
 
         current_documents_url = documents_url_by_group_id.get(node.group_id)
 
         if not node.documents_url:
             if current_documents_url:
-                log("INFO", "add_documents_link", f"{node.name} (id={node.group_id})")
-                print(f"Adding Documents link for '{node.name}'")
+                _report_hierarchy_edit(
+                    dry_run, "add_documents_link", f"{node.name} (id={node.group_id})",
+                    f"add Documents link for '{node.name}'",
+                )
                 node.documents_url = current_documents_url
         elif current_documents_url and current_documents_url != node.documents_url:
-            log("INFO", "update_documents_link",
-                f"{node.name} (id={node.group_id}): {node.documents_url!r} -> {current_documents_url!r}")
-            print(f"Updating Documents link for '{node.name}'")
+            _report_hierarchy_edit(
+                dry_run, "update_documents_link",
+                f"{node.name} (id={node.group_id}): {node.documents_url!r} -> {current_documents_url!r}",
+                f"update Documents link for '{node.name}'",
+            )
             node.documents_url = current_documents_url
         elif not current_documents_url and node.group_id not in linked_group_ids:
-            log("INFO", "remove_documents_link", f"{node.name} (id={node.group_id})")
-            print(f"Removing Documents link for '{node.name}' (folder no longer linked)")
+            _report_hierarchy_edit(
+                dry_run, "remove_documents_link", f"{node.name} (id={node.group_id})",
+                f"remove Documents link for '{node.name}' (folder no longer linked)",
+            )
             node.documents_url = ""
+
+
+def _report_hierarchy_edit(dry_run: bool, event: str, detail: str, action: str) -> None:
+    """Log and print one Circle Structure edit. action is lower-case
+    ("rename 'A' -> 'B'"); a dry run reports it as "would <action>" and
+    logs "would_<event>", like the script's other steps."""
+    if dry_run:
+        log("INFO", f"would_{event}", detail)
+        print(f"[dry-run] Circle Structure: would {action}")
+    else:
+        log("INFO", event, detail)
+        print(f"Circle Structure: {action[0].upper()}{action[1:]}")
 
 
 def add_missing_groups(
