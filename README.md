@@ -2,7 +2,7 @@
 
 Administration scripts for the Berkeley Moshav community's online setup.
 
-Their main job is keeping four things linked together and consistent:
+Their main job is keeping these things linked together and consistent:
 
 - **[Gather groups](https://berkeley-moshav.gather.coop/groups)** (circles,
   working groups, and clubs, with their members and managers)
@@ -15,6 +15,12 @@ Their main job is keeping four things linked together and consistent:
 - The **[Circle Structure](https://berkeley-moshav.gather.coop/wiki/circle-structure)**
   wiki page in Gather, a tree of the circles and working groups with links to
   each one's members, documents, and wiki page
+- Each group's **Google calendar**, owned by `admin@berkeleymoshav.org` and
+  shared with the group's Google Group so its members can add meetings, and
+  its permanent **Zoom meeting room**, owned by the
+  `zoomhosts@berkeleymoshav.org` Zoom user. A room's link never changes, and
+  meetings in it can run with no host present. There's also one "All Berkeley
+  Moshav Events" calendar for every meeting.
 
 Two Google Apps Script projects run inside Google Workspace alongside the
 Python scripts:
@@ -35,8 +41,8 @@ APIs.
 
 ## How the group linking fits together
 
-This section covers only the linking of Gather groups, Drive, and Google
-Groups; the calendar script is separate.
+This section covers the linking of Gather groups, Drive, Google Groups,
+calendars, and Zoom rooms; the calendar notifications script is separate.
 
 ```
 Gather group members ──(Gather's Drive sync)──▶ folder Content managers / shared-drive Viewers
@@ -59,6 +65,12 @@ Google calendar: https://calendar.google.com/calendar/u/0?cid=...
 Zoom meeting: https://us06web.zoom.us/j/...
 ```
 
+The footer is the only record of which calendar and Zoom room belong to a
+group; `update_groups_in_google_and_hierarchy.py` and `add_new_group.py`
+create them and write the links. Each calendar is shared with the group's
+Google Group as "Make changes to events", so membership of the Google Group
+(kept in step with Drive above) decides who can use it.
+
 A group linked to a shared drive has a "Shared Drive:" line instead of
 "Google Docs folder:". `groups_drive_sync.gs` reads that footer to know which
 item's permissions to copy into the group, so a new group starts syncing as
@@ -80,9 +92,23 @@ playwright install chromium
   ```
 - **Google APIs**: create a Desktop OAuth 2.0 client in Google Cloud Console,
   save its JSON as `client_secret.json` in the repo root (or pass `-c`), and
-  enable the Drive, Admin SDK (Directory), and Groups Settings APIs. On first
-  run, a script prints a sign-in URL; open it signed in as a Workspace
-  super-admin. The sign-in is saved to `~/.google_setup_token.pkl`.
+  enable the Drive, Admin SDK (Directory), Groups Settings, and Google
+  Calendar APIs. On first run, a script prints a sign-in URL; open it signed
+  in as `admin@berkeleymoshav.org`, which owns the group calendars (the
+  scripts that make calendars refuse to run as anyone else). The sign-in is
+  saved to `~/.google_setup_token.pkl`; delete that file to sign in as a
+  different account. A script that needs a scope the saved sign-in lacks asks
+  you to sign in again.
+- **Zoom API**: in the Zoom App Marketplace, signed in as the account owner,
+  create a **Server-to-Server OAuth** app (Develop → Build App). Give it the
+  scopes to read, create, and update meetings, list a user's meetings, list
+  a meeting's past instances, and update users (for the host key), then
+  activate it. Put its credentials in `~/.zoom` (`chmod 600`):
+  ```
+  account_id = ...
+  client_id = ...
+  client_secret = ...
+  ```
 
 Run scripts from the repo root, e.g. `python add_new_group.py ...` or
 `python archive/data_import/parse_households.py ...`. Every script
@@ -109,15 +135,21 @@ screenshots go to `debug/` (git-ignored).
 ### Root: group creation and maintenance
 
 - **`add_new_group.py`** creates a complete new group in one step: the Drive
-  folder, the Google Group (optionally with a shorter address), and the Gather
-  group with its manager; links them all together; adds the group to the
-  Circle Structure page; and opens a welcome email to the new list as a draft
-  in your mail program.
+  folder, the Google Group (optionally with a shorter address), the Gather
+  group with its manager, and the group's calendar and Zoom room; links them
+  all together; adds the group to the Circle Structure page; and opens a
+  welcome email to the new list as a draft in your mail program.
 - **`update_groups_in_google_and_hierarchy.py`** brings every group (or one,
   with `-g`) into line: offers to find or create a missing Drive folder or
-  email list, enforces the Google Group settings, writes the footer links,
-  and updates the Circle Structure page (renames, links, missing and stale
-  entries).
+  email list, enforces the Google Group settings, gives each group a calendar
+  and Zoom room (asking which one is the group's when existing ones match its
+  name), writes the footer links, and updates the Circle Structure page
+  (renames, links, missing and stale entries). Its first run also creates the
+  "All Berkeley Moshav Events" calendar.
+- **`reset_zoom_room.py`** gives a group's Zoom room a new passcode, and so a
+  new link, which it writes into the group's footer, for when a link has
+  leaked. With `--host-key` it instead (or also) sets a new host key for
+  every group room.
 - **`audit_group_memberships.py`** is a read-only report of where a group's
   Gather membership, Drive permissions, and Google Group membership disagree,
   plus setup problems and anyone else with access to its Drive item.
@@ -160,7 +192,10 @@ Both are deployed to Google with [`clasp`](https://github.com/google/clasp)
 - **`wiki_utils.py`**: per-group wiki pages
 - **`folder_matching.py`**: fuzzy matching of group names to folder and
   Google Group names
-- **`credentials.py`**: reading `~/.gather`
+- **`meeting_rooms.py`**: finding, choosing, or creating each group's
+  calendar and Zoom room, and keeping them named, shared, and configured
+- **`zoom_utils.py`**: the Zoom API, and the standard room settings
+- **`credentials.py`**: reading `~/.gather` and `~/.zoom`
 
 ### `archive/`: no longer in use
 

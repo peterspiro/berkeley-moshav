@@ -26,6 +26,7 @@ from util.google_group_footer import (
     parse_footer_folder_id,
     parse_footer_link,
     parse_footer_zoom_url,
+    replace_footer_zoom_url,
 )
 
 GROUPS_DRIVE_SYNC_GS = Path(__file__).resolve().parent.parent / "groups_drive_sync" / "groups_drive_sync.gs"
@@ -168,6 +169,20 @@ class TestCalendarAndZoomLinks:
         footer = (f"Zoom meeting: https://zoom.us/j/1\n\n"
                   + build_footer_block("1", "FID", "https://x.coop", "Foo"))
         assert parse_footer_zoom_url(footer) is None
+
+
+class TestReplaceFooterZoomUrl:
+    def test_replaces_only_the_zoom_link(self):
+        block = build_footer_block("1", "FID", "https://x.coop", "Foo",
+                                   calendar_id=CAL_ID, zoom_url=ZOOM_URL)
+        footer = "Human text\n\n" + block
+        new = replace_footer_zoom_url(footer, "https://us06web.zoom.us/j/1?pwd=NEW")
+        assert new == footer.replace(ZOOM_URL, "https://us06web.zoom.us/j/1?pwd=NEW")
+
+    def test_no_zoom_link_raises(self):
+        with pytest.raises(ValueError):
+            replace_footer_zoom_url(build_footer_block("1", "FID", "https://x.coop", "Foo"),
+                                    ZOOM_URL)
 
 
 class TestGroupsDriveSyncCompatibility:

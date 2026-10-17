@@ -46,6 +46,8 @@ SCOPES = [
     # in addition to the group scope above.
     "https://www.googleapis.com/auth/admin.directory.group.member",
     "https://www.googleapis.com/auth/apps.groups.settings",
+    # Group calendars (util/meeting_rooms.py): create, rename, share.
+    "https://www.googleapis.com/auth/calendar",
 ]
 
 

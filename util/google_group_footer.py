@@ -189,6 +189,16 @@ def parse_footer_zoom_url(footer_text: str | None) -> str | None:
     return m.group(1) if m else None
 
 
+def replace_footer_zoom_url(footer_text: str, zoom_url: str) -> str:
+    """footer_text with the managed block's "Zoom meeting" link replaced by
+    zoom_url. Raises ValueError if the block has no Zoom link."""
+    prefix, block = split_footer(footer_text or "")
+    new_block, n = _ZOOM_LINK_RE.subn(lambda _: f"{_ZOOM_LABEL}: {zoom_url}", block, count=1)
+    if not n:
+        raise ValueError("footer has no Zoom meeting link")
+    return f"{prefix}\n\n{new_block}" if prefix else new_block
+
+
 def parse_footer_folder_id(footer_text: str) -> str | None:
     """Extract the Drive item ID from a footer's managed block, if any,
     regardless of whether it's a folder or shared-drive link. Retained for
