@@ -99,11 +99,14 @@ playwright install chromium
   saved to `~/.google_setup_token.pkl`; delete that file to sign in as a
   different account. A script that needs a scope the saved sign-in lacks asks
   you to sign in again.
-- **Zoom API**: in the Zoom App Marketplace, signed in as the account owner,
-  create a **Server-to-Server OAuth** app (Develop → Build App). Give it the
-  scopes to read, create, and update meetings, list a user's meetings, list
-  a meeting's past instances, and update users (for the host key), then
-  activate it. Put its credentials in `~/.zoom` (`chmod 600`):
+- **Zoom API**: in the Zoom App Marketplace, create a **Server-to-Server
+  OAuth** app (Develop → Build App), signed in as the account owner or as an
+  admin whose role has View and Edit for "Server-to-Server OAuth app" (Role
+  Settings → Advanced features) and for Users. Give it the scopes to read,
+  create, and update meetings, list a user's meetings, list a meeting's past
+  instances, and update users (for the host key), then activate it. If its
+  creator's role is later reduced, Zoom removes those scopes, so transfer the
+  app to another admin first. Put its credentials in `~/.zoom` (`chmod 600`):
   ```
   account_id = ...
   client_id = ...
