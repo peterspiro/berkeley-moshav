@@ -1,6 +1,6 @@
 """
 Tests for util.zoom_utils: the standard room settings, the requests sent to
-Zoom's API, and generated passcodes and host keys. No network: a fake
+Zoom's API, and generated passcodes. No network: a fake
 session records each request and returns canned responses.
 
 All IDs and addresses are fictional.
@@ -16,10 +16,8 @@ from util.zoom_utils import (
     TOKEN_URL,
     ZoomClient,
     ZoomError,
-    _is_weak_host_key,
     meeting_id_from_url,
     is_numeric_passcode,
-    new_host_key,
     new_passcode,
     room_settings_differences,
     room_topic,
@@ -105,19 +103,6 @@ class TestHelpers:
     def test_is_numeric_passcode(self, passcode, ok):
         assert is_numeric_passcode(passcode) is ok
 
-    @pytest.mark.parametrize("key", ["111111", "123456", "654321", "000000"])
-    def test_weak_host_keys(self, key):
-        assert _is_weak_host_key(key)
-
-    @pytest.mark.parametrize("key", ["135792", "112233", "908172"])
-    def test_ok_host_keys(self, key):
-        assert not _is_weak_host_key(key)
-
-    def test_new_host_key(self):
-        for _ in range(50):
-            k = new_host_key()
-            assert len(k) == 6 and k.isdigit() and not _is_weak_host_key(k)
-
 
 class TestZoomClient:
     def test_get_meeting_missing_is_none(self):
@@ -167,11 +152,7 @@ class TestZoomClient:
         zoom, _ = _client({("GET", "/past_meetings/1/instances"): _Resp(200, {"meetings": []})})
         assert zoom.last_used("1") is None
 
-    def test_set_passcode_and_host_key(self):
+    def test_set_passcode(self):
         zoom, session = _client()
-        zoom.set_passcode("1", "abc123")
-        zoom.set_host_key("135792")
-        assert session.calls == [
-            ("PATCH", "/meetings/1", {"json": {"password": "abc123"}}),
-            ("PATCH", f"/users/{ROOMS_USER}", {"json": {"host_key": "135792"}}),
-        ]
+        zoom.set_passcode("1", "123456")
+        assert session.calls == [("PATCH", "/meetings/1", {"json": {"password": "123456"}})]

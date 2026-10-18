@@ -1,18 +1,16 @@
 #!/usr/bin/env python3
 """
-Changes a group's Zoom meeting room passcode, or the rooms' shared host
-key, for when one has leaked.
+Changes a group's Zoom meeting room passcode, for when its link has
+leaked.
 
-With -g/--group, gives the group's room (the one linked in its Google
-Group's footer) a new random digits-only passcode. The room keeps its
-meeting ID, but its join link changes, since the link embeds the passcode;
-the script writes the new link and passcode into the footer and prints
-them. Calendar events and
-messages that contain the old link need updating separately.
+Gives the group's room (the one linked in its Google Group's footer) a new
+random digits-only passcode. The room keeps its meeting ID, but its join
+link changes, since the link embeds the passcode; the script writes the
+new link and passcode into the footer and prints them. Calendar events
+and messages that contain the old link need updating separately.
 
-With --host-key, gives the rooms user (zoom_utils.ROOMS_USER) a new random
-host key and prints it. One host key works for every group room, so give
-the new one privately to each group's facilitators.
+The rooms' shared host key isn't changed here; see README.md ("Changing
+the host key") for doing that in Zoom's web portal.
 
 The group is named by its Google Group's email address, or by a prefix of
 its Google Group name or address that matches just one group.
@@ -23,7 +21,6 @@ and the Zoom app's credentials in zoom_credentials (see README.md).
 Usage:
     python reset_zoom_room.py -g tech-circle@berkeleymoshav.org
     python reset_zoom_room.py -g technology -n
-    python reset_zoom_room.py --host-key
 """
 
 import argparse
@@ -37,13 +34,7 @@ from util.credentials import load_zoom_credentials
 from util.gather_utils import close_log, configure, init_log, log
 from util.google_group_footer import parse_footer_zoom_url, replace_footer_zoom
 from util.google_group_utils import DEFAULT_CLIENT_SECRETS_PATH, get_credentials, list_all_groups
-from util.zoom_utils import (
-    ROOMS_USER,
-    ZoomClient,
-    meeting_id_from_url,
-    new_host_key,
-    new_passcode,
-)
+from util.zoom_utils import ZoomClient, meeting_id_from_url, new_passcode
 
 _LOG_FILE = Path("debug/reset_zoom_room_log.csv")
 _SCREENSHOT_DIR = Path("debug/reset_zoom_room_screenshots")
@@ -102,52 +93,32 @@ def reset_room_passcode(settings_service, zoom: ZoomClient, group: dict, dry_run
     print("Update any calendar events and messages that still contain the old link.")
 
 
-def reset_host_key(zoom: ZoomClient, dry_run: bool) -> None:
-    if dry_run:
-        print(f"[dry-run] Would give {ROOMS_USER} a new host key.")
-        log("INFO", "would_reset_host_key", ROOMS_USER)
-        return
-    host_key = new_host_key()
-    zoom.set_host_key(host_key)
-    log("INFO", "reset_host_key", ROOMS_USER)
-    print(f"New host key for every group room ({ROOMS_USER}): {host_key}")
-    print("Give it privately to each group's facilitators.")
-
-
-def main(group_query: str | None, host_key: bool, dry_run: bool, credentials_path: str) -> None:
+def main(group_query: str, dry_run: bool, credentials_path: str) -> None:
     init_log()
-    log("INFO", "start", f"group={group_query!r} host_key={host_key} dry_run={dry_run}")
+    log("INFO", "start", f"group={group_query!r} dry_run={dry_run}")
     zoom = ZoomClient(**load_zoom_credentials())
     try:
-        if group_query:
-            creds = get_credentials(credentials_path)
-            dir_service = build("admin", "directory_v1", credentials=creds)
-            settings_service = build("groupssettings", "v1", credentials=creds)
-            try:
-                group = find_group(list_all_groups(dir_service), group_query)
-            except ValueError as e:
-                sys.exit(f"Error: {e}")
-            reset_room_passcode(settings_service, zoom, group, dry_run)
-        if host_key:
-            reset_host_key(zoom, dry_run)
+        creds = get_credentials(credentials_path)
+        dir_service = build("admin", "directory_v1", credentials=creds)
+        settings_service = build("groupssettings", "v1", credentials=creds)
+        try:
+            group = find_group(list_all_groups(dir_service), group_query)
+        except ValueError as e:
+            sys.exit(f"Error: {e}")
+        reset_room_passcode(settings_service, zoom, group, dry_run)
     finally:
         close_log()
 
 
 def cli():
     parser = argparse.ArgumentParser(
-        description="Give a group's Zoom room a new passcode (and link), or the rooms "
-                    "a new host key.",
+        description="Give a group's Zoom room a new passcode (and so a new link).",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
-        "-g", "--group", metavar="GROUP",
+        "-g", "--group", metavar="GROUP", required=True,
         help="The group's Google Group address, or a prefix of its name or address "
              "matching just one group",
-    )
-    parser.add_argument(
-        "--host-key", action="store_true",
-        help=f"Give {ROOMS_USER} a new host key (shared by every group room)",
     )
     parser.add_argument(
         "-n", "--dry-run", action="store_true",
@@ -158,14 +129,12 @@ def cli():
         help="Path to OAuth client secrets JSON",
     )
     args = parser.parse_args()
-    if not args.group and not args.host_key:
-        parser.error("pass -g/--group, --host-key, or both")
-    if args.group and not os.path.exists(args.credentials):
+    if not os.path.exists(args.credentials):
         sys.exit(
             f"Error: credentials file not found: {args.credentials}\n"
             "Download a Desktop OAuth 2.0 client JSON from Google Cloud Console."
         )
-    main(args.group, args.host_key, args.dry_run, args.credentials)
+    main(args.group, args.dry_run, args.credentials)
 
 
 if __name__ == "__main__":

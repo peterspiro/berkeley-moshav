@@ -118,7 +118,6 @@ playwright install chromium
   | `meeting:update:meeting:admin` | Update a meeting | Fixing a room's topic or settings; new passcodes (`reset_zoom_room.py`) |
   | `meeting:read:list_meetings:admin` | View a user's meetings | Listing the rooms, to offer ones matching a group's name |
   | `meeting:read:list_past_instances:admin` | View a past meeting's instances | Warning about rooms unused for 300 days, before Zoom deletes them at 365 |
-  | `user:update:user:admin` | Update a user | New host keys (`reset_zoom_room.py --host-key`) only |
 
   If its creator's role is later reduced, Zoom removes those scopes, so
   transfer the app to another admin first. Put its credentials in a file
@@ -140,6 +139,16 @@ Run scripts from the repo root, e.g. `python add_new_group.py ...` or
 `python archive/data_import/parse_households.py ...`. Every script
 supports `-h` for its options, and most support `-n`/`--dry-run`. Logs and
 screenshots go to `debug/` (git-ignored).
+
+### Changing the host key
+
+All the group rooms share one host key: the `zoomhosts@berkeleymoshav.org`
+Zoom user's. It's given privately to each group's facilitators, so they can
+claim host in their group's room. Change it only when it has leaked or a
+facilitator who knows it shouldn't any more, since every facilitator in every
+group then needs the new one. It's changed by hand, not by a script: sign in
+to the Zoom web portal as `zoomhosts@berkeleymoshav.org`, open **Profile**,
+and edit **Host Key** (6 to 10 digits; Zoom rejects easy ones like 123456).
 
 ## Directories
 
@@ -174,8 +183,7 @@ screenshots go to `debug/` (git-ignored).
   "All Berkeley Moshav Events" calendar.
 - **`reset_zoom_room.py`** gives a group's Zoom room a new passcode, and so a
   new link, both of which it writes into the group's footer, for when a link has
-  leaked. With `--host-key` it instead (or also) sets a new host key for
-  every group room.
+  leaked.
 - **`audit_group_memberships.py`** is a read-only report of where a group's
   Gather membership, Drive permissions, and Google Group membership disagree,
   plus setup problems and anyone else with access to its Drive item.

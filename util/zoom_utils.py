@@ -43,7 +43,6 @@ ROOM_SETTINGS = {
 # Digits only, to be easy to type. Zoom allows up to 10 characters.
 PASSCODE_LENGTH = 6
 
-HOST_KEY_LENGTH = 6
 
 _MEETING_ID_RE = re.compile(r"/j/(\d+)")
 
@@ -78,21 +77,6 @@ def new_passcode() -> str:
 def is_numeric_passcode(passcode: str | None) -> bool:
     """True if the passcode is digits only, as new_passcode() makes them."""
     return bool(passcode) and passcode.isdigit()
-
-
-def _is_weak_host_key(key: str) -> bool:
-    """Zoom rejects host keys made of one repeated digit or a run of
-    consecutive digits (e.g. 111111, 123456, 654321)."""
-    digits = [int(c) for c in key]
-    steps = {b - a for a, b in zip(digits, digits[1:])}
-    return steps <= {0} or steps == {1} or steps == {-1}
-
-
-def new_host_key() -> str:
-    while True:
-        key = "".join(secrets.choice(string.digits) for _ in range(HOST_KEY_LENGTH))
-        if not _is_weak_host_key(key):
-            return key
 
 
 class ZoomError(RuntimeError):
@@ -185,8 +169,3 @@ class ZoomClient:
 
     def set_passcode(self, meeting_id: str, passcode: str) -> None:
         self.update_meeting(meeting_id, {"password": passcode})
-
-    def set_host_key(self, host_key: str, user: str = ROOMS_USER) -> None:
-        resp = self._request("PATCH", f"/users/{user}", json={"host_key": host_key})
-        if resp.status_code == 404:
-            raise ZoomError(f"Zoom user {user} not found")
