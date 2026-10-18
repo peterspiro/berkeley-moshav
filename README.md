@@ -102,11 +102,21 @@ playwright install chromium
 - **Zoom API**: in the Zoom App Marketplace, create a **Server-to-Server
   OAuth** app (Develop → Build App), signed in as the account owner or as an
   admin whose role has View and Edit for "Server-to-Server OAuth app" (Role
-  Settings → Advanced features) and for Users. Give it the scopes to read,
-  create, and update meetings, list a user's meetings, list a meeting's past
-  instances, and update users (for the host key), then activate it. If its
-  creator's role is later reduced, Zoom removes those scopes, so transfer the
-  app to another admin first. Put its credentials in `~/.zoom` (`chmod 600`):
+  Settings → Advanced features) and for Users. Give it these scopes, then
+  activate it:
+
+  | Scope | Zoom's name for it | Used for |
+  |---|---|---|
+  | `meeting:read:meeting:admin` | View a meeting | Checking a group's room still exists, and reading its settings and link |
+  | `meeting:write:meeting:admin` | Create a meeting for a user | Creating a group's room |
+  | `meeting:update:meeting:admin` | Update a meeting | Fixing a room's topic or settings; new passcodes (`reset_zoom_room.py`) |
+  | `meeting:read:list_meetings:admin` | View a user's meetings | Listing the rooms, to offer ones matching a group's name |
+  | `meeting:read:list_past_instances:admin` | View a past meeting's instances | Warning about rooms unused for 300 days, before Zoom deletes them at 365 |
+  | `user:update:user:admin` | Update a user | New host keys (`reset_zoom_room.py --host-key`) only |
+
+  If its creator's role is later reduced, Zoom removes those scopes, so
+  transfer the app to another admin first. Put its credentials in `~/.zoom`
+  (`chmod 600`):
   ```
   account_id = ...
   client_id = ...
