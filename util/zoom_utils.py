@@ -10,7 +10,9 @@ ROOMS_USER, so its link never changes and members only ever click it.
 Room settings (ROOM_SETTINGS) let a meeting run with no host present:
 participants can join before the host at any time, there's no waiting room
 (a host key can't be used with one), recording is never automatic, and the
-passcode is embedded in the join link.
+passcode is embedded in the join link. Passcodes are digits only
+(new_passcode()), since members joining by meeting ID type them in, and
+sometimes read them out over the phone.
 """
 
 import re
@@ -38,9 +40,8 @@ ROOM_SETTINGS = {
     "approval_type": 2,            # no registration
 }
 
-# Zoom passcodes: up to 10 characters; letters and digits are always allowed.
-PASSCODE_LENGTH = 10
-PASSCODE_ALPHABET = string.ascii_letters + string.digits
+# Digits only, to be easy to type. Zoom allows up to 10 characters.
+PASSCODE_LENGTH = 6
 
 HOST_KEY_LENGTH = 6
 
@@ -71,7 +72,12 @@ def room_settings_differences(meeting: dict, topic: str) -> dict:
 
 
 def new_passcode() -> str:
-    return "".join(secrets.choice(PASSCODE_ALPHABET) for _ in range(PASSCODE_LENGTH))
+    return "".join(secrets.choice(string.digits) for _ in range(PASSCODE_LENGTH))
+
+
+def is_numeric_passcode(passcode: str | None) -> bool:
+    """True if the passcode is digits only, as new_passcode() makes them."""
+    return bool(passcode) and passcode.isdigit()
 
 
 def _is_weak_host_key(key: str) -> bool:
@@ -140,6 +146,7 @@ class ZoomClient:
         resp = self._request("POST", f"/users/{user}/meetings", json={
             "topic": topic,
             "type": MEETING_TYPE_NO_FIXED_TIME,
+            "password": new_passcode(),
             "settings": ROOM_SETTINGS,
         })
         if resp.status_code == 404:

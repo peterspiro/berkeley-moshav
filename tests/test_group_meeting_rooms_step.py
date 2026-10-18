@@ -17,7 +17,7 @@ from util.google_group_footer import (
     parse_footer_calendar_id,
     parse_footer_zoom_url,
 )
-from util.meeting_rooms import LinkedResources
+from util.meeting_rooms import LinkedResources, RoomLink
 
 GROUPS = {
     "1": {"name": "Technology Circle", "kind": "circle", "availability": "closed"},
@@ -114,7 +114,7 @@ def test_footer_links_reused():
         _Directory(), _Settings({"tech@x.org": footer}), cal, zoom, groups, FOLDERS, EMAILS,
         lambda: LinkedResources(), False, cals, urls,
     )
-    assert cals == {"1": "c1"} and urls == {"1": "https://zoom.us/j/7?pwd=p"}
+    assert cals == {"1": "c1"} and urls == {"1": RoomLink("https://zoom.us/j/7?pwd=p", "135790")}
     assert cal.writes == [] and zoom.writes == []
 
 
@@ -130,11 +130,13 @@ def test_footer_step_writes_calendar_and_zoom_links(capsys):
     settings = _Settings({"tech@x.org": old})
     m.ensure_group_footers(
         settings, "https://g", {"1": GROUPS["1"]}, FOLDERS, {"1": ITEM_TYPE_FOLDER}, EMAILS,
-        False, {"1": "c1@group.calendar.google.com"}, {"1": "https://zoom.us/j/7?pwd=p"},
+        False, {"1": "c1@group.calendar.google.com"},
+        {"1": RoomLink("https://zoom.us/j/7?pwd=p", "135790")},
     )
     footer = settings.updated["tech@x.org"]["customFooterText"]
     assert parse_footer_calendar_id(footer) == "c1@group.calendar.google.com"
     assert parse_footer_zoom_url(footer) == "https://zoom.us/j/7?pwd=p"
+    assert "passcode 135790" in footer
     assert "calendar link; Zoom link" in capsys.readouterr().out
 
 

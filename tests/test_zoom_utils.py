@@ -18,6 +18,7 @@ from util.zoom_utils import (
     ZoomError,
     _is_weak_host_key,
     meeting_id_from_url,
+    is_numeric_passcode,
     new_host_key,
     new_passcode,
     room_settings_differences,
@@ -94,10 +95,15 @@ class TestHelpers:
         assert ROOM_SETTINGS["waiting_room"] is False
         assert ROOM_SETTINGS["auto_recording"] == "none"
 
-    def test_passcode(self):
-        p = new_passcode()
-        assert len(p) == 10 and p.isalnum()
-        assert new_passcode() != p
+    def test_passcode_is_six_digits(self):
+        for _ in range(20):
+            p = new_passcode()
+            assert len(p) == 6 and p.isdigit()
+
+    @pytest.mark.parametrize("passcode,ok", [
+        ("123456", True), ("aB3xK9", False), ("", False), (None, False)])
+    def test_is_numeric_passcode(self, passcode, ok):
+        assert is_numeric_passcode(passcode) is ok
 
     @pytest.mark.parametrize("key", ["111111", "123456", "654321", "000000"])
     def test_weak_host_keys(self, key):
@@ -134,7 +140,9 @@ class TestZoomClient:
             {("POST", f"/users/{ROOMS_USER}/meetings"): _Resp(201, {"id": 5})})
         assert zoom.create_room("Foo Meeting Room") == {"id": 5}
         method, path, kwargs = session.calls[0]
-        assert kwargs["json"] == {
+        body = kwargs["json"]
+        assert body["password"].isdigit()
+        assert {k: v for k, v in body.items() if k != "password"} == {
             "topic": "Foo Meeting Room",
             "type": MEETING_TYPE_NO_FIXED_TIME,
             "settings": ROOM_SETTINGS,

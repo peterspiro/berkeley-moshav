@@ -217,7 +217,7 @@ def build_welcome_message(
         "group's permanent meeting place: its link never changes, and anyone "
         "with the link can join, with or without a host. Someone joining by "
         "typing the meeting ID instead of clicking the link will also need the "
-        "passcode, which I can give you.\n"
+        "passcode; both are in the footer too.\n"
         "\n"
         f"I've also created this email list, {list_address}, which is linked to "
         "the Gather group and the folder. Everyone in the Gather group can post to "
@@ -549,14 +549,14 @@ def main(
             linked_calendar_id = fetch_footer_calendar_id(settings_service, gemail)
             linked_zoom_url = fetch_footer_zoom_url(settings_service, gemail)
         get_linked = functools.cache(lambda: find_linked_resources(dir_service, settings_service))
-        calendar_id = zoom_url = None
+        calendar_id = room = None
         try:
             calendar_id = ensure_group_calendar(
                 calendar_service, gdisplay, gemail, linked_calendar_id,
                 owned_calendars=lambda: list_owned_calendars(calendar_service),
                 linked=get_linked, dry_run=False,
             )
-            zoom_url = ensure_zoom_room(
+            room = ensure_zoom_room(
                 zoom, gdisplay, linked_zoom_url, gemail,
                 rooms=zoom.list_rooms, linked=get_linked, dry_run=False,
             )
@@ -568,7 +568,9 @@ def main(
 
         # ── Write the Google Group's footer link block ───────────────────────
         ensure_group_footer(settings_service, gemail, gather_group_id, folder_id, base_url,
-                            gdisplay, calendar_id=calendar_id, zoom_url=zoom_url)
+                            gdisplay, calendar_id=calendar_id,
+                            zoom_url=room.join_url if room else None,
+                            zoom_passcode=room.passcode if room else None)
         print(f"Set footer links for '{gemail}'.")
 
         # ── Add to the Circle Hierarchy ──────────────────────────────────────

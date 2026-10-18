@@ -63,7 +63,13 @@ Gather group: https://berkeley-moshav.gather.coop/groups/1093
 Google Docs folder: https://drive.google.com/drive/folders/...
 Google calendar: https://calendar.google.com/calendar/u/0?cid=...
 Zoom meeting: https://us06web.zoom.us/j/...
+Meeting ID 812 3456 7890, passcode 123456
 ```
+
+The meeting ID and passcode are for members who type them into Zoom instead
+of clicking the link; since the link already lets anyone in, showing the
+passcode exposes nothing more. Passcodes are six digits, to be easy to type
+and read out.
 
 The footer is the only record of which calendar and Zoom room belong to a
 group; `update_groups_in_google_and_hierarchy.py` and `add_new_group.py`
@@ -125,6 +131,10 @@ playwright install chromium
   client_id = ...
   client_secret = ...
   ```
+  Finally, in the Zoom web portal's account settings (under Security, the
+  passcode requirements), allow passcodes made only of digits, and preferably
+  require them so rooms made by hand match. The scripts give every room a
+  six-digit passcode, which Zoom rejects if passcodes must contain letters.
 
 Run scripts from the repo root, e.g. `python add_new_group.py ...` or
 `python archive/data_import/parse_households.py ...`. Every script
@@ -163,7 +173,7 @@ screenshots go to `debug/` (git-ignored).
   (renames, links, missing and stale entries). Its first run also creates the
   "All Berkeley Moshav Events" calendar.
 - **`reset_zoom_room.py`** gives a group's Zoom room a new passcode, and so a
-  new link, which it writes into the group's footer, for when a link has
+  new link, both of which it writes into the group's footer, for when a link has
   leaked. With `--host-key` it instead (or also) sets a new host key for
   every group room.
 - **`audit_group_memberships.py`** is a read-only report of where a group's

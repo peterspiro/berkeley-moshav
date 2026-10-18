@@ -9,7 +9,11 @@ import pytest
 
 import reset_zoom_room as r
 from tests.fakes_meeting_rooms import FakeZoom, room
-from util.google_group_footer import build_footer_block, parse_footer_zoom_url
+from util.google_group_footer import (
+    build_footer_block,
+    parse_footer_zoom_passcode,
+    parse_footer_zoom_url,
+)
 
 GROUPS = [
     {"email": "tech-circle@x.org", "name": "Technology Circle"},
@@ -81,9 +85,11 @@ def test_resets_passcode_and_footer(capsys):
     settings = _Settings(_footer())
     zoom = _ResettingZoom({7: room(7, "Technology Circle Meeting Room")})
     r.reset_room_passcode(settings, zoom, GROUPS[0], dry_run=False)
-    assert zoom.writes[0][:2] == ("passcode", "7")
+    _, _, passcode = zoom.writes[0]
+    assert zoom.writes[0][:2] == ("passcode", "7") and passcode.isdigit()
     new_footer = settings.updated["customFooterText"]
     assert parse_footer_zoom_url(new_footer) == "https://zoom.us/j/7?pwd=NEW"
+    assert parse_footer_zoom_passcode(new_footer) == passcode
     assert new_footer.startswith("Notes\n\n")
     assert "pwd=NEW" in capsys.readouterr().out
 

@@ -25,8 +25,10 @@ from util.google_group_footer import (
     parse_footer_calendar_id,
     parse_footer_folder_id,
     parse_footer_link,
+    format_meeting_id,
+    parse_footer_zoom_passcode,
     parse_footer_zoom_url,
-    replace_footer_zoom_url,
+    replace_footer_zoom,
 )
 
 GROUPS_DRIVE_SYNC_GS = Path(__file__).resolve().parent.parent / "groups_drive_sync" / "groups_drive_sync.gs"
@@ -171,18 +173,52 @@ class TestCalendarAndZoomLinks:
         assert parse_footer_zoom_url(footer) is None
 
 
-class TestReplaceFooterZoomUrl:
-    def test_replaces_only_the_zoom_link(self):
+class TestZoomDetails:
+    def test_meeting_id_and_passcode_line(self):
         block = build_footer_block("1", "FID", "https://x.coop", "Foo",
-                                   calendar_id=CAL_ID, zoom_url=ZOOM_URL)
+                                   zoom_url=ZOOM_URL, zoom_passcode="123456")
+        assert block.splitlines()[-2:] == [
+            f"Zoom meeting: {ZOOM_URL}",
+            "Meeting ID 812 3456 7890, passcode 123456",
+        ]
+        assert parse_footer_zoom_passcode(block) == "123456"
+        assert parse_footer_zoom_url(block) == ZOOM_URL
+
+    def test_no_passcode_no_line(self):
+        block = build_footer_block("1", "FID", "https://x.coop", "Foo", zoom_url=ZOOM_URL)
+        assert "Meeting ID" not in block
+        assert parse_footer_zoom_passcode(block) is None
+
+    @pytest.mark.parametrize("raw,shown", [
+        ("81234567890", "812 3456 7890"),
+        ("8123456789", "812 345 6789"),
+        ("812345678", "812345678"),
+    ])
+    def test_format_meeting_id(self, raw, shown):
+        assert format_meeting_id(raw) == shown
+
+
+class TestReplaceFooterZoom:
+    NEW_URL = "https://us06web.zoom.us/j/81234567890?pwd=NEW"
+
+    def test_replaces_link_and_passcode_only(self):
+        block = build_footer_block("1", "FID", "https://x.coop", "Foo",
+                                   calendar_id=CAL_ID, zoom_url=ZOOM_URL, zoom_passcode="123456")
         footer = "Human text\n\n" + block
-        new = replace_footer_zoom_url(footer, "https://us06web.zoom.us/j/1?pwd=NEW")
-        assert new == footer.replace(ZOOM_URL, "https://us06web.zoom.us/j/1?pwd=NEW")
+        assert replace_footer_zoom(footer, self.NEW_URL, "654321") == "Human text\n\n" + \
+            build_footer_block("1", "FID", "https://x.coop", "Foo", calendar_id=CAL_ID,
+                               zoom_url=self.NEW_URL, zoom_passcode="654321")
+
+    def test_adds_passcode_line_when_missing(self):
+        block = build_footer_block("1", "FID", "https://x.coop", "Foo", zoom_url=ZOOM_URL)
+        new = replace_footer_zoom(block, self.NEW_URL, "654321")
+        assert parse_footer_zoom_passcode(new) == "654321"
+        assert parse_footer_zoom_url(new) == self.NEW_URL
 
     def test_no_zoom_link_raises(self):
         with pytest.raises(ValueError):
-            replace_footer_zoom_url(build_footer_block("1", "FID", "https://x.coop", "Foo"),
-                                    ZOOM_URL)
+            replace_footer_zoom(build_footer_block("1", "FID", "https://x.coop", "Foo"),
+                                ZOOM_URL, "1")
 
 
 class TestGroupsDriveSyncCompatibility:
@@ -263,13 +299,14 @@ class TestComputeGroupFooterUpdates:
 
     def test_keeps_existing_calendar_and_zoom_when_not_given(self):
         block = build_footer_block("9", "FID", "https://x.coop", "Old Name",
-                                   calendar_id=CAL_ID, zoom_url=ZOOM_URL)
+                                   calendar_id=CAL_ID, zoom_url=ZOOM_URL, zoom_passcode="123456")
         svc = _FakeSettingsService({"customFooterText": block, "includeCustomFooter": "true"})
         updates = compute_group_footer_updates(
             svc, "grp@x.coop", "9", "FID", "https://x.coop", "New Name", ITEM_TYPE_FOLDER
         )
         assert updates["customFooterText"] == build_footer_block(
-            "9", "FID", "https://x.coop", "New Name", calendar_id=CAL_ID, zoom_url=ZOOM_URL)
+            "9", "FID", "https://x.coop", "New Name", calendar_id=CAL_ID, zoom_url=ZOOM_URL,
+            zoom_passcode="123456")
 
     def test_no_update_when_calendar_and_zoom_unchanged(self):
         block = build_footer_block("9", "FID", "https://x.coop", "Foo",

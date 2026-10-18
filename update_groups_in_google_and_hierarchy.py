@@ -185,6 +185,7 @@ from util.meeting_rooms import (
     check_calendar_owner,
     ensure_all_events_calendar,
     ensure_group_calendar,
+    RoomLink,
     ensure_zoom_room,
     find_linked_resources,
     list_owned_calendars,
@@ -973,11 +974,11 @@ def ensure_group_meeting_rooms(
     group_info: dict[str, dict],
     google_file_id_by_group_id: dict[str, str], email_by_group_id: dict[str, str],
     get_linked: Callable[[], LinkedResources], dry_run: bool,
-    calendar_id_by_group_id: dict[str, str], zoom_url_by_group_id: dict[str, str],
+    calendar_id_by_group_id: dict[str, str], room_by_group_id: dict[str, RoomLink],
 ) -> None:
     """Make sure every eligible group has a Google calendar and a Zoom
     meeting room (see util/meeting_rooms.py), recording them in
-    calendar_id_by_group_id / zoom_url_by_group_id (mutated in place) for
+    calendar_id_by_group_id / room_by_group_id (mutated in place) for
     ensure_group_footers() to write into the footers.
 
     Only groups that will get a footer — ones with both a Drive item and a
@@ -1022,12 +1023,12 @@ def ensure_group_meeting_rooms(
         )
         if calendar_id:
             calendar_id_by_group_id[group_id] = calendar_id
-        join_url = ensure_zoom_room(
+        room = ensure_zoom_room(
             zoom, group_name, parse_footer_zoom_url(footer), email,
             rooms=rooms, linked=get_linked, dry_run=dry_run,
         )
-        if join_url:
-            zoom_url_by_group_id[group_id] = join_url
+        if room:
+            room_by_group_id[group_id] = room
 
 
 # ── Step 3: keep each Google Group's footer link in sync with Gather ──────────
@@ -1037,7 +1038,7 @@ def ensure_group_footers(
     google_file_id_by_group_id: dict[str, str], item_type_by_group_id: dict[str, str],
     email_by_group_id: dict[str, str], dry_run: bool,
     calendar_id_by_group_id: dict[str, str] | None = None,
-    zoom_url_by_group_id: dict[str, str] | None = None,
+    room_by_group_id: dict[str, RoomLink] | None = None,
 ) -> None:
     """Keep each eligible Google Group's custom footer in sync with
     Gather's own state: for every eligible group that currently has both a
@@ -1052,12 +1053,12 @@ def ensure_group_footers(
     Gather can't currently derive a pairing for is left alone, and any
     other footer content a human wrote is preserved regardless.
 
-    calendar_id_by_group_id / zoom_url_by_group_id (from
+    calendar_id_by_group_id / room_by_group_id (from
     ensure_group_meeting_rooms()) give the calendar and Zoom links; a group
     missing from them keeps whatever calendar/Zoom link its footer has.
     """
     calendar_id_by_group_id = calendar_id_by_group_id or {}
-    zoom_url_by_group_id = zoom_url_by_group_id or {}
+    room_by_group_id = room_by_group_id or {}
     eligible = [
         (gid, info) for gid, info in group_info.items()
         if info["kind"] in ELIGIBLE_KINDS
@@ -1072,10 +1073,12 @@ def ensure_group_footers(
         item_id = google_file_id_by_group_id[group_id]
         item_type = item_type_by_group_id.get(group_id, ITEM_TYPE_FOLDER)
 
+        room = room_by_group_id.get(group_id)
         current = settings_service.groups().get(groupUniqueId=email).execute()
         updates = footer_updates(
             current, group_id, item_id, base_url, group_name, item_type,
-            calendar_id_by_group_id.get(group_id), zoom_url_by_group_id.get(group_id),
+            calendar_id_by_group_id.get(group_id),
+            room.join_url if room else None, room.passcode if room else None,
         )
         if not updates:
             continue
@@ -1426,7 +1429,7 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
 
         # Step 2b: give each group a calendar and a Zoom room.
         calendar_id_by_group_id: dict[str, str] = {}
-        zoom_url_by_group_id: dict[str, str] = {}
+        room_by_group_id: dict[str, RoomLink] = {}
         if not quit_requested:
             get_linked = functools.cache(
                 lambda: find_linked_resources(dir_service, settings_service))
@@ -1434,7 +1437,7 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
                 ensure_group_meeting_rooms(
                     dir_service, settings_service, calendar_service, zoom, group_info,
                     google_file_id_by_group_id, email_by_group_id, get_linked, dry_run,
-                    calendar_id_by_group_id, zoom_url_by_group_id,
+                    calendar_id_by_group_id, room_by_group_id,
                 )
             except QuitRequested:
                 quit_requested = True
@@ -1445,7 +1448,7 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
         ensure_group_footers(
             settings_service, base_url, group_info, google_file_id_by_group_id,
             item_type_by_group_id, email_by_group_id, dry_run,
-            calendar_id_by_group_id, zoom_url_by_group_id,
+            calendar_id_by_group_id, room_by_group_id,
         )
 
         if not quit_requested:

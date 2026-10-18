@@ -4,9 +4,10 @@ Changes a group's Zoom meeting room passcode, or the rooms' shared host
 key, for when one has leaked.
 
 With -g/--group, gives the group's room (the one linked in its Google
-Group's footer) a new random passcode. The room keeps its meeting ID, but
-its join link changes, since the link embeds the passcode; the script
-writes the new link into the footer and prints it. Calendar events and
+Group's footer) a new random digits-only passcode. The room keeps its
+meeting ID, but its join link changes, since the link embeds the passcode;
+the script writes the new link and passcode into the footer and prints
+them. Calendar events and
 messages that contain the old link need updating separately.
 
 With --host-key, gives the rooms user (zoom_utils.ROOMS_USER) a new random
@@ -34,7 +35,7 @@ from googleapiclient.discovery import build
 
 from util.credentials import load_zoom_credentials
 from util.gather_utils import close_log, configure, init_log, log
-from util.google_group_footer import parse_footer_zoom_url, replace_footer_zoom_url
+from util.google_group_footer import parse_footer_zoom_url, replace_footer_zoom
 from util.google_group_utils import DEFAULT_CLIENT_SECRETS_PATH, get_credentials, list_all_groups
 from util.zoom_utils import (
     ROOMS_USER,
@@ -93,11 +94,11 @@ def reset_room_passcode(settings_service, zoom: ZoomClient, group: dict, dry_run
     log("INFO", "reset_passcode", f"{email}: {meeting_id}")
     settings_service.groups().update(
         groupUniqueId=email,
-        body={"customFooterText": replace_footer_zoom_url(footer, join_url)},
+        body={"customFooterText": replace_footer_zoom(footer, join_url, passcode)},
     ).execute()
     log("INFO", "update_footer", f"{email}: new Zoom link")
     print(f"New passcode for {group.get('name')}'s Zoom room {meeting_id}: {passcode}")
-    print(f"New link (now in {email}'s footer): {join_url}")
+    print(f"New link (it and the passcode are now in {email}'s footer): {join_url}")
     print("Update any calendar events and messages that still contain the old link.")
 
 

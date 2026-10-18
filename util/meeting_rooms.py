@@ -26,6 +26,7 @@ invited to (ALL_EVENTS_CALENDAR_NAME). It starts out shared with no one.
 import datetime
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import NamedTuple
 
 from util.folder_matching import find_matching_folders
 from util.gather_utils import log
@@ -35,7 +36,9 @@ from util.zoom_utils import (
     ROOM_TOPIC_SUFFIX,
     ROOMS_USER,
     ZoomClient,
+    is_numeric_passcode,
     meeting_id_from_url,
+    new_passcode,
     room_settings_differences,
     room_topic,
 )
@@ -328,6 +331,12 @@ def ensure_all_events_calendar(
 
 # ── Zoom rooms ────────────────────────────────────────────────────────────────
 
+class RoomLink(NamedTuple):
+    """What a group's footer shows of its room."""
+    join_url: str
+    passcode: str
+
+
 def _room_candidates(rooms: list[dict]) -> list[dict]:
     """Rooms as {"id", "name"}, named by topic without " Meeting Room" so
     they match against group names."""
@@ -357,12 +366,13 @@ def ensure_zoom_room(
     zoom: ZoomClient, group_name: str, linked_join_url: str | None, group_email: str, *,
     rooms: Callable[[], list[dict]], linked: Callable[[], LinkedResources], dry_run: bool,
     input_fn: Callable[[str], str] = input, now: datetime.datetime | None = None,
-) -> str | None:
-    """Return the group's room's join link, finding, choosing, or creating
-    the room (see the module docstring), and make sure its topic and
-    settings are the standard ones. rooms and linked are called only when
-    a choice has to be made. Returns None only in a dry run that would
-    create a room. Raises QuitRequested if the user quits."""
+) -> RoomLink | None:
+    """Return the group's room's join link and passcode, finding, choosing,
+    or creating the room (see the module docstring), and make sure its
+    topic and settings are the standard ones and its passcode is digits
+    only (replacing one that isn't changes the link). rooms and linked are
+    called only when a choice has to be made. Returns None only in a dry
+    run that would create a room. Raises QuitRequested if the user quits."""
     group_email = group_email.lower()
     topic = room_topic(group_name)
     meeting_id = meeting_id_from_url(linked_join_url)
@@ -398,14 +408,20 @@ def ensure_zoom_room(
             f"not {ROOMS_USER}")
 
     body = room_settings_differences(meeting, topic)
+    described = dict(body)
+    if not is_numeric_passcode(meeting.get("password")):
+        body["password"] = new_passcode()
+        described["password"] = "(new digits-only passcode)"
     if body:
+        prefix = "[dry-run] would " if dry_run else ""
+        print(f"  {prefix}update Zoom room {meeting['id']}: {described}")
+        log("INFO", f"{'would_' if dry_run else ''}update_room",
+            f"{group_name}: {meeting['id']} {described}")
         if not dry_run:
             zoom.update_meeting(str(meeting["id"]), body)
-        prefix = "[dry-run] would " if dry_run else ""
-        print(f"  {prefix}update Zoom room {meeting['id']}: {body}")
-        log("INFO", f"{'would_' if dry_run else ''}update_room",
-            f"{group_name}: {meeting['id']} {body}")
+            if "password" in body:  # the link embeds the passcode
+                meeting = zoom.get_meeting(str(meeting["id"]))
 
     if not created:
         _warn_if_idle(zoom, group_name, meeting, now or datetime.datetime.now(datetime.timezone.utc))
-    return meeting["join_url"]
+    return RoomLink(meeting["join_url"], meeting.get("password", ""))

@@ -32,7 +32,7 @@ class TestBuildWelcomeMessage:
         assert "a Google calendar for its meetings" in body
         assert "a Zoom meeting room" in body
         assert "put the group's meetings on its calendar" in body
-        assert "will also need the passcode" in body
+        assert "will also need the passcode; both are in the footer too" in body
         assert "landscape@example.org" in body
         assert "add and edit files in the folder" in body
         assert ("I've made you a manager of the Gather group, which allows you to add "

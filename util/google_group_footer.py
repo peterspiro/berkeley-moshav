@@ -10,10 +10,13 @@ the group:
     Gather group: https://berkeley-moshav.gather.coop/groups/1093
     Google Docs folder: https://drive.google.com/drive/folders/<id>
     Google calendar: https://calendar.google.com/calendar/u/0?cid=<base64 id>
-    Zoom meeting: https://us06web.zoom.us/j/<id>?pwd=<passcode>
+    Zoom meeting: https://us06web.zoom.us/j/<id>?pwd=<encoded passcode>
+    Meeting ID 812 3456 7890, passcode 123456
 
 The calendar and Zoom lines appear only once the group has a calendar and
-a meeting room.
+a meeting room. The meeting ID and passcode are for members who join by
+typing them into Zoom rather than clicking the link (which already lets
+anyone in, so showing the passcode exposes nothing more).
 
 The footer is the source of truth for which Drive item a Google Group's
 membership should sync to (see groups_drive_sync.gs): rather than
@@ -82,6 +85,8 @@ _CALENDAR_LINK_RE = re.compile(
     + r"([A-Za-z0-9%+/_=-]+)"
 )
 _ZOOM_LINK_RE = re.compile(re.escape(_ZOOM_LABEL) + r":\s*(https://\S+)")
+_ZOOM_DETAILS_RE = re.compile(r"^Meeting ID [\d ]+, passcode (\S+)$", re.MULTILINE)
+_MEETING_ID_IN_URL_RE = re.compile(r"/j/(\d+)")
 
 
 def drive_folder_url(item_id: str) -> str:
@@ -107,6 +112,24 @@ def calendar_id_from_cid(cid: str) -> str | None:
         return None
 
 
+def format_meeting_id(meeting_id: str) -> str:
+    """Group a Zoom meeting ID's digits the way Zoom shows them:
+    81234567890 -> "812 3456 7890", 8123456789 -> "812 345 6789"."""
+    if len(meeting_id) == 11:
+        return f"{meeting_id[:3]} {meeting_id[3:7]} {meeting_id[7:]}"
+    if len(meeting_id) == 10:
+        return f"{meeting_id[:3]} {meeting_id[3:6]} {meeting_id[6:]}"
+    return meeting_id
+
+
+def _zoom_lines(zoom_url: str, zoom_passcode: str | None) -> list[str]:
+    lines = [f"{_ZOOM_LABEL}: {zoom_url}"]
+    m = _MEETING_ID_IN_URL_RE.search(zoom_url)
+    if m and zoom_passcode:
+        lines.append(f"Meeting ID {format_meeting_id(m.group(1))}, passcode {zoom_passcode}")
+    return lines
+
+
 def _item_label(item_type: str) -> str:
     try:
         return _ITEM_LABELS[item_type]
@@ -117,10 +140,11 @@ def _item_label(item_type: str) -> str:
 def build_footer_block(
     gather_group_id: str, item_id: str, base_url: str, group_name: str,
     item_type: str = ITEM_TYPE_FOLDER, calendar_id: str | None = None,
-    zoom_url: str | None = None,
+    zoom_url: str | None = None, zoom_passcode: str | None = None,
 ) -> str:
     """The managed block, from FOOTER_MARKER on. The calendar and Zoom
-    lines are left out when calendar_id / zoom_url is None."""
+    lines are left out when calendar_id / zoom_url is None, and the
+    meeting ID and passcode line when zoom_passcode is."""
     lines = [
         FOOTER_MARKER,
         f"{group_name}'s:",
@@ -130,7 +154,7 @@ def build_footer_block(
     if calendar_id:
         lines.append(f"{_CALENDAR_LABEL}: {calendar_url(calendar_id)}")
     if zoom_url:
-        lines.append(f"{_ZOOM_LABEL}: {zoom_url}")
+        lines += _zoom_lines(zoom_url, zoom_passcode)
     return "\n".join(lines)
 
 
@@ -189,11 +213,21 @@ def parse_footer_zoom_url(footer_text: str | None) -> str | None:
     return m.group(1) if m else None
 
 
-def replace_footer_zoom_url(footer_text: str, zoom_url: str) -> str:
-    """footer_text with the managed block's "Zoom meeting" link replaced by
-    zoom_url. Raises ValueError if the block has no Zoom link."""
+def parse_footer_zoom_passcode(footer_text: str | None) -> str | None:
+    """Extract the Zoom passcode from a footer's "Meeting ID ..., passcode
+    ..." line, if any."""
+    m = _ZOOM_DETAILS_RE.search(_managed_text(footer_text))
+    return m.group(1) if m else None
+
+
+def replace_footer_zoom(footer_text: str, zoom_url: str, zoom_passcode: str) -> str:
+    """footer_text with the managed block's "Zoom meeting" link and its
+    meeting ID and passcode line replaced. Raises ValueError if the block
+    has no Zoom link."""
     prefix, block = split_footer(footer_text or "")
-    new_block, n = _ZOOM_LINK_RE.subn(lambda _: f"{_ZOOM_LABEL}: {zoom_url}", block, count=1)
+    block = _ZOOM_DETAILS_RE.sub("", block).replace("\n\n", "\n").rstrip("\n")
+    new_block, n = _ZOOM_LINK_RE.subn(
+        lambda _: "\n".join(_zoom_lines(zoom_url, zoom_passcode)), block, count=1)
     if not n:
         raise ValueError("footer has no Zoom meeting link")
     return f"{prefix}\n\n{new_block}" if prefix else new_block
@@ -210,23 +244,25 @@ def parse_footer_folder_id(footer_text: str) -> str | None:
 def footer_updates(
     current_settings: dict, gather_group_id: str, item_id: str, base_url: str,
     group_name: str, item_type: str = ITEM_TYPE_FOLDER, calendar_id: str | None = None,
-    zoom_url: str | None = None,
+    zoom_url: str | None = None, zoom_passcode: str | None = None,
 ) -> dict:
     """Return {field: new_value} for the customFooterText /
     includeCustomFooter settings, given the group's current settings (a
     Groups Settings API groups().get() result). Pure — no API calls.
 
     A calendar_id or zoom_url left as None keeps whatever calendar or Zoom
-    link the footer already has, so a caller that doesn't know them never
-    drops them."""
+    link (and passcode) the footer already has, so a caller that doesn't
+    know them never drops them."""
     current_footer = current_settings.get("customFooterText") or ""
     prefix, existing_block = split_footer(current_footer)
     if calendar_id is None:
         calendar_id = parse_footer_calendar_id(existing_block)
     if zoom_url is None:
         zoom_url = parse_footer_zoom_url(existing_block)
+        zoom_passcode = parse_footer_zoom_passcode(existing_block)
     desired_block = build_footer_block(
-        gather_group_id, item_id, base_url, group_name, item_type, calendar_id, zoom_url
+        gather_group_id, item_id, base_url, group_name, item_type, calendar_id, zoom_url,
+        zoom_passcode,
     )
 
     updates = {}
@@ -240,14 +276,15 @@ def footer_updates(
 def compute_group_footer_updates(
     settings_service, gemail: str, gather_group_id: str, item_id: str, base_url: str,
     group_name: str, item_type: str = ITEM_TYPE_FOLDER, calendar_id: str | None = None,
-    zoom_url: str | None = None,
+    zoom_url: str | None = None, zoom_passcode: str | None = None,
 ) -> dict:
     """footer_updates() for the group's current settings, fetched from the
     API. Read-only — safe to call from a dry run. Raises if the group
     doesn't exist."""
     current = settings_service.groups().get(groupUniqueId=gemail).execute()
     return footer_updates(
-        current, gather_group_id, item_id, base_url, group_name, item_type, calendar_id, zoom_url
+        current, gather_group_id, item_id, base_url, group_name, item_type, calendar_id, zoom_url,
+        zoom_passcode,
     )
 
 
@@ -287,6 +324,8 @@ def describe_footer_updates(current_footer: str | None, updates: dict) -> str:
                 parts.append("calendar link")
             if parse_footer_zoom_url(old_block) != parse_footer_zoom_url(new_block):
                 parts.append("Zoom link")
+            elif parse_footer_zoom_passcode(old_block) != parse_footer_zoom_passcode(new_block):
+                parts.append("Zoom passcode")
             if not parts:
                 old_header = _HEADER_RE.search(old_block)
                 new_name = _HEADER_RE.search(new_block).group(1)
@@ -304,7 +343,7 @@ def describe_footer_updates(current_footer: str | None, updates: dict) -> str:
 def ensure_group_footer(
     settings_service, gemail: str, gather_group_id: str, item_id: str, base_url: str,
     group_name: str, item_type: str = ITEM_TYPE_FOLDER, calendar_id: str | None = None,
-    zoom_url: str | None = None,
+    zoom_url: str | None = None, zoom_passcode: str | None = None,
 ) -> dict:
     """Apply the group's auto-managed footer block, preserving any other
     footer content (and, when calendar_id / zoom_url is None, the existing
@@ -312,7 +351,7 @@ def ensure_group_footer(
     fields."""
     updates = compute_group_footer_updates(
         settings_service, gemail, gather_group_id, item_id, base_url, group_name, item_type,
-        calendar_id, zoom_url,
+        calendar_id, zoom_url, zoom_passcode,
     )
     if updates:
         settings_service.groups().update(groupUniqueId=gemail, body=updates).execute()

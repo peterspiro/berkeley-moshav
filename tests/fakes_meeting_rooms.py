@@ -119,7 +119,8 @@ class FakeZoom:
     def create_room(self, topic):
         mid = str(90000 + len(self.meetings))
         meeting = {"id": int(mid), "topic": topic, "join_url": f"https://zoom.us/j/{mid}?pwd=x",
-                   "settings": {}, "host_email": "zoomhosts@berkeleymoshav.org"}
+                   "password": "246810", "settings": {},
+                   "host_email": "zoomhosts@berkeleymoshav.org"}
         from util.zoom_utils import ROOM_SETTINGS
         meeting["settings"] = dict(ROOM_SETTINGS)
         self.meetings[mid] = meeting
@@ -128,6 +129,10 @@ class FakeZoom:
 
     def update_meeting(self, meeting_id, body):
         self.writes.append(("update", meeting_id, body))
+        if "password" in body:  # as Zoom does, the link changes with the passcode
+            m = self.meetings[str(meeting_id)]
+            m["password"] = body["password"]
+            m["join_url"] = f"https://zoom.us/j/{meeting_id}?pwd=new"
 
     def list_rooms(self):
         self.list_calls += 1
@@ -140,5 +145,6 @@ class FakeZoom:
 def room(mid, topic, **kw):
     from util.zoom_utils import ROOM_SETTINGS
     return {"id": mid, "topic": topic, "join_url": f"https://zoom.us/j/{mid}?pwd=p",
+            "password": "135790",
             "settings": dict(ROOM_SETTINGS), "host_email": "zoomhosts@berkeleymoshav.org",
             "created_at": "2026-09-01T00:00:00Z", **kw}

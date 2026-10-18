@@ -13,6 +13,7 @@ import util.meeting_rooms as mr
 from tests.fakes_meeting_rooms import OWNER, FakeCalendarService, FakeZoom, room
 from util.meeting_rooms import (
     LinkedResources,
+    RoomLink,
     QuitRequested,
     check_calendar_owner,
     ensure_all_events_calendar,
@@ -184,7 +185,8 @@ class TestEnsureZoomRoom:
     def test_uses_footer_room_without_listing(self):
         zoom = FakeZoom({1: room(1, "Technology Circle Meeting Room")},
                         last_used={"1": "2026-10-01T00:00:00Z"})
-        assert _room(zoom, "https://zoom.us/j/1?pwd=p") == "https://zoom.us/j/1?pwd=p"
+        assert _room(zoom, "https://zoom.us/j/1?pwd=p") == RoomLink(
+            "https://zoom.us/j/1?pwd=p", "135790")
         assert zoom.writes == [] and zoom.list_calls == 0
 
     def test_fixes_topic_and_settings(self):
@@ -197,14 +199,28 @@ class TestEnsureZoomRoom:
 
     def test_expired_room_offers_candidates_then_creates(self, capsys):
         zoom = FakeZoom({})
-        url = _room(zoom, "https://zoom.us/j/1?pwd=p")
+        link = _room(zoom, "https://zoom.us/j/1?pwd=p")
         assert zoom.writes == [("create", "Technology Circle Meeting Room")]
-        assert url.startswith("https://zoom.us/j/9")
+        assert link.join_url.startswith("https://zoom.us/j/9") and link.passcode.isdigit()
         assert "no longer exists" in capsys.readouterr().out
 
     def test_prompts_for_matching_room(self):
         zoom = FakeZoom({7: room(7, "Technology Circle Meeting Room")})
-        assert _room(zoom, input_fn=_inputs("1")) == "https://zoom.us/j/7?pwd=p"
+        assert _room(zoom, input_fn=_inputs("1")).join_url == "https://zoom.us/j/7?pwd=p"
+
+    def test_non_numeric_passcode_replaced_and_new_link_returned(self):
+        zoom = FakeZoom({1: room(1, "Technology Circle Meeting Room", password="aB3xK9")})
+        link = _room(zoom, "https://zoom.us/j/1?pwd=p")
+        (op, mid, body), = zoom.writes
+        assert (op, mid, list(body)) == ("update", "1", ["password"])
+        assert body["password"].isdigit()
+        assert link == RoomLink("https://zoom.us/j/1?pwd=new", body["password"])
+
+    def test_dry_run_reports_passcode_change(self, capsys):
+        zoom = FakeZoom({1: room(1, "Technology Circle Meeting Room", password="aB3xK9")})
+        assert _room(zoom, "https://zoom.us/j/1?pwd=p", dry_run=True).passcode == "aB3xK9"
+        assert zoom.writes == []
+        assert "new digits-only passcode" in capsys.readouterr().out
 
     def test_room_linked_elsewhere_not_offered(self):
         zoom = FakeZoom({7: room(7, "Technology Circle Meeting Room")})
