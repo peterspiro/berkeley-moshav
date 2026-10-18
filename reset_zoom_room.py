@@ -17,7 +17,7 @@ The group is named by its Google Group's email address, or by a prefix of
 its Google Group name or address that matches just one group.
 
 Requires Google API access (see update_groups_in_google_and_hierarchy.py)
-and the Zoom app's credentials in ~/.zoom (see README.md).
+and the Zoom app's credentials in zoom_credentials (see README.md).
 
 Usage:
     python reset_zoom_room.py -g tech-circle@berkeleymoshav.org

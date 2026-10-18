@@ -1,8 +1,11 @@
 import sys
 from pathlib import Path
 
+# Personal: each admin's own Gather login, shared by every copy of the repo.
 CREDENTIALS_FILE = Path.home() / ".gather"
-ZOOM_CREDENTIALS_FILE = Path.home() / ".zoom"
+# The project's: the community Zoom app's credentials, the same for every
+# admin, kept in the repo folder (git-ignored) beside client_secret.json.
+ZOOM_CREDENTIALS_FILE = Path(__file__).parent.parent / "zoom_credentials"
 
 _ZOOM_KEYS = ("account_id", "client_id", "client_secret")
 
@@ -56,6 +59,7 @@ def load_credentials(path: Path = CREDENTIALS_FILE) -> tuple[str, str]:
 
 
 def load_zoom_credentials(path: Path = ZOOM_CREDENTIALS_FILE) -> dict[str, str]:
-    """Return {"account_id", "client_id", "client_secret"} from ~/.zoom —
-    the Zoom Server-to-Server OAuth app's credentials (see README.md)."""
+    """Return {"account_id", "client_id", "client_secret"} from the repo's
+    zoom_credentials file — the Zoom Server-to-Server OAuth app's
+    credentials (see README.md)."""
     return read_key_value_file(path, _ZOOM_KEYS)

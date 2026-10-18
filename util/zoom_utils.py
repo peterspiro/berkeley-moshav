@@ -2,7 +2,8 @@
 Zoom API access for the groups' permanent meeting rooms.
 
 Uses a Server-to-Server OAuth app in the community's Zoom account (its
-credentials live in ~/.zoom — see util/credentials.py and README.md). Every
+credentials live in the repo's zoom_credentials file — see
+util/credentials.py and README.md). Every
 group room is a recurring meeting with no fixed time (type 3) owned by
 ROOMS_USER, so its link never changes and members only ever click it.
 

@@ -104,7 +104,7 @@ Calendar):
      signed in as admin@berkeleymoshav.org (the account that owns the group
      calendars; the script refuses to run as anyone else). The token is
      cached at ~/.google_setup_token.pkl for subsequent runs.
-Also requires the Zoom app's credentials in ~/.zoom (see README.md).
+Also requires the Zoom app's credentials in zoom_credentials (see README.md).
 
 Usage:
     python update_groups_in_google_and_hierarchy.py -e admin@example.com -p secret

@@ -115,8 +115,11 @@ playwright install chromium
   | `user:update:user:admin` | Update a user | New host keys (`reset_zoom_room.py --host-key`) only |
 
   If its creator's role is later reduced, Zoom removes those scopes, so
-  transfer the app to another admin first. Put its credentials in `~/.zoom`
-  (`chmod 600`):
+  transfer the app to another admin first. Put its credentials in a file
+  named `zoom_credentials` in the repo root, beside `client_secret.json`
+  (git-ignored; `chmod 600`). Unlike `~/.gather`, which holds each admin's
+  own login, these belong to the community's app and are the same for
+  everyone:
   ```
   account_id = ...
   client_id = ...
@@ -208,7 +211,7 @@ Both are deployed to Google with [`clasp`](https://github.com/google/clasp)
 - **`meeting_rooms.py`**: finding, choosing, or creating each group's
   calendar and Zoom room, and keeping them named, shared, and configured
 - **`zoom_utils.py`**: the Zoom API, and the standard room settings
-- **`credentials.py`**: reading `~/.gather` and `~/.zoom`
+- **`credentials.py`**: reading `~/.gather` and `zoom_credentials`
 
 ### `archive/`: no longer in use
 

@@ -1,13 +1,23 @@
 """
 Tests for util.credentials: the private key = value files (~/.gather,
-~/.zoom).
+zoom_credentials).
 
 All values are fictional.
 """
 
+from pathlib import Path
+
 import pytest
 
-from util.credentials import load_credentials, load_zoom_credentials
+from util.credentials import ZOOM_CREDENTIALS_FILE, load_credentials, load_zoom_credentials
+
+ROOT = Path(__file__).resolve().parent.parent
+
+
+def test_zoom_credentials_file_is_in_repo_root_and_git_ignored():
+    assert ZOOM_CREDENTIALS_FILE.resolve().parent == ROOT
+    ignored = (ROOT / ".gitignore").read_text().splitlines()
+    assert ZOOM_CREDENTIALS_FILE.name in ignored
 
 
 def _write(tmp_path, text, mode=0o600):

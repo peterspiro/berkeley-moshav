@@ -42,7 +42,7 @@ Steps:
 
 Requires Google API access (Drive, Admin Directory, Groups Settings,
 Calendar), signed in as the calendars' owner, and the Zoom app's
-credentials in ~/.zoom — see update_groups_in_google_and_hierarchy.py's
+credentials in zoom_credentials — see update_groups_in_google_and_hierarchy.py's
 docstring and README.md for setup.
 
 The group type (circle / working group / club) is inferred from a name
