@@ -142,7 +142,8 @@ class TestEnsureGroupCalendar:
         assert _calendar(svc, dry_run=True) is None
         assert svc.writes == []
         out = capsys.readouterr().out
-        assert "would ask" in out
+        assert ("would ask whether one of these is the calendar for 'Technology Circle': "
+                "'Technology Circle'") in out
         assert "would create calendar 'Technology Circle'" in out
         assert "unless one of those is chosen" in out
 
@@ -163,6 +164,14 @@ class TestEnsureAllEventsCalendar:
         assert svc.calendars_by_id[cid] == "All Berkeley Moshav Events"
         assert not any(w[0].startswith("acl") for w in svc.writes)
         assert "Set ALL_EVENTS_CALENDAR_ID" in capsys.readouterr().out
+
+    def test_dry_run_question_names_the_calendar(self, monkeypatch, capsys):
+        monkeypatch.setattr(mr, "ALL_EVENTS_CALENDAR_ID", "")
+        svc = FakeCalendarService({"ae": "All Berkeley Moshav Events"})
+        assert ensure_all_events_calendar(
+            svc, owned_calendars=lambda: list_owned_calendars(svc), dry_run=True) is None
+        assert ("would ask whether one of these is the 'All Berkeley Moshav Events' "
+                "calendar: 'All Berkeley Moshav Events'") in capsys.readouterr().out
 
     def test_configured_id_used(self, monkeypatch):
         monkeypatch.setattr(mr, "ALL_EVENTS_CALENDAR_ID", "ae")

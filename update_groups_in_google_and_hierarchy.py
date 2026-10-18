@@ -992,15 +992,24 @@ def ensure_group_meeting_rooms(
     group's Gather mailing list may use an alias of it), which is what
     Google records in the calendar's sharing settings.
 
+    Prints one status line per group, including the ones skipped and why,
+    so a quiet run is clearly a run with nothing to fix.
+
     Raises QuitRequested if the user quits at a prompt; whatever was
     recorded by then still gets written to the footers.
     """
-    eligible = [
-        (gid, info) for gid, info in group_info.items()
-        if info["kind"] in ELIGIBLE_KINDS and not _is_everybody(info)
-        and email_by_group_id.get(gid) and google_file_id_by_group_id.get(gid)
-    ]
-    eligible.sort(key=lambda item: item[1]["name"].casefold())
+    eligible = []
+    for gid, info in sorted(group_info.items(), key=lambda item: item[1]["name"].casefold()):
+        if info["kind"] not in ELIGIBLE_KINDS:
+            continue
+        if _is_everybody(info):
+            print(f"'{info['name']}': no calendar or Zoom room (an everybody group)")
+        elif not email_by_group_id.get(gid):
+            print(f"'{info['name']}': no calendar or Zoom room yet (no email list)")
+        elif not google_file_id_by_group_id.get(gid):
+            print(f"'{info['name']}': no calendar or Zoom room yet (no Drive folder)")
+        else:
+            eligible.append((gid, info))
 
     owned_calendars = functools.cache(lambda: list_owned_calendars(calendar_service))
     rooms = functools.cache(zoom.list_rooms)
@@ -1029,6 +1038,19 @@ def ensure_group_meeting_rooms(
         )
         if room:
             room_by_group_id[group_id] = room
+        print(f"'{group_name}': {_meeting_rooms_status(calendar_id, room)}")
+
+
+def _meeting_rooms_status(calendar_id: str | None, room: RoomLink | None) -> str:
+    """Status line text for a group after ensure_group_meeting_rooms(); a
+    missing calendar or room only happens in a dry run that would create
+    it."""
+    if calendar_id and room:
+        return "calendar and Zoom room in place"
+    return "; ".join([
+        "calendar in place" if calendar_id else "calendar would be created",
+        "Zoom room in place" if room else "Zoom room would be created",
+    ])
 
 
 # ── Step 3: keep each Google Group's footer link in sync with Gather ──────────

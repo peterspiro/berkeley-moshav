@@ -149,3 +149,22 @@ def test_calendar_shared_with_primary_address_not_alias():
     )
     shared = [w[2]["scope"]["value"] for w in cal.writes if w[0] == "acl_insert"]
     assert shared == ["technology-circle@x.org"]
+
+
+def test_status_line_for_every_group(capsys):
+    cal = FakeCalendarService({"ae": "All Berkeley Moshav Events"})
+    _run(_Settings({}), cal, FakeZoom())
+    out = capsys.readouterr().out
+    assert "'Technology Circle': calendar and Zoom room in place" in out
+    assert "'Book Club': calendar and Zoom room in place" in out
+    assert "'Full Community': no calendar or Zoom room (an everybody group)" in out
+    assert "'No List Circle': no calendar or Zoom room yet (no email list)" in out
+    assert "'No Folder Circle': no calendar or Zoom room yet (no Drive folder)" in out
+
+
+def test_dry_run_status_says_what_would_be_created(capsys):
+    cal = FakeCalendarService({"ae": "All Berkeley Moshav Events"})
+    _run(_Settings({}), cal, FakeZoom(), dry_run=True)
+    out = capsys.readouterr().out
+    assert ("'Technology Circle': calendar would be created; Zoom room would be created"
+            in out)

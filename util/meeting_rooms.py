@@ -49,9 +49,12 @@ CALENDAR_OWNER = "admin@berkeleymoshav.org"
 CALENDAR_TIME_ZONE = "America/Los_Angeles"
 
 ALL_EVENTS_CALENDAR_NAME = "All Berkeley Moshav Events"
-# Filled in once the calendar exists (ensure_all_events_calendar() prints
-# the ID to put here). Until then, every run offers to find or create it.
-ALL_EVENTS_CALENDAR_ID = ""
+# Set once the calendar existed (ensure_all_events_calendar() prints the ID
+# to put here); while it's empty, every run offers to find or create it.
+ALL_EVENTS_CALENDAR_ID = (
+    "c_301c808f640b3a04f5344b1bbf266955d51fecaabd7835936b7591f9cff09222"
+    "@group.calendar.google.com"
+)
 
 # Calendar ACL role for "Make changes to events".
 GROUP_CALENDAR_ROLE = "writer"
@@ -150,18 +153,20 @@ _UNLESS_CHOSEN = ", unless one of those is chosen"
 
 
 def _choose(
-    what: str, group_name: str, available: list[dict], taken: list[dict], dry_run: bool,
+    what: str, target: str, available: list[dict], taken: list[dict], dry_run: bool,
     input_fn: Callable[[str], str],
 ) -> dict | None:
     """Pick an existing candidate, or None to create a new one. With no
-    available candidates there's nothing to ask. A dry run only reports."""
+    available candidates there's nothing to ask. A dry run only reports,
+    naming what it's looking for as target (e.g. "the calendar for
+    'Technology Circle'")."""
     if not available:
         for c in taken:
             print(f"  ('{c['name']}' matches but is linked to {c['owner']})")
         return None
     if dry_run:
         names = ", ".join(f"'{c['name']}'" for c in available)
-        print(f"  [dry-run] would ask whether one of these is '{group_name}''s {what}: {names}")
+        print(f"  [dry-run] would ask whether one of these is {target}: {names}")
         return None
     return prompt_for_candidate(what, available, taken, input_fn)
 
@@ -262,7 +267,8 @@ def ensure_group_calendar(
                  if c["id"] != ALL_EVENTS_CALENDAR_ID and c["name"] != ALL_EVENTS_CALENDAR_NAME]
         available, taken = _matching_candidates(
             group_name, items, linked().calendars, group_email)
-        chosen = _choose("calendar", group_name, available, taken, dry_run, input_fn)
+        chosen = _choose("calendar", f"the calendar for '{group_name}'", available, taken,
+                         dry_run, input_fn)
         if chosen:
             calendar = {"id": chosen["id"], "summary": chosen["name"]}
             linked().calendars[chosen["id"]] = group_email
@@ -313,7 +319,8 @@ def ensure_all_events_calendar(
     print(f"The '{ALL_EVENTS_CALENDAR_NAME}' calendar isn't configured yet.")
     available, taken = _matching_candidates(
         ALL_EVENTS_CALENDAR_NAME, owned_calendars(), {}, "")
-    chosen = _choose("calendar", ALL_EVENTS_CALENDAR_NAME, available, taken, dry_run, input_fn)
+    chosen = _choose("calendar", f"the '{ALL_EVENTS_CALENDAR_NAME}' calendar", available, taken,
+                     dry_run, input_fn)
     if chosen:
         calendar_id = chosen["id"]
     elif dry_run:
@@ -386,7 +393,8 @@ def ensure_zoom_room(
             print(f"'{group_name}' has no Zoom room linked in its footer.")
         available, taken = _matching_candidates(
             group_name, _room_candidates(rooms()), linked().rooms, group_email)
-        chosen = _choose("Zoom room", group_name, available, taken, dry_run, input_fn)
+        chosen = _choose("Zoom room", f"the Zoom room for '{group_name}'", available, taken,
+                         dry_run, input_fn)
         if chosen:
             meeting = zoom.get_meeting(chosen["id"])
             linked().rooms[chosen["id"]] = group_email
