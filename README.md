@@ -22,7 +22,7 @@ Their main job is keeping these things linked together and consistent:
   meetings in it can run with no host present. There's also one "All Berkeley
   Moshav Events" calendar for every meeting.
 
-Two Google Apps Script projects run inside Google Workspace alongside the
+Three Google Apps Script projects run inside Google Workspace alongside the
 Python scripts:
 
 - **`groups_drive_sync`** keeps each Google Group's membership in step with its
@@ -30,6 +30,10 @@ Python scripts:
 - **`calendar_notifications`** looks after the shared community calendar: it
   emails a community group when one of its members adds an event, and removes
   invitations from anyone who isn't allowed to add events.
+- **`group_meetings`** looks after the groups' calendars: it gives each
+  group's meetings its Zoom room and invites the group and the all-events
+  calendar, and emails warnings about meetings that would clash over a Zoom
+  user, and about meetings set up as invitations from someone's own calendar.
 
 The repo also keeps, in `archive/`, the one-off scripts that were used to
 migrate the community into Gather (members, households, groups, photos) and
@@ -118,6 +122,7 @@ playwright install chromium
   | `meeting:update:meeting:admin` | Update a meeting | Fixing a room's topic or settings; new passcodes (`reset_zoom_room.py`) |
   | `meeting:read:list_meetings:admin` | View a user's meetings | Listing the rooms, to offer ones matching a group's name |
   | `meeting:read:list_past_instances:admin` | View a past meeting's instances | Warning about rooms unused for 300 days, before Zoom deletes them at 365 |
+  | `user:read:list_users:admin` | View users | Finding every Zoom user's scheduled meetings, to check for overlaps (`group_meetings`) |
 
   If its creator's role is later reduced, Zoom removes those scopes, so
   transfer the app to another admin first. Put its credentials in a file
@@ -157,6 +162,7 @@ and edit **Host Key** (6 to 10 digits; Zoom rejects easy ones like 123456).
 | `.` (root) | The scripts used day to day to create and maintain groups, plus setup files and design notes |
 | `groups_drive_sync/` | Apps Script project that syncs each Google Group's membership from its Drive item |
 | `calendar_notifications/` | Apps Script project that announces and gatekeeps events on the shared community calendar |
+| `group_meetings/` | Apps Script project that adds Zoom rooms and guests to group calendar events, and warns about overlapping meetings |
 | `util/` | Shared Python modules used by the scripts |
 | `tests/` | Unit tests (`pytest`) |
 | `archive/` | One-off scripts and plans that are no longer in use, kept for reference |
@@ -196,7 +202,7 @@ and edit **Host Key** (6 to 10 digits; Zoom rejects easy ones like 123456).
 
 ### Apps Script projects
 
-Both are deployed to Google with [`clasp`](https://github.com/google/clasp)
+All are deployed to Google with [`clasp`](https://github.com/google/clasp)
 (`clasp push` from the project's directory).
 
 - **`groups_drive_sync/groups_drive_sync.gs`** runs hourly. For every Google
@@ -210,6 +216,19 @@ Both are deployed to Google with [`clasp`](https://github.com/google/clasp)
   group when one of its members adds an event, and removes invitations from
   anyone who isn't allowed to add events. See
   `calendar_notifications/README.md` for deployment.
+- **`group_meetings/group_meetings.gs`** runs every 5 minutes, as
+  `admin@berkeleymoshav.org`, over every group calendar linked from a footer.
+  Each event the group calendar organizes gets the group's Zoom room (link,
+  meeting ID, and passcode) and the group and the all-events calendar as
+  guests, unless it's marked `[no zoom]` or has another meeting link typed in.
+  An event that's only a copy of someone's invitation gets its organizer an
+  email asking them to create it on the group calendar instead. It also
+  checks the next 8 weeks for meetings that overlap in rooms of the same Zoom
+  user, including ones scheduled directly in Zoom, and emails
+  calendaring-alerts@berkeleymoshav.org and the groups involved. Its rules are
+  in `group_meetings/event_rules.gs`, tested under Node. See
+  `group_meetings/README.md` for deployment, including the Zoom credentials
+  it reads from Script Properties.
 
 ### `util/`: shared modules
 
@@ -281,3 +300,6 @@ Both are deployed to Google with [`clasp`](https://github.com/google/clasp)
 ```bash
 python -m pytest
 ```
+
+The tests of `group_meetings/event_rules.gs` run it under Node, and are
+skipped if `node` isn't installed.
