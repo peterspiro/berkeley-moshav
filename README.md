@@ -77,9 +77,11 @@ and read out.
 
 The footer is the only record of which calendar and Zoom room belong to a
 group; `update_groups_in_google_and_hierarchy.py` and `add_new_group.py`
-create them and write the links. Each calendar is shared with the group's
+create them and write the links. A new calendar is shared with the group's
 Google Group as "Make changes to events", so membership of the Google Group
-(kept in step with Drive above) decides who can use it.
+(kept in step with Drive above) decides who can use it. The scripts only set
+that starting access: a circle can be restricted so only some members edit
+(see "Letting only some members edit a group's calendar" below).
 
 A group linked to a shared drive has a "Shared Drive:" line instead of
 "Google Docs folder:". `groups_drive_sync.gs` reads that footer to know which
@@ -154,6 +156,27 @@ facilitator who knows it shouldn't any more, since every facilitator in every
 group then needs the new one. It's changed by hand, not by a script: sign in
 to the Zoom web portal as `zoomhosts@berkeleymoshav.org`, open **Profile**,
 and edit **Host Key** (6 to 10 digits; Zoom rejects easy ones like 123456).
+
+
+### Letting only some members edit a group's calendar
+
+Every member of a group can add and change events on its calendar to begin
+with. If a circle wants only a few designated members to do that, change the
+calendar's sharing by hand; the scripts leave it alone afterwards (they only
+share a calendar with its group when it isn't shared with the group at all).
+
+1. Sign in to Google Calendar as `admin@berkeleymoshav.org` and open the
+   group calendar's **Settings and sharing**.
+2. Under **Share with specific people or groups**, change the group's email
+   list to **See all event details**.
+3. Add each designated member with **Make changes to events**. They need a
+   Google account (a personal Gmail address is fine).
+4. Optionally, give the circle's admin **Make changes and manage sharing**, so
+   they can change who edits without asking the Technology Circle.
+
+Members who can't edit still get every meeting's invitation.
+`update_groups_in_google_and_hierarchy.py` shows a restricted calendar in its
+status line as "calendar (members can view, not edit)".
 
 ## Directories
 

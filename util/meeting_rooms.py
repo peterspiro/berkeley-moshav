@@ -10,9 +10,11 @@ ensure_group_calendar() and ensure_zoom_room():
      ask which one is the group's (even if only one matches), with "none
      of these" creating a new one — so a calendar or room made by an
      earlier, interrupted run is picked up rather than duplicated;
-  3. then bring it into line: a calendar named after the group and shared
-     with the group's Google Group as editors ("Make changes to events");
-     a room titled "<Group> Meeting Room" with zoom_utils.ROOM_SETTINGS.
+  3. then bring it into line: a calendar named after the group, and shared
+     with the group's Google Group as editors ("Make changes to events") if
+     it isn't shared with the group at all (any other access is left alone,
+     so a circle can be restricted by hand); a room titled
+     "<Group> Meeting Room" with zoom_utils.ROOM_SETTINGS.
 
 Calendars belong to whoever creates them, and other admins can't see them
 through the API, so all of them are owned by CALENDAR_OWNER, and the
@@ -213,28 +215,33 @@ def create_calendar(calendar_service, name: str) -> str:
     return created["id"]
 
 
-def ensure_calendar_shared_with_group(
-    calendar_service, calendar_id: str, group_email: str, dry_run: bool,
-) -> str | None:
-    """Give group_email "Make changes to events" access, unless it already
-    has that or more. Returns a description of the change, or None.
-
-    Google emails the group an invitation to add the calendar only when
-    the access is first granted."""
+def group_calendar_role(calendar_service, calendar_id: str, group_email: str) -> str | None:
+    """The access role the calendar's sharing gives group_email ("writer",
+    "reader", ...), or None if it isn't shared with the group at all."""
     rules = calendar_service.acl().list(calendarId=calendar_id).execute().get("items", [])
     rule = next((r for r in rules
                  if r.get("scope", {}).get("type") == "group"
                  and r["scope"].get("value", "").lower() == group_email.lower()), None)
-    if rule and rule.get("role") in (GROUP_CALENDAR_ROLE, "owner"):
+    return rule.get("role") if rule else None
+
+
+def group_can_edit(role: str | None) -> bool:
+    return role in (GROUP_CALENDAR_ROLE, "owner")
+
+
+def ensure_calendar_shared_with_group(
+    calendar_service, calendar_id: str, group_email: str, dry_run: bool,
+) -> str | None:
+    """Give group_email "Make changes to events" access if the calendar
+    isn't shared with it at all. Returns a description of the change, or
+    None.
+
+    Any access the group already has is left as it is, so a circle can be
+    restricted by hand to "See all event details", with only some members
+    given edit access (see README.md). Google emails the group an
+    invitation to add the calendar when the access is granted."""
+    if group_calendar_role(calendar_service, calendar_id, group_email) is not None:
         return None
-    if rule:
-        change = f"change {group_email}'s access from {rule.get('role')} to {GROUP_CALENDAR_ROLE}"
-        if not dry_run:
-            calendar_service.acl().patch(
-                calendarId=calendar_id, ruleId=rule["id"], body={"role": GROUP_CALENDAR_ROLE},
-                sendNotifications=False,
-            ).execute()
-        return change
     change = f"share with {group_email} ({GROUP_CALENDAR_ROLE})"
     if not dry_run:
         calendar_service.acl().insert(
@@ -252,7 +259,7 @@ def ensure_group_calendar(
 ) -> str | None:
     """Return the group's calendar ID, finding, choosing, or creating it
     (see the module docstring), and make sure it's named after the group
-    and shared with group_email. owned_calendars and linked are called
+    and shared with group_email (if it isn't at all). owned_calendars and linked are called
     only when a choice has to be made. Returns None only in a dry run that
     would create a calendar. Raises QuitRequested if the user quits."""
     group_email = group_email.lower()

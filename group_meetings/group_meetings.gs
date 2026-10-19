@@ -280,8 +280,9 @@ function alertInvitationCopy(event, group) {
       `invitation like that, so its Zoom room link can't be added and the group isn't ` +
       `invited.\n\n` +
       `To fix it, create the meeting on the ${group.name} calendar itself (there's a link ` +
-      `to it at the bottom of every message to the group's email list), then delete your ` +
-      `original or remove the group calendar from its guests.\n\n` +
+      `to it at the bottom of every message to the group's email list), or, if you can't ` +
+      `add events to that calendar, ask someone who can to create it there. Then delete ` +
+      `your original or remove the group calendar from its guests.\n\n` +
       `This message was sent automatically.\n`,
   });
   console.log(`${group.email}: alerted ${organizer} about invitation copy "${event.summary}"`);

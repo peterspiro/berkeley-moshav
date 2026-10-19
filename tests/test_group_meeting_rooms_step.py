@@ -168,3 +168,21 @@ def test_dry_run_status_says_what_would_be_created(capsys):
     out = capsys.readouterr().out
     assert ("'Technology Circle': calendar would be created; Zoom room would be created"
             in out)
+
+
+def test_status_marks_calendar_members_cannot_edit(capsys):
+    footer = build_footer_block("1", "F1", "https://g", "Technology Circle",
+                                calendar_id="c1", zoom_url="https://zoom.us/j/7?pwd=p",
+                                zoom_passcode="135790")
+    cal = FakeCalendarService(
+        {"ae": "All Berkeley Moshav Events", "c1": "Technology Circle"},
+        {"c1": [{"id": "r", "role": "reader", "scope": {"type": "group", "value": "tech@x.org"}}]})
+    zoom = FakeZoom({7: room(7, "Technology Circle Meeting Room")},
+                    last_used={"7": "2026-10-01T00:00:00Z"})
+    m.ensure_group_meeting_rooms(
+        _Directory(), _Settings({"tech@x.org": footer}), cal, zoom, {"1": GROUPS["1"]},
+        FOLDERS, EMAILS, lambda: LinkedResources(), False, {}, {},
+    )
+    assert cal.writes == []
+    assert ("'Technology Circle': calendar (members can view, not edit) and Zoom room "
+            "in place") in capsys.readouterr().out

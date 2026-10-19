@@ -77,11 +77,14 @@ class TestEnsureGroupCalendar:
         assert ("acl_insert", "c1",
                 {"role": "writer", "scope": {"type": "group", "value": GROUP}}, True) in svc.writes
 
-    def test_upgrades_reader_access_without_notifying(self):
-        reader = {**WRITER_RULE, "role": "reader"}
-        svc = FakeCalendarService({"c1": "Technology Circle"}, {"c1": [reader]})
-        _calendar(svc, "c1")
-        assert svc.writes == [("acl_patch", "c1", "r1", "writer")]
+    @pytest.mark.parametrize("role", ["reader", "freeBusyReader"])
+    def test_restricted_access_left_alone(self, role):
+        # A circle restricted by hand: the group only views; some members edit.
+        rules = [{**WRITER_RULE, "role": role},
+                 {"id": "r2", "role": "writer", "scope": {"type": "user", "value": "dana@gmail.com"}}]
+        svc = FakeCalendarService({"c1": "Technology Circle"}, {"c1": rules})
+        assert _calendar(svc, "c1") == "c1"
+        assert svc.writes == []
 
     def test_owner_access_left_alone(self):
         owner = {**WRITER_RULE, "role": "owner"}

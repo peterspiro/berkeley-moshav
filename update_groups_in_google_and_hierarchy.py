@@ -32,7 +32,9 @@ excluding hidden groups:
       footer are used if they still exist; otherwise calendars/rooms with
       matching names are offered to choose from (even if only one
       matches), or a new one is created. Each calendar is named after the
-      group and shared with its Google Group as "Make changes to events";
+      group and, if it isn't shared with its Google Group at all, shared
+      with it as "Make changes to events" (other access, such as a circle
+      restricted by hand to "See all event details", is left alone);
       each room is titled "<Group> Meeting Room" with the standard room
       settings. Also makes sure the all-events calendar exists.
   0e. Once every group's folder and mailing-list state is settled, ensures
@@ -188,6 +190,8 @@ from util.meeting_rooms import (
     RoomLink,
     ensure_zoom_room,
     find_linked_resources,
+    group_calendar_role,
+    group_can_edit,
     list_owned_calendars,
 )
 from util.zoom_utils import ZoomClient
@@ -1038,17 +1042,23 @@ def ensure_group_meeting_rooms(
         )
         if room:
             room_by_group_id[group_id] = room
-        print(f"'{group_name}': {_meeting_rooms_status(calendar_id, room)}")
+        role = group_calendar_role(calendar_service, calendar_id, email) if calendar_id else None
+        restricted = role is not None and not group_can_edit(role)
+        print(f"'{group_name}': {_meeting_rooms_status(calendar_id, room, restricted)}")
 
 
-def _meeting_rooms_status(calendar_id: str | None, room: RoomLink | None) -> str:
+def _meeting_rooms_status(
+    calendar_id: str | None, room: RoomLink | None, restricted: bool = False,
+) -> str:
     """Status line text for a group after ensure_group_meeting_rooms(); a
     missing calendar or room only happens in a dry run that would create
-    it."""
+    it. restricted marks a calendar whose group can't edit it (only some
+    members were given edit access by hand)."""
+    calendar = "calendar (members can view, not edit)" if restricted else "calendar"
     if calendar_id and room:
-        return "calendar and Zoom room in place"
+        return f"{calendar} and Zoom room in place"
     return "; ".join([
-        "calendar in place" if calendar_id else "calendar would be created",
+        f"{calendar} in place" if calendar_id else "calendar would be created",
         "Zoom room in place" if room else "Zoom room would be created",
     ])
 
