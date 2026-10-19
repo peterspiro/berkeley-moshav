@@ -21,21 +21,29 @@ Steps:
      --alias address if given, else the group's primary address).
   5. Unless --type=club, add a row for the new group to the Circle
      Hierarchy, alphabetically under its parent circle.
-  6. Write the new Google Group's custom footer with a "Gather group" /
-     "Google Docs folder" link block (see util/google_group_footer.py) —
-     this is what groups_drive_sync.gs reads to sync membership, so no
-     Apps Script redeploy is needed for a new group to start syncing.
-  7. Add the manager to the Google Group directly, so the list reaches
+  6. Give the group a Google calendar, shared with the new Google Group so
+     its members can add and edit events, and a permanent Zoom meeting room
+     (see util/meeting_rooms.py). If calendars or rooms with matching names
+     already exist (say, from an interrupted earlier run), offer to use one
+     of those instead.
+  7. Write the new Google Group's custom footer with its "Gather group",
+     "Google Docs folder", "Google calendar", and "Zoom meeting" links (see
+     util/google_group_footer.py) — this is what groups_drive_sync.gs reads
+     to sync membership, so no Apps Script redeploy is needed for a new
+     group to start syncing.
+  8. Add the manager to the Google Group directly, so the list reaches
      them right away rather than after groups_drive_sync.gs's next run.
-  8. Unless --no-email, open a welcome message to the new list as a draft
+  9. Unless --no-email, open a welcome message to the new list as a draft
      in the default mail program (via a mailto: link), for the person
      running the script to review, edit if they like, and send from their
      own account. It tells the manager what was created and what they can
      do, and that they can ask the sender for a different list address or
      group name. A dry run prints the draft instead.
 
-Requires Google API access (Drive, Admin Directory, Groups Settings) —
-see update_groups_in_google_and_hierarchy.py's docstring for setup.
+Requires Google API access (Drive, Admin Directory, Groups Settings,
+Calendar), signed in as the calendars' owner, and the Zoom app's
+credentials in zoom_credentials — see update_groups_in_google_and_hierarchy.py's
+docstring and README.md for setup.
 
 The group type (circle / working group / club) is inferred from a name
 ending in the matching suffix ("Circle" / "Working Group" / "Club");
@@ -57,8 +65,9 @@ for clubs, and can't be combined with --alias.
 email uniquely identifying them; they're made a manager of the new group.
 
 Pass --idempotent to reuse any artifacts that already exist (folder,
-Google Group, Gather group, alias, folder link, hierarchy entry) rather
-than aborting — useful for re-running after a partial failure. Combine it
+Google Group, Gather group, alias, folder link, hierarchy entry, and the
+calendar and Zoom room linked in the group's footer) rather than aborting
+— useful for re-running after a partial failure. Combine it
 with --no-email if the first run already opened (and you sent) the welcome
 message.
 
@@ -70,6 +79,7 @@ Usage:
 """
 
 import argparse
+import functools
 import os
 import re
 import sys
@@ -81,7 +91,7 @@ from urllib.parse import quote
 from googleapiclient.discovery import build
 from playwright.sync_api import sync_playwright
 
-from util.credentials import load_credentials
+from util.credentials import load_credentials, load_zoom_credentials
 from util.gather_utils import (
     close_log,
     configure,
@@ -110,7 +120,11 @@ from util.gdrive_config import (
     parent_folder_id_for_group_type,
     scrape_gdrive_config,
 )
-from util.google_group_footer import ensure_group_footer
+from util.google_group_footer import (
+    ensure_group_footer,
+    fetch_footer_calendar_id,
+    fetch_footer_zoom_url,
+)
 from util.google_group_utils import (
     CONVERSATION_HISTORY_SETTINGS,
     DEFAULT_CLIENT_SECRETS_PATH,
@@ -127,6 +141,15 @@ from util.google_group_utils import (
     group_exists,
     truncate_local_part,
 )
+from util.meeting_rooms import (
+    QuitRequested,
+    check_calendar_owner,
+    ensure_group_calendar,
+    ensure_zoom_room,
+    find_linked_resources,
+    list_owned_calendars,
+)
+from util.zoom_utils import ZoomClient, room_topic
 from util.hierarchy_wiki import (
     HierarchyNode,
     ensure_hierarchy_page,
@@ -185,12 +208,17 @@ def build_welcome_message(
         f"{greeting}\n"
         "\n"
         f"I've created the {group_name} group in Gather, along with a Google "
-        "Drive folder for its documents. Links to both are in the footer at the "
-        "bottom of this message.\n"
+        "Drive folder for its documents, a Google calendar for its meetings, and "
+        "a Zoom meeting room. Links to all of them are in the footer at the "
+        f"bottom of this message. I've also created this email list, {list_address}.\n"
         "\n"
-        f"I've also created this email list, {list_address}, which is linked to "
-        "the Gather group and the folder. Everyone in the Gather group can post to "
-        "the list and can add and edit files in the folder.\n"
+        "Everyone in the Gather group receives messages sent to the list, can add "
+        "and edit files in the folder, and can add and change events on the "
+        "calendar. Anyone can post to the list.\n"
+        "\n"
+        "Please put the group's meetings on its calendar rather than on your own. "
+        "The Zoom room is the group's permanent meeting place: its link never "
+        "changes, and anyone with the link can join, with or without a host.\n"
         "\n"
         "I've made you a manager of the Gather group, which allows you to add "
         "members to it, and to make other members managers.\n"
@@ -219,8 +247,8 @@ def print_welcome_message(to: str, subject: str, body: str) -> None:
     print()
     print(body.rstrip("\n"))
     print()
-    print("(Google Groups appends the footer, with the Gather group and Drive "
-          "folder links, when it delivers the message.)")
+    print("(Google Groups appends the footer, with the Gather group, Drive folder, "
+          "calendar, and Zoom room links, when it delivers the message.)")
 
 
 def main(
@@ -276,6 +304,9 @@ def main(
     drive_service = build("drive", "v3", credentials=creds)
     dir_service = build("admin", "directory_v1", credentials=creds)
     settings_service = build("groupssettings", "v1", credentials=creds)
+    calendar_service = build("calendar", "v3", credentials=creds)
+    check_calendar_owner(calendar_service)
+    zoom = ZoomClient(**load_zoom_credentials())
 
     with sync_playwright() as pw:
         browser = launch_browser(pw)
@@ -410,6 +441,9 @@ def main(
             if alias_email:
                 print(f"[dry-run] Would add alias '{alias_email}' to the Google Group and "
                       f"set the Gather group's mailing list to '{list_local}@{DOMAIN}'.")
+            print(f"[dry-run] Would create calendar '{gdisplay}' (shared with '{gemail}' "
+                  f"as editors) and Zoom room '{room_topic(gdisplay)}', unless ones with "
+                  "matching names exist and you choose one of those.")
             if parent_node is not None:
                 print(f"[dry-run] Would add it to the Circle Hierarchy under "
                       f"'{parent_node.name}'.")
@@ -506,8 +540,34 @@ def main(
         )
         print(f"Configured mailing list for '{gdisplay}' as '{list_local}@{DOMAIN}'.")
 
+        # ── Calendar and Zoom room (or the ones its footer already links) ───
+        linked_calendar_id = linked_zoom_url = None
+        if google_group_exists:
+            linked_calendar_id = fetch_footer_calendar_id(settings_service, gemail)
+            linked_zoom_url = fetch_footer_zoom_url(settings_service, gemail)
+        get_linked = functools.cache(lambda: find_linked_resources(dir_service, settings_service))
+        calendar_id = room = None
+        try:
+            calendar_id = ensure_group_calendar(
+                calendar_service, gdisplay, gemail, linked_calendar_id,
+                owned_calendars=lambda: list_owned_calendars(calendar_service),
+                linked=get_linked, dry_run=False,
+            )
+            room = ensure_zoom_room(
+                zoom, gdisplay, linked_zoom_url, gemail,
+                rooms=zoom.list_rooms, linked=get_linked, dry_run=False,
+            )
+        except QuitRequested:
+            log("INFO", "quit", "User quit during the calendar/Zoom room step")
+            print(f"Skipped the rest of the calendar/Zoom room setup. Run "
+                  f"'python update_groups_in_google_and_hierarchy.py -g \"{gdisplay}\"' "
+                  "later to finish it.")
+
         # ── Write the Google Group's footer link block ───────────────────────
-        ensure_group_footer(settings_service, gemail, gather_group_id, folder_id, base_url, gdisplay)
+        ensure_group_footer(settings_service, gemail, gather_group_id, folder_id, base_url,
+                            gdisplay, calendar_id=calendar_id,
+                            zoom_url=room.join_url if room else None,
+                            zoom_passcode=room.passcode if room else None)
         print(f"Set footer links for '{gemail}'.")
 
         # ── Add to the Circle Hierarchy ──────────────────────────────────────

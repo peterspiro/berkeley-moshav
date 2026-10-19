@@ -26,7 +26,16 @@ excluding hidden groups:
       kept flat. Groups with Availability = Everybody are exempt from both
       the moderation setting and the role demotion: their
       whoCanModerateContent and members' roles are left untouched.
-  0d. Once every group's folder and mailing-list state is settled, ensures
+  0d. Gives every group (except Availability = Everybody groups) that has
+      both a Drive item and a mailing list a Google calendar and a Zoom
+      meeting room (see util/meeting_rooms.py). The ones linked in its
+      footer are used if they still exist; otherwise calendars/rooms with
+      matching names are offered to choose from (even if only one
+      matches), or a new one is created. Each calendar is named after the
+      group and shared with its Google Group as "Make changes to events";
+      each room is titled "<Group> Meeting Room" with the standard room
+      settings. Also makes sure the all-events calendar exists.
+  0e. Once every group's folder and mailing-list state is settled, ensures
       each associated Google Group's custom footer carries an up-to-date
       "Gather group"/Drive-item link block (this is what
       groups_drive_sync.gs reads to know which item to sync membership
@@ -38,7 +47,8 @@ excluding hidden groups:
       hard error. Any other footer content is preserved, and so are the
       block's "Google calendar" and "Zoom meeting" links; the block is only
       touched when Gather itself currently implies a (possibly different)
-      pairing for that email.
+      pairing for that email. The block also carries the group's
+      "Google calendar" and "Zoom meeting" links from step 0d.
   1.  If it's already in the hierarchy but has been renamed, updates the
       hierarchy line to the current name (matched by Gather group ID, embedded
       in the [Members] link, so renames don't break the association).
@@ -68,7 +78,7 @@ line.
 
 With -g/--group PREFIX, only the one group whose name starts with PREFIX
 (case-insensitive; it must match exactly one Gather group, which mustn't be
-hidden or deactivated) is processed: steps 0a-0d run for just that group,
+hidden or deactivated) is processed: steps 0a-0e run for just that group,
 and in the hierarchy only that group's own row is renamed/re-linked (or
 added if missing). Hierarchy-wide passes — forcing the root entry, and
 removing entries for deleted/deactivated groups — are skipped, since they
@@ -84,14 +94,17 @@ Every interactive prompt accepts 'q' (or 'quit') to stop immediately —
 whatever's already been done (Drive folders linked, groups created,
 footer links, hierarchy edits) is still saved.
 
-Requires Google API access (Drive, Admin Directory, Groups Settings):
+Requires Google API access (Drive, Admin Directory, Groups Settings,
+Calendar):
   1. In Google Cloud Console, create a Desktop OAuth 2.0 client and download
      the JSON as client_secret.json (or pass a different path via -c).
-  2. Enable the Google Drive API, Admin SDK (Directory API), and Groups
-     Settings API for the project.
+  2. Enable the Google Drive API, Admin SDK (Directory API), Groups
+     Settings API, and Google Calendar API for the project.
   3. On first run the script prints an auth URL — paste it into a browser
-     signed in as a Workspace super-admin. The token is cached at
-     ~/.google_setup_token.pkl for subsequent runs.
+     signed in as admin@berkeleymoshav.org (the account that owns the group
+     calendars; the script refuses to run as anyone else). The token is
+     cached at ~/.google_setup_token.pkl for subsequent runs.
+Also requires the Zoom app's credentials in zoom_credentials (see README.md).
 
 Usage:
     python update_groups_in_google_and_hierarchy.py -e admin@example.com -p secret
@@ -110,7 +123,7 @@ from pathlib import Path
 from googleapiclient.discovery import build
 from playwright.sync_api import sync_playwright
 
-from util.credentials import load_credentials
+from util.credentials import load_credentials, load_zoom_credentials
 from util.folder_matching import find_matching_folders
 from util.gather_utils import (
     _fetch_group_detail,
@@ -146,6 +159,8 @@ from util.google_group_footer import (
     describe_footer_updates,
     fetch_footer_link,
     footer_updates,
+    parse_footer_calendar_id,
+    parse_footer_zoom_url,
 )
 from util.google_group_utils import (
     CONVERSATION_HISTORY_SETTINGS,
@@ -164,6 +179,18 @@ from util.google_group_utils import (
     list_group_members,
     set_member_role,
 )
+from util.meeting_rooms import (
+    LinkedResources,
+    QuitRequested,
+    check_calendar_owner,
+    ensure_all_events_calendar,
+    ensure_group_calendar,
+    RoomLink,
+    ensure_zoom_room,
+    find_linked_resources,
+    list_owned_calendars,
+)
+from util.zoom_utils import ZoomClient
 from util.hierarchy_wiki import (
     WIKI_SLUG,
     HierarchyNode,
@@ -940,12 +967,100 @@ def demote_managers_to_members(
                 log("INFO", "demote_manager", f"{group_name}: {member_email}")
 
 
+# ── Step 2b: give each group a calendar and a Zoom room ───────────────────────
+
+def ensure_group_meeting_rooms(
+    dir_service, settings_service, calendar_service, zoom: ZoomClient,
+    group_info: dict[str, dict],
+    google_file_id_by_group_id: dict[str, str], email_by_group_id: dict[str, str],
+    get_linked: Callable[[], LinkedResources], dry_run: bool,
+    calendar_id_by_group_id: dict[str, str], room_by_group_id: dict[str, RoomLink],
+) -> None:
+    """Make sure every eligible group has a Google calendar and a Zoom
+    meeting room (see util/meeting_rooms.py), recording them in
+    calendar_id_by_group_id / room_by_group_id (mutated in place) for
+    ensure_group_footers() to write into the footers.
+
+    Only groups that will get a footer — ones with both a Drive item and a
+    mailing list — are covered, since the footer is the only record of
+    which calendar and room are the group's; a calendar made for a group
+    without one would be orphaned. Availability = Everybody groups are
+    skipped. A dry run creates and changes nothing, and records only the
+    links already in footers.
+
+    Calendars are shared with each Google Group's primary address (the
+    group's Gather mailing list may use an alias of it), which is what
+    Google records in the calendar's sharing settings.
+
+    Prints one status line per group, including the ones skipped and why,
+    so a quiet run is clearly a run with nothing to fix.
+
+    Raises QuitRequested if the user quits at a prompt; whatever was
+    recorded by then still gets written to the footers.
+    """
+    eligible = []
+    for gid, info in sorted(group_info.items(), key=lambda item: item[1]["name"].casefold()):
+        if info["kind"] not in ELIGIBLE_KINDS:
+            continue
+        if _is_everybody(info):
+            print(f"'{info['name']}': no calendar or Zoom room (an everybody group)")
+        elif not email_by_group_id.get(gid):
+            print(f"'{info['name']}': no calendar or Zoom room yet (no email list)")
+        elif not google_file_id_by_group_id.get(gid):
+            print(f"'{info['name']}': no calendar or Zoom room yet (no Drive folder)")
+        else:
+            eligible.append((gid, info))
+
+    owned_calendars = functools.cache(lambda: list_owned_calendars(calendar_service))
+    rooms = functools.cache(zoom.list_rooms)
+
+    ensure_all_events_calendar(calendar_service, owned_calendars=owned_calendars, dry_run=dry_run)
+
+    for group_id, info in eligible:
+        group_name = info["name"]
+        email = email_by_group_id[group_id]
+        footer = settings_service.groups().get(groupUniqueId=email).execute().get(
+            "customFooterText")
+        google_group = get_group_by_email(dir_service, email)
+        if google_group is None:
+            log("WARN", "meeting_rooms", f"{group_name}: Google Group {email} not found")
+            continue
+        email = google_group["email"]
+        calendar_id = ensure_group_calendar(
+            calendar_service, group_name, email, parse_footer_calendar_id(footer),
+            owned_calendars=owned_calendars, linked=get_linked, dry_run=dry_run,
+        )
+        if calendar_id:
+            calendar_id_by_group_id[group_id] = calendar_id
+        room = ensure_zoom_room(
+            zoom, group_name, parse_footer_zoom_url(footer), email,
+            rooms=rooms, linked=get_linked, dry_run=dry_run,
+        )
+        if room:
+            room_by_group_id[group_id] = room
+        print(f"'{group_name}': {_meeting_rooms_status(calendar_id, room)}")
+
+
+def _meeting_rooms_status(calendar_id: str | None, room: RoomLink | None) -> str:
+    """Status line text for a group after ensure_group_meeting_rooms(); a
+    missing calendar or room only happens in a dry run that would create
+    it."""
+    if calendar_id and room:
+        return "calendar and Zoom room in place"
+    return "; ".join([
+        "calendar in place" if calendar_id else "calendar would be created",
+        "Zoom room in place" if room else "Zoom room would be created",
+    ])
+
+
 # ── Step 3: keep each Google Group's footer link in sync with Gather ──────────
 
 def ensure_group_footers(
     settings_service, base_url: str, group_info: dict[str, dict],
     google_file_id_by_group_id: dict[str, str], item_type_by_group_id: dict[str, str],
     email_by_group_id: dict[str, str], dry_run: bool,
+    calendar_id_by_group_id: dict[str, str] | None = None,
+    room_by_group_id: dict[str, RoomLink] | None = None,
 ) -> None:
     """Keep each eligible Google Group's custom footer in sync with
     Gather's own state: for every eligible group that currently has both a
@@ -959,7 +1074,13 @@ def ensure_group_footers(
     A footer is only ever added/updated here, never blanked out — a group
     Gather can't currently derive a pairing for is left alone, and any
     other footer content a human wrote is preserved regardless.
+
+    calendar_id_by_group_id / room_by_group_id (from
+    ensure_group_meeting_rooms()) give the calendar and Zoom links; a group
+    missing from them keeps whatever calendar/Zoom link its footer has.
     """
+    calendar_id_by_group_id = calendar_id_by_group_id or {}
+    room_by_group_id = room_by_group_id or {}
     eligible = [
         (gid, info) for gid, info in group_info.items()
         if info["kind"] in ELIGIBLE_KINDS
@@ -974,8 +1095,13 @@ def ensure_group_footers(
         item_id = google_file_id_by_group_id[group_id]
         item_type = item_type_by_group_id.get(group_id, ITEM_TYPE_FOLDER)
 
+        room = room_by_group_id.get(group_id)
         current = settings_service.groups().get(groupUniqueId=email).execute()
-        updates = footer_updates(current, group_id, item_id, base_url, group_name, item_type)
+        updates = footer_updates(
+            current, group_id, item_id, base_url, group_name, item_type,
+            calendar_id_by_group_id.get(group_id),
+            room.join_url if room else None, room.passcode if room else None,
+        )
         if not updates:
             continue
         change = describe_footer_updates(current.get("customFooterText"), updates)
@@ -1208,6 +1334,9 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
     drive_service = build("drive", "v3", credentials=creds)
     dir_service = build("admin", "directory_v1", credentials=creds)
     settings_service = build("groupssettings", "v1", credentials=creds)
+    calendar_service = build("calendar", "v3", credentials=creds)
+    check_calendar_owner(calendar_service)
+    zoom = ZoomClient(**load_zoom_credentials())
 
     with sync_playwright() as pw:
         browser = launch_browser(pw)
@@ -1320,10 +1449,28 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
         # setting above), so membership is kept flat.
         demote_managers_to_members(dir_service, group_info, email_by_group_id, dry_run)
 
-        # Step 3: keep each Google Group's footer link in sync with Gather.
+        # Step 2b: give each group a calendar and a Zoom room.
+        calendar_id_by_group_id: dict[str, str] = {}
+        room_by_group_id: dict[str, RoomLink] = {}
+        if not quit_requested:
+            get_linked = functools.cache(
+                lambda: find_linked_resources(dir_service, settings_service))
+            try:
+                ensure_group_meeting_rooms(
+                    dir_service, settings_service, calendar_service, zoom, group_info,
+                    google_file_id_by_group_id, email_by_group_id, get_linked, dry_run,
+                    calendar_id_by_group_id, room_by_group_id,
+                )
+            except QuitRequested:
+                quit_requested = True
+                print("\nQuit requested — skipping remaining steps and saving progress so far.")
+                log("INFO", "quit", "User quit during the calendar/Zoom room step")
+
+        # Step 3: keep each Google Group's footer links in sync with Gather.
         ensure_group_footers(
             settings_service, base_url, group_info, google_file_id_by_group_id,
             item_type_by_group_id, email_by_group_id, dry_run,
+            calendar_id_by_group_id, room_by_group_id,
         )
 
         if not quit_requested:

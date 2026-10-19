@@ -25,17 +25,25 @@ class TestBuildWelcomeMessage:
     def test_body_covers_required_points(self):
         _, body = _msg()
         assert body.startswith("Hi Dana,\n")
-        assert "I've created the Landscape Circle group in Gather" in body
-        assert "I've also created this email list, landscape@example.org, which" in body
-        assert "I've made you a manager of the Gather group" in body
-        assert "Google Drive folder" in body and "footer" in body
-        assert "landscape@example.org" in body
-        assert "add and edit files in the folder" in body
+        assert ("I've created the Landscape Circle group in Gather, along with a Google "
+                "Drive folder for its documents, a Google calendar for its meetings, and "
+                "a Zoom meeting room. Links to all of them are in the footer") in body
+        assert "I've also created this email list, landscape@example.org.\n" in body
+        assert ("Everyone in the Gather group receives messages sent to the list, can "
+                "add and edit files in the folder, and can add and change events on the "
+                "calendar. Anyone can post to the list.") in body
+        assert "Please put the group's meetings on its calendar rather than on your own." in body
+        assert "its link never changes" in body
         assert ("I've made you a manager of the Gather group, which allows you to add "
                 "members to it, and to make other members managers.") in body
         assert "different address for the list" in body
         assert "different name for the group" in body
         assert body.rstrip().endswith("Sam")
+
+    def test_dropped_wording_is_gone(self):
+        _, body = _msg()
+        assert "with the group's calendar invited" not in body
+        assert "passcode" not in body
 
     def test_no_rename_instructions(self):
         # Renames are requested from the sender, not done by the recipient.
