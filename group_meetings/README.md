@@ -1,0 +1,93 @@
+# Group Meetings
+
+Apps Script that looks after every group's Google calendar (the calendars
+`update_groups_in_google_and_hierarchy.py` creates):
+
+- **Every 5 minutes**, for each changed event on a group calendar:
+  - an event the group calendar organizes gets the group's Zoom room (link in
+    the location; link, meeting ID, and passcode in the description), and the
+    group's Google Group and the "All Berkeley Moshav Events" calendar as
+    guests. The group's members get an invitation; adding the room details or
+    the all-events calendar sends no email. Events marked `[no zoom]`, or with
+    another Zoom or Meet link typed in, keep their own link.
+  - an event that's only a copy of someone's invitation (made on their own
+    calendar, with the group calendar invited) can't be changed that way, so
+    its organizer and `calendaring-alerts@berkeleymoshav.org` get one email
+    asking them to create it on the group calendar instead.
+- **Every hour**, and after any change, it looks for meetings in the next 8
+  weeks that overlap in Zoom rooms belonging to the same Zoom user (a Zoom
+  user can run only one meeting at a time), including meetings scheduled
+  directly in Zoom by any user in the account, and emails
+  `calendaring-alerts@` and the groups involved, once per conflict.
+
+Which calendar and room are a group's comes from the group's email footer,
+read hourly, so new groups need no redeploy. When a group's room link changes
+(say, after `reset_zoom_room.py`), its upcoming events are updated within the
+hour.
+
+- `group_meetings.gs` — triggers, Calendar/Groups/Zoom calls, emails
+- `event_rules.gs` — the rules themselves, with no Apps Script calls, tested
+  under Node by `tests/test_group_meetings_rules.py`
+- `appsscript.json` — advanced services and OAuth scopes
+
+## Deploy with clasp
+
+**Everything runs as `admin@berkeleymoshav.org`**, which owns the group
+calendars. Sign in as that account for every step.
+
+```bash
+npm install -g @google/clasp
+clasp login                     # as admin@berkeleymoshav.org
+cd group_meetings
+clasp create --type standalone --title "Group Meetings"
+git checkout -- appsscript.json # clasp create overwrites it with a bare default
+clasp push -f
+clasp open
+```
+
+### Zoom credentials
+
+The script reads Zoom's meetings with the same Server-to-Server app as the
+Python scripts. In the editor, open **Project Settings → Script Properties**
+and add the three values from the repo's `zoom_credentials` file:
+
+| Property | Value |
+|---|---|
+| `ZOOM_ACCOUNT_ID` | `account_id` |
+| `ZOOM_CLIENT_ID` | `client_id` |
+| `ZOOM_CLIENT_SECRET` | `client_secret` |
+
+The Zoom app also needs the `user:read:list_users:admin` ("View users") scope
+for this, to find every Zoom user's scheduled meetings (see the main
+README.md).
+
+### One-time authorization and triggers
+
+In the editor, select **`installTriggers`** and click **Run**, then approve
+the authorization prompt. It reads the footers and Zoom's meetings, handles
+every upcoming event once (so existing events get the room too), and installs
+two triggers: `syncAll` every 5 minutes and `hourly` every hour. Check them
+under **Triggers** (⏰).
+
+### Updating later
+
+```bash
+clasp push
+```
+
+The triggers stay installed across pushes.
+
+## Smoke test
+
+1. On a test group's calendar (one whose footer has calendar and Zoom links),
+   create an event. Within 5 minutes it should show the Zoom link as its
+   location, the Zoom details in its description, and the group and the
+   all-events calendar as guests; the group's members should get an
+   invitation.
+2. Create an event on your own calendar and invite the test group's calendar:
+   you and `calendaring-alerts@` should get one email about it.
+3. Create two overlapping events on group calendars: `calendaring-alerts@` and
+   both groups should get one overlap email.
+
+Run **`syncAll`** or **`hourly`** from the editor to force a pass, and read
+**Executions** for the log.

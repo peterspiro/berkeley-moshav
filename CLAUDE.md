@@ -2,7 +2,7 @@
 
 Administration scripts for the Berkeley Moshav community: Gather groups,
 their Google Drive folders, the Google Groups used as their email lists, and
-the Circle Structure wiki page, plus two Apps Script projects. README.md
+the Circle Structure wiki page, plus three Apps Script projects. README.md
 describes the layout and every script — read it first.
 
 ## Keep README.md up to date

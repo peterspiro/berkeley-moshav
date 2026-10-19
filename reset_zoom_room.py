@@ -6,8 +6,9 @@ leaked.
 Gives the group's room (the one linked in its Google Group's footer) a new
 random digits-only passcode. The room keeps its meeting ID, but its join
 link changes, since the link embeds the passcode; the script writes the
-new link and passcode into the footer and prints them. Calendar events
-and messages that contain the old link need updating separately.
+new link and passcode into the footer and prints them. Within the hour
+the group_meetings Apps Script puts the new link in the group's calendar
+events; other messages that contain the old link need updating by hand.
 
 The rooms' shared host key isn't changed here; see README.md ("Changing
 the host key") for doing that in Zoom's web portal.
@@ -90,7 +91,8 @@ def reset_room_passcode(settings_service, zoom: ZoomClient, group: dict, dry_run
     log("INFO", "update_footer", f"{email}: new Zoom link")
     print(f"New passcode for {group.get('name')}'s Zoom room {meeting_id}: {passcode}")
     print(f"New link (it and the passcode are now in {email}'s footer): {join_url}")
-    print("Update any calendar events and messages that still contain the old link.")
+    print("The group's calendar events get the new link within the hour; update any "
+          "other messages that still contain the old one.")
 
 
 def main(group_query: str, dry_run: bool, credentials_path: str) -> None:
