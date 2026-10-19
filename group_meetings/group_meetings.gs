@@ -435,24 +435,39 @@ function zoomToken() {
   const cache = CacheService.getScriptCache();
   const cached = cache.get('zoomToken');
   if (cached) return cached;
-  const props = PropertiesService.getScriptProperties();
+  const creds = zoomCredentials();
   const resp = UrlFetchApp.fetch(
     'https://zoom.us/oauth/token?grant_type=account_credentials&account_id=' +
-      encodeURIComponent(props.getProperty(PROP_ZOOM_ACCOUNT_ID)),
+      encodeURIComponent(creds.accountId),
     {
       method: 'post',
       headers: {
-        Authorization: 'Basic ' + Utilities.base64Encode(
-          props.getProperty(PROP_ZOOM_CLIENT_ID) + ':' + props.getProperty(PROP_ZOOM_CLIENT_SECRET)),
+        Authorization: 'Basic ' + Utilities.base64Encode(`${creds.clientId}:${creds.clientSecret}`),
       },
       muteHttpExceptions: true,
     });
   if (resp.getResponseCode() !== 200) {
-    throw new Error(`Zoom sign-in failed (${resp.getResponseCode()}): ${resp.getContentText()}`);
+    throw new Error(
+      `Zoom sign-in failed (${resp.getResponseCode()}): ${resp.getContentText()}. Check the ` +
+      `${PROP_ZOOM_ACCOUNT_ID}, ${PROP_ZOOM_CLIENT_ID}, and ${PROP_ZOOM_CLIENT_SECRET} ` +
+      `Script Properties against the repo's zoom_credentials file.`);
   }
   const token = JSON.parse(resp.getContentText()).access_token;
   cache.put('zoomToken', token, 50 * 60);
   return token;
+}
+
+/** The Zoom app's credentials from Script Properties, trimmed; throws
+ * naming any that are missing. */
+function zoomCredentials() {
+  const props = PropertiesService.getScriptProperties();
+  const names = [PROP_ZOOM_ACCOUNT_ID, PROP_ZOOM_CLIENT_ID, PROP_ZOOM_CLIENT_SECRET];
+  const values = names.map(n => (props.getProperty(n) || '').trim());
+  const missing = names.filter((n, i) => !values[i]);
+  if (missing.length) {
+    throw new Error(`Missing Script Properties: ${missing.join(', ')} (see README.md)`);
+  }
+  return { accountId: values[0], clientId: values[1], clientSecret: values[2] };
 }
 
 /** GET a Zoom API path; null on 404. */
