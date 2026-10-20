@@ -15,8 +15,9 @@ Apps Script that looks after every group's Google calendar (the calendars
     its organizer and `calendaring-alerts@berkeleymoshav.org` get one email
     asking them to create it on the group calendar instead.
 - **Every hour**, and after any change, it looks for meetings in the next 8
-  weeks that overlap in Zoom rooms belonging to the same Zoom user (a Zoom
-  user can run only one meeting at a time), including meetings scheduled
+  weeks in Zoom rooms belonging to the same Zoom user (a Zoom user can run
+  only one meeting at a time) that overlap, or that are less than 15 minutes
+  apart (in case the first runs over), including meetings scheduled
   directly in Zoom by any user in the account, and emails
   `calendaring-alerts@` and the groups involved, once per conflict.
 
@@ -87,7 +88,9 @@ The triggers stay installed across pushes.
 2. Create an event on your own calendar and invite the test group's calendar:
    you and `calendaring-alerts@` should get one email about it.
 3. Create two overlapping events on group calendars: `calendaring-alerts@` and
-   both groups should get one overlap email.
+   both groups should get one overlap email. Then move one so they're 10
+   minutes apart: one "too close together" email. At 15 minutes apart or
+   more: no email.
 
 Run **`syncAll`** or **`hourly`** from the editor to force a pass, and read
 **Executions** for the log.

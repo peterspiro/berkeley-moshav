@@ -246,8 +246,9 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
   guests, unless it's marked `[no zoom]` or has another meeting link typed in.
   An event that's only a copy of someone's invitation gets its organizer an
   email asking them to create it on the group calendar instead. It also
-  checks the next 8 weeks for meetings that overlap in rooms of the same Zoom
-  user, including ones scheduled directly in Zoom, and emails
+  checks the next 8 weeks for meetings in rooms of the same Zoom user that
+  overlap or are less than 15 minutes apart, including ones scheduled
+  directly in Zoom, and emails
   calendaring-alerts@berkeleymoshav.org and the groups involved. Its rules are
   in `group_meetings/event_rules.gs`, tested under Node. See
   `group_meetings/README.md` for deployment, including the Zoom credentials

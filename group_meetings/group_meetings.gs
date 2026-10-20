@@ -17,9 +17,10 @@
  *      and ALERT_EMAIL get one email asking them to create it on the group
  *      calendar instead.
  * Then, if anything changed, and every hour regardless (hourly), it looks for
- * meetings in the next OVERLAP_WEEKS weeks that overlap in rooms owned by the
- * same Zoom user (a Zoom user can run only one meeting at a time) and emails
- * ALERT_EMAIL and the groups involved, once per conflict.
+ * meetings in the next OVERLAP_WEEKS weeks in rooms owned by the same Zoom
+ * user (a Zoom user can run only one meeting at a time) that overlap or are
+ * less than MIN_GAP_MINUTES apart, and emails ALERT_EMAIL and the groups
+ * involved, once per conflict.
  *
  * Which calendar and room are a group's comes from the group's own email
  * footer (written by update_groups_in_google_and_hierarchy.py), read hourly,
@@ -36,6 +37,10 @@ const ALL_EVENTS_CALENDAR_ID =
 const ALERT_EMAIL = 'calendaring-alerts@berkeleymoshav.org';
 const TIME_ZONE = 'America/Los_Angeles';
 const OVERLAP_WEEKS = 8;
+// Meetings in rooms of the same Zoom user are flagged if they overlap, or if
+// the second starts less than this many minutes after the first ends (in
+// case the first runs over).
+const MIN_GAP_MINUTES = 15;
 
 // Script Properties keys.
 const PROP_GROUPS = 'groups';                // JSON [{ email, name, calendarId, zoomUrl, passcode }]
@@ -342,7 +347,7 @@ function checkOverlaps(groups) {
     if (m.end > now && m.start < until) meetings.push(Object.assign({ groups: [] }, m));
   }
 
-  alertOverlaps(findOverlaps(meetings));
+  alertOverlaps(findOverlaps(meetings, MIN_GAP_MINUTES * 60 * 1000));
 }
 
 function alertOverlaps(conflicts) {
@@ -363,15 +368,26 @@ function sendOverlapAlert(c) {
   const describe = m =>
     `"${m.title}" (${m.where}), ${formatRange(m.start, m.end)}`;
   const groups = [...new Set([...(c.a.groups || []), ...(c.b.groups || [])])];
+  const overlap = c.b.start < c.a.end;
+  const gap = Math.round((c.b.start - c.a.end) / 60000);
+  const problem = overlap
+    ? `These two meetings overlap, and both use Zoom rooms belonging to ${c.a.owner}, ` +
+      `which can run only one meeting at a time, so whichever starts second won't be ` +
+      `able to start:`
+    : `These two meetings both use Zoom rooms belonging to ${c.a.owner}, which can run ` +
+      `only one meeting at a time, and the second starts ${gap} minute${gap === 1 ? '' : 's'} ` +
+      `after the first ends, so if the first runs over, the second won't be able to ` +
+      `start until it ends:`;
   MailApp.sendEmail({
     to: [ALERT_EMAIL].concat(groups).join(','),
-    subject: `Zoom meetings overlap: "${c.a.title}" and "${c.b.title}"`,
+    subject: overlap
+      ? `Zoom meetings overlap: "${c.a.title}" and "${c.b.title}"`
+      : `Zoom meetings too close together: "${c.a.title}" and "${c.b.title}"`,
     body:
-      `These two meetings overlap, and both use Zoom rooms belonging to ${c.a.owner}, ` +
-      `which can run only one meeting at a time, so whichever starts second won't be ` +
-      `able to start:\n\n` +
+      `${problem}\n\n` +
       `  - ${describe(c.a)}\n  - ${describe(c.b)}\n\n` +
-      `Please move one of them to another time, or ask the Technology Circle to host ` +
+      `Please move one of them to another time (at least ${MIN_GAP_MINUTES} minutes ` +
+      `apart), or ask the Technology Circle to host ` +
       `one in a room belonging to a different Zoom user.\n\n` +
       `This message was sent automatically.\n`,
   });

@@ -165,6 +165,22 @@ class TestFindOverlaps:
     def test_back_to_back_is_fine(self):
         assert js("findOverlaps(m)", m=[meeting("a", "u1", 0, 60), meeting("b", "u1", 60, 90)]) == []
 
+    def test_less_than_gap_apart_is_flagged(self):
+        conflicts = js("findOverlaps(m, 15)", m=[meeting("a", "u1", 0, 60), meeting("b", "u1", 70, 90)])
+        assert [(c["a"]["key"], c["b"]["key"]) for c in conflicts] == [("a", "b")]
+
+    def test_exactly_gap_apart_is_fine(self):
+        assert js("findOverlaps(m, 15)", m=[meeting("a", "u1", 0, 60), meeting("b", "u1", 75, 90)]) == []
+
+    def test_gap_measured_from_the_later_end(self):
+        # "a" runs past "b", so "c" is measured from a's end, not b's.
+        conflicts = js("findOverlaps(m, 15)", m=[
+            meeting("a", "u1", 0, 100), meeting("b", "u1", 10, 20), meeting("c", "u1", 105, 120)])
+        assert sorted((c["a"]["key"], c["b"]["key"]) for c in conflicts) == [("a", "b"), ("a", "c")]
+
+    def test_gap_applies_only_to_same_owner(self):
+        assert js("findOverlaps(m, 15)", m=[meeting("a", "u1", 0, 60), meeting("b", "u2", 65, 90)]) == []
+
     def test_different_owners_fine(self):
         assert js("findOverlaps(m)", m=[meeting("a", "u1", 0, 60), meeting("b", "u2", 30, 90)]) == []
 

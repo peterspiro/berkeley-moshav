@@ -184,16 +184,18 @@ function zoomIdsInEvent(event) {
 }
 
 /**
- * Pairs of meetings that overlap in rooms owned by the same Zoom user.
+ * Pairs of meetings in rooms owned by the same Zoom user that overlap, or
+ * where the second starts less than minGapMs after the first ends (so the
+ * first running over would block it).
  *
  * meetings: [{ key, owner, start, end, ... }] with start/end in ms. A
  * meeting that appears more than once (the same calendar event on several
  * calendars, or a Zoom meeting also on a calendar) shares its key and is
- * merged first. Back-to-back meetings (one ends as the other starts) are fine.
+ * merged first.
  *
  * Returns [{ a, b }] with a.start <= b.start.
  */
-function findOverlaps(meetings) {
+function findOverlaps(meetings, minGapMs = 0) {
   const byKey = new Map();
   for (const m of meetings) {
     const prev = byKey.get(m.key);
@@ -208,7 +210,7 @@ function findOverlaps(meetings) {
   for (const list of byOwner.values()) {
     list.sort((x, y) => x.start - y.start || x.end - y.end);
     for (let i = 0; i < list.length; i++) {
-      for (let j = i + 1; j < list.length && list[j].start < list[i].end; j++) {
+      for (let j = i + 1; j < list.length && list[j].start < list[i].end + minGapMs; j++) {
         conflicts.push({ a: list[i], b: list[j] });
       }
     }
