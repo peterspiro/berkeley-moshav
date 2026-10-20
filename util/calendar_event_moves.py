@@ -1,0 +1,436 @@
+"""
+Moving a group's meetings onto its new calendar.
+
+When a group gets its own calendar (or when asked, with
+update_groups_in_google_and_hierarchy.py --move-events), its meetings may
+still be on other calendars. offer_event_moves() looks through every
+calendar on CALENDAR_OWNER's calendar list (its own, including its primary
+calendar, and the ones it's subscribed to) except the group calendars, the
+all-events calendar, and Google's built-in ones, for events in the next
+EVENT_WINDOW_DAYS whose titles match the group's name. It lists them all,
+then asks of each whether to copy it to the group's calendar, delete it,
+both, or neither:
+
+- A copy keeps the title, description, location, times, and repeat rule,
+  but not the guests (group_meetings invites the group) or any Zoom or Meet
+  link (so group_meetings adds the group's room). Occurrences of a series
+  that were moved or changed become one-off events, and cancelled ones are
+  left out. Copies are tagged with the original's iCalUID, so a later run
+  doesn't offer them again.
+- Deleting needs edit access to the calendar the event is on. An event
+  organized there is cancelled for everyone, with Google's cancellation
+  emails; an invitation copy is removed from that calendar only.
+
+An event on several of these calendars (say, organized on one, and an
+invitation on the owner's primary calendar) is offered once, from the
+calendar that organizes it if that's one of them. Nothing changes until the
+end, when it shows what it will do and, if anything will be deleted, asks
+you to type 'delete'.
+"""
+
+import datetime
+import re
+from collections.abc import Callable
+from zoneinfo import ZoneInfo
+
+from googleapiclient.errors import HttpError
+
+from util.folder_matching import find_matching_folders
+from util.gather_utils import log
+from util.meeting_rooms import (
+    ALL_EVENTS_CALENDAR_ID,
+    CALENDAR_TIME_ZONE,
+    QuitRequested,
+)
+
+EVENT_WINDOW_DAYS = 365
+
+# Where a copy records the event it was copied from.
+COPIED_FROM_KEY = "copiedFrom"
+
+EDIT_ROLES = ("owner", "writer")
+
+# Same links group_meetings/event_rules.gs counts as "another meeting link".
+_MEETING_LINK_RE = re.compile(r"[\w.-]*zoom\.us/j/\d+|meet\.google\.com/[a-z-]+", re.I)
+# Lines of a pasted Zoom or Meet invitation, removed along with the link.
+_MEETING_LINE_RE = re.compile(
+    r"zoom\.us/|meet\.google\.com/|^\s*(join zoom meeting|join with google meet|"
+    r"meeting id\b|passcode\b|password\b|one tap mobile|dial by your location|"
+    r"find your local number|or dial\b|\+\d[\d ,#*]{6,})", re.I)
+_LINE_BREAK_RE = re.compile(r"\n|<br\s*/?>", re.I)
+
+
+# ── Which calendars to look in ────────────────────────────────────────────────
+
+def _is_builtin(calendar_id: str) -> bool:
+    """Google's holiday, birthday, and week-number calendars."""
+    return calendar_id.endswith("group.v.calendar.google.com") or "#contacts@" in calendar_id
+
+
+def other_calendars(calendar_service, group_calendar_ids: set[str]) -> list[dict]:
+    """[{"id", "name", "role", "primary"}] for every calendar on the signed-in
+    account's list except group calendars, the all-events calendar,
+    Google's built-in ones, and ones shared as free/busy only."""
+    calendars = []
+    page_token = None
+    while True:
+        resp = calendar_service.calendarList().list(pageToken=page_token).execute()
+        for c in resp.get("items", []):
+            cid = c["id"]
+            if (cid in group_calendar_ids or cid == ALL_EVENTS_CALENDAR_ID or _is_builtin(cid)
+                    or c.get("accessRole") == "freeBusyReader"):  # no titles to match
+                continue
+            calendars.append({
+                "id": cid, "name": c.get("summaryOverride") or c.get("summary") or cid,
+                "role": c.get("accessRole", "reader"), "primary": bool(c.get("primary")),
+            })
+        page_token = resp.get("nextPageToken")
+        if not page_token:
+            return calendars
+
+
+def _list_events(calendar_service, calendar_id: str, **params) -> list[dict]:
+    """The calendar's events, or [] (with a warning) if it can't be read."""
+    events = []
+    page_token = None
+    while True:
+        try:
+            resp = calendar_service.events().list(
+                calendarId=calendar_id, pageToken=page_token, **params).execute()
+        except HttpError as err:
+            log("WARN", "list_events", f"{calendar_id}: {err}")
+            return []
+        events += resp.get("items", [])
+        page_token = resp.get("nextPageToken")
+        if not page_token:
+            return events
+
+
+def upcoming_events(calendar_service, calendar_id: str, now: datetime.datetime) -> list[dict]:
+    """The calendar's events in the next EVENT_WINDOW_DAYS, with each
+    recurring series once (not per occurrence), plus its changed and
+    cancelled occurrences (which have "recurringEventId")."""
+    return _list_events(
+        calendar_service, calendar_id, singleEvents=False, showDeleted=True,
+        timeMin=now.isoformat(),
+        timeMax=(now + datetime.timedelta(days=EVENT_WINDOW_DAYS)).isoformat(),
+    )
+
+
+def copied_event_uids(calendar_service, group_calendar_ids: set[str]) -> set[str]:
+    """iCalUIDs of the events already copied to a group calendar."""
+    uids = set()
+    for calendar_id in group_calendar_ids:
+        for e in _list_events(calendar_service, calendar_id, showDeleted=False):
+            uid = ((e.get("extendedProperties") or {}).get("private") or {}).get(COPIED_FROM_KEY)
+            if uid:
+                uids.add(uid)
+    return uids
+
+
+# ── Gathering candidate events ────────────────────────────────────────────────
+
+def _organizer_is(event: dict, calendar_id: str) -> bool:
+    organizer = event.get("organizer") or {}
+    return bool(organizer.get("self")) or organizer.get("email") == calendar_id
+
+
+def gather_candidates(
+    events_by_calendar: dict[str, list[dict]], calendars: list[dict],
+    group_calendar_ids: set[str],
+) -> list[dict]:
+    """One candidate per event (by iCalUID) across the calendars:
+    {"uid", "event", "calendar", "organized_here", "also_on", "changed",
+    "cancelled"}, where event is a one-off event or a series, taken from
+    the calendar that organizes it when that's one of them, and changed /
+    cancelled are the series' changed and cancelled occurrences there.
+    Events organized by a group calendar are left out (they're already
+    the group's)."""
+    by_id = {c["id"]: c for c in calendars}
+    groups: dict[str, list[tuple[dict, dict]]] = {}
+    exceptions: dict[tuple[str, str], list[dict]] = {}
+    for calendar_id, events in events_by_calendar.items():
+        for e in events:
+            if e.get("recurringEventId"):
+                exceptions.setdefault((calendar_id, e["recurringEventId"]), []).append(e)
+            elif e.get("status") != "cancelled":
+                if (e.get("organizer") or {}).get("email") in group_calendar_ids:
+                    continue
+                groups.setdefault(e.get("iCalUID") or e["id"], []).append(
+                    (by_id[calendar_id], e))
+
+    candidates = []
+    for uid, copies in groups.items():
+        calendar, event = next(((c, e) for c, e in copies if _organizer_is(e, c["id"])),
+                               copies[0])
+        occurrences = exceptions.get((calendar["id"], event["id"]), [])
+        candidates.append({
+            "uid": uid, "event": event, "calendar": calendar,
+            "organized_here": _organizer_is(event, calendar["id"]),
+            "also_on": [c["name"] for c, _ in copies if c is not calendar],
+            "changed": [o for o in occurrences if o.get("status") != "cancelled"],
+            "cancelled": [o for o in occurrences if o.get("status") == "cancelled"],
+        })
+    return candidates
+
+
+def matching_candidates(group_name: str, candidates: list[dict]) -> list[dict]:
+    """The candidates whose titles match the group's name, soonest first."""
+    items = [{"id": c["uid"], "name": c["event"].get("summary") or ""} for c in candidates]
+    matched = {m["id"] for m in find_matching_folders(group_name, items)}
+    return sorted((c for c in candidates if c["uid"] in matched),
+                  key=lambda c: _start_key(c["event"]))
+
+
+# ── Describing events ─────────────────────────────────────────────────────────
+
+_DAY_CODES = {"SU": "Sun", "MO": "Mon", "TU": "Tue", "WE": "Wed", "TH": "Thu", "FR": "Fri",
+              "SA": "Sat"}
+_ORDINALS = {"1": "1st", "2": "2nd", "3": "3rd", "4": "4th", "5": "5th", "-1": "last"}
+_FREQ = {"DAILY": ("daily", "days"), "WEEKLY": ("weekly", "weeks"),
+         "MONTHLY": ("monthly", "months"), "YEARLY": ("yearly", "years")}
+
+
+def _start_key(event: dict) -> str:
+    start = event.get("start") or {}
+    return start.get("dateTime") or start.get("date") or ""
+
+
+def _when(start: dict) -> str:
+    if start.get("date"):
+        day = datetime.date.fromisoformat(start["date"])
+        return f"{day:%a %b} {day.day}, all day"
+    dt = datetime.datetime.fromisoformat(start["dateTime"].replace("Z", "+00:00")).astimezone(
+        ZoneInfo(CALENDAR_TIME_ZONE))
+    return f"{dt:%a %b} {dt.day}, {dt.strftime('%I:%M %p').lstrip('0')}"
+
+
+def describe_rrule(recurrence: list[str]) -> str:
+    """A short description of an event's RRULE: "weekly on Tue",
+    "monthly on the 3rd Mon", "every 2 weeks on Mon, Wed", ..."""
+    rule = next((r for r in recurrence if r.startswith("RRULE:")), None)
+    if rule is None:
+        return "repeats"
+    parts = dict(p.split("=", 1) for p in rule[len("RRULE:"):].split(";") if "=" in p)
+    every, unit = _FREQ.get(parts.get("FREQ"), ("repeats", ""))
+    interval = parts.get("INTERVAL", "1")
+    text = every if interval == "1" or not unit else f"every {interval} {unit}"
+    days = []
+    for code in filter(None, parts.get("BYDAY", "").split(",")):
+        m = re.fullmatch(r"([+-]?\d)?([A-Z]{2})", code)
+        if m and m.group(2) in _DAY_CODES:
+            ordinal = _ORDINALS.get((m.group(1) or "").lstrip("+"), "")
+            days.append(f"the {ordinal} {_DAY_CODES[m.group(2)]}" if ordinal
+                        else _DAY_CODES[m.group(2)])
+    if days:
+        return f"{text} on {', '.join(days)}"
+    if parts.get("BYMONTHDAY"):
+        return f"{text} on day {parts['BYMONTHDAY']}"
+    return text
+
+
+def describe_candidate(c: dict) -> str:
+    """What, when, and where: "Finance Circle meeting   (monthly on the 2nd
+    Tue, from Tue Nov 10, 7:00 PM; on Treasurer's calendar)"."""
+    e = c["event"]
+    when = (f"{describe_rrule(e['recurrence'])}, from {_when(e['start'])}"
+            if e.get("recurrence") else _when(e["start"]))
+    where = f"on {c['calendar']['name']}"
+    if not c["organized_here"]:
+        organizer = (e.get("organizer") or {}).get("email", "someone else")
+        where += f", an invitation from {organizer}"
+    if c["also_on"]:
+        where += f"; also on {', '.join(c['also_on'])}"
+    extra = f"; {len(c['changed'])} changed occurrence(s)" if c["changed"] else ""
+    return f"{e.get('summary') or '(no title)'}   ({when}; {where}{extra})"
+
+
+def can_delete(c: dict) -> bool:
+    return c["calendar"]["role"] in EDIT_ROLES
+
+
+# ── Copying ───────────────────────────────────────────────────────────────────
+
+def strip_meeting_links(text: str | None) -> tuple[str, bool]:
+    """Remove the lines of a description or location that hold a Zoom or
+    Meet link or the rest of a pasted invitation (meeting ID, passcode,
+    dial-in numbers). Returns (text, whether a link was removed)."""
+    if not text or not _MEETING_LINK_RE.search(text):
+        return text or "", False
+    html = bool(re.search(r"<br\s*/?>", text, re.I))
+    lines = [line for line in _LINE_BREAK_RE.split(text) if not _MEETING_LINE_RE.search(line)]
+    while lines and not lines[-1].strip():
+        lines.pop()
+    return ("<br>" if html else "\n").join(lines).strip(), True
+
+
+def _exdate(occurrence: dict) -> str:
+    original = occurrence["originalStartTime"]
+    if original.get("date"):
+        return "EXDATE;VALUE=DATE:" + original["date"].replace("-", "")
+    dt = datetime.datetime.fromisoformat(original["dateTime"].replace("Z", "+00:00"))
+    return "EXDATE:" + dt.astimezone(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+
+def _copy_body(event: dict, uid: str) -> dict:
+    description, _ = strip_meeting_links(event.get("description"))
+    location, _ = strip_meeting_links(event.get("location"))
+    body = {
+        "summary": event.get("summary", ""),
+        "description": description,
+        "location": location,
+        "start": event["start"],
+        "end": event["end"],
+        "extendedProperties": {"private": {COPIED_FROM_KEY: uid}},
+    }
+    for key in ("transparency", "visibility", "colorId"):
+        if key in event:
+            body[key] = event[key]
+    return body
+
+
+def copy_bodies(c: dict) -> list[dict]:
+    """The events to insert on the group calendar for candidate c: the
+    event or series (with its changed and cancelled occurrences excluded
+    from the series), then each changed occurrence as a one-off event."""
+    e = c["event"]
+    main = _copy_body(e, c["uid"])
+    if e.get("recurrence"):
+        main["recurrence"] = list(e["recurrence"]) + [
+            _exdate(o) for o in c["changed"] + c["cancelled"]]
+    return [main] + [_copy_body(o, c["uid"]) for o in c["changed"]]
+
+
+def had_meeting_link(c: dict) -> bool:
+    e = c["event"]
+    return any(strip_meeting_links(e.get(k))[1] for k in ("description", "location"))
+
+
+# ── Asking ────────────────────────────────────────────────────────────────────
+
+_ACTIONS = {"c": "copy", "d": "delete", "b": "both", "n": "neither"}
+
+
+def _ask(label: str, deletable: bool, dry_run: bool, input_fn: Callable[[str], str]) -> str:
+    keys = ["c", "d", "b", "n"] if deletable else ["c", "n"]
+    names = {"c": "[c]opy to the group's calendar", "d": "[d]elete",
+             "b": "[b]oth", "n": "[n]either"}
+    note = " (DRY-RUN: NOTHING WILL BE COPIED OR DELETED)" if dry_run else ""
+    prefix = "[dry-run] " if dry_run else ""
+    prompt = f"  {prefix}{label} — {', '.join(names[k] for k in keys)}, or [q]uit{note}: "
+    while True:
+        answer = input_fn(prompt).strip().lower()
+        if answer in ("q", "quit"):
+            raise QuitRequested
+        for k in keys:
+            if answer in (k, _ACTIONS[k]):
+                return _ACTIONS[k]
+        print("  Invalid choice.")
+
+
+def decide_on_events(
+    group_name: str, matches: list[dict], dry_run: bool, input_fn: Callable[[str], str] = input,
+) -> tuple[list[dict], list[dict]]:
+    """List the matching events, then ask about each in turn. Nothing is
+    changed here: returns (events to copy, events to delete), confirmed
+    by typing 'delete' when there are any to delete (except in a dry
+    run). Raises QuitRequested on 'q'."""
+    while True:
+        print(f"  Events on other calendars matching '{group_name}':")
+        for i, c in enumerate(matches, start=1):
+            note = "" if can_delete(c) else " — can't be deleted (view-only calendar)"
+            print(f"    {i}. {describe_candidate(c)}{note}")
+        print()
+        copy, delete = [], []
+        for i, c in enumerate(matches, start=1):
+            action = _ask(f"{i}. {c['event'].get('summary') or '(no title)'}", can_delete(c),
+                          dry_run, input_fn)
+            if action in ("copy", "both"):
+                copy.append(c)
+            if action in ("delete", "both"):
+                delete.append(c)
+        verb = "Would" if dry_run else "Will"
+        if not copy and not delete:
+            print("  Leaving them all as they are.")
+            return copy, delete
+        if copy:
+            print(f"  {verb} copy to the '{group_name}' calendar:")
+            for c in copy:
+                note = " (its Zoom/Meet link left out; the group's room will be added)" \
+                    if had_meeting_link(c) else ""
+                print(f"    {describe_candidate(c)}{note}")
+        if delete:
+            print(f"  {verb} delete:")
+            for c in delete:
+                effect = ("cancelled for everyone invited, with Google's cancellation emails"
+                          if c["organized_here"] else
+                          f"removed from {c['calendar']['name']} only; the organizer's event "
+                          f"stays")
+                print(f"    {describe_candidate(c)} — {effect}")
+        if not delete or dry_run:
+            return copy, delete
+        confirm = input_fn("  Type 'delete' to confirm, or anything else to go back and "
+                           "choose again: ").strip().lower()
+        if confirm == "delete":
+            return copy, delete
+        print()
+
+
+# ── Doing it ──────────────────────────────────────────────────────────────────
+
+class EventMover:
+    """Offers to move events onto group calendars, reading the other
+    calendars' events once per run. group_calendar_ids is called when
+    first needed, and should include calendars made earlier in the run."""
+
+    def __init__(self, calendar_service, group_calendar_ids: Callable[[], set[str]], *,
+                 dry_run: bool, input_fn: Callable[[str], str] | None = None,
+                 now: datetime.datetime | None = None):
+        self.service = calendar_service
+        self._group_calendar_ids = group_calendar_ids
+        self.dry_run = dry_run
+        self.input_fn = input_fn or input
+        self.now = now or datetime.datetime.now(datetime.timezone.utc)
+        self._candidates: list[dict] | None = None
+        self._done: set[str] = set()
+
+    def _load(self) -> list[dict]:
+        if self._candidates is None:
+            group_ids = self._group_calendar_ids()
+            calendars = other_calendars(self.service, group_ids)
+            events = {c["id"]: upcoming_events(self.service, c["id"], self.now)
+                      for c in calendars}
+            self._done = copied_event_uids(self.service, group_ids)
+            self._candidates = gather_candidates(events, calendars, group_ids)
+        return self._candidates
+
+    def offer(self, group_name: str, group_calendar_id: str | None) -> None:
+        """Offer to copy events matching group_name to group_calendar_id
+        (None only in a dry run that would create it) and delete them from
+        their calendars. Raises QuitRequested if the user quits."""
+        candidates = [c for c in self._load() if c["uid"] not in self._done]
+        matches = matching_candidates(group_name, candidates)
+        if not matches:
+            print(f"  No events on other calendars match '{group_name}'.")
+            return
+        copy, delete = decide_on_events(group_name, matches, self.dry_run, self.input_fn)
+        for c in copy:
+            self._done.add(c["uid"])
+            if self.dry_run:
+                log("INFO", "would_copy_event", f"{group_name}: {c['uid']}")
+                continue
+            for body in copy_bodies(c):
+                self.service.events().insert(
+                    calendarId=group_calendar_id, body=body, sendUpdates="none").execute()
+            print(f"  + copied '{c['event'].get('summary')}' to the group's calendar")
+            log("INFO", "copy_event", f"{group_name}: {c['uid']} from {c['calendar']['id']}")
+        for c in delete:
+            self._done.add(c["uid"])
+            if self.dry_run:
+                log("INFO", "would_delete_event", f"{group_name}: {c['uid']}")
+                continue
+            self.service.events().delete(
+                calendarId=c["calendar"]["id"], eventId=c["event"]["id"],
+                sendUpdates="all").execute()
+            print(f"  - deleted '{c['event'].get('summary')}' from {c['calendar']['name']}")
+            log("INFO", "delete_event", f"{group_name}: {c['uid']} from {c['calendar']['id']}")

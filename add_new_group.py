@@ -91,6 +91,7 @@ from urllib.parse import quote
 from googleapiclient.discovery import build
 from playwright.sync_api import sync_playwright
 
+from util.calendar_event_moves import EventMover
 from util.credentials import load_credentials, load_zoom_credentials
 from util.gather_utils import (
     close_log,
@@ -557,11 +558,15 @@ def main(
         get_linked = functools.cache(lambda: find_linked_resources(dir_service, settings_service))
         calendar_id = room = None
         try:
+            created = []
             calendar_id = ensure_group_calendar(
                 calendar_service, gdisplay, gemail, linked_calendar_id,
                 owned_calendars=lambda: list_owned_calendars(calendar_service),
-                linked=get_linked, dry_run=False,
+                linked=get_linked, dry_run=False, on_create=lambda: created.append(True),
             )
+            if created:
+                EventMover(calendar_service, lambda: set(get_linked().calendars),
+                           dry_run=False).offer(gdisplay, calendar_id)
             room = ensure_zoom_room(
                 zoom, gdisplay, linked_zoom_url, gemail,
                 meetings=zoom.list_account_meetings, linked=get_linked, dry_run=False,

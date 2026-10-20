@@ -127,6 +127,7 @@ from pathlib import Path
 from googleapiclient.discovery import build
 from playwright.sync_api import sync_playwright
 
+from util.calendar_event_moves import EventMover
 from util.credentials import load_credentials, load_zoom_credentials
 from util.folder_matching import find_matching_folders
 from util.gather_utils import (
@@ -981,11 +982,16 @@ def ensure_group_meeting_rooms(
     google_file_id_by_group_id: dict[str, str], email_by_group_id: dict[str, str],
     get_linked: Callable[[], LinkedResources], dry_run: bool,
     calendar_id_by_group_id: dict[str, str], room_by_group_id: dict[str, RoomLink],
+    move_events: bool = False,
 ) -> None:
     """Make sure every eligible group has a Google calendar and a Zoom
     meeting room (see util/meeting_rooms.py), recording them in
     calendar_id_by_group_id / room_by_group_id (mutated in place) for
     ensure_group_footers() to write into the footers.
+
+    When a group's calendar is created, and for every group with
+    move_events, offer to move its meetings from other calendars onto it
+    (util/calendar_event_moves.py).
 
     Only groups that will get a footer — ones with both a Drive item and a
     mailing list — are covered, since the footer is the only record of
@@ -1018,6 +1024,7 @@ def ensure_group_meeting_rooms(
             eligible.append((gid, info))
 
     owned_calendars = functools.cache(lambda: list_owned_calendars(calendar_service))
+    mover = EventMover(calendar_service, lambda: set(get_linked().calendars), dry_run=dry_run)
     zoom_meetings = functools.cache(zoom.list_account_meetings)
 
     # The everybody groups' primary addresses (a Gather list may use an alias).
@@ -1042,12 +1049,16 @@ def ensure_group_meeting_rooms(
             log("WARN", "meeting_rooms", f"{group_name}: Google Group {email} not found")
             continue
         email = google_group["email"]
+        created = []
         calendar_id = ensure_group_calendar(
             calendar_service, group_name, email, parse_footer_calendar_id(footer),
             owned_calendars=owned_calendars, linked=get_linked, dry_run=dry_run,
+            on_create=lambda: created.append(True),
         )
         if calendar_id:
             calendar_id_by_group_id[group_id] = calendar_id
+        if created or move_events:
+            mover.offer(group_name, calendar_id)
         room = ensure_zoom_room(
             zoom, group_name, parse_footer_zoom_url(footer), email,
             meetings=zoom_meetings, linked=get_linked, dry_run=dry_run,
@@ -1347,7 +1358,8 @@ def add_missing_groups(
 
 
 def main(base_url: str, email: str, password: str, dry_run: bool,
-         credentials_path: str, drive_id: str, group_prefix: str | None = None):
+         credentials_path: str, drive_id: str, group_prefix: str | None = None,
+         move_events: bool = False):
     base_url = base_url.rstrip("/")
     init_log()
     log("INFO", "start", f"base_url={base_url} dry_run={dry_run} group={group_prefix!r}")
@@ -1481,7 +1493,7 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
                 ensure_group_meeting_rooms(
                     dir_service, settings_service, calendar_service, zoom, group_info,
                     google_file_id_by_group_id, email_by_group_id, get_linked, dry_run,
-                    calendar_id_by_group_id, room_by_group_id,
+                    calendar_id_by_group_id, room_by_group_id, move_events,
                 )
             except QuitRequested:
                 quit_requested = True
@@ -1556,6 +1568,11 @@ def cli():
         help="Process only the Gather group whose name starts with this prefix "
              "(case-insensitive; must match exactly one group)",
     )
+    parser.add_argument(
+        "--move-events", action="store_true",
+        help="For each group, offer to copy its meetings from other calendars to its own "
+             "calendar and delete them there (always offered for a newly created calendar)",
+    )
     args = parser.parse_args()
 
     if not os.path.exists(args.credentials):
@@ -1566,7 +1583,7 @@ def cli():
 
     email, password = load_credentials()
     main(args.base_url, email, password, args.dry_run, args.credentials, args.drive_id,
-         args.group)
+         args.group, args.move_events)
 
 
 if __name__ == "__main__":

@@ -224,6 +224,27 @@ status line as "calendar (members can view, not edit)".
   meeting (whose link then stops working), asks you to type `delete`. Unless
   a meeting is used, it creates a room. A dry run asks the same questions but
   changes nothing. `add_new_group.py` does the same.
+
+  When it creates a group's calendar, or for every group with
+  `--move-events`, it looks for the group's meetings on other calendars:
+  every calendar on `admin@`'s calendar list (its own, including its primary
+  calendar, and the ones it's subscribed to) except the group calendars, the
+  all-events calendar, and Google's holiday and birthday calendars. It lists
+  the events in the next 12 months whose titles match the group's name
+  (each repeating series once), then asks of each whether to copy it to the
+  group's calendar, delete it, both, or neither. A copy keeps the title,
+  description, location, times, and repeat rule, but not the guests (the
+  group is invited instead) or any Zoom or Meet link (so the group's room is
+  added); occurrences of a series that were moved or changed become one-off
+  events. Copies are tagged with the original, so they aren't offered again.
+  Deleting needs edit access to the event's calendar: an event organized
+  there is cancelled for everyone, with Google's cancellation emails; an
+  invitation is removed from that calendar only. As with Zoom meetings,
+  nothing changes until the summary, and deleting asks you to type
+  `delete`. `add_new_group.py` does this when it creates the calendar.
+  Calendars `admin@` can't see (other members' own calendars) aren't
+  searched; to include one, share it with `admin@` and add it to
+  `admin@`'s calendar list.
 - **`reset_zoom_room.py`** gives a group's Zoom room a new passcode, and so a
   new link, both of which it writes into the group's footer, for when a link has
   leaked.
@@ -289,6 +310,8 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
 - **`meeting_rooms.py`**: finding, choosing, or creating each group's
   calendar and Zoom room (and deleting matching meetings you don't want),
   and keeping them named, shared, and configured
+- **`calendar_event_moves.py`**: finding a group's meetings on other
+  calendars, and copying them to its calendar or deleting them
 - **`zoom_utils.py`**: the Zoom API, and the standard room settings
 - **`credentials.py`**: reading `~/.gather` and `zoom_credentials`
 

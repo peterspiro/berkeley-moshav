@@ -290,12 +290,14 @@ def ensure_group_calendar(
     calendar_service, group_name: str, group_email: str, linked_calendar_id: str | None, *,
     owned_calendars: Callable[[], list[dict]], linked: Callable[[], LinkedResources],
     dry_run: bool, input_fn: Callable[[str], str] = input,
+    on_create: Callable[[], None] | None = None,
 ) -> str | None:
     """Return the group's calendar ID, finding, choosing, or creating it
     (see the module docstring), and make sure it's named after the group
     and shared with group_email (if it isn't at all). owned_calendars and linked are called
-    only when a choice has to be made. Returns None only in a dry run that
-    would create a calendar. Raises QuitRequested if the user quits."""
+    only when a choice has to be made. on_create is called when a calendar
+    is created (or would be, in a dry run). Returns None only in a dry run
+    that would create a calendar. Raises QuitRequested if the user quits."""
     group_email = group_email.lower()
     calendar = get_calendar(calendar_service, linked_calendar_id) if linked_calendar_id else None
     if calendar is None:
@@ -317,6 +319,8 @@ def ensure_group_calendar(
             print(f"  [dry-run] would create calendar '{group_name}' and share it with "
                   f"{group_email}{_UNLESS_CHOSEN if available else ''}")
             log("INFO", "would_create_calendar", f"{group_name} ({group_email})")
+            if on_create:
+                on_create()
             return None
         else:
             calendar_id = create_calendar(calendar_service, group_name)
@@ -324,6 +328,8 @@ def ensure_group_calendar(
             linked().calendars[calendar_id] = group_email
             print(f"  + created calendar '{group_name}' ({calendar_id})")
             log("INFO", "create_calendar", f"{group_name}: {calendar_id}")
+            if on_create:
+                on_create()
 
     calendar_id = calendar["id"]
     prefix = "[dry-run] would " if dry_run else ""

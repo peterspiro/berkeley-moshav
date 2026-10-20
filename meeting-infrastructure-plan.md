@@ -30,6 +30,14 @@ are; this note keeps the reasoning and the remaining work.
   each you choose to use it (only a no-fixed-time meeting of `zoomhosts@`,
   since Zoom can't change a meeting's type or owner), ignore it, or delete
   it; deletions are confirmed by typing `delete`.
+- **Moving existing meetings** (`util/calendar_event_moves.py`): when a
+  group's calendar is created, or with `update_groups_... --move-events`,
+  events in the next 12 months matching the group's name, on any calendar
+  `admin@` can see (except group calendars), can be copied to the group's
+  calendar (without guests or meeting links), deleted (cancelled for
+  everyone, with emails, when organized there), both, or neither. Calendars
+  `admin@` can't see would need domain-wide delegation, so their owners
+  share them with `admin@` instead.
 - **`reset_zoom_room.py`**: a new passcode (and so link) for a leaked room.
 - **`group_meetings` Apps Script**: adds the room and guests to group
   calendar events, alerts about invitation-only copies, and warns about
