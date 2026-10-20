@@ -40,6 +40,12 @@ const ALL_EVENTS_CALENDAR_ID =
 const ALERT_EMAIL = 'calendaring-alerts@berkeleymoshav.org';
 const TECH_CIRCLE_NAME = 'Technology Circle';
 const TIME_ZONE = 'America/Los_Angeles';
+// Linked from every group-calendar event that gets the group's Zoom room.
+const MEETINGS_FAQ_URL =
+  'https://docs.google.com/document/d/1rr8WqPnsLKw-tgVea40NkyTxlwLFVVLnXbL3UVFQcZY';
+// Bump when computeEventPatch's rules change, so the next syncAll rechecks
+// every upcoming event, not just changed ones (see recheckIfRulesChanged).
+const RULES_VERSION = 2;
 const OVERLAP_WEEKS = 8;
 // Meetings in rooms of the same Zoom user are flagged if they overlap, or if
 // the second starts less than this many minutes after the first ends (in
@@ -53,6 +59,7 @@ const PROP_COPY_ALERTS = 'copyAlerts';       // JSON { iCalUID: forgetAfterMs }
 const PROP_OVERLAP_ALERTS = 'overlapAlerts'; // JSON { conflictId: fingerprint }
 const PROP_ZOOM_MEETINGS = 'zoomMeetings';   // JSON, fixed-time Zoom meetings
 const PROP_ROOM_OWNER_PREFIX = 'roomOwner:'; // + Zoom meeting ID -> JSON { owner, type } or ''
+const PROP_RULES_VERSION = 'rulesVersion';
 // Zoom app credentials (Script Properties, set by hand; see README.md).
 const PROP_ZOOM_ACCOUNT_ID = 'ZOOM_ACCOUNT_ID';
 const PROP_ZOOM_CLIENT_ID = 'ZOOM_CLIENT_ID';
@@ -65,6 +72,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 /** Every 5 minutes: fix changed events; check overlaps if anything changed. */
 function syncAll() {
   withLock(() => {
+    recheckIfRulesChanged();
     const groups = loadGroups();
     let changed = 0;
     for (const group of groups) {
@@ -76,6 +84,22 @@ function syncAll() {
     }
     if (changed) checkOverlaps(groups);
   });
+}
+
+/**
+ * If RULES_VERSION changed since the last run, drop every calendar's sync
+ * token, so this run handles every upcoming event (adding whatever the new
+ * rules add) rather than only changed ones. Those changes send no email:
+ * the groups are already invited.
+ */
+function recheckIfRulesChanged() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty(PROP_RULES_VERSION) === String(RULES_VERSION)) return;
+  for (const key of props.getKeys()) {
+    if (key.startsWith(PROP_SYNC_PREFIX)) props.deleteProperty(key);
+  }
+  props.setProperty(PROP_RULES_VERSION, String(RULES_VERSION));
+  console.log(`Rules version ${RULES_VERSION}: rechecking every upcoming event.`);
 }
 
 /** Every hour: re-read footers and Zoom's meetings, then check overlaps. */
@@ -245,6 +269,7 @@ function handleEvent(event, group, groups) {
     passcode: group.passcode,
     groupEmail: group.email,
     allEventsCalendarId: ALL_EVENTS_CALENDAR_ID,
+    faqUrl: MEETINGS_FAQ_URL,
   });
   if (!change) return;
   Calendar.Events.patch(change.patch, group.calendarId, event.id,

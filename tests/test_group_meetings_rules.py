@@ -139,6 +139,56 @@ class TestComputeEventPatch:
         assert "Meeting ID" not in p["description"]
 
 
+FAQ = "https://docs.google.com/document/d/1rr8WqPnsLKw-tgVea40NkyTxlwLFVVLnXbL3UVFQcZY"
+FAQ_LINE = f"Questions about joining? See the BM Meetings FAQ: {FAQ}"
+CTX_FAQ = {**CTX, "faqUrl": FAQ}
+
+
+def done_with(event, ctx):
+    change = patch(event, ctx)
+    return {**event, **change["patch"]} if change else event
+
+
+class TestMeetingsFaq:
+    def test_added_above_zoom_block(self):
+        desc = patch({"description": "Agenda"}, CTX_FAQ)["patch"]["description"]
+        assert desc.startswith(f"Agenda\n\n{FAQ_LINE}\n\nJoin Zoom meeting: ")
+
+    def test_empty_description(self):
+        desc = patch({}, CTX_FAQ)["patch"]["description"]
+        assert desc.startswith(f"{FAQ_LINE}\n\nJoin Zoom meeting: ")
+
+    def test_second_pass_changes_nothing(self):
+        assert patch(done_with({"description": "Agenda"}, CTX_FAQ), CTX_FAQ) is None
+
+    def test_existing_link_in_any_form_not_duplicated(self):
+        event = {"description": f"See {FAQ}/edit?tab=t.0#heading=h.abc for help"}
+        desc = patch(event, CTX_FAQ)["patch"]["description"]
+        assert "BM Meetings FAQ" not in desc and desc.count("1rr8WqPn") == 1
+
+    def test_html_description(self):
+        desc = patch({"description": "<b>Agenda</b>"}, CTX_FAQ)["patch"]["description"]
+        assert desc.startswith(f"<b>Agenda</b><br><br>{FAQ_LINE}<br><br>Join Zoom meeting: ")
+
+    def test_deleted_line_is_added_back(self):
+        event = done_with({"description": "Agenda"}, CTX_FAQ)
+        event["description"] = event["description"].replace(f"{FAQ_LINE}\n\n", "")
+        assert FAQ_LINE in patch(event, CTX_FAQ)["patch"]["description"]
+
+    def test_room_link_change_keeps_faq_in_place(self):
+        event = done_with({"description": "Agenda"}, CTX_FAQ)
+        new = {**CTX_FAQ, "zoomUrl": "https://us06web.zoom.us/j/81234567890?pwd=NEW"}
+        desc = patch(event, new)["patch"]["description"]
+        assert desc.count(FAQ_LINE) == 1
+        assert desc.index(FAQ_LINE) < desc.index("Join Zoom meeting")
+
+    def test_not_added_without_zoom_room(self):
+        for event in ({"summary": "Walk [no zoom]"},
+                      {"description": "Join https://zoom.us/j/99999999999"}):
+            change = patch(event, CTX_FAQ)
+            assert change is None or "description" not in change["patch"]
+
+
 class TestInvitationCopy:
     def test_own_event_is_not_a_copy(self):
         assert js("isInvitationCopy(e, cal, [])", e={"organizer": {"email": CAL}}, cal=CAL) is False

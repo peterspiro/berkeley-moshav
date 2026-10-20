@@ -79,6 +79,8 @@ const ZOOM_BLOCK_END = '(Added automatically from the group\'s Zoom room.)';
 const ZOOM_BLOCK_RE =
   /(?:\n|<br\s*\/?>)*Join Zoom meeting: [\s\S]*?\(Added automatically from the group's Zoom room\.\)/i;
 const STAMP_KEY = 'groupZoomUrl';
+const FAQ_TEXT = 'Questions about joining? See the BM Meetings FAQ:';
+const GOOGLE_DOC_ID_RE = /\/document\/d\/([\w-]+)/;
 
 function lower(s) { return (s || '').toLowerCase(); }
 
@@ -93,7 +95,8 @@ function zoomBlock(room, br) {
 
 /**
  * What to change on an event organized by a group's own calendar, or null
- * if nothing. ctx: { zoomUrl, passcode, groupEmail, allEventsCalendarId }.
+ * if nothing. ctx: { zoomUrl, passcode, groupEmail, allEventsCalendarId,
+ * faqUrl }.
  *
  * Returns { patch, sendUpdates } where patch is an Events.patch body:
  *   - Zoom details: location set to the room link if empty (or still the
@@ -101,6 +104,9 @@ function zoomBlock(room, br) {
  *     description, unless the event is marked "[no zoom]" or already has
  *     another Zoom or Meet link. The link written is remembered in a
  *     private extended property, so a changed room link replaces it.
+ *     Such an event also gets a line linking the meetings FAQ
+ *     (ctx.faqUrl), just above the block, unless the description already
+ *     links that document anywhere.
  *   - Guests: the all-events calendar and the group's Google Group.
  * sendUpdates is 'all' when the group is newly invited (so members get the
  * invitation), else 'none'.
@@ -119,9 +125,13 @@ function computeEventPatch(event, ctx) {
     }
 
     const br = /<[a-z][^>]*>/i.test(description) ? '<br>' : '\n';
-    const without = description.replace(ZOOM_BLOCK_RE, '').replace(/\s+$/, '');
+    let text = description.replace(ZOOM_BLOCK_RE, '').replace(/\s+$/, '');
+    if (ctx.faqUrl && !linksDocument(text, ctx.faqUrl)) {
+      const faq = `${FAQ_TEXT} ${ctx.faqUrl}`;
+      text = text ? `${text}${br}${br}${faq}` : faq;
+    }
     const block = zoomBlock(ctx, br);
-    const desired = without ? `${without}${br}${br}${block}` : block;
+    const desired = text ? `${text}${br}${br}${block}` : block;
     if (desired !== description) patch.description = desired;
 
     if (stamped !== ctx.zoomUrl) {
@@ -140,6 +150,13 @@ function computeEventPatch(event, ctx) {
   if (!Object.keys(patch).length) return null;
   const invitesGroup = added.some(a => lower(a.email) === lower(ctx.groupEmail));
   return { patch, sendUpdates: invitesGroup ? 'all' : 'none' };
+}
+
+/** True if text links the Google Doc at docUrl, in any form (a section
+ * link, an /edit link, inside formatted text): it contains the doc's ID. */
+function linksDocument(text, docUrl) {
+  const m = docUrl.match(GOOGLE_DOC_ID_RE);
+  return (text || '').includes(m ? m[1] : docUrl);
 }
 
 function hasNoZoomMarker(event) {

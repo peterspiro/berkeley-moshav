@@ -71,7 +71,10 @@ are; this note keeps the reasoning and the remaining work.
   the group's invitation; its organizer gets an email instead.
 - Each event made on a group calendar gets the room (location, and a marked
   block in the description), and the group and the "All Berkeley Moshav
-  Events" calendar as guests. `[no zoom]`, or another Zoom or Meet link typed
+  Events" calendar as guests. Events that get the room also get a line
+  linking the "BM Meetings FAQ" Google doc, just above the room's block,
+  unless the description already links the doc (if someone deletes the
+  line, it's added back the next time the event changes). `[no zoom]`, or another Zoom or Meet link typed
   in, opts out of the room. A Meet link Calendar adds on its own doesn't
   count, and is left in place.
 - The all-events calendar is shared view-only with the everybody groups,
@@ -112,7 +115,8 @@ admins (a different set for each calendar). Agreed design:
   breakout rooms. Being under the same Zoom user, community-wide meetings
   clash with overlapping group meetings, which the existing check catches.
 - The Apps Script treats their events like group events: the shared room's
-  details, and the **everybody group** and the all-events calendar invited.
+  details, and the **everybody group** and the all-events calendar invited,
+  but **not** the BM Meetings FAQ line, which is for group meetings only.
 - **Read access to the all-events calendar**: originally each admin group
   (and anyone shared a community-wide calendar by hand) was to get it; the
   everybody groups' view-only access, added since, may cover this already.
