@@ -9,9 +9,10 @@ calendar, and the ones it's subscribed to) except the group calendars, the
 all-events calendar, and Google's built-in ones, for events in the next
 EVENT_WINDOW_DAYS whose titles match the group's name. It lists them all,
 then asks of each whether to copy it to the group's calendar, delete it,
-both, or neither:
+both, or to skip it:
 
-- A copy keeps the title, description, location, times, and repeat rule,
+- A copy keeps the title, description, location, times, and repeat rule
+  (a series' copy starts at its next occurrence, and ends when it would),
   but not the guests (group_meetings invites the group) or any Zoom or Meet
   link (so group_meetings adds the group's room). Occurrences of a series
   that were moved or changed become one-off events, and cancelled ones are
@@ -209,6 +210,24 @@ def _clock(dt: datetime.datetime) -> str:
     return dt.strftime("%I:%M %p").lstrip("0")
 
 
+def _times(start: dict, end: dict) -> str:
+    """"7:00–8:30 PM", "11:00 AM–1:00 PM", or "all day"."""
+    if start.get("date"):
+        return "all day"
+    begin = _local(start["dateTime"])
+    if not end.get("dateTime"):
+        return _clock(begin)
+    finish = _local(end["dateTime"])
+    if begin.strftime("%p") == finish.strftime("%p"):
+        return f"{_clock(begin)[:-3]}–{_clock(finish)}"
+    return f"{_clock(begin)}–{_clock(finish)}"
+
+
+def _first_day(start: dict) -> datetime.date:
+    return (datetime.date.fromisoformat(start["date"]) if start.get("date")
+            else _local(start["dateTime"]).date())
+
+
 def _when(start: dict, end: dict) -> str:
     """"Mon Nov 2, 7:00–8:30 PM", "Mon Nov 2, 11:00 AM–1:00 PM", "Mon Nov
     2, all day", "Mon Nov 2 – Wed Nov 4, all day", or for a timed event
@@ -221,14 +240,10 @@ def _when(start: dict, end: dict) -> str:
         days = _day(first) if last <= first else f"{_day(first)} – {_day(last)}"
         return f"{days}, all day"
     begin = _local(start["dateTime"])
-    if not end.get("dateTime"):
-        return f"{_day(begin)}, {_clock(begin)}"
-    finish = _local(end["dateTime"])
-    if finish.date() != begin.date():
+    if end.get("dateTime") and _local(end["dateTime"]).date() != begin.date():
+        finish = _local(end["dateTime"])
         return f"{_day(begin)}, {_clock(begin)} – {_day(finish)}, {_clock(finish)}"
-    if begin.strftime("%p") == finish.strftime("%p"):
-        return f"{_day(begin)}, {_clock(begin)[:-3]}–{_clock(finish)}"
-    return f"{_day(begin)}, {_clock(begin)}–{_clock(finish)}"
+    return f"{_day(begin)}, {_times(start, end)}"
 
 
 def describe_rrule(recurrence: list[str]) -> str:
@@ -257,11 +272,19 @@ def describe_rrule(recurrence: list[str]) -> str:
 
 def describe_candidate(c: dict) -> str:
     """What, when, and where: "Finance Circle meeting   (monthly on the 2nd
-    Tue, from Tue Nov 10, 7:00–8:30 PM; on Treasurer's calendar)"."""
+    Tue, 7:00–8:30 PM, from Tue Jan 10, 2023 (a copy would start Tue Nov
+    10, 2026); on Treasurer's calendar)"."""
     e = c["event"]
-    when = _when(e["start"], e.get("end") or {})
     if e.get("recurrence"):
-        when = f"{describe_rrule(e['recurrence'])}, from {when}"
+        first = _first_day(e["start"])
+        when = (f"{describe_rrule(e['recurrence'])}, {_times(e['start'], e.get('end') or {})}, "
+                f"from {_day(first)}, {first.year}")
+        copy_start = c.get("copy_start")
+        if copy_start and _first_day(copy_start[0]) != first:
+            day = _first_day(copy_start[0])
+            when += f" (a copy would start {_day(day)}, {day.year})"
+    else:
+        when = _when(e["start"], e.get("end") or {})
     where = f"on {c['calendar']['name']}"
     if not c["organized_here"]:
         organizer = (e.get("organizer") or {}).get("email", "someone else")
@@ -316,15 +339,79 @@ def _copy_body(event: dict, uid: str) -> dict:
     return body
 
 
+def _shifted(start: dict, end: dict, slot: dict) -> tuple[dict, dict]:
+    """start and end moved to begin at slot (an occurrence's
+    originalStartTime), keeping the event's length and time zone."""
+    if start.get("date"):
+        days = (datetime.date.fromisoformat(end["date"])
+                - datetime.date.fromisoformat(start["date"]))
+        new_start = datetime.date.fromisoformat(slot["date"])
+        return {"date": new_start.isoformat()}, {"date": (new_start + days).isoformat()}
+    length = (datetime.datetime.fromisoformat(end["dateTime"].replace("Z", "+00:00"))
+              - datetime.datetime.fromisoformat(start["dateTime"].replace("Z", "+00:00")))
+    new_start = datetime.datetime.fromisoformat(slot["dateTime"].replace("Z", "+00:00"))
+    zone = {"timeZone": start["timeZone"]} if start.get("timeZone") else {}
+    return ({"dateTime": new_start.isoformat(), **zone},
+            {"dateTime": (new_start + length).isoformat(), **zone})
+
+
+def _until(slot: dict) -> str:
+    if slot.get("date"):
+        return slot["date"].replace("-", "")
+    dt = datetime.datetime.fromisoformat(slot["dateTime"].replace("Z", "+00:00"))
+    return dt.astimezone(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+
+def plan_series_copy(calendar_service, c: dict, now: datetime.datetime) -> None:
+    """For a series, set c["copy_start"] to the (start, end) of its next
+    occurrence, where its copy begins, and, if the series ends after a
+    number of occurrences, c["copy_until"] to its last occurrence, so the
+    copy ends with it."""
+    e = c["event"]
+    if not e.get("recurrence"):
+        return
+    calendar_id = c["calendar"]["id"]
+    upcoming = calendar_service.events().instances(
+        calendarId=calendar_id, eventId=e["id"], timeMin=now.isoformat(),
+        maxResults=1).execute().get("items", [])
+    if upcoming:
+        c["copy_start"] = _shifted(e["start"], e["end"], upcoming[0]["originalStartTime"])
+    if any(r.startswith("RRULE:") and "COUNT=" in r for r in e["recurrence"]):
+        slots, page_token = [], None
+        while True:
+            resp = calendar_service.events().instances(
+                calendarId=calendar_id, eventId=e["id"], showDeleted=True,
+                pageToken=page_token).execute()
+            slots += [i["originalStartTime"] for i in resp.get("items", [])]
+            page_token = resp.get("nextPageToken")
+            if not page_token:
+                break
+        if slots:
+            c["copy_until"] = max(slots, key=_until)
+
+
+def _copy_recurrence(c: dict) -> list[str]:
+    rules = []
+    for rule in c["event"]["recurrence"]:
+        if rule.startswith("RRULE:") and c.get("copy_until"):
+            parts = [p for p in rule[len("RRULE:"):].split(";") if not p.startswith("COUNT=")]
+            rule = "RRULE:" + ";".join(parts + [f"UNTIL={_until(c['copy_until'])}"])
+        rules.append(rule)
+    return rules + [_exdate(o) for o in c["changed"] + c["cancelled"]]
+
+
 def copy_bodies(c: dict) -> list[dict]:
     """The events to insert on the group calendar for candidate c: the
-    event or series (with its changed and cancelled occurrences excluded
-    from the series), then each changed occurrence as a one-off event."""
+    event or series (starting at its next occurrence, if
+    plan_series_copy() found one, with its changed and cancelled
+    occurrences excluded), then each changed occurrence as a one-off
+    event."""
     e = c["event"]
     main = _copy_body(e, c["uid"])
     if e.get("recurrence"):
-        main["recurrence"] = list(e["recurrence"]) + [
-            _exdate(o) for o in c["changed"] + c["cancelled"]]
+        if c.get("copy_start"):
+            main["start"], main["end"] = c["copy_start"]
+        main["recurrence"] = _copy_recurrence(c)
     return [main] + [_copy_body(o, c["uid"]) for o in c["changed"]]
 
 
@@ -335,13 +422,13 @@ def had_meeting_link(c: dict) -> bool:
 
 # ── Asking ────────────────────────────────────────────────────────────────────
 
-_ACTIONS = {"c": "copy", "d": "delete", "b": "both", "n": "neither"}
+_ACTIONS = {"c": "copy", "d": "delete", "b": "both", "s": "skip"}
 
 
 def _ask(label: str, deletable: bool, dry_run: bool, input_fn: Callable[[str], str]) -> str:
-    keys = ["c", "d", "b", "n"] if deletable else ["c", "n"]
+    keys = ["c", "d", "b", "s"] if deletable else ["c", "s"]
     names = {"c": "[c]opy to the group's calendar", "d": "[d]elete",
-             "b": "[b]oth", "n": "[n]either"}
+             "b": "[b]oth", "s": "[s]kip"}
     note = " (DRY-RUN: NOTHING WILL BE COPIED OR DELETED)" if dry_run else ""
     prefix = "[dry-run] " if dry_run else ""
     prompt = f"  {prefix}{label} — {', '.join(names[k] for k in keys)}, or [q]uit{note}: "
@@ -440,6 +527,10 @@ class EventMover:
         if not matches:
             print(f"  No events on other calendars match '{group_name}'.")
             return
+        for c in matches:
+            if not c.get("planned"):
+                plan_series_copy(self.service, c, self.now)
+                c["planned"] = True
         copy, delete = decide_on_events(group_name, matches, self.dry_run, self.input_fn)
         for c in copy:
             self._done.add(c["uid"])

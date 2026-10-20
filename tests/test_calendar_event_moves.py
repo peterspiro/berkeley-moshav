@@ -167,17 +167,50 @@ class TestOffer:
         assert "cancelled for everyone invited, with Google's cancellation emails" in out
         assert answers.prompts[0] == (
             "  1. Technology Circle meeting — [c]opy to the group's calendar, [d]elete, "
-            "[b]oth, [n]either, or [q]uit: ")
+            "[b]oth, [s]kip, or [q]uit: ")
         (insert, delete) = svc.writes
         assert insert[:2] == ("insert_event", GROUP_CAL) and insert[3] == "none"
         assert delete == ("delete_event", SHARED, "e1", "all")
 
-    def test_view_only_calendar_offers_copy_or_neither(self, capsys):
+    def test_series_copy_starts_at_next_occurrence(self, capsys):
+        series = _event("s1", "Technology Circle", SHARED, start="2023-01-17T03:00:00Z",
+                        recurrence=["RRULE:FREQ=MONTHLY;BYDAY=3MO"])
+        series["end"]["dateTime"] = "2023-01-17T04:30:00Z"
+        past = {"originalStartTime": {"dateTime": "2026-09-22T02:00:00Z"},
+                "start": {"dateTime": "2026-09-22T02:00:00Z"}}
+        nxt = {"originalStartTime": {"dateTime": "2026-11-17T03:00:00Z"},
+               "start": {"dateTime": "2026-11-17T03:00:00Z"}}
+        svc = _service({SHARED: [series]})
+        svc.instances_by_series[(SHARED, "s1")] = [past, nxt]
+        _mover(svc, _Answers("c")).offer("Technology Circle", GROUP_CAL)
+        assert ("(monthly on the 3rd Mon, 7:00–8:30 PM, from Mon Jan 16, 2023 "
+                "(a copy would start Mon Nov 16, 2026); on Shared Events)"
+                in capsys.readouterr().out)
+        (_, _, body, _), = svc.writes
+        assert body["start"] == {"dateTime": "2026-11-17T03:00:00+00:00",
+                                 "timeZone": "America/Los_Angeles"}
+        assert body["end"]["dateTime"] == "2026-11-17T04:30:00+00:00"
+        assert body["recurrence"] == ["RRULE:FREQ=MONTHLY;BYDAY=3MO"]
+
+    def test_series_ending_after_a_count_ends_on_its_last_occurrence(self):
+        series = _event("s1", "Technology Circle", SHARED, start="2026-09-01T03:00:00Z",
+                        recurrence=["RRULE:FREQ=WEEKLY;COUNT=10;BYDAY=MO"])
+        slots = [{"originalStartTime": {"dateTime": f"2026-{d}T03:00:00Z"},
+                  "start": {"dateTime": f"2026-{d}T03:00:00Z"}}
+                 for d in ("09-01", "10-27", "11-03")]
+        svc = _service({SHARED: [series]})
+        svc.instances_by_series[(SHARED, "s1")] = slots
+        _mover(svc, _Answers("c")).offer("Technology Circle", GROUP_CAL)
+        (_, _, body, _), = svc.writes
+        assert body["recurrence"] == ["RRULE:FREQ=WEEKLY;BYDAY=MO;UNTIL=20261103T030000Z"]
+        assert body["start"]["dateTime"] == "2026-10-27T03:00:00+00:00"
+
+    def test_view_only_calendar_offers_copy_or_skip(self, capsys):
         e = _event("e1", "Technology Circle meeting", VIEW_ONLY)
         answers = _Answers("d", "c")
         svc = _service({VIEW_ONLY: [e]})
         _mover(svc, answers).offer("Technology Circle", GROUP_CAL)
-        assert answers.prompts[0].endswith("[c]opy to the group's calendar, [n]either, "
+        assert answers.prompts[0].endswith("[c]opy to the group's calendar, [s]kip, "
                                            "or [q]uit: ")
         assert "can't be deleted (view-only calendar)" in capsys.readouterr().out
         assert [w[0] for w in svc.writes] == ["insert_event"]
@@ -193,7 +226,7 @@ class TestOffer:
 
     def test_not_confirming_asks_again(self):
         svc = _service({SHARED: [_event("e1", "Technology Circle meeting", SHARED)]})
-        answers = _Answers("d", "no", "n")
+        answers = _Answers("d", "no", "s")
         _mover(svc, answers).offer("Technology Circle", GROUP_CAL)
         assert svc.writes == [] and len(answers.prompts) == 3
 
@@ -240,7 +273,7 @@ class TestOffer:
                 raise _http_error(404)
             return real_list(calendarId, **kw)
         svc.events = lambda: type("E", (), {"list": staticmethod(list_events)})()
-        _mover(svc, _Answers("n")).offer("Technology Circle", GROUP_CAL)
+        _mover(svc, _Answers("s")).offer("Technology Circle", GROUP_CAL)
         assert "1. Technology Circle meeting" in capsys.readouterr().out
 
     def test_unrelated_events_not_offered(self, capsys):

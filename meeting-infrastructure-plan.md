@@ -35,7 +35,8 @@ are; this note keeps the reasoning and the remaining work.
   events in the next 12 months matching the group's name, on any calendar
   `admin@` can see (except group calendars), can be copied to the group's
   calendar (without guests or meeting links), deleted (cancelled for
-  everyone, with emails, when organized there), both, or neither. Calendars
+  everyone, with emails, when organized there), both, or skipped. A
+  series' copy starts at its next occurrence. Calendars
   `admin@` can't see would need domain-wide delegation, so their owners
   share them with `admin@` instead.
 - **`reset_zoom_room.py`**: a new passcode (and so link) for a leaked room.

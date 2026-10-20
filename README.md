@@ -232,11 +232,13 @@ status line as "calendar (members can view, not edit)".
   all-events calendar, and Google's holiday and birthday calendars. It lists
   the events in the next 12 months whose titles match the group's name
   (each repeating series once), then asks of each whether to copy it to the
-  group's calendar, delete it, both, or neither. A copy keeps the title,
+  group's calendar, delete it, both, or skip it. A copy keeps the title,
   description, location, times, and repeat rule, but not the guests (the
   group is invited instead) or any Zoom or Meet link (so the group's room is
   added); occurrences of a series that were moved or changed become one-off
-  events. Copies are tagged with the original, so they aren't offered again.
+  events. A series' copy starts at its next occurrence (the list shows both
+  the original's first date and the copy's), and ends when the original
+  would. Copies are tagged with the original, so they aren't offered again.
   Deleting needs edit access to the event's calendar: an event organized
   there is cancelled for everyone, with Google's cancellation emails; an
   invitation is removed from that calendar only. As with Zoom meetings,

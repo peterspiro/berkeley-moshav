@@ -26,12 +26,14 @@ class FakeCalendarService:
     calendars on the list that the account doesn't own. Records writes."""
 
     def __init__(self, calendars=None, acls=None, primary=OWNER, events=None,
-                 subscribed=None):
+                 subscribed=None, instances=None):
         self.calendars_by_id = dict(calendars or {})
         self.acls = {cid: list(rules) for cid, rules in (acls or {}).items()}
         self.primary = primary
         self.events_by_calendar = {cid: list(evs) for cid, evs in (events or {}).items()}
         self.subscribed = dict(subscribed or {})
+        # {(calendar id, series id): [instance, ...]}, in order
+        self.instances_by_series = dict(instances or {})
         self.writes = []
         self._next_id = 1
 
@@ -111,6 +113,15 @@ class _Events:
         if not params.get("showDeleted"):
             events = [e for e in events if e.get("status") != "cancelled"]
         return _Call(lambda: {"items": list(events)})
+
+    def instances(self, calendarId, eventId, timeMin=None, maxResults=None, showDeleted=None,
+                  pageToken=None):
+        items = self.svc.instances_by_series.get((calendarId, eventId), [])
+        if timeMin:
+            items = [i for i in items if i["start"]["dateTime"] >= timeMin[:19]]
+        if not showDeleted:
+            items = [i for i in items if i.get("status") != "cancelled"]
+        return _Call(lambda: {"items": items[:maxResults] if maxResults else list(items)})
 
     def insert(self, calendarId, body, sendUpdates=None):
         def fn():
