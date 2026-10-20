@@ -316,6 +316,9 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
 
 - `calendar-notifications-plan.md`: design of the calendar notifications
   script
+- `meeting-infrastructure-plan.md`: decisions behind the group calendars,
+  Zoom rooms, and `group_meetings`, and the meeting features not built yet
+  (community-wide calendars, recording archive, and more)
 - `archive/gather-sandbox-plan.md` and `archive/gather-import-plan.md`: plans
   for the local Gather test instance and the member import
 
