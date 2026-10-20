@@ -564,7 +564,7 @@ def main(
             )
             room = ensure_zoom_room(
                 zoom, gdisplay, linked_zoom_url, gemail,
-                rooms=zoom.list_rooms, linked=get_linked, dry_run=False,
+                meetings=zoom.list_account_meetings, linked=get_linked, dry_run=False,
             )
         except QuitRequested:
             log("INFO", "quit", "User quit during the calendar/Zoom room step")

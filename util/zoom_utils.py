@@ -142,21 +142,43 @@ class ZoomClient:
         if resp.status_code == 404:
             raise ZoomError(f"Zoom meeting {meeting_id} not found")
 
-    def list_rooms(self, user: str = ROOMS_USER) -> list[dict]:
-        """Every no-fixed-time meeting the user owns ({"id", "topic",
-        "join_url", ...})."""
-        rooms = []
-        params = {"type": "scheduled", "page_size": 300}
+    def list_users(self) -> list[dict]:
+        """Every active user in the account ({"id", "email", ...})."""
+        return self._list_pages("/users", "users", {"status": "active"})
+
+    def list_meetings(self, user: str) -> list[dict]:
+        """Every scheduled meeting the user owns, of any type ({"id",
+        "topic", "type", "start_time", ...})."""
+        return self._list_pages(f"/users/{user}/meetings", "meetings", {"type": "scheduled"})
+
+    def list_account_meetings(self) -> list[dict]:
+        """Every scheduled meeting in the account, each once (a recurring
+        one can be listed per occurrence), with "host_email" set to its
+        owner's address."""
+        meetings = {}
+        for user in self.list_users():
+            for m in self.list_meetings(user["id"]):
+                meetings.setdefault(str(m["id"]), {**m, "host_email": user["email"]})
+        return list(meetings.values())
+
+    def _list_pages(self, path: str, key: str, params: dict) -> list[dict]:
+        items = []
+        params = {**params, "page_size": 300}
         while True:
-            resp = self._request("GET", f"/users/{user}/meetings", params=params)
+            resp = self._request("GET", path, params=params)
             if resp.status_code == 404:
-                raise ZoomError(f"Zoom user {user} not found")
+                raise ZoomError(f"Zoom GET {path}: not found")
             data = resp.json()
-            rooms += [m for m in data.get("meetings", [])
-                      if m.get("type") == MEETING_TYPE_NO_FIXED_TIME]
+            items += data.get(key, [])
             if not data.get("next_page_token"):
-                return rooms
+                return items
             params["next_page_token"] = data["next_page_token"]
+
+    def delete_meeting(self, meeting_id: str) -> None:
+        """Delete the meeting (every occurrence of a recurring one), without
+        Zoom's cancellation emails. A meeting that's already gone is fine."""
+        self._request("DELETE", f"/meetings/{meeting_id}", params={
+            "schedule_for_reminder": "false", "cancel_meeting_reminder": "false"})
 
     def last_used(self, meeting_id: str) -> str | None:
         """Start time (ISO 8601) of the meeting's latest past instance, or

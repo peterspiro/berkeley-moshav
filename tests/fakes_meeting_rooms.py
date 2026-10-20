@@ -134,9 +134,13 @@ class FakeZoom:
             m["password"] = body["password"]
             m["join_url"] = f"https://zoom.us/j/{meeting_id}?pwd=new"
 
-    def list_rooms(self):
+    def list_account_meetings(self):
         self.list_calls += 1
         return list(self.meetings.values())
+
+    def delete_meeting(self, meeting_id):
+        self.writes.append(("delete", str(meeting_id)))
+        del self.meetings[str(meeting_id)]
 
     def last_used(self, meeting_id):
         return self.last_used_by_id.get(str(meeting_id))
@@ -144,7 +148,8 @@ class FakeZoom:
 
 def room(mid, topic, **kw):
     from util.zoom_utils import ROOM_SETTINGS
-    return {"id": mid, "topic": topic, "join_url": f"https://zoom.us/j/{mid}?pwd=p",
+    return {"id": mid, "topic": topic, "type": 3,
+            "join_url": f"https://zoom.us/j/{mid}?pwd=p",
             "password": "135790",
             "settings": dict(ROOM_SETTINGS), "host_email": "zoomhosts@berkeleymoshav.org",
             "created_at": "2026-09-01T00:00:00Z", **kw}

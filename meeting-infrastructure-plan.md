@@ -25,7 +25,11 @@ are; this note keeps the reasoning and the remaining work.
   `update_groups_in_google_and_hierarchy.py`, and `add_new_group.py`): every
   circle, working group, and club (not everybody groups) with a Drive item and
   an email list gets a calendar and a room. Existing ones are found through
-  the footer, or offered by name, before anything is created.
+  the footer, or offered by name, before anything is created. For a room,
+  every meeting in the Zoom account whose name matches is listed, and for
+  each you choose to use it (only a no-fixed-time meeting of `zoomhosts@`,
+  since Zoom can't change a meeting's type or owner), ignore it, or delete
+  it; deletions are confirmed by typing `delete`.
 - **`reset_zoom_room.py`**: a new passcode (and so link) for a leaked room.
 - **`group_meetings` Apps Script**: adds the room and guests to group
   calendar events, alerts about invitation-only copies, and warns about

@@ -122,9 +122,10 @@ playwright install chromium
   | `meeting:read:meeting:admin` | View a meeting | Checking a group's room still exists, and reading its settings and link |
   | `meeting:write:meeting:admin` | Create a meeting for a user | Creating a group's room |
   | `meeting:update:meeting:admin` | Update a meeting | Fixing a room's topic or settings; new passcodes (`reset_zoom_room.py`) |
-  | `meeting:read:list_meetings:admin` | View a user's meetings | Listing the rooms, to offer ones matching a group's name |
+  | `meeting:read:list_meetings:admin` | View a user's meetings | Listing the account's meetings, to offer ones matching a group's name |
+  | `meeting:delete:meeting:admin` | Delete a meeting | Deleting a meeting that matches a group's name, when you choose to |
   | `meeting:read:list_past_instances:admin` | View a past meeting's instances | Warning about rooms unused for 300 days, before Zoom deletes them at 365 |
-  | `user:read:list_users:admin` | View users | Finding every Zoom user's scheduled meetings, to check for overlaps (`group_meetings`) |
+  | `user:read:list_users:admin` | View users | Finding every Zoom user's scheduled meetings, to offer ones matching a group's name, and to check for overlaps (`group_meetings`) |
 
   If its creator's role is later reduced, Zoom removes those scopes, so
   transfer the app to another admin first. Put its credentials in a file
@@ -206,11 +207,23 @@ status line as "calendar (members can view, not edit)".
 - **`update_groups_in_google_and_hierarchy.py`** brings every group (or one,
   with `-g`) into line: offers to find or create a missing Drive folder or
   email list, enforces the Google Group settings, gives each group a calendar
-  and Zoom room (asking which one is the group's when existing ones match its
-  name), writes the footer links, and updates the Circle Structure page
+  and Zoom room, writes the footer links, and updates the Circle Structure page
   (renames, links, missing and stale entries). Its first run also creates the
   "All Berkeley Moshav Events" calendar, which it shares view-only with the
   everybody groups, without Google's "shared a calendar" email.
+
+  When a group's footer links no calendar, it asks which of the calendars
+  matching the group's name is the group's, or creates one. When it links no
+  Zoom room, it lists every scheduled meeting in the Zoom account whose name
+  matches the group's (any user's, of any kind, with its owner and schedule),
+  then asks of each one in turn whether to use it as the room, ignore it, or
+  delete it. Only a no-fixed-time meeting of `zoomhosts@` can be used, since
+  Zoom can't change a meeting's type or owner; choosing a second one to use
+  asks to confirm the switch, and what to do with the first. Nothing changes
+  until the end, when it shows what it will do and, if it will delete any
+  meeting (whose link then stops working), asks you to type `delete`. Unless
+  a meeting is used, it creates a room. A dry run asks the same questions but
+  changes nothing. `add_new_group.py` does the same.
 - **`reset_zoom_room.py`** gives a group's Zoom room a new passcode, and so a
   new link, both of which it writes into the group's footer, for when a link has
   leaked.
@@ -274,7 +287,8 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
 - **`folder_matching.py`**: fuzzy matching of group names to folder and
   Google Group names
 - **`meeting_rooms.py`**: finding, choosing, or creating each group's
-  calendar and Zoom room, and keeping them named, shared, and configured
+  calendar and Zoom room (and deleting matching meetings you don't want),
+  and keeping them named, shared, and configured
 - **`zoom_utils.py`**: the Zoom API, and the standard room settings
 - **`credentials.py`**: reading `~/.gather` and `zoom_credentials`
 
