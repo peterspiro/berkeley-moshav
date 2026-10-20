@@ -479,11 +479,12 @@ def describe_schedule(meeting: dict, now: datetime.datetime) -> str:
 
 # ── Deciding what to do with the meetings that match a group ──
 
-def _ask_action(label: str, can_use: bool, input_fn: Callable[[str], str]) -> str:
+def _ask_action(label: str, can_use: bool, input_fn: Callable[[str], str],
+                prefix: str = "") -> str:
     """Ask what to do with one meeting: "use", "ignore", or "delete".
     Raises QuitRequested on 'q'."""
     actions = (["use"] if can_use else []) + ["ignore", "delete"]
-    prompt = f"  {label} — {', '.join(f'[{a[0]}]{a[1:]}' for a in actions)}, or [q]uit: "
+    prompt = f"  {prefix}{label} — {', '.join(f'[{a[0]}]{a[1:]}' for a in actions)}, or [q]uit: "
     while True:
         answer = input_fn(prompt).strip().lower()
         if answer in ("q", "quit"):
@@ -522,6 +523,7 @@ def decide_on_matching_meetings(
     and "can_use" set; taken ones are linked to another group and only
     listed."""
     room = room_topic(group_name)
+    prefix = "[dry-run] " if dry_run else ""
     while True:
         print("  Matching Zoom meetings:")
         for i, c in enumerate(available, start=1):
@@ -534,14 +536,15 @@ def decide_on_matching_meetings(
         used: int | None = None
         for i, c in enumerate(available, start=1):
             label = f"{i}. {c['topic']}"
-            action = _ask_action(label, c["can_use"], input_fn)
+            action = _ask_action(label, c["can_use"], input_fn, prefix)
             if action == "use" and used is not None:
                 previous = f"{used}. {available[used - 1]['topic']}"
-                if _ask_yes_no(f"  You already chose to use {previous}. "
+                if _ask_yes_no(f"  {prefix}You already chose to use {previous}. "
                                f"Use this one instead? [y/n]: ", input_fn):
-                    actions[used] = _ask_action(f"{previous} is now unused", False, input_fn)
+                    actions[used] = _ask_action(f"{previous} is now unused", False, input_fn,
+                                                prefix)
                 else:
-                    action = _ask_action(label, False, input_fn)
+                    action = _ask_action(label, False, input_fn, prefix)
             actions[i] = action
             if action == "use":
                 used = i

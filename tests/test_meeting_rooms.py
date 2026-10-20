@@ -388,8 +388,11 @@ class TestMatchingMeetings:
 
     def test_dry_run_asks_but_changes_nothing(self, capsys, quiet_log):
         zoom = FakeZoom({8: _weekly(8, "Technology Circle weekly")})
-        assert _room(zoom, dry_run=True, input_fn=_Answers("d")) is None
+        answers = _Answers("d")
+        assert _room(zoom, dry_run=True, input_fn=answers) is None
         assert zoom.writes == []
+        assert answers.prompts == [
+            "  [dry-run] 1. Technology Circle weekly — [i]gnore, [d]elete, or [q]uit: "]
         out = capsys.readouterr().out
         assert "Would create a new room, 'Technology Circle Meeting Room', and delete:" in out
         assert ("INFO", "would_delete_meeting",
