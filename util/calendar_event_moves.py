@@ -196,13 +196,39 @@ def _start_key(event: dict) -> str:
     return start.get("dateTime") or start.get("date") or ""
 
 
-def _when(start: dict) -> str:
-    if start.get("date"):
-        day = datetime.date.fromisoformat(start["date"])
-        return f"{day:%a %b} {day.day}, all day"
-    dt = datetime.datetime.fromisoformat(start["dateTime"].replace("Z", "+00:00")).astimezone(
+def _local(dt: str) -> datetime.datetime:
+    return datetime.datetime.fromisoformat(dt.replace("Z", "+00:00")).astimezone(
         ZoneInfo(CALENDAR_TIME_ZONE))
-    return f"{dt:%a %b} {dt.day}, {dt.strftime('%I:%M %p').lstrip('0')}"
+
+
+def _day(d: datetime.date) -> str:
+    return f"{d:%a %b} {d.day}"
+
+
+def _clock(dt: datetime.datetime) -> str:
+    return dt.strftime("%I:%M %p").lstrip("0")
+
+
+def _when(start: dict, end: dict) -> str:
+    """"Mon Nov 2, 7:00–8:30 PM", "Mon Nov 2, 11:00 AM–1:00 PM", "Mon Nov
+    2, all day", "Mon Nov 2 – Wed Nov 4, all day", or for a timed event
+    spanning days "Mon Nov 2, 10:00 PM – Tue Nov 3, 1:00 AM"."""
+    if start.get("date"):
+        first = datetime.date.fromisoformat(start["date"])
+        # An all-day event's end date is the day after its last day.
+        last = datetime.date.fromisoformat(end.get("date") or start["date"]) \
+            - datetime.timedelta(days=1)
+        days = _day(first) if last <= first else f"{_day(first)} – {_day(last)}"
+        return f"{days}, all day"
+    begin = _local(start["dateTime"])
+    if not end.get("dateTime"):
+        return f"{_day(begin)}, {_clock(begin)}"
+    finish = _local(end["dateTime"])
+    if finish.date() != begin.date():
+        return f"{_day(begin)}, {_clock(begin)} – {_day(finish)}, {_clock(finish)}"
+    if begin.strftime("%p") == finish.strftime("%p"):
+        return f"{_day(begin)}, {_clock(begin)[:-3]}–{_clock(finish)}"
+    return f"{_day(begin)}, {_clock(begin)}–{_clock(finish)}"
 
 
 def describe_rrule(recurrence: list[str]) -> str:
@@ -231,10 +257,11 @@ def describe_rrule(recurrence: list[str]) -> str:
 
 def describe_candidate(c: dict) -> str:
     """What, when, and where: "Finance Circle meeting   (monthly on the 2nd
-    Tue, from Tue Nov 10, 7:00 PM; on Treasurer's calendar)"."""
+    Tue, from Tue Nov 10, 7:00–8:30 PM; on Treasurer's calendar)"."""
     e = c["event"]
-    when = (f"{describe_rrule(e['recurrence'])}, from {_when(e['start'])}"
-            if e.get("recurrence") else _when(e["start"]))
+    when = _when(e["start"], e.get("end") or {})
+    if e.get("recurrence"):
+        when = f"{describe_rrule(e['recurrence'])}, from {when}"
     where = f"on {c['calendar']['name']}"
     if not c["organized_here"]:
         organizer = (e.get("organizer") or {}).get("email", "someone else")

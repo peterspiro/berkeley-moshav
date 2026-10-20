@@ -123,6 +123,18 @@ class TestDescriptions:
         assert describe_rrule(["RRULE:FREQ=MONTHLY;BYMONTHDAY=5"]) == "monthly on day 5"
         assert describe_rrule(["EXDATE:20261215T030000Z"]) == "repeats"
 
+    def test_when(self):
+        w = cem._when
+        assert w({"dateTime": "2026-11-03T03:00:00Z"}, {"dateTime": "2026-11-03T04:30:00Z"}) \
+            == "Mon Nov 2, 7:00–8:30 PM"
+        assert w({"dateTime": "2026-11-02T19:00:00Z"}, {"dateTime": "2026-11-02T21:00:00Z"}) \
+            == "Mon Nov 2, 11:00 AM–1:00 PM"
+        assert w({"dateTime": "2026-11-03T06:00:00Z"}, {"dateTime": "2026-11-03T09:00:00Z"}) \
+            == "Mon Nov 2, 10:00 PM – Tue Nov 3, 1:00 AM"
+        assert w({"date": "2026-11-02"}, {"date": "2026-11-03"}) == "Mon Nov 2, all day"
+        assert w({"date": "2026-11-02"}, {"date": "2026-11-05"}) == \
+            "Mon Nov 2 – Wed Nov 4, all day"
+
     def test_strip_meeting_links(self):
         text = ("Agenda in the folder.\n\nJoin Zoom Meeting\nhttps://us06web.zoom.us/j/123?pwd=x"
                 "\n\nMeeting ID: 123\nPasscode: 456\nOne tap mobile\n+16699006833,,123# US")
@@ -150,7 +162,7 @@ class TestOffer:
         answers = _Answers("b", "delete")
         _mover(svc, answers).offer("Technology Circle", GROUP_CAL)
         out = capsys.readouterr().out
-        assert ("1. Technology Circle meeting   (Mon Nov 2, 7:00 PM; on Shared Events)"
+        assert ("1. Technology Circle meeting   (Mon Nov 2, 7:00–8:00 PM; on Shared Events)"
                 in out)
         assert "cancelled for everyone invited, with Google's cancellation emails" in out
         assert answers.prompts[0] == (
