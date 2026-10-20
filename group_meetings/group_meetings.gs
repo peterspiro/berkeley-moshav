@@ -19,8 +19,9 @@
  * Then, if anything changed, and every hour regardless (hourly), it looks for
  * meetings in the next OVERLAP_WEEKS weeks in rooms owned by the same Zoom
  * user (a Zoom user can run only one meeting at a time) that overlap or are
- * less than MIN_GAP_MINUTES apart, and emails ALERT_EMAIL and the groups
- * involved, once per conflict.
+ * less than MIN_GAP_MINUTES apart, and emails the groups involved (and
+ * ALERT_EMAIL, the Technology Circle) once per conflict, asking them to agree
+ * which meeting moves (see overlapMessage in event_rules.gs).
  *
  * Which calendar and room are a group's comes from the group's own email
  * footer (written by update_groups_in_google_and_hierarchy.py), read hourly,
@@ -34,7 +35,10 @@
 const DOMAIN = 'berkeleymoshav.org';
 const ALL_EVENTS_CALENDAR_ID =
   'c_301c808f640b3a04f5344b1bbf266955d51fecaabd7835936b7591f9cff09222@group.calendar.google.com';
+// The Technology Circle's address for alerts; it's also asked to move
+// meetings scheduled directly in Zoom.
 const ALERT_EMAIL = 'calendaring-alerts@berkeleymoshav.org';
+const TECH_CIRCLE_NAME = 'Technology Circle';
 const TIME_ZONE = 'America/Los_Angeles';
 const OVERLAP_WEEKS = 8;
 // Meetings in rooms of the same Zoom user are flagged if they overlap, or if
@@ -334,7 +338,7 @@ function checkOverlaps(groups) {
             key: room.type === 3 ? `${event.iCalUID}@${start}` : `zoom:${id}@${start}`,
             owner: room.owner, start, end,
             title: event.summary || '(untitled)',
-            groups: [group.email], where: group.name,
+            groups: [group.email], names: [group.name],
           });
           break;
         }
@@ -344,7 +348,7 @@ function checkOverlaps(groups) {
   }
 
   for (const m of loadZoomMeetings()) {
-    if (m.end > now && m.start < until) meetings.push(Object.assign({ groups: [] }, m));
+    if (m.end > now && m.start < until) meetings.push(Object.assign({ groups: [], names: [] }, m));
   }
 
   alertOverlaps(findOverlaps(meetings, MIN_GAP_MINUTES * 60 * 1000));
@@ -365,31 +369,20 @@ function alertOverlaps(conflicts) {
 }
 
 function sendOverlapAlert(c) {
-  const describe = m =>
-    `"${m.title}" (${m.where}), ${formatRange(m.start, m.end)}`;
-  const groups = [...new Set([...(c.a.groups || []), ...(c.b.groups || [])])];
-  const overlap = c.b.start < c.a.end;
-  const gap = Math.round((c.b.start - c.a.end) / 60000);
-  const problem = overlap
-    ? `These two meetings overlap, and both use Zoom rooms belonging to ${c.a.owner}, ` +
-      `which can run only one meeting at a time, so whichever starts second won't be ` +
-      `able to start:`
-    : `These two meetings both use Zoom rooms belonging to ${c.a.owner}, which can run ` +
-      `only one meeting at a time, and the second starts ${gap} minute${gap === 1 ? '' : 's'} ` +
-      `after the first ends, so if the first runs over, the second won't be able to ` +
-      `start until it ends:`;
+  const message = overlapMessage(c, {
+    alertEmail: ALERT_EMAIL,
+    techName: TECH_CIRCLE_NAME,
+    allEventsUrl: 'https://calendar.google.com/calendar/embed?src=' +
+      encodeURIComponent(ALL_EVENTS_CALENDAR_ID) + '&ctz=' + encodeURIComponent(TIME_ZONE),
+    minGapMinutes: MIN_GAP_MINUTES,
+    formatRange,
+  });
   MailApp.sendEmail({
-    to: [ALERT_EMAIL].concat(groups).join(','),
-    subject: overlap
-      ? `Zoom meetings overlap: "${c.a.title}" and "${c.b.title}"`
-      : `Zoom meetings too close together: "${c.a.title}" and "${c.b.title}"`,
-    body:
-      `${problem}\n\n` +
-      `  - ${describe(c.a)}\n  - ${describe(c.b)}\n\n` +
-      `Please move one of them to another time (at least ${MIN_GAP_MINUTES} minutes ` +
-      `apart), or ask the Technology Circle to host ` +
-      `one in a room belonging to a different Zoom user.\n\n` +
-      `This message was sent automatically.\n`,
+    to: message.to.join(','),
+    cc: message.cc.join(',') || undefined,
+    replyTo: ALERT_EMAIL,
+    subject: message.subject,
+    body: message.body,
   });
   console.log(`Overlap alert: ${conflictId(c)}`);
 }
@@ -439,7 +432,7 @@ function refreshZoomMeetings() {
         if (end < now) continue;
         meetings.push({
           key: `zoom:${m.id}@${start}`, owner: lower(user.email), start, end,
-          title: m.topic || '(untitled)', where: `scheduled in Zoom by ${user.email}`,
+          title: m.topic || '(untitled)',
         });
       }
     }

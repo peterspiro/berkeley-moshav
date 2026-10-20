@@ -186,3 +186,11 @@ def test_status_marks_calendar_members_cannot_edit(capsys):
     assert cal.writes == []
     assert ("'Technology Circle': calendar (members can view, not edit) and Zoom room "
             "in place") in capsys.readouterr().out
+
+
+def test_all_events_calendar_shared_with_everybody_groups():
+    cal = FakeCalendarService({"ae": "All Berkeley Moshav Events"})
+    _run(_Settings({}), cal, FakeZoom())
+    shared = [(w[1], w[2]["scope"]["value"], w[2]["role"], w[3])
+              for w in cal.writes if w[0] == "acl_insert" and w[1] == "ae"]
+    assert shared == [("ae", "all@x.org", "reader", False)]

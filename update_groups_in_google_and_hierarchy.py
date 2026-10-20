@@ -36,7 +36,9 @@ excluding hidden groups:
       with it as "Make changes to events" (other access, such as a circle
       restricted by hand to "See all event details", is left alone);
       each room is titled "<Group> Meeting Room" with the standard room
-      settings. Also makes sure the all-events calendar exists.
+      settings. Also makes sure the all-events calendar exists, and is
+      shared read-only, without an email, with the everybody groups (in a
+      -g run, only if the group named is one).
   0e. Once every group's folder and mailing-list state is settled, ensures
       each associated Google Group's custom footer carries an up-to-date
       "Gather group"/Drive-item link block (this is what
@@ -1018,7 +1020,17 @@ def ensure_group_meeting_rooms(
     owned_calendars = functools.cache(lambda: list_owned_calendars(calendar_service))
     rooms = functools.cache(zoom.list_rooms)
 
-    ensure_all_events_calendar(calendar_service, owned_calendars=owned_calendars, dry_run=dry_run)
+    # The everybody groups' primary addresses (a Gather list may use an alias).
+    everybody_emails = []
+    for gid, info in group_info.items():
+        if _is_everybody(info) and email_by_group_id.get(gid):
+            google_group = get_group_by_email(dir_service, email_by_group_id[gid])
+            if google_group:
+                everybody_emails.append(google_group["email"].lower())
+    ensure_all_events_calendar(
+        calendar_service, owned_calendars=owned_calendars, dry_run=dry_run,
+        reader_groups=everybody_emails,
+    )
 
     for group_id, info in eligible:
         group_name = info["name"]

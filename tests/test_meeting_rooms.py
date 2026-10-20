@@ -176,6 +176,27 @@ class TestEnsureAllEventsCalendar:
         assert ("would ask whether one of these is the 'All Berkeley Moshav Events' "
                 "calendar: 'All Berkeley Moshav Events'") in capsys.readouterr().out
 
+    def test_shared_quietly_with_reader_groups(self, monkeypatch):
+        monkeypatch.setattr(mr, "ALL_EVENTS_CALENDAR_ID", "ae")
+        svc = FakeCalendarService({"ae": "All Berkeley Moshav Events"})
+        ensure_all_events_calendar(svc, owned_calendars=lambda: [], dry_run=False,
+                                   reader_groups=["all@x.org"])
+        assert svc.writes == [("acl_insert", "ae", {
+            "role": "reader", "scope": {"type": "group", "value": "all@x.org"}}, False)]
+        # Already shared: nothing more, and any existing access is kept.
+        ensure_all_events_calendar(svc, owned_calendars=lambda: [], dry_run=False,
+                                   reader_groups=["all@x.org"])
+        assert len(svc.writes) == 1
+
+    def test_reader_groups_dry_run(self, monkeypatch, capsys):
+        monkeypatch.setattr(mr, "ALL_EVENTS_CALENDAR_ID", "ae")
+        svc = FakeCalendarService({"ae": "All Berkeley Moshav Events"})
+        ensure_all_events_calendar(svc, owned_calendars=lambda: [], dry_run=True,
+                                   reader_groups=["all@x.org"])
+        assert svc.writes == []
+        assert "would share 'All Berkeley Moshav Events' with all@x.org (view only, no email)" \
+            in capsys.readouterr().out
+
     def test_configured_id_used(self, monkeypatch):
         monkeypatch.setattr(mr, "ALL_EVENTS_CALENDAR_ID", "ae")
         svc = FakeCalendarService({"ae": "All Berkeley Moshav Events"})

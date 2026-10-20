@@ -18,8 +18,11 @@ Apps Script that looks after every group's Google calendar (the calendars
   weeks in Zoom rooms belonging to the same Zoom user (a Zoom user can run
   only one meeting at a time) that overlap, or that are less than 15 minutes
   apart (in case the first runs over), including meetings scheduled
-  directly in Zoom by any user in the account, and emails
-  `calendaring-alerts@` and the groups involved, once per conflict.
+  directly in Zoom by any user in the account. It emails the groups involved,
+  once per conflict, asking them to agree which meeting moves, with a link
+  to the all-events calendar for finding a free time. `calendaring-alerts@`
+  (the Technology Circle) is copied, or, when one of the meetings was
+  scheduled directly in Zoom, asked to agree too.
 
 Which calendar and room are a group's comes from the group's email footer,
 read hourly, so new groups need no redeploy. When a group's room link changes

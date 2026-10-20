@@ -205,3 +205,99 @@ def test_zoom_ids_in_event():
     event = {"location": "https://us06web.zoom.us/j/111?pwd=x",
              "description": "or https://zoom.us/j/222 and again https://zoom.us/j/111"}
     assert js("zoomIdsInEvent(e)", e=event) == ["111", "222"]
+
+
+OPTS = {"alertEmail": "alerts@x.org", "techName": "Technology Circle",
+        "allEventsUrl": "https://cal/all", "minGapMinutes": 15}
+MIN = 60 * 1000
+
+
+def message(a, b):
+    return js("overlapMessage({a: a, b: b}, Object.assign(o, {formatRange: (s, e) => "
+              "`${s / 60000}-${e / 60000}`}))", a=a, b=b, o=OPTS)
+
+
+def group_meeting(title, group, start, end):
+    return meeting(title, "u1", start * MIN, end * MIN, title=title,
+                   groups=[f"{group.split()[0].lower()}@x.org"], names=[group])
+
+
+def zoom_meeting(title, start, end):
+    return meeting(title, "u1", start * MIN, end * MIN, title=title, groups=[], names=[])
+
+
+class TestOverlapMessage:
+    def test_two_groups_overlap(self):
+        msg = message(group_meeting("Finance meeting", "Finance Circle", 0, 90),
+                      group_meeting("Care meeting", "Care Circle", 60, 120))
+        assert msg["to"] == ["finance@x.org", "care@x.org"]
+        assert msg["cc"] == ["alerts@x.org"]
+        assert msg["subject"] == 'Zoom meetings overlap: "Finance meeting" and "Care meeting"'
+        assert msg["body"] == (
+            "Hi Finance Circle and Care Circle,\n\n"
+            "These two meetings overlap:\n"
+            '  - "Finance meeting" (Finance Circle), 0-90\n'
+            '  - "Care meeting" (Care Circle), 60-120\n\n'
+            "All our meetings use one Zoom account, which can host only one meeting at a "
+            "time, so the second meeting won't be able to start while the first is still "
+            "going.\n\n"
+            "Please agree between you which meeting moves, and change its time on its group "
+            "calendar. To find a free time, check the All Berkeley Moshav Events calendar, "
+            "which shows every group's meetings:\nhttps://cal/all\n\n"
+            "This message was sent automatically. Questions? Reply to alerts@x.org.\n")
+
+    def test_two_groups_too_close(self):
+        msg = message(group_meeting("Finance meeting", "Finance Circle", 0, 90),
+                      group_meeting("Care meeting", "Care Circle", 100, 120))
+        assert msg["subject"].startswith("Zoom meetings too close together: ")
+        assert "These two meetings are only 10 minutes apart:" in msg["body"]
+        assert "so if the first runs over, the second won't be able to start until it ends." \
+            in msg["body"]
+        assert ("change its time on its group calendar, leaving at least 15 minutes "
+                "between them.") in msg["body"]
+
+    def test_back_to_back(self):
+        msg = message(group_meeting("A", "Finance Circle", 0, 60),
+                      group_meeting("B", "Care Circle", 60, 90))
+        assert "These two meetings are back to back:" in msg["body"]
+
+    def test_same_group_twice(self):
+        msg = message(group_meeting("A", "Finance Circle", 0, 60),
+                      group_meeting("B", "Finance Circle", 30, 90))
+        assert msg["to"] == ["finance@x.org"]
+        assert msg["body"].startswith("Hi Finance Circle,\n")
+        assert "Please move one of them to another time on the Finance Circle calendar." \
+            in msg["body"]
+
+    def test_group_and_zoom_meeting(self):
+        msg = message(group_meeting("Finance meeting", "Finance Circle", 0, 90),
+                      zoom_meeting("Board training", 60, 120))
+        assert msg["to"] == ["finance@x.org", "alerts@x.org"]
+        assert msg["cc"] == []
+        assert msg["body"].startswith("Hi Technology Circle and Finance Circle,\n")
+        assert '  - "Board training" (a meeting scheduled in our Zoom account), 60-120' \
+            in msg["body"]
+        assert ("Please agree between you which meeting moves. The Finance Circle meeting "
+                "can be moved on the Finance Circle calendar; the other meeting can be moved "
+                "in Zoom.") in msg["body"]
+
+    def test_two_zoom_meetings(self):
+        msg = message(zoom_meeting("A", 0, 60), zoom_meeting("B", 30, 90))
+        assert msg["to"] == ["alerts@x.org"] and msg["cc"] == []
+        assert msg["body"].startswith("Hi Technology Circle,\n")
+        assert "Please move one of them in Zoom." in msg["body"]
+
+    def test_joint_meeting_names_both_groups(self):
+        joint = group_meeting("Joint", "Finance Circle", 0, 60)
+        joint["groups"].append("care@x.org")
+        joint["names"].append("Care Circle")
+        msg = message(joint, group_meeting("C", "Garden Club", 30, 90))
+        assert msg["body"].startswith("Hi Finance Circle, Care Circle and Garden Club,\n")
+        assert '  - "Joint" (Finance Circle and Care Circle), 0-60' in msg["body"]
+
+
+def test_merge_keeps_every_group_name():
+    merged = js("mergeMeetings(x, y)",
+                x={"key": "k", "groups": ["a@x"], "names": ["A"], "title": "T"},
+                y={"key": "k", "groups": ["b@x"], "names": ["B"], "title": "T"})
+    assert merged["groups"] == ["a@x", "b@x"] and merged["names"] == ["A", "B"]

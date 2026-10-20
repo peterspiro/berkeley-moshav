@@ -74,8 +74,10 @@ are; this note keeps the reasoning and the remaining work.
   Events" calendar as guests. `[no zoom]`, or another Zoom or Meet link typed
   in, opts out of the room. A Meet link Calendar adds on its own doesn't
   count, and is left in place.
-- The all-events calendar is shared with no one to start with; organizers are
-  given read access over time.
+- The all-events calendar is shared view-only with the everybody groups,
+  without Google's "shared a calendar" email (the Calendar API can skip it;
+  Calendar's own sharing page can't), so anyone can open its link, though it
+  isn't added to their calendar lists.
 
 ### Clashes
 - A Zoom user can run only one meeting at a time (tested: a second room of
@@ -84,6 +86,14 @@ are; this note keeps the reasoning and the remaining work.
   are less than 15 minutes apart (in case one runs over), over the next 8
   weeks, including meetings scheduled directly in Zoom by any user in the
   account. Meetings of different Zoom users never clash.
+- Each clash is emailed once (again if its times change, or if it's resolved
+  and recurs), with a link to the all-events calendar for finding a free time,
+  replies going to `calendaring-alerts@` (the Technology Circle):
+  - two group meetings: the groups are asked to agree which moves, cc the
+    Technology Circle (a group clashing with itself is asked to move one);
+  - a group meeting and a meeting scheduled directly in Zoom: the group and
+    the Technology Circle are asked to agree which moves;
+  - two meetings scheduled in Zoom: the Technology Circle is asked to move one.
 
 ## Not built yet
 
@@ -103,9 +113,51 @@ admins (a different set for each calendar). Agreed design:
   clash with overlapping group meetings, which the existing check catches.
 - The Apps Script treats their events like group events: the shared room's
   details, and the **everybody group** and the all-events calendar invited.
-- Each admin group's Google Group is given **read access to the all-events
-  calendar**. Anyone shared a community-wide calendar by hand also gets read
-  access to the all-events calendar (the script only ever adds access).
+- **Read access to the all-events calendar**: originally each admin group
+  (and anyone shared a community-wide calendar by hand) was to get it; the
+  everybody groups' view-only access, added since, may cover this already.
+- **Clash emails** (alongside the group cases above), sent like the others,
+  in an overlapping and a "too close together" version:
+  - *A community-wide meeting and a group meeting.* Community-wide meetings
+    come first, so the group is asked to move its meeting. To: the group;
+    cc: `calendaring-alerts@` and the community calendar's admin group.
+
+    > **Subject:** Please move your meeting: "Finance Circle meeting" overlaps
+    > a community-wide meeting
+    >
+    > Hi Finance Circle,
+    >
+    > Your meeting overlaps a community-wide meeting:
+    >   - "Finance Circle meeting" (Finance Circle), Tue Nov 4, 7:00–8:30 PM
+    >   - "Community meeting" (Community Meetings calendar), Tue Nov 4,
+    >     8:00–9:30 PM
+    >
+    > All our meetings use one Zoom account, which can host only one meeting
+    > at a time. Community-wide meetings come first, so please move your
+    > meeting to another time on the Finance Circle calendar. To find a free
+    > time, check the All Berkeley Moshav Events calendar: <link>
+    >
+    > This message was sent automatically. Questions? Reply to
+    > calendaring-alerts@berkeleymoshav.org.
+
+  - *Two community-wide meetings.* To: both calendars' admin groups (or the
+    one, if both are on the same calendar); cc: `calendaring-alerts@`.
+
+    > **Subject:** Zoom meetings overlap: "Community meeting" and
+    > "Movie night"
+    >
+    > Hi Community Meetings admins and Social Events admins,
+    >
+    > These two community-wide meetings overlap: …
+    >
+    > They share one Zoom room, which can host only one meeting at a time.
+    > Please agree which one moves. To find a free time, check the All
+    > Berkeley Moshav Events calendar: <link>
+
+  The "too close together" versions say how many minutes apart the meetings
+  are, that the second can't start until the first ends if it runs over, and
+  ask for at least 15 minutes between them. `overlapMessage` in
+  `group_meetings/event_rules.gs` builds the group cases.
 - Where the calendars and the room are recorded is to be decided (the admin
   groups' footers would follow the existing pattern).
 

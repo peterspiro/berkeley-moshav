@@ -221,7 +221,87 @@ function findOverlaps(meetings, minGapMs = 0) {
 /** Combine two sightings of the same meeting, keeping every group named. */
 function mergeMeetings(x, y) {
   const groups = [...new Set([...(x.groups || []), ...(y.groups || [])])];
-  return Object.assign({}, x, { groups, title: x.title || y.title });
+  const names = [...new Set([...(x.names || []), ...(y.names || [])])];
+  return Object.assign({}, x, { groups, names, title: x.title || y.title });
+}
+
+/** "A", "A and B", "A, B and C". */
+function joinNames(names) {
+  return names.length < 3
+    ? names.join(' and ')
+    : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+}
+
+/**
+ * The email about a conflict from findOverlaps: { to, cc, subject, body }.
+ *
+ * A meeting with groups ([emails]) and names ([group names]) is on group
+ * calendars; one with neither was scheduled directly in Zoom, and the
+ * Technology Circle (opts.alertEmail, opts.techName) is asked about it:
+ *   - two group meetings: the groups are asked to agree which moves (cc the
+ *     Technology Circle);
+ *   - a group meeting and a Zoom meeting: the group and the Technology
+ *     Circle are asked to agree which moves;
+ *   - two Zoom meetings: the Technology Circle is asked to move one.
+ * Each email links the all-events calendar (opts.allEventsUrl) for finding
+ * a free time. opts.formatRange(startMs, endMs) formats a meeting's time;
+ * opts.minGapMinutes is the gap meetings should leave.
+ */
+function overlapMessage(c, opts) {
+  const overlap = c.b.start < c.a.end;
+  const gap = Math.round((c.b.start - c.a.end) / 60000);
+  const groupEmails = [...new Set([...(c.a.groups || []), ...(c.b.groups || [])])];
+  const names = [...new Set([...(c.a.names || []), ...(c.b.names || [])])];
+  const zoomOnly = [c.a, c.b].filter(m => !(m.groups || []).length).length;
+  const spacing = overlap ? '' : `, leaving at least ${opts.minGapMinutes} minutes between them`;
+
+  let to, cc, greeting, ask;
+  if (zoomOnly === 2) {
+    to = [opts.alertEmail]; cc = [];
+    greeting = opts.techName;
+    ask = `Please move one of them in Zoom${spacing}.`;
+  } else if (zoomOnly === 1) {
+    to = groupEmails.concat([opts.alertEmail]); cc = [];
+    greeting = joinNames([opts.techName].concat(names));
+    const where = names.length === 1 ? `the ${names[0]} calendar` : 'its group calendar';
+    ask = `Please agree between you which meeting moves${spacing}. The ` +
+      `${joinNames(names)} meeting can be moved on ${where}; the other meeting can be ` +
+      `moved in Zoom.`;
+  } else if (names.length === 1) {
+    to = groupEmails; cc = [opts.alertEmail];
+    greeting = names[0];
+    ask = `Please move one of them to another time on the ${names[0]} calendar${spacing}.`;
+  } else {
+    to = groupEmails; cc = [opts.alertEmail];
+    greeting = joinNames(names);
+    ask = `Please agree between you which meeting moves, and change its time on its ` +
+      `group calendar${spacing}.`;
+  }
+
+  const line = m => {
+    const where = (m.names || []).length
+      ? joinNames(m.names) : 'a meeting scheduled in our Zoom account';
+    return `  - "${m.title}" (${where}), ${opts.formatRange(m.start, m.end)}`;
+  };
+  const what = overlap ? 'overlap'
+    : gap === 0 ? 'are back to back'
+    : `are only ${gap} minute${gap === 1 ? '' : 's'} apart`;
+  const why = overlap
+    ? "so the second meeting won't be able to start while the first is still going."
+    : "so if the first runs over, the second won't be able to start until it ends.";
+  return {
+    to, cc,
+    subject: `Zoom meetings ${overlap ? 'overlap' : 'too close together'}: ` +
+      `"${c.a.title}" and "${c.b.title}"`,
+    body:
+      `Hi ${greeting},\n\n` +
+      `These two meetings ${what}:\n${line(c.a)}\n${line(c.b)}\n\n` +
+      `All our meetings use one Zoom account, which can host only one meeting at a ` +
+      `time, ${why}\n\n` +
+      `${ask} To find a free time, check the All Berkeley Moshav Events calendar, ` +
+      `which shows every group's meetings:\n${opts.allEventsUrl}\n\n` +
+      `This message was sent automatically. Questions? Reply to ${opts.alertEmail}.\n`,
+  };
 }
 
 /** Stable ID for a conflict, and a fingerprint that changes with its times. */

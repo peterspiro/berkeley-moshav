@@ -20,7 +20,7 @@ Their main job is keeping these things linked together and consistent:
   its permanent **Zoom meeting room**, owned by the
   `zoomhosts@berkeleymoshav.org` Zoom user. A room's link never changes, and
   meetings in it can run with no host present. There's also one "All Berkeley
-  Moshav Events" calendar for every meeting.
+  Moshav Events" calendar for every meeting, which everyone can view.
 
 Three Google Apps Script projects run inside Google Workspace alongside the
 Python scripts:
@@ -209,7 +209,8 @@ status line as "calendar (members can view, not edit)".
   and Zoom room (asking which one is the group's when existing ones match its
   name), writes the footer links, and updates the Circle Structure page
   (renames, links, missing and stale entries). Its first run also creates the
-  "All Berkeley Moshav Events" calendar.
+  "All Berkeley Moshav Events" calendar, which it shares view-only with the
+  everybody groups, without Google's "shared a calendar" email.
 - **`reset_zoom_room.py`** gives a group's Zoom room a new passcode, and so a
   new link, both of which it writes into the group's footer, for when a link has
   leaked.
@@ -248,8 +249,10 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
   email asking them to create it on the group calendar instead. It also
   checks the next 8 weeks for meetings in rooms of the same Zoom user that
   overlap or are less than 15 minutes apart, including ones scheduled
-  directly in Zoom, and emails
-  calendaring-alerts@berkeleymoshav.org and the groups involved. Its rules are
+  directly in Zoom, and emails the groups involved (and, for a meeting
+  scheduled directly in Zoom, calendaring-alerts@berkeleymoshav.org, for the
+  Technology Circle), asking them to agree which meeting moves, with a link to
+  the all-events calendar for finding a free time. Its rules are
   in `group_meetings/event_rules.gs`, tested under Node. See
   `group_meetings/README.md` for deployment, including the Zoom credentials
   it reads from Script Properties.

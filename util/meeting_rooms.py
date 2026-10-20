@@ -22,7 +22,9 @@ scripts that call this refuse to run signed in as anyone else
 (check_calendar_owner()). The Apps Scripts run as that account too.
 
 ensure_all_events_calendar() makes the one calendar every meeting is also
-invited to (ALL_EVENTS_CALENDAR_NAME). It starts out shared with no one.
+invited to (ALL_EVENTS_CALENDAR_NAME), and shares it read-only, without the
+usual email, with the everybody groups, so everyone can look at it (the
+group_meetings clash alerts link to it).
 """
 
 import datetime
@@ -252,6 +254,28 @@ def ensure_calendar_shared_with_group(
     return change
 
 
+def share_calendar_quietly(
+    calendar_service, calendar_id: str, calendar_name: str, group_email: str, dry_run: bool,
+) -> None:
+    """Give group_email "See all event details" access, without Google's
+    "shared a calendar with you" email, if the calendar isn't shared with
+    it at all. Members can then open the calendar's view-only link, though
+    it isn't added to their own calendar lists. Any existing access is left
+    alone."""
+    if group_calendar_role(calendar_service, calendar_id, group_email) is not None:
+        return
+    prefix = "[dry-run] would " if dry_run else ""
+    if not dry_run:
+        calendar_service.acl().insert(
+            calendarId=calendar_id,
+            body={"role": "reader", "scope": {"type": "group", "value": group_email}},
+            sendNotifications=False,
+        ).execute()
+    print(f"  {prefix}share '{calendar_name}' with {group_email} (view only, no email)")
+    log("INFO", f"{'would_' if dry_run else ''}share_calendar",
+        f"{calendar_name}: {group_email} (reader, no email)")
+
+
 def ensure_group_calendar(
     calendar_service, group_name: str, group_email: str, linked_calendar_id: str | None, *,
     owned_calendars: Callable[[], list[dict]], linked: Callable[[], LinkedResources],
@@ -310,17 +334,22 @@ def ensure_group_calendar(
 
 def ensure_all_events_calendar(
     calendar_service, *, owned_calendars: Callable[[], list[dict]], dry_run: bool,
-    input_fn: Callable[[str], str] = input,
+    reader_groups: list[str] = (), input_fn: Callable[[str], str] = input,
 ) -> str | None:
     """Return the all-events calendar's ID, finding, choosing, or creating
-    it while ALL_EVENTS_CALENDAR_ID isn't set yet. It isn't shared with
-    anyone here. Returns None in a dry run that would create it, or if the
-    configured calendar is missing."""
+    it while ALL_EVENTS_CALENDAR_ID isn't set yet, and share it read-only
+    with each of reader_groups that it isn't shared with at all (see
+    share_calendar_quietly). Returns None in a dry run that would create
+    it, or if the configured calendar is missing."""
     if ALL_EVENTS_CALENDAR_ID:
         if get_calendar(calendar_service, ALL_EVENTS_CALENDAR_ID) is None:
             log("WARN", "all_events_calendar",
                 f"ALL_EVENTS_CALENDAR_ID {ALL_EVENTS_CALENDAR_ID} not found")
             return None
+        for group_email in reader_groups:
+            share_calendar_quietly(
+                calendar_service, ALL_EVENTS_CALENDAR_ID, ALL_EVENTS_CALENDAR_NAME,
+                group_email, dry_run)
         return ALL_EVENTS_CALENDAR_ID
 
     print(f"The '{ALL_EVENTS_CALENDAR_NAME}' calendar isn't configured yet.")
