@@ -484,7 +484,10 @@ def _ask_action(label: str, can_use: bool, input_fn: Callable[[str], str],
     """Ask what to do with one meeting: "use", "ignore", or "delete".
     Raises QuitRequested on 'q'."""
     actions = (["use"] if can_use else []) + ["ignore", "delete"]
-    prompt = f"  {prefix}{label} — {', '.join(f'[{a[0]}]{a[1:]}' for a in actions)}, or [q]uit: "
+    names = [f"[{a[0]}]{a[1:]}" for a in actions]
+    if prefix:  # a dry run
+        names[-1] += " (DRY-RUN: DELETION WON'T OCCUR)"
+    prompt = f"  {prefix}{label} — {', '.join(names)}, or [q]uit: "
     while True:
         answer = input_fn(prompt).strip().lower()
         if answer in ("q", "quit"):

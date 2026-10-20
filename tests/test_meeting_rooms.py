@@ -392,7 +392,8 @@ class TestMatchingMeetings:
         assert _room(zoom, dry_run=True, input_fn=answers) is None
         assert zoom.writes == []
         assert answers.prompts == [
-            "  [dry-run] 1. Technology Circle weekly — [i]gnore, [d]elete, or [q]uit: "]
+            "  [dry-run] 1. Technology Circle weekly — [i]gnore, "
+            "[d]elete (DRY-RUN: DELETION WON'T OCCUR), or [q]uit: "]
         out = capsys.readouterr().out
         assert "Would create a new room, 'Technology Circle Meeting Room', and delete:" in out
         assert ("INFO", "would_delete_meeting",
