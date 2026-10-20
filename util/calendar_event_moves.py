@@ -429,7 +429,10 @@ def _ask(label: str, deletable: bool, dry_run: bool, input_fn: Callable[[str], s
     keys = ["c", "d", "b", "s"] if deletable else ["c", "s"]
     names = {"c": "[c]opy to the group's calendar", "d": "[d]elete",
              "b": "[b]oth", "s": "[s]kip"}
-    note = " (DRY-RUN: NOTHING WILL BE COPIED OR DELETED)" if dry_run else ""
+    note = ""
+    if dry_run:
+        note = (" (DRY-RUN: NOTHING WILL BE COPIED OR DELETED)" if deletable
+                else " (DRY-RUN: NOTHING WILL BE COPIED)")
     prefix = "[dry-run] " if dry_run else ""
     prompt = f"  {prefix}{label} — {', '.join(names[k] for k in keys)}, or [q]uit{note}: "
     while True:
@@ -524,13 +527,17 @@ class EventMover:
         their calendars. Raises QuitRequested if the user quits."""
         candidates = [c for c in self._load() if c["uid"] not in self._done]
         matches = matching_candidates(group_name, candidates)
-        if not matches:
-            print(f"  No events on other calendars match '{group_name}'.")
-            return
         for c in matches:
             if not c.get("planned"):
                 plan_series_copy(self.service, c, self.now)
                 c["planned"] = True
+        # Listing a calendar's events by date returns some series that have
+        # already ended (often the first half of a series someone split
+        # with "this and following events"); leave those out.
+        matches = [c for c in matches if not c["event"].get("recurrence") or c.get("copy_start")]
+        if not matches:
+            print(f"  No events on other calendars match '{group_name}'.")
+            return
         copy, delete = decide_on_events(group_name, matches, self.dry_run, self.input_fn)
         for c in copy:
             self._done.add(c["uid"])

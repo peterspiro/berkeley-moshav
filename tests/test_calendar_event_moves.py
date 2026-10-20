@@ -192,6 +192,16 @@ class TestOffer:
         assert body["end"]["dateTime"] == "2026-11-17T04:30:00+00:00"
         assert body["recurrence"] == ["RRULE:FREQ=MONTHLY;BYDAY=3MO"]
 
+    def test_ended_series_left_out(self, capsys):
+        ended = _event("s1", "Technology Circle", SHARED, start="2025-08-19T03:00:00Z",
+                       recurrence=["RRULE:FREQ=MONTHLY;UNTIL=20260601T000000Z;BYDAY=3MO"])
+        svc = _service({SHARED: [ended]})
+        svc.instances_by_series[(SHARED, "s1")] = [
+            {"originalStartTime": {"dateTime": "2026-05-19T03:00:00Z"},
+             "start": {"dateTime": "2026-05-19T03:00:00Z"}}]
+        _mover(svc, _no_input).offer("Technology Circle", GROUP_CAL)
+        assert "No events on other calendars match" in capsys.readouterr().out
+
     def test_series_ending_after_a_count_ends_on_its_last_occurrence(self):
         series = _event("s1", "Technology Circle", SHARED, start="2026-09-01T03:00:00Z",
                         recurrence=["RRULE:FREQ=WEEKLY;COUNT=10;BYDAY=MO"])
@@ -244,6 +254,14 @@ class TestOffer:
         assert answers.prompts[0].startswith("  [dry-run] 1. Technology Circle meeting")
         assert answers.prompts[0].endswith("(DRY-RUN: NOTHING WILL BE COPIED OR DELETED): ")
         assert "Would copy to the 'Technology Circle' calendar:" in capsys.readouterr().out
+
+    def test_dry_run_view_only_note_mentions_copying_only(self):
+        svc = _service({VIEW_ONLY: [_event("e1", "Technology Circle meeting", VIEW_ONLY)]})
+        answers = _Answers("s")
+        _mover(svc, answers, dry_run=True).offer("Technology Circle", None)
+        assert answers.prompts[0].endswith(
+            "[c]opy to the group's calendar, [s]kip, or [q]uit "
+            "(DRY-RUN: NOTHING WILL BE COPIED): ")
 
     def test_already_copied_not_offered(self, capsys):
         e = _event("e1", "Technology Circle meeting", SHARED)
