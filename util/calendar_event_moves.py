@@ -13,13 +13,15 @@ both, or to skip it:
 
 - A copy keeps the title, description, location, times, and repeat rule
   (a series' copy starts at its next occurrence, and ends when it would),
-  and invites the guests who aren't members of the group (group_meetings
-  invites the group, and with it emails them all), but not rooms,
-  calendars, or any Zoom or Meet link (so group_meetings adds the group's
+  but not rooms, calendars, or any Zoom or Meet link (so group_meetings adds the group's
   room). Occurrences of a series
   that were moved or changed become one-off events, and cancelled ones are
   left out. Copies are tagged with the original's iCalUID, so a later run
-  doesn't offer them again.
+  doesn't offer them again. For each of an event's guests who isn't a
+  member of the group (group_meetings invites the group), it asks whether
+  to invite them to the copy (they're emailed when group_meetings invites
+  the group), share the group's calendar with them (view only, with
+  Google's email), both, or neither.
 - Deleting needs edit access to the calendar the event is on. An event
   organized there is cancelled for everyone, with Google's cancellation
   emails; an invitation copy is removed from that calendar only.
@@ -490,13 +492,36 @@ def _ask(label: str, deletable: bool, dry_run: bool, input_fn: Callable[[str], s
         print("  Invalid choice.")
 
 
+_GUEST_ACTIONS = {"e": "event", "c": "calendar", "b": "both", "s": "skip"}
+
+
+def _ask_guest(email: str, dry_run: bool, input_fn: Callable[[str], str]) -> str:
+    """Ask what to do with a guest who isn't in the group: add them to the
+    copied event, share the group's calendar with them, both, or neither."""
+    note = " (DRY-RUN: NOTHING WILL BE ADDED OR SHARED)" if dry_run else ""
+    prefix = "[dry-run] " if dry_run else ""
+    prompt = (f"    {prefix}{email} isn't in the group — add to the [e]vent, share the "
+              f"[c]alendar (view only), [b]oth, [s]kip, or [q]uit{note}: ")
+    while True:
+        answer = input_fn(prompt).strip().lower()
+        if answer in ("q", "quit"):
+            raise QuitRequested
+        for key, action in _GUEST_ACTIONS.items():
+            if answer in (key, action):
+                return action
+        print("  Invalid choice.")
+
+
 def decide_on_events(
     group_name: str, matches: list[dict], dry_run: bool, input_fn: Callable[[str], str] = input,
 ) -> tuple[list[dict], list[dict]]:
-    """List the matching events, then ask about each in turn. Nothing is
-    changed here: returns (events to copy, events to delete), confirmed
-    by typing 'delete' when there are any to delete (except in a dry
-    run). Raises QuitRequested on 'q'."""
+    """List the matching events, then ask about each in turn, and, for an
+    event to copy, about each of its guests who aren't in the group
+    (c["outside_guests"]): whether to invite them to the copy (recorded
+    in c["invite"]), share the group's calendar with them (c["share"]),
+    both, or neither. Nothing is changed here: returns (events to copy,
+    events to delete), confirmed by typing 'delete' when there are any to
+    delete (except in a dry run). Raises QuitRequested on 'q'."""
     while True:
         print(f"  Events on other calendars matching '{group_name}':")
         for i, c in enumerate(matches, start=1):
@@ -507,8 +532,15 @@ def decide_on_events(
         for i, c in enumerate(matches, start=1):
             action = _ask(f"{i}. {c['event'].get('summary') or '(no title)'}", can_delete(c),
                           dry_run, input_fn)
+            c["invite"], c["share"] = [], []
             if action in ("copy", "both"):
                 copy.append(c)
+                for email in c.get("outside_guests", []):
+                    guest_action = _ask_guest(email, dry_run, input_fn)
+                    if guest_action in ("event", "both"):
+                        c["invite"].append(email)
+                    if guest_action in ("calendar", "both"):
+                        c["share"].append(email)
             if action in ("delete", "both"):
                 delete.append(c)
         verb = "Would" if dry_run else "Will"
@@ -520,10 +552,13 @@ def decide_on_events(
             for c in copy:
                 note = " (its Zoom/Meet link left out; the group's room will be added)" \
                     if had_meeting_link(c) else ""
-                if c.get("outside_guests"):
-                    note += f" — also inviting, as they aren't in the group: " \
-                            f"{', '.join(c['outside_guests'])}"
+                if c["invite"]:
+                    note += f" — also inviting {', '.join(c['invite'])}"
                 print(f"    {describe_candidate(c)}{note}")
+            shares = _shares(copy)
+            if shares:
+                print(f"  {verb} share the '{group_name}' calendar (view only) with: "
+                      f"{', '.join(shares)}")
         if delete:
             print(f"  {verb} delete:")
             for c in delete:
@@ -539,6 +574,15 @@ def decide_on_events(
         if confirm == "delete":
             return copy, delete
         print()
+
+
+def _shares(copied: list[dict]) -> list[str]:
+    """The addresses to share the group's calendar with, each once."""
+    seen = {}
+    for c in copied:
+        for email in c.get("share", []):
+            seen.setdefault(email.lower(), email)
+    return list(seen.values())
 
 
 # ── Doing it ──────────────────────────────────────────────────────────────────
@@ -578,9 +622,10 @@ class EventMover:
               group_email: str | None = None) -> None:
         """Offer to copy events matching group_name to group_calendar_id
         (None only in a dry run that would create it) and delete them from
-        their calendars. Guests of a copied event who aren't members of
-        group_email (read with dir_service) are invited to the copy. Raises
-        QuitRequested if the user quits."""
+        their calendars. For each guest of a copied event who isn't a
+        member of group_email (read with dir_service), asks whether to
+        invite them to the copy, share the group's calendar with them (view
+        only), both, or neither. Raises QuitRequested if the user quits."""
         candidates = [c for c in self._load() if c["uid"] not in self._done]
         matches = matching_candidates(group_name, candidates)
         zoom = self._matching_zoom_topics(group_name)
@@ -602,11 +647,15 @@ class EventMover:
             if self.dry_run:
                 log("INFO", "would_copy_event", f"{group_name}: {c['uid']}")
                 continue
-            for body in copy_bodies(c, members):
+            not_invited = {e.lower() for e in c["outside_guests"]} - {
+                e.lower() for e in c["invite"]}
+            for body in copy_bodies(c, members | not_invited):
                 self.service.events().insert(
                     calendarId=group_calendar_id, body=body, sendUpdates="none").execute()
             print(f"  + copied '{c['event'].get('summary')}' to the group's calendar")
             log("INFO", "copy_event", f"{group_name}: {c['uid']} from {c['calendar']['id']}")
+        for email in _shares(copy):
+            self._share(group_name, group_calendar_id, email)
         for c in delete:
             self._done.add(c["uid"])
             if self.dry_run:
@@ -618,6 +667,24 @@ class EventMover:
             self._deleted.add(c["uid"])
             print(f"  - deleted '{c['event'].get('summary')}' from {c['calendar']['name']}")
             log("INFO", "delete_event", f"{group_name}: {c['uid']} from {c['calendar']['id']}")
+
+    def _share(self, group_name: str, calendar_id: str | None, email: str) -> None:
+        """Share the group's calendar with email as "See all event details",
+        with Google's email, unless it's already shared with them."""
+        if self.dry_run:
+            log("INFO", "would_share_calendar", f"{group_name}: {email} (reader)")
+            return
+        rules = self.service.acl().list(calendarId=calendar_id).execute().get("items", [])
+        if any(r.get("scope", {}).get("type") == "user"
+               and r["scope"].get("value", "").lower() == email.lower() for r in rules):
+            print(f"  ({email} can already see the group's calendar)")
+            return
+        self.service.acl().insert(
+            calendarId=calendar_id,
+            body={"role": "reader", "scope": {"type": "user", "value": email}},
+            sendNotifications=True).execute()
+        print(f"  + shared the group's calendar with {email} (view only)")
+        log("INFO", "share_calendar", f"{group_name}: {email} (reader)")
 
     def _members(self, group_email: str | None) -> set[str]:
         """The group's own address and its members' (lowercase), or an

@@ -239,11 +239,13 @@ status line as "calendar (members can view, not edit)".
   naming the matching Zoom meeting an event is held in, if any), then asks
   of each whether to copy it to the group's calendar, delete it, both, or
   skip it. A copy keeps the title, description, location, times, and repeat
-  rule, and invites the guests who aren't members of the group (the group
-  itself is invited once the copy gets the group's room, which sends the
-  invitations), but not any Zoom or Meet link (so the group's room is
+  rule, but not any Zoom or Meet link (so the group's room is
   added); occurrences of a series that were moved or changed become one-off
-  events. A series' copy starts at its next occurrence (the list shows both
+  events. For each of a copied event's guests who isn't in the group, it
+  asks whether to invite them to the copy (they're emailed along with the
+  group, once the copy gets the group's room), share the group's calendar
+  with them (view only, with Google's email), both, or neither. A series'
+  copy starts at its next occurrence (the list shows both
   the original's first date and the copy's), and ends when the original
   would. Copies are tagged with the original, so they aren't offered again.
   Deleting needs edit access to the event's calendar: an event organized

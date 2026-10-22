@@ -322,18 +322,69 @@ def _no_input(prompt):
 
 
 class TestOutsideGuests:
-    def test_summary_names_guests_and_copy_invites_them(self, capsys):
+    def _offer(self, answers, dry_run=False, acl=None):
         from tests.test_group_meeting_rooms_step import _Directory
-        e = _event("e1", "Technology Circle meeting", SHARED,
-                   attendees=[{"email": "member@x.org"}, {"email": "guest@gmail.com"}])
+        e = _event("e1", "Technology Circle meeting", SHARED, attendees=[
+            {"email": "member@x.org"}, {"email": "guest@gmail.com"}, {"email": "b@gmail.com"}])
         svc = _service({SHARED: [e]})
-        mover = EventMover(svc, lambda: {GROUP_CAL}, dry_run=False, input_fn=_Answers("c"),
-                           now=NOW, dir_service=_Directory(members={"tech@x.org": ["member@x.org"]}))
-        mover.offer("Technology Circle", GROUP_CAL, "tech@x.org")
-        assert ("also inviting, as they aren't in the group: guest@gmail.com"
-                in capsys.readouterr().out)
+        if acl:
+            svc.acls[GROUP_CAL] = acl
+        mover = EventMover(svc, lambda: {GROUP_CAL}, dry_run=dry_run, input_fn=answers,
+                           now=NOW,
+                           dir_service=_Directory(members={"tech@x.org": ["member@x.org"]}))
+        mover.offer("Technology Circle", None if dry_run else GROUP_CAL, "tech@x.org")
+        return svc
+
+    def test_asks_about_each_guest_outside_the_group(self):
+        answers = _Answers("c", "s", "s")
+        self._offer(answers)
+        assert answers.prompts[1:] == [
+            "    b@gmail.com isn't in the group — add to the [e]vent, share the "
+            "[c]alendar (view only), [b]oth, [s]kip, or [q]uit: ",
+            "    guest@gmail.com isn't in the group — add to the [e]vent, share the "
+            "[c]alendar (view only), [b]oth, [s]kip, or [q]uit: "]
+
+    def test_event_invites_only_chosen_guests(self, capsys):
+        svc = self._offer(_Answers("c", "s", "e"))
+        assert "also inviting guest@gmail.com" in capsys.readouterr().out
         (_, _, body, send), = svc.writes
         assert body["attendees"] == [{"email": "guest@gmail.com"}] and send == "none"
+
+    def test_skip_invites_no_one(self):
+        svc = self._offer(_Answers("c", "s", "s"))
+        (_, _, body, _), = svc.writes
+        assert "attendees" not in body
+
+    def test_calendar_shares_view_only_with_email(self, capsys):
+        svc = self._offer(_Answers("c", "c", "b"))
+        out = capsys.readouterr().out
+        assert ("share the 'Technology Circle' calendar (view only) with: "
+                "b@gmail.com, guest@gmail.com") in out
+        insert, *shares = svc.writes
+        assert insert[2]["attendees"] == [{"email": "guest@gmail.com"}]
+        assert shares == [
+            ("acl_insert", GROUP_CAL, {"role": "reader",
+                                       "scope": {"type": "user", "value": e}}, True)
+            for e in ("b@gmail.com", "guest@gmail.com")]
+
+    def test_already_shared_left_alone(self, capsys):
+        rule = {"id": "r", "role": "writer", "scope": {"type": "user", "value": "B@gmail.com"}}
+        svc = self._offer(_Answers("c", "c", "s"), acl=[rule])
+        assert [w[0] for w in svc.writes] == ["insert_event"]
+        assert "b@gmail.com can already see the group's calendar" in capsys.readouterr().out
+
+    def test_dry_run_asks_but_changes_nothing(self, capsys):
+        answers = _Answers("c", "b", "b")
+        svc = self._offer(answers, dry_run=True)
+        assert svc.writes == []
+        assert answers.prompts[1].startswith("    [dry-run] b@gmail.com isn't in the group")
+        assert answers.prompts[1].endswith("(DRY-RUN: NOTHING WILL BE ADDED OR SHARED): ")
+        assert "Would share the 'Technology Circle' calendar" in capsys.readouterr().out
+
+    def test_not_asked_unless_copying(self):
+        answers = _Answers("s")
+        self._offer(answers)
+        assert len(answers.prompts) == 1
 
 
 class TestUpdateGroupsStep:
