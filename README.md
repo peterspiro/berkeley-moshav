@@ -218,7 +218,8 @@ status line as "calendar (members can view, not edit)".
   no calendar, it asks which of the matching calendars is the group's, or
   creates one. When it links no
   Zoom room, it lists every scheduled meeting in the Zoom account whose name
-  matches the group's (any user's, of any kind, with its owner and schedule),
+  matches the group's (any user's, of any kind, with its owner and schedule,
+  and the matching calendar events held in it),
   then asks of each one in turn whether to use it as the room, ignore it, or
   delete it. Only a no-fixed-time meeting of `zoomhosts@` can be used, since
   Zoom can't change a meeting's type or owner; choosing a second one to use
@@ -234,7 +235,8 @@ status line as "calendar (members can view, not edit)".
   calendar, and the ones it's subscribed to) except the group calendars, the
   all-events calendar, and Google's holiday and birthday calendars. It lists
   the events in the next 12 months whose titles match the group's name
-  (each repeating series once, leaving out series that have ended), then asks of each whether to copy it to the
+  (each repeating series once, leaving out series that have ended, and
+  naming the matching Zoom meeting an event is held in, if any), then asks of each whether to copy it to the
   group's calendar, delete it, both, or skip it. A copy keeps the title,
   description, location, times, and repeat rule, but not the guests (the
   group is invited instead) or any Zoom or Meet link (so the group's room is

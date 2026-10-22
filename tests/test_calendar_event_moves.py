@@ -12,7 +12,7 @@ import pytest
 import update_groups_in_google_and_hierarchy as m
 import util.calendar_event_moves as cem
 import util.meeting_rooms as mr
-from tests.fakes_meeting_rooms import OWNER, FakeCalendarService, FakeZoom
+from tests.fakes_meeting_rooms import OWNER, FakeCalendarService, FakeZoom, room
 from util.calendar_event_moves import (
     EventMover,
     copy_bodies,
@@ -20,6 +20,7 @@ from util.calendar_event_moves import (
     gather_candidates,
     other_calendars,
     strip_meeting_links,
+    zoom_meeting_ids,
 )
 from util.meeting_rooms import LinkedResources, QuitRequested
 
@@ -331,3 +332,55 @@ class TestUpdateGroupsStep:
         self._run(svc, False, monkeypatch, answers)
         (insert,) = [w for w in svc.writes if w[0] == "insert_event"]
         assert insert[1].startswith("new") and len(answers.prompts) == 1
+
+
+class TestZoomLinks:
+    def test_zoom_meeting_ids(self):
+        assert zoom_meeting_ids({
+            "location": "https://us06web.zoom.us/j/81234567890?pwd=x",
+            "description": "Meeting ID: 845 1111 2222\nPasscode: 1",
+            "conferenceData": {"entryPoints": [{"uri": "https://zoom.us/j/9876543210"}]},
+        }) == {"81234567890", "84511112222", "9876543210"}
+        assert zoom_meeting_ids({"summary": "x"}) == set()
+
+    def _svc(self):
+        e = _event("e1", "Technology Circle meeting", SHARED,
+                   location="https://zoom.us/j/81234567890?pwd=x")
+        return _service({SHARED: [e]})
+
+    def test_event_list_names_matching_zoom_meeting(self, capsys):
+        zoom = FakeZoom({81234567890: room(81234567890, "Technology Circle weekly"),
+                         82000000000: room(82000000000, "Book Club")})
+        mover = EventMover(self._svc(), lambda: {GROUP_CAL}, dry_run=False,
+                           input_fn=_Answers("s"), now=NOW,
+                           zoom_meetings=zoom.list_account_meetings)
+        mover.offer("Technology Circle", GROUP_CAL)
+        assert "; in matching Zoom meeting 812 3456 7890 'Technology Circle weekly')" in \
+            capsys.readouterr().out
+
+    def test_unmatched_zoom_meeting_not_named(self, capsys):
+        zoom = FakeZoom({81234567890: room(81234567890, "Book Club")})
+        mover = EventMover(self._svc(), lambda: {GROUP_CAL}, dry_run=False,
+                           input_fn=_Answers("s"), now=NOW,
+                           zoom_meetings=zoom.list_account_meetings)
+        mover.offer("Technology Circle", GROUP_CAL)
+        assert "matching Zoom meeting" not in capsys.readouterr().out
+
+    def test_zoom_list_names_events_held_there(self, capsys):
+        zoom = FakeZoom({81234567890: room(81234567890, "Technology Circle weekly")})
+        mover = EventMover(self._svc(), lambda: {GROUP_CAL}, dry_run=False, now=NOW)
+        mr.ensure_zoom_room(
+            zoom, "Technology Circle", None, "tech@x.org",
+            meetings=zoom.list_account_meetings, linked=lambda: LinkedResources(),
+            dry_run=False, input_fn=_Answers("u"), now=NOW,
+            events_using=lambda mid: mover.events_using_meeting("Technology Circle", mid))
+        assert ("1. Technology Circle weekly   (812 3456 7890, zoomhosts@berkeleymoshav.org, "
+                "no fixed time) — the location of matching event(s): "
+                "'Technology Circle meeting' on Shared Events") in capsys.readouterr().out
+
+    def test_deleted_event_no_longer_named(self):
+        svc = self._svc()
+        mover = EventMover(svc, lambda: {GROUP_CAL}, dry_run=False,
+                           input_fn=_Answers("d", "delete"), now=NOW)
+        mover.offer("Technology Circle", GROUP_CAL)
+        assert mover.events_using_meeting("Technology Circle", "81234567890") == []

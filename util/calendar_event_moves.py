@@ -38,10 +38,12 @@ from googleapiclient.errors import HttpError
 
 from util.folder_matching import find_matching_names
 from util.gather_utils import log
+from util.google_group_footer import format_meeting_id
 from util.meeting_rooms import (
     ALL_EVENTS_CALENDAR_ID,
     CALENDAR_TIME_ZONE,
     QuitRequested,
+    room_candidates,
 )
 
 EVENT_WINDOW_DAYS = 365
@@ -59,6 +61,8 @@ _MEETING_LINE_RE = re.compile(
     r"meeting id\b|passcode\b|password\b|one tap mobile|dial by your location|"
     r"find your local number|or dial\b|\+\d[\d ,#*]{6,})", re.I)
 _LINE_BREAK_RE = re.compile(r"\n|<br\s*/?>", re.I)
+# A Zoom meeting's ID, in its link or written out ("Meeting ID: 812 3456 7890").
+_ZOOM_ID_RE = re.compile(r"zoom\.us/j/(\d{9,11})|meeting id:?\s*(\d{3}[ \d]{6,10}\d)", re.I)
 
 
 # ── Which calendars to look in ────────────────────────────────────────────────
@@ -171,8 +175,19 @@ def gather_candidates(
             "also_on": [c["name"] for c, _ in copies if c is not calendar],
             "changed": [o for o in occurrences if o.get("status") != "cancelled"],
             "cancelled": [o for o in occurrences if o.get("status") == "cancelled"],
+            "zoom_ids": zoom_meeting_ids(event),
         })
     return candidates
+
+
+def zoom_meeting_ids(event: dict) -> set[str]:
+    """IDs of the Zoom meetings the event's location, description, or
+    conference details link or name."""
+    texts = [event.get("location") or "", event.get("description") or ""]
+    texts += [p.get("uri") or "" for p in
+              (event.get("conferenceData") or {}).get("entryPoints") or []]
+    return {(link or written).replace(" ", "")
+            for text in texts for link, written in _ZOOM_ID_RE.findall(text)}
 
 
 def matching_candidates(group_name: str, candidates: list[dict]) -> list[dict]:
@@ -292,6 +307,8 @@ def describe_candidate(c: dict) -> str:
     if c["also_on"]:
         where += f"; also on {', '.join(c['also_on'])}"
     extra = f"; {len(c['changed'])} changed occurrence(s)" if c["changed"] else ""
+    for meeting_id, topic in c.get("matching_zoom", []):
+        extra += f"; in matching Zoom meeting {format_meeting_id(meeting_id)} '{topic}'"
     return f"{e.get('summary') or '(no title)'}   ({when}; {where}{extra})"
 
 
@@ -502,14 +519,17 @@ class EventMover:
 
     def __init__(self, calendar_service, group_calendar_ids: Callable[[], set[str]], *,
                  dry_run: bool, input_fn: Callable[[str], str] | None = None,
-                 now: datetime.datetime | None = None):
+                 now: datetime.datetime | None = None,
+                 zoom_meetings: Callable[[], list[dict]] | None = None):
         self.service = calendar_service
         self._group_calendar_ids = group_calendar_ids
+        self._zoom_meetings = zoom_meetings
         self.dry_run = dry_run
         self.input_fn = input_fn or input
         self.now = now or datetime.datetime.now(datetime.timezone.utc)
         self._candidates: list[dict] | None = None
         self._done: set[str] = set()
+        self._deleted: set[str] = set()
 
     def _load(self) -> list[dict]:
         if self._candidates is None:
@@ -527,14 +547,11 @@ class EventMover:
         their calendars. Raises QuitRequested if the user quits."""
         candidates = [c for c in self._load() if c["uid"] not in self._done]
         matches = matching_candidates(group_name, candidates)
+        zoom = self._matching_zoom_topics(group_name)
         for c in matches:
-            if not c.get("planned"):
-                plan_series_copy(self.service, c, self.now)
-                c["planned"] = True
-        # Listing a calendar's events by date returns some series that have
-        # already ended (often the first half of a series someone split
-        # with "this and following events"); leave those out.
-        matches = [c for c in matches if not c["event"].get("recurrence") or c.get("copy_start")]
+            c["matching_zoom"] = sorted((i, zoom[i]) for i in c["zoom_ids"] if i in zoom)
+        self._plan(matches)
+        matches = [c for c in matches if not _has_ended(c)]
         if not matches:
             print(f"  No events on other calendars match '{group_name}'.")
             return
@@ -557,5 +574,37 @@ class EventMover:
             self.service.events().delete(
                 calendarId=c["calendar"]["id"], eventId=c["event"]["id"],
                 sendUpdates="all").execute()
+            self._deleted.add(c["uid"])
             print(f"  - deleted '{c['event'].get('summary')}' from {c['calendar']['name']}")
             log("INFO", "delete_event", f"{group_name}: {c['uid']} from {c['calendar']['id']}")
+
+    def _matching_zoom_topics(self, group_name: str) -> dict[str, str]:
+        """{meeting ID: topic} of the Zoom meetings whose names match the
+        group's, or {} without zoom_meetings."""
+        if self._zoom_meetings is None:
+            return {}
+        items = room_candidates(self._zoom_meetings())
+        return {m["id"]: m["topic"] for m in find_matching_names(group_name, items)}
+
+    def events_using_meeting(self, group_name: str, meeting_id: str) -> list[str]:
+        """Descriptions of the not-yet-deleted events matching group_name
+        whose location or description is the Zoom meeting meeting_id."""
+        using = [c for c in matching_candidates(group_name, self._load())
+                 if meeting_id in c["zoom_ids"] and c["uid"] not in self._deleted]
+        self._plan(using)
+        return [f"'{c['event'].get('summary') or '(no title)'}' on {c['calendar']['name']}"
+                for c in using if not _has_ended(c)]
+
+    def _plan(self, candidates: list[dict]) -> None:
+        for c in candidates:
+            if not c.get("planned"):
+                plan_series_copy(self.service, c, self.now)
+                c["planned"] = True
+
+
+def _has_ended(c: dict) -> bool:
+    """True for a series with no upcoming occurrence (see plan_series_copy).
+    Listing a calendar's events by date returns some series that have
+    already ended (often the first half of a series someone split with
+    "this and following events")."""
+    return bool(c["event"].get("recurrence")) and not c.get("copy_start")

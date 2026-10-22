@@ -396,7 +396,7 @@ class RoomLink(NamedTuple):
     passcode: str
 
 
-def _room_candidates(meetings: list[dict]) -> list[dict]:
+def room_candidates(meetings: list[dict]) -> list[dict]:
     """Meetings as {"id", "name", "topic", "host_email"}, named by topic
     without " Meeting Room" so they match against group names."""
     out = []
@@ -513,7 +513,10 @@ def _ask_yes_no(prompt: str, input_fn: Callable[[str], str]) -> bool:
 
 
 def _candidate_line(c: dict) -> str:
-    return f"{c['topic']}   ({format_meeting_id(c['id'])}, {c['host_email']}, {c['schedule']})"
+    line = f"{c['topic']}   ({format_meeting_id(c['id'])}, {c['host_email']}, {c['schedule']})"
+    if c.get("used_by"):
+        line += f" — the location of matching event(s): {', '.join(c['used_by'])}"
+    return line
 
 
 def decide_on_matching_meetings(
@@ -599,13 +602,16 @@ def ensure_zoom_room(
     zoom: ZoomClient, group_name: str, linked_join_url: str | None, group_email: str, *,
     meetings: Callable[[], list[dict]], linked: Callable[[], LinkedResources], dry_run: bool,
     input_fn: Callable[[str], str] = input, now: datetime.datetime | None = None,
+    events_using: Callable[[str], list[str]] | None = None,
 ) -> RoomLink | None:
     """Return the group's room's join link and passcode, finding, choosing,
     or creating the room (see the module docstring), and make sure its
     topic and settings are the standard ones and its passcode is digits
     only (replacing one that isn't changes the link). meetings (every
     scheduled meeting in the Zoom account) and linked are called only when
-    there's no room in the footer. Returns None only in a dry
+    there's no room in the footer. events_using(meeting ID), if given,
+    describes the calendar events matching the group that are held in
+    that meeting, to show beside it. Returns None only in a dry
     run that would create a room. Raises QuitRequested if the user quits."""
     group_email = group_email.lower()
     topic = room_topic(group_name)
@@ -619,13 +625,14 @@ def ensure_zoom_room(
         else:
             print(f"'{group_name}' has no Zoom room linked in its footer.")
         available, taken = _matching_candidates(
-            group_name, _room_candidates(meetings()), linked().rooms, group_email)
+            group_name, room_candidates(meetings()), linked().rooms, group_email)
         when = now or datetime.datetime.now(datetime.timezone.utc)
         for c in available + taken:
             details = zoom.get_meeting(c["id"]) or {}
             c["details"] = {**details, "host_email": c["host_email"]}
             c["schedule"] = describe_schedule(details, when)
             c["can_use"] = _can_be_room(c["details"])
+            c["used_by"] = events_using(c["id"]) if events_using else []
         use, delete = (decide_on_matching_meetings(group_name, available, taken, dry_run,
                                                    input_fn)
                        if available else (None, []))

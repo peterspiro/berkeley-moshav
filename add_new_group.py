@@ -564,12 +564,15 @@ def main(
                 owned_calendars=lambda: list_owned_calendars(calendar_service),
                 linked=get_linked, dry_run=False, on_create=lambda: created.append(True),
             )
+            zoom_meetings = functools.cache(zoom.list_account_meetings)
+            mover = EventMover(calendar_service, lambda: set(get_linked().calendars),
+                               dry_run=False, zoom_meetings=zoom_meetings)
             if created:
-                EventMover(calendar_service, lambda: set(get_linked().calendars),
-                           dry_run=False).offer(gdisplay, calendar_id)
+                mover.offer(gdisplay, calendar_id)
             room = ensure_zoom_room(
                 zoom, gdisplay, linked_zoom_url, gemail,
-                meetings=zoom.list_account_meetings, linked=get_linked, dry_run=False,
+                meetings=zoom_meetings, linked=get_linked, dry_run=False,
+                events_using=lambda meeting_id: mover.events_using_meeting(gdisplay, meeting_id),
             )
         except QuitRequested:
             log("INFO", "quit", "User quit during the calendar/Zoom room step")
