@@ -37,7 +37,7 @@ from dataclasses import dataclass, field
 from typing import NamedTuple
 from zoneinfo import ZoneInfo
 
-from util.folder_matching import find_matching_folders
+from util.folder_matching import find_matching_names
 from util.gather_utils import log
 from util.google_group_footer import (
     format_meeting_id,
@@ -132,7 +132,7 @@ def _matching_candidates(
 ) -> tuple[list[dict], list[dict]]:
     """Split the items ({"id", "name"}) whose names match group_name into
     (available, taken), where taken ones are linked to another group."""
-    matches = find_matching_folders(group_name, items)
+    matches = find_matching_names(group_name, items)
     available = [m for m in matches if owner_by_id.get(m["id"]) in (None, group_email)]
     taken = [{**m, "owner": owner_by_id[m["id"]]} for m in matches if m not in available]
     return available, taken

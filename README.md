@@ -212,8 +212,11 @@ status line as "calendar (members can view, not edit)".
   "All Berkeley Moshav Events" calendar, which it shares view-only with the
   everybody groups, without Google's "shared a calendar" email.
 
-  When a group's footer links no calendar, it asks which of the calendars
-  matching the group's name is the group's, or creates one. When it links no
+  Calendars, Zoom meetings, and events match a group when their names are
+  like the group's, or contain its acronym (for the "Development, Finance,
+  & Legal Circle", "DF&L", "DFL", or "D.F.L."). When a group's footer links
+  no calendar, it asks which of the matching calendars is the group's, or
+  creates one. When it links no
   Zoom room, it lists every scheduled meeting in the Zoom account whose name
   matches the group's (any user's, of any kind, with its owner and schedule),
   then asks of each one in turn whether to use it as the room, ignore it, or
@@ -308,7 +311,8 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
   page
 - **`wiki_utils.py`**: per-group wiki pages
 - **`folder_matching.py`**: fuzzy matching of group names to folder and
-  Google Group names
+  Google Group names (and, including acronyms, to calendars, Zoom meetings,
+  and events)
 - **`meeting_rooms.py`**: finding, choosing, or creating each group's
   calendar and Zoom room (and deleting matching meetings you don't want),
   and keeping them named, shared, and configured

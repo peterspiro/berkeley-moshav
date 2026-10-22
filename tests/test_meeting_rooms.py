@@ -425,3 +425,20 @@ class TestDescribeSchedule:
         assert describe_schedule({"type": 8, "recurrence": {"type": 1}, "occurrences": [
             {"start_time": "2026-10-18T16:00:00Z", "status": "deleted"},
             {"start_time": "2026-10-19T16:00:00Z"}]}, NOW) == "daily, 9:00 AM, next Mon Oct 19"
+
+
+class TestAcronymMatching:
+    def test_zoom_meeting_named_with_acronym_offered(self):
+        zoom = FakeZoom({7: room(7, "DF&L Meeting Room")})
+        link = ensure_zoom_room(
+            zoom, "Development, Finance, & Legal Circle", None, GROUP,
+            meetings=zoom.list_account_meetings, linked=lambda: LinkedResources(),
+            dry_run=False, input_fn=_inputs("u"), now=NOW)
+        assert link.join_url == "https://zoom.us/j/7?pwd=p"
+
+    def test_calendar_named_with_acronym_offered(self):
+        svc = FakeCalendarService({"c1": "DF&L"})
+        assert ensure_group_calendar(
+            svc, "Development, Finance, & Legal Circle", GROUP, None,
+            owned_calendars=lambda: mr.list_owned_calendars(svc),
+            linked=lambda: LinkedResources(), dry_run=False, input_fn=_inputs("1")) == "c1"

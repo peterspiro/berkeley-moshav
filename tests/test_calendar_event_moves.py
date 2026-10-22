@@ -294,6 +294,12 @@ class TestOffer:
         _mover(svc, _Answers("s")).offer("Technology Circle", GROUP_CAL)
         assert "1. Technology Circle meeting" in capsys.readouterr().out
 
+    def test_event_titled_with_acronym_offered(self):
+        svc = _service({SHARED: [_event("e1", "DF&L budget review", SHARED)]})
+        answers = _Answers("s")
+        _mover(svc, answers).offer("Development, Finance, & Legal Circle", GROUP_CAL)
+        assert answers.prompts[0].startswith("  1. DF&L budget review — ")
+
     def test_unrelated_events_not_offered(self, capsys):
         svc = _service({SHARED: [_event("e1", "Book Club", SHARED)]})
         _mover(svc, _no_input).offer("Technology Circle", GROUP_CAL)

@@ -36,7 +36,7 @@ from zoneinfo import ZoneInfo
 
 from googleapiclient.errors import HttpError
 
-from util.folder_matching import find_matching_folders
+from util.folder_matching import find_matching_names
 from util.gather_utils import log
 from util.meeting_rooms import (
     ALL_EVENTS_CALENDAR_ID,
@@ -178,7 +178,7 @@ def gather_candidates(
 def matching_candidates(group_name: str, candidates: list[dict]) -> list[dict]:
     """The candidates whose titles match the group's name, soonest first."""
     items = [{"id": c["uid"], "name": c["event"].get("summary") or ""} for c in candidates]
-    matched = {m["id"] for m in find_matching_folders(group_name, items)}
+    matched = {m["id"] for m in find_matching_names(group_name, items)}
     return sorted((c for c in candidates if c["uid"] in matched),
                   key=lambda c: _start_key(c["event"]))
 
