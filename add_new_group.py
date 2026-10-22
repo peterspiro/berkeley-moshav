@@ -566,9 +566,10 @@ def main(
             )
             zoom_meetings = functools.cache(zoom.list_account_meetings)
             mover = EventMover(calendar_service, lambda: set(get_linked().calendars),
-                               dry_run=False, zoom_meetings=zoom_meetings)
+                               dry_run=False, zoom_meetings=zoom_meetings,
+                               dir_service=dir_service)
             if created:
-                mover.offer(gdisplay, calendar_id)
+                mover.offer(gdisplay, calendar_id, gemail)
             room = ensure_zoom_room(
                 zoom, gdisplay, linked_zoom_url, gemail,
                 meetings=zoom_meetings, linked=get_linked, dry_run=False,

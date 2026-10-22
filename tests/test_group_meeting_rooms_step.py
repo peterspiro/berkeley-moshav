@@ -57,11 +57,26 @@ class _Settings:
 
 class _Directory:
     """Directory API stand-in: groups().get(groupKey=...) resolves aliases
-    ({alias: primary}) and returns any other address as its own primary."""
+    ({alias: primary}) and returns any other address as its own primary;
+    members().list(groupKey=...) returns members ({group: [email, ...]})."""
 
-    def __init__(self, aliases=None):
+    def __init__(self, aliases=None, members=None):
         self.aliases = aliases or {}
+        self.members_by_group = members or {}
         self._key = None
+
+    def members(self):
+        directory = self
+
+        class _Members:
+            def list(self, groupKey, **kwargs):
+                emails = directory.members_by_group.get(groupKey, [])
+
+                class _Call:
+                    def execute(self):
+                        return {"members": [{"email": e, "role": "MEMBER"} for e in emails]}
+                return _Call()
+        return _Members()
 
     def groups(self):
         return self

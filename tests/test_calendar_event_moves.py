@@ -145,15 +145,25 @@ class TestDescriptions:
         assert strip_meeting_links("No links here") == ("No links here", False)
         assert strip_meeting_links(None) == ("", False)
 
-    def test_copy_leaves_out_guests_and_links(self):
-        e = _event("e1", "Technology Circle", SHARED,
-                   attendees=[{"email": "a@x.org"}], location="https://zoom.us/j/123",
-                   description="Hi\nhttps://zoom.us/j/123")
+    def test_copy_invites_only_guests_outside_the_group_and_drops_links(self):
+        e = _event("e1", "Technology Circle", SHARED, location="https://zoom.us/j/123",
+                   description="Hi\nhttps://zoom.us/j/123", attendees=[
+                       {"email": "Member@x.org", "responseStatus": "accepted"},
+                       {"email": "guest@gmail.com", "displayName": "Guest", "optional": True,
+                        "responseStatus": "accepted"},
+                       {"email": "tech@x.org"},
+                       {"email": "room-1@resource.calendar.google.com", "resource": True},
+                       {"email": SHARED},
+                       {"email": OWNER}])
         calendars = other_calendars(_service(), {GROUP_CAL})
         (c,) = gather_candidates({SHARED: [e]}, calendars, {GROUP_CAL})
-        (body,) = copy_bodies(c)
-        assert "attendees" not in body
+        (body,) = copy_bodies(c, {"member@x.org", "tech@x.org"})
+        assert body["attendees"] == [
+            {"email": "guest@gmail.com", "displayName": "Guest", "optional": True}]
         assert (body["description"], body["location"]) == ("Hi", "")
+        (body,) = copy_bodies({**c, "event": {**e, "attendees": [{"email": "member@x.org"}]}},
+                              {"member@x.org"})
+        assert "attendees" not in body
 
 
 class TestOffer:
@@ -309,6 +319,21 @@ class TestOffer:
 
 def _no_input(prompt):
     raise AssertionError(f"unexpected prompt: {prompt}")
+
+
+class TestOutsideGuests:
+    def test_summary_names_guests_and_copy_invites_them(self, capsys):
+        from tests.test_group_meeting_rooms_step import _Directory
+        e = _event("e1", "Technology Circle meeting", SHARED,
+                   attendees=[{"email": "member@x.org"}, {"email": "guest@gmail.com"}])
+        svc = _service({SHARED: [e]})
+        mover = EventMover(svc, lambda: {GROUP_CAL}, dry_run=False, input_fn=_Answers("c"),
+                           now=NOW, dir_service=_Directory(members={"tech@x.org": ["member@x.org"]}))
+        mover.offer("Technology Circle", GROUP_CAL, "tech@x.org")
+        assert ("also inviting, as they aren't in the group: guest@gmail.com"
+                in capsys.readouterr().out)
+        (_, _, body, send), = svc.writes
+        assert body["attendees"] == [{"email": "guest@gmail.com"}] and send == "none"
 
 
 class TestUpdateGroupsStep:

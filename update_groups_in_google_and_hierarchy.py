@@ -1026,7 +1026,7 @@ def ensure_group_meeting_rooms(
     owned_calendars = functools.cache(lambda: list_owned_calendars(calendar_service))
     zoom_meetings = functools.cache(zoom.list_account_meetings)
     mover = EventMover(calendar_service, lambda: set(get_linked().calendars), dry_run=dry_run,
-                       zoom_meetings=zoom_meetings)
+                       zoom_meetings=zoom_meetings, dir_service=dir_service)
 
     # The everybody groups' primary addresses (a Gather list may use an alias).
     everybody_emails = []
@@ -1059,7 +1059,7 @@ def ensure_group_meeting_rooms(
         if calendar_id:
             calendar_id_by_group_id[group_id] = calendar_id
         if created or move_events:
-            mover.offer(group_name, calendar_id)
+            mover.offer(group_name, calendar_id, email)
         room = ensure_zoom_room(
             zoom, group_name, parse_footer_zoom_url(footer), email,
             meetings=zoom_meetings, linked=get_linked, dry_run=dry_run,

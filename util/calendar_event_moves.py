@@ -13,8 +13,10 @@ both, or to skip it:
 
 - A copy keeps the title, description, location, times, and repeat rule
   (a series' copy starts at its next occurrence, and ends when it would),
-  but not the guests (group_meetings invites the group) or any Zoom or Meet
-  link (so group_meetings adds the group's room). Occurrences of a series
+  and invites the guests who aren't members of the group (group_meetings
+  invites the group, and with it emails them all), but not rooms,
+  calendars, or any Zoom or Meet link (so group_meetings adds the group's
+  room). Occurrences of a series
   that were moved or changed become one-off events, and cancelled ones are
   left out. Copies are tagged with the original's iCalUID, so a later run
   doesn't offer them again.
@@ -39,8 +41,10 @@ from googleapiclient.errors import HttpError
 from util.folder_matching import find_matching_names
 from util.gather_utils import log
 from util.google_group_footer import format_meeting_id
+from util.google_group_utils import list_group_members
 from util.meeting_rooms import (
     ALL_EVENTS_CALENDAR_ID,
+    CALENDAR_OWNER,
     CALENDAR_TIME_ZONE,
     QuitRequested,
     room_candidates,
@@ -339,7 +343,27 @@ def _exdate(occurrence: dict) -> str:
     return "EXDATE:" + dt.astimezone(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
 
-def _copy_body(event: dict, uid: str) -> dict:
+def _is_calendar_address(email: str) -> bool:
+    return email.endswith("calendar.google.com")
+
+
+def outside_guests(event: dict, members: set[str]) -> list[dict]:
+    """The event's guests to invite to its copy: people who aren't members
+    (members) of the group, which the copy invites, leaving out rooms,
+    calendars, and CALENDAR_OWNER. Each is {"email"}, plus "displayName"
+    and "optional" if the original has them."""
+    guests = []
+    for a in event.get("attendees") or []:
+        email = (a.get("email") or "").lower()
+        if (not email or a.get("resource") or email in members or email == CALENDAR_OWNER
+                or _is_calendar_address(email)):
+            continue
+        guests.append({"email": a["email"],
+                       **{k: a[k] for k in ("displayName", "optional") if k in a}})
+    return guests
+
+
+def _copy_body(event: dict, uid: str, members: set[str]) -> dict:
     description, _ = strip_meeting_links(event.get("description"))
     location, _ = strip_meeting_links(event.get("location"))
     body = {
@@ -350,6 +374,9 @@ def _copy_body(event: dict, uid: str) -> dict:
         "end": event["end"],
         "extendedProperties": {"private": {COPIED_FROM_KEY: uid}},
     }
+    guests = outside_guests(event, members)
+    if guests:
+        body["attendees"] = guests
     for key in ("transparency", "visibility", "colorId"):
         if key in event:
             body[key] = event[key]
@@ -417,19 +444,20 @@ def _copy_recurrence(c: dict) -> list[str]:
     return rules + [_exdate(o) for o in c["changed"] + c["cancelled"]]
 
 
-def copy_bodies(c: dict) -> list[dict]:
+def copy_bodies(c: dict, members: set[str] = frozenset()) -> list[dict]:
     """The events to insert on the group calendar for candidate c: the
     event or series (starting at its next occurrence, if
     plan_series_copy() found one, with its changed and cancelled
     occurrences excluded), then each changed occurrence as a one-off
-    event."""
+    event. Guests who aren't in members (the group's members' and the
+    group's own addresses, lowercase) are invited to the copies."""
     e = c["event"]
-    main = _copy_body(e, c["uid"])
+    main = _copy_body(e, c["uid"], members)
     if e.get("recurrence"):
         if c.get("copy_start"):
             main["start"], main["end"] = c["copy_start"]
         main["recurrence"] = _copy_recurrence(c)
-    return [main] + [_copy_body(o, c["uid"]) for o in c["changed"]]
+    return [main] + [_copy_body(o, c["uid"], members) for o in c["changed"]]
 
 
 def had_meeting_link(c: dict) -> bool:
@@ -492,6 +520,9 @@ def decide_on_events(
             for c in copy:
                 note = " (its Zoom/Meet link left out; the group's room will be added)" \
                     if had_meeting_link(c) else ""
+                if c.get("outside_guests"):
+                    note += f" — also inviting, as they aren't in the group: " \
+                            f"{', '.join(c['outside_guests'])}"
                 print(f"    {describe_candidate(c)}{note}")
         if delete:
             print(f"  {verb} delete:")
@@ -520,8 +551,10 @@ class EventMover:
     def __init__(self, calendar_service, group_calendar_ids: Callable[[], set[str]], *,
                  dry_run: bool, input_fn: Callable[[str], str] | None = None,
                  now: datetime.datetime | None = None,
-                 zoom_meetings: Callable[[], list[dict]] | None = None):
+                 zoom_meetings: Callable[[], list[dict]] | None = None,
+                 dir_service=None):
         self.service = calendar_service
+        self._dir_service = dir_service
         self._group_calendar_ids = group_calendar_ids
         self._zoom_meetings = zoom_meetings
         self.dry_run = dry_run
@@ -541,10 +574,13 @@ class EventMover:
             self._candidates = gather_candidates(events, calendars, group_ids)
         return self._candidates
 
-    def offer(self, group_name: str, group_calendar_id: str | None) -> None:
+    def offer(self, group_name: str, group_calendar_id: str | None,
+              group_email: str | None = None) -> None:
         """Offer to copy events matching group_name to group_calendar_id
         (None only in a dry run that would create it) and delete them from
-        their calendars. Raises QuitRequested if the user quits."""
+        their calendars. Guests of a copied event who aren't members of
+        group_email (read with dir_service) are invited to the copy. Raises
+        QuitRequested if the user quits."""
         candidates = [c for c in self._load() if c["uid"] not in self._done]
         matches = matching_candidates(group_name, candidates)
         zoom = self._matching_zoom_topics(group_name)
@@ -555,13 +591,18 @@ class EventMover:
         if not matches:
             print(f"  No events on other calendars match '{group_name}'.")
             return
+        members = self._members(group_email)
+        for c in matches:
+            c["outside_guests"] = sorted(
+                {g["email"] for e in [c["event"]] + c["changed"]
+                 for g in outside_guests(e, members)}, key=str.lower)
         copy, delete = decide_on_events(group_name, matches, self.dry_run, self.input_fn)
         for c in copy:
             self._done.add(c["uid"])
             if self.dry_run:
                 log("INFO", "would_copy_event", f"{group_name}: {c['uid']}")
                 continue
-            for body in copy_bodies(c):
+            for body in copy_bodies(c, members):
                 self.service.events().insert(
                     calendarId=group_calendar_id, body=body, sendUpdates="none").execute()
             print(f"  + copied '{c['event'].get('summary')}' to the group's calendar")
@@ -577,6 +618,14 @@ class EventMover:
             self._deleted.add(c["uid"])
             print(f"  - deleted '{c['event'].get('summary')}' from {c['calendar']['name']}")
             log("INFO", "delete_event", f"{group_name}: {c['uid']} from {c['calendar']['id']}")
+
+    def _members(self, group_email: str | None) -> set[str]:
+        """The group's own address and its members' (lowercase), or an
+        empty set without a group address or dir_service."""
+        if not group_email or self._dir_service is None:
+            return set()
+        return {group_email.lower()} | {
+            m["email"].lower() for m in list_group_members(self._dir_service, group_email)}
 
     def _matching_zoom_topics(self, group_name: str) -> dict[str, str]:
         """{meeting ID: topic} of the Zoom meetings whose names match the

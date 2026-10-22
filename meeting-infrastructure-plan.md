@@ -34,7 +34,7 @@ are; this note keeps the reasoning and the remaining work.
   group's calendar is created, or with `update_groups_... --move-events`,
   events in the next 12 months matching the group's name, on any calendar
   `admin@` can see (except group calendars), can be copied to the group's
-  calendar (without guests or meeting links), deleted (cancelled for
+  calendar (inviting guests outside the group, without meeting links), deleted (cancelled for
   everyone, with emails, when organized there), both, or skipped. A
   series' copy starts at its next occurrence. Calendars
   `admin@` can't see would need domain-wide delegation, so their owners
