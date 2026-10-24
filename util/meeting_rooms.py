@@ -250,8 +250,10 @@ def ensure_calendar_shared_with_group(
 
     Any access the group already has is left as it is, so a circle can be
     restricted by hand to "See all event details", with only some members
-    given edit access (see README.md). Google emails the group an
-    invitation to add the calendar when the access is granted."""
+    given edit access (see README.md). Google's "shared a calendar with
+    you" email isn't sent: for a group, it goes to the group's address,
+    and its button does nothing for members. Members add the calendar from
+    the link in the group's footer."""
     if group_calendar_role(calendar_service, calendar_id, group_email) is not None:
         return None
     change = f"share with {group_email} ({GROUP_CALENDAR_ROLE})"
@@ -259,7 +261,7 @@ def ensure_calendar_shared_with_group(
         calendar_service.acl().insert(
             calendarId=calendar_id,
             body={"role": GROUP_CALENDAR_ROLE, "scope": {"type": "group", "value": group_email}},
-            sendNotifications=True,
+            sendNotifications=False,
         ).execute()
     return change
 

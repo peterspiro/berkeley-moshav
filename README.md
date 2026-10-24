@@ -210,7 +210,10 @@ status line as "calendar (members can view, not edit)".
   and Zoom room, writes the footer links, and updates the Circle Structure page
   (renames, links, missing and stale entries). Its first run also creates the
   "All Berkeley Moshav Events" calendar, which it shares view-only with the
-  everybody groups, without Google's "shared a calendar" email.
+  everybody groups. Calendars are shared with groups without Google's
+  "shared a calendar" email, which for a group goes to the group's address
+  and has a button that does nothing for members; members add a calendar
+  from the link in the group's footer.
 
   Calendars, Zoom meetings, and events match a group when their names are
   like the group's, or contain its acronym (for the "Development, Finance,

@@ -71,12 +71,12 @@ class TestEnsureGroupCalendar:
         assert _calendar(svc, "c1") == "c1"
         assert svc.writes == []
 
-    def test_renames_and_shares_footer_calendar(self):
+    def test_renames_and_shares_footer_calendar_without_googles_email(self):
         svc = FakeCalendarService({"c1": "Tech Circle"})
         assert _calendar(svc, "c1") == "c1"
         assert ("rename", "c1", "Technology Circle") in svc.writes
         assert ("acl_insert", "c1",
-                {"role": "writer", "scope": {"type": "group", "value": GROUP}}, True) in svc.writes
+                {"role": "writer", "scope": {"type": "group", "value": GROUP}}, False) in svc.writes
 
     @pytest.mark.parametrize("role", ["reader", "freeBusyReader"])
     def test_restricted_access_left_alone(self, role):
