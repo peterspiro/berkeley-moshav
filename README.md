@@ -216,6 +216,8 @@ status line as "calendar (members can view, not edit)".
   the footer links the calendar and Zoom room: how to add the calendar to
   your own Google Calendar from the footer link, that meetings belong on
   it, and what the Zoom room is. A dry run says which lists it would email.
+  `--announce-calendar` sends it even when the calendar already existed
+  (with `-g`, to one group; without, it asks before emailing every group).
   Calendars are shared with groups without Google's
   "shared a calendar" email, which for a group goes to the group's address
   and has a button that does nothing for members; members add a calendar

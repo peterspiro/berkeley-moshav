@@ -109,3 +109,23 @@ def test_step_records_only_created_calendars(monkeypatch):
         {"1": "F1", "3": "F3"}, {"1": "tech@x.org", "3": "books@x.org"},
         lambda: LinkedResources(), False, {}, {}, created_calendar_group_ids=created)
     assert created == ["1"]
+
+
+def test_step_with_announce_records_existing_calendars(monkeypatch):
+    from tests.fakes_meeting_rooms import FakeCalendarService, FakeZoom
+    from tests.test_group_meeting_rooms_step import _Directory, _Settings
+    import util.meeting_rooms as mr
+    from util.google_group_footer import build_footer_block
+    from util.meeting_rooms import LinkedResources
+    monkeypatch.setattr(mr, "ALL_EVENTS_CALENDAR_ID", "ae")
+    monkeypatch.setattr(mr, "log", lambda *a, **k: None)
+    monkeypatch.setattr(m, "log", lambda *a, **k: None)
+    groups = {"3": {"name": "Book Club", "kind": "club", "availability": "open"}}
+    footer = build_footer_block("3", "F3", "https://g", "Book Club", calendar_id="c3")
+    cal = FakeCalendarService({"ae": "All Berkeley Moshav Events", "c3": "Book Club"})
+    created = []
+    m.ensure_group_meeting_rooms(
+        _Directory(), _Settings({"books@x.org": footer}), cal, FakeZoom(), groups,
+        {"3": "F3"}, {"3": "books@x.org"}, lambda: LinkedResources(), False, {}, {},
+        created_calendar_group_ids=created, announce_calendars=True)
+    assert created == ["3"]

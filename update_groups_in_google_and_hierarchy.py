@@ -984,6 +984,7 @@ def ensure_group_meeting_rooms(
     get_linked: Callable[[], LinkedResources], dry_run: bool,
     calendar_id_by_group_id: dict[str, str], room_by_group_id: dict[str, RoomLink],
     move_events: bool = False, created_calendar_group_ids: list[str] | None = None,
+    announce_calendars: bool = False,
 ) -> None:
     """Make sure every eligible group has a Google calendar and a Zoom
     meeting room (see util/meeting_rooms.py), recording them in
@@ -993,9 +994,9 @@ def ensure_group_meeting_rooms(
     When a group's calendar is created, and for every group with
     move_events, offer to move its meetings from other calendars onto it
     (util/calendar_event_moves.py). Groups whose calendars are created (or
-    would be, in a dry run) are appended to created_calendar_group_ids, to
-    be told about it once their footers are written
-    (announce_new_calendars()).
+    would be, in a dry run), or every group with announce_calendars, are
+    appended to created_calendar_group_ids, to be told about their calendar
+    once their footers are written (announce_new_calendars()).
 
     Only groups that will get a footer — ones with both a Drive item and a
     mailing list — are covered, since the footer is the only record of
@@ -1062,7 +1063,7 @@ def ensure_group_meeting_rooms(
         )
         if calendar_id:
             calendar_id_by_group_id[group_id] = calendar_id
-        if created and created_calendar_group_ids is not None:
+        if (created or announce_calendars) and created_calendar_group_ids is not None:
             created_calendar_group_ids.append(group_id)
         if created or move_events:
             mover.offer(group_name, calendar_id, email)
@@ -1383,7 +1384,7 @@ def add_missing_groups(
 
 def main(base_url: str, email: str, password: str, dry_run: bool,
          credentials_path: str, drive_id: str, group_prefix: str | None = None,
-         move_events: bool = False):
+         move_events: bool = False, announce_calendars: bool = False):
     base_url = base_url.rstrip("/")
     init_log()
     log("INFO", "start", f"base_url={base_url} dry_run={dry_run} group={group_prefix!r}")
@@ -1520,7 +1521,7 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
                     dir_service, settings_service, calendar_service, zoom, group_info,
                     google_file_id_by_group_id, email_by_group_id, get_linked, dry_run,
                     calendar_id_by_group_id, room_by_group_id, move_events,
-                    created_calendar_group_ids,
+                    created_calendar_group_ids, announce_calendars,
                 )
             except QuitRequested:
                 quit_requested = True
@@ -1606,7 +1607,18 @@ def cli():
         help="For each group, offer to copy its meetings from other calendars to its own "
              "calendar and delete them there (always offered for a newly created calendar)",
     )
+    parser.add_argument(
+        "--announce-calendar", action="store_true",
+        help="Email each group's list about its calendar and Zoom room even if the calendar "
+             "already existed (always sent for a newly created calendar); use with -g",
+    )
     args = parser.parse_args()
+
+    if args.announce_calendar and not args.group and not args.dry_run:
+        answer = input("--announce-calendar without -g emails every group's list. "
+                       "Continue? [y/N]: ").strip().lower()
+        if answer not in ("y", "yes"):
+            sys.exit("Stopped; nothing was changed.")
 
     if not os.path.exists(args.credentials):
         sys.exit(
@@ -1616,7 +1628,7 @@ def cli():
 
     email, password = load_credentials()
     main(args.base_url, email, password, args.dry_run, args.credentials, args.drive_id,
-         args.group, args.move_events)
+         args.group, args.move_events, args.announce_calendar)
 
 
 if __name__ == "__main__":
