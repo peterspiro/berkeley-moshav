@@ -66,12 +66,19 @@ def send_email(gmail_service, to: str, subject: str, body: str, reply_to: str) -
     gmail_service.users().messages().send(userId="me", body={"raw": raw}).execute()
 
 
+def _indented(text: str) -> str:
+    return "\n".join(f"      {line}" if line else "" for line in text.split("\n"))
+
+
 def announce_calendar(gmail_service, group_name: str, list_email: str, dry_run: bool) -> None:
     """Email the group's list about its new calendar and Zoom room (or, in
-    a dry run, say that it would)."""
+    a dry run, show the email it would send)."""
     subject, body = build_calendar_announcement(group_name)
     if dry_run:
         print(f"  [dry-run] would email {list_email}: \"{subject}\"")
+        print(_indented(f"To: {list_email}\nReply-To: {ALERT_EMAIL}\nSubject: {subject}\n\n"
+                        f"{body.rstrip()}\n\n(Google Groups appends the group's footer, with "
+                        f"the calendar and Zoom links, when it delivers the message.)"))
         log("INFO", "would_announce_calendar", f"{group_name}: {list_email}")
         return
     send_email(gmail_service, list_email, subject, body, ALERT_EMAIL)

@@ -67,8 +67,12 @@ def test_dry_run_sends_nothing(capsys):
     gmail = FakeGmail()
     announce_calendar(gmail, "Technology Circle", "tech@x.org", dry_run=True)
     assert gmail.sent == []
-    assert ('[dry-run] would email tech@x.org: "Technology Circle\'s new calendar and Zoom room"'
-            in capsys.readouterr().out)
+    out = capsys.readouterr().out
+    assert '[dry-run] would email tech@x.org: "Technology Circle\'s new calendar and Zoom room"' \
+        in out
+    assert f"      To: tech@x.org\n      Reply-To: {ALERT_EMAIL}\n" in out
+    assert "      Hi Technology Circle,\n\n      Technology Circle now has its own" in out
+    assert "(Google Groups appends the group's footer" in out
 
 
 class TestAnnounceNewCalendars:
