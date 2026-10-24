@@ -34,6 +34,8 @@ class TestBuildWelcomeMessage:
                 "calendar. Anyone can post to the list.") in body
         assert ("Please put the group's meetings on its calendar rather than on your own. "
                 f"Here's how:\n{GROUP_CALENDAR_HOWTO_URL}\n\nThe Zoom room is") in body
+        assert ("To see the calendar in your own Google Calendar, click its link in the "
+                "footer.") in body
         assert "its link never changes" in body
         assert ("I've made you a manager of the Gather group, which allows you to add "
                 "members to it, and to make other members managers.") in body

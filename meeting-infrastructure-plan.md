@@ -40,6 +40,12 @@ are; this note keeps the reasoning and the remaining work.
   series' copy starts at its next occurrence. Calendars
   `admin@` can't see would need domain-wide delegation, so their owners
   share them with `admin@` instead.
+- **Calendar announcement** (`util/calendar_announcement.py`): when
+  `update_groups_...` creates a group's calendar, it emails the group's list
+  (from `admin@`, replies to `calendaring-alerts@`) once the footer links the
+  calendar and room. Groups made by `add_new_group.py` get its welcome email
+  instead. Google's own "shared a calendar" email isn't sent: for a group it
+  goes to the group's address and its button does nothing for members.
 - **`reset_zoom_room.py`**: a new passcode (and so link) for a leaked room.
 - **`group_meetings` Apps Script**: adds the room and guests to group
   calendar events, alerts about invitation-only copies, and warns about
@@ -209,6 +215,10 @@ when someone runs `update_groups_in_google_and_hierarchy.py`. Either run it
 regularly, or have the hourly Apps Script run send the warning.
 
 ## Non-code tasks
+
+- Enable the Gmail API in the Google Cloud project, then sign in again on
+  the next script run (the scripts now ask to send mail, for the email
+  telling a group about its new calendar).
 
 - Run `update_groups_in_google_and_hierarchy.py` for all groups (dry run
   first), then tell the community about the calendars and rooms.

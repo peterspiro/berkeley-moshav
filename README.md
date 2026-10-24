@@ -104,8 +104,9 @@ playwright install chromium
   ```
 - **Google APIs**: create a Desktop OAuth 2.0 client in Google Cloud Console,
   save its JSON as `client_secret.json` in the repo root (or pass `-c`), and
-  enable the Drive, Admin SDK (Directory), Groups Settings, and Google
-  Calendar APIs. On first run, a script prints a sign-in URL; open it signed
+  enable the Drive, Admin SDK (Directory), Groups Settings, Google
+  Calendar, and Gmail APIs (Gmail sends the email telling a group about its
+  new calendar). On first run, a script prints a sign-in URL; open it signed
   in as `admin@berkeleymoshav.org`, which owns the group calendars (the
   scripts that make calendars refuse to run as anyone else). The sign-in is
   saved to `~/.google_setup_token.pkl`; delete that file to sign in as a
@@ -210,7 +211,12 @@ status line as "calendar (members can view, not edit)".
   and Zoom room, writes the footer links, and updates the Circle Structure page
   (renames, links, missing and stale entries). Its first run also creates the
   "All Berkeley Moshav Events" calendar, which it shares view-only with the
-  everybody groups. Calendars are shared with groups without Google's
+  everybody groups. When it creates a group's calendar, it emails the
+  group's list from `admin@` (replies going to `calendaring-alerts@`), once
+  the footer links the calendar and Zoom room: how to add the calendar to
+  your own Google Calendar from the footer link, that meetings belong on
+  it, and what the Zoom room is. A dry run says which lists it would email.
+  Calendars are shared with groups without Google's
   "shared a calendar" email, which for a group goes to the group's address
   and has a button that does nothing for members; members add a calendar
   from the link in the group's footer.
@@ -325,6 +331,8 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
 - **`meeting_rooms.py`**: finding, choosing, or creating each group's
   calendar and Zoom room (and deleting matching meetings you don't want),
   and keeping them named, shared, and configured
+- **`calendar_announcement.py`**: the email telling a group about its new
+  calendar and Zoom room
 - **`calendar_event_moves.py`**: finding a group's meetings on other
   calendars, and copying them to its calendar or deleting them
 - **`zoom_utils.py`**: the Zoom API, and the standard room settings

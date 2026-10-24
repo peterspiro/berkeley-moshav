@@ -91,6 +91,7 @@ from urllib.parse import quote
 from googleapiclient.discovery import build
 from playwright.sync_api import sync_playwright
 
+from util.calendar_announcement import GROUP_CALENDAR_HOWTO_URL
 from util.calendar_event_moves import EventMover
 from util.credentials import load_credentials, load_zoom_credentials
 from util.gather_utils import (
@@ -161,13 +162,6 @@ from util.hierarchy_wiki import (
     render_hierarchy,
 )
 
-# How to put a group's meetings on its calendar; linked from the welcome
-# message. Must be viewable by every group member.
-GROUP_CALENDAR_HOWTO_URL = (
-    "https://docs.google.com/document/d/1rr8WqPnsLKw-tgVea40NkyTxlwLFVVLnXbL3UVFQcZY"
-    "/edit?tab=t.0#heading=h.5orsgyhrirdv"
-)
-
 _LOG_FILE = Path("debug/add_new_group_log.csv")
 _SCREENSHOT_DIR = Path("debug/add_new_group_screenshots")
 
@@ -223,6 +217,9 @@ def build_welcome_message(
         "Everyone in the Gather group receives messages sent to the list, can add "
         "and edit files in the folder, and can add and change events on the "
         "calendar. Anyone can post to the list.\n"
+        "\n"
+        "To see the calendar in your own Google Calendar, click its link in the "
+        "footer.\n"
         "\n"
         "Please put the group's meetings on its calendar rather than on your own. "
         f"Here's how:\n{GROUP_CALENDAR_HOWTO_URL}\n"

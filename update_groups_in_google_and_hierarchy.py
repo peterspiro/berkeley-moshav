@@ -127,6 +127,7 @@ from pathlib import Path
 from googleapiclient.discovery import build
 from playwright.sync_api import sync_playwright
 
+from util.calendar_announcement import announce_calendar
 from util.calendar_event_moves import EventMover
 from util.credentials import load_credentials, load_zoom_credentials
 from util.folder_matching import find_matching_folders
@@ -982,7 +983,7 @@ def ensure_group_meeting_rooms(
     google_file_id_by_group_id: dict[str, str], email_by_group_id: dict[str, str],
     get_linked: Callable[[], LinkedResources], dry_run: bool,
     calendar_id_by_group_id: dict[str, str], room_by_group_id: dict[str, RoomLink],
-    move_events: bool = False,
+    move_events: bool = False, created_calendar_group_ids: list[str] | None = None,
 ) -> None:
     """Make sure every eligible group has a Google calendar and a Zoom
     meeting room (see util/meeting_rooms.py), recording them in
@@ -991,7 +992,10 @@ def ensure_group_meeting_rooms(
 
     When a group's calendar is created, and for every group with
     move_events, offer to move its meetings from other calendars onto it
-    (util/calendar_event_moves.py).
+    (util/calendar_event_moves.py). Groups whose calendars are created (or
+    would be, in a dry run) are appended to created_calendar_group_ids, to
+    be told about it once their footers are written
+    (announce_new_calendars()).
 
     Only groups that will get a footer — ones with both a Drive item and a
     mailing list — are covered, since the footer is the only record of
@@ -1058,6 +1062,8 @@ def ensure_group_meeting_rooms(
         )
         if calendar_id:
             calendar_id_by_group_id[group_id] = calendar_id
+        if created and created_calendar_group_ids is not None:
+            created_calendar_group_ids.append(group_id)
         if created or move_events:
             mover.offer(group_name, calendar_id, email)
         room = ensure_zoom_room(
@@ -1070,6 +1076,22 @@ def ensure_group_meeting_rooms(
         role = group_calendar_role(calendar_service, calendar_id, email) if calendar_id else None
         restricted = role is not None and not group_can_edit(role)
         print(f"'{group_name}': {_meeting_rooms_status(calendar_id, room, restricted)}")
+
+
+def announce_new_calendars(
+    gmail_service, group_info: dict[str, dict], email_by_group_id: dict[str, str],
+    created_calendar_group_ids: list[str], calendar_id_by_group_id: dict[str, str],
+    room_by_group_id: dict[str, RoomLink], dry_run: bool,
+) -> None:
+    """Email each group whose calendar this run created about its calendar
+    and Zoom room (util/calendar_announcement.py), at its list address.
+    Only groups whose footer now links both are emailed, since the message
+    points to the footer's links (the user may have quit before the room
+    was made); a dry run says who would be."""
+    for group_id in created_calendar_group_ids:
+        if dry_run or (group_id in calendar_id_by_group_id and group_id in room_by_group_id):
+            announce_calendar(gmail_service, group_info[group_id]["name"],
+                              email_by_group_id[group_id], dry_run)
 
 
 def _meeting_rooms_status(
@@ -1371,6 +1393,7 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
     dir_service = build("admin", "directory_v1", credentials=creds)
     settings_service = build("groupssettings", "v1", credentials=creds)
     calendar_service = build("calendar", "v3", credentials=creds)
+    gmail_service = build("gmail", "v1", credentials=creds)
     check_calendar_owner(calendar_service)
     zoom = ZoomClient(**load_zoom_credentials())
 
@@ -1488,6 +1511,7 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
         # Step 2b: give each group a calendar and a Zoom room.
         calendar_id_by_group_id: dict[str, str] = {}
         room_by_group_id: dict[str, RoomLink] = {}
+        created_calendar_group_ids: list[str] = []
         if not quit_requested:
             get_linked = functools.cache(
                 lambda: find_linked_resources(dir_service, settings_service))
@@ -1496,6 +1520,7 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
                     dir_service, settings_service, calendar_service, zoom, group_info,
                     google_file_id_by_group_id, email_by_group_id, get_linked, dry_run,
                     calendar_id_by_group_id, room_by_group_id, move_events,
+                    created_calendar_group_ids,
                 )
             except QuitRequested:
                 quit_requested = True
@@ -1508,6 +1533,12 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
             item_type_by_group_id, email_by_group_id, dry_run,
             calendar_id_by_group_id, room_by_group_id,
         )
+
+        # Step 3b: tell groups about their new calendars, now that their
+        # footers link them.
+        announce_new_calendars(gmail_service, group_info, email_by_group_id,
+                               created_calendar_group_ids, calendar_id_by_group_id,
+                               room_by_group_id, dry_run)
 
         if not quit_requested:
             try:
