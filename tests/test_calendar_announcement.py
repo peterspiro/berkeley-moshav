@@ -14,7 +14,7 @@ import update_groups_in_google_and_hierarchy as m
 import util.calendar_announcement as ca
 from util.calendar_announcement import (
     ALERT_EMAIL,
-    GROUP_CALENDAR_HOWTO_URL,
+    ANNOUNCEMENT_HOWTO_URL,
     announce_calendar,
     build_calendar_announcement,
 )
@@ -47,9 +47,9 @@ class FakeGmail:
 def test_message():
     subject, body = build_calendar_announcement("Technology Circle")
     assert subject == "Technology Circle's new calendar and Zoom room"
-    assert body.startswith("Hi Technology Circle,\n\nTechnology Circle now has its own")
+    assert body.startswith("Hello Technology Circle,\n\nThe Technology Circle now has its own")
     assert "click its link in the footer" in body
-    assert f"Here's how:\n{GROUP_CALENDAR_HOWTO_URL}\n" in body
+    assert f"Here's how:\n{ANNOUNCEMENT_HOWTO_URL}\n" in body
     assert body.endswith(f"Questions? Reply to {ALERT_EMAIL}.\n")
 
 
@@ -60,7 +60,7 @@ def test_sends_to_list_with_replies_to_alerts():
     assert user == "me"
     assert (msg["To"], msg["Reply-To"]) == ("tech@x.org", ALERT_EMAIL)
     assert msg["Subject"] == "Technology Circle's new calendar and Zoom room"
-    assert "Hi Technology Circle," in msg.get_payload()
+    assert "Hello Technology Circle," in msg.get_payload()
 
 
 def test_dry_run_sends_nothing(capsys):
@@ -71,7 +71,7 @@ def test_dry_run_sends_nothing(capsys):
     assert '[dry-run] would email tech@x.org: "Technology Circle\'s new calendar and Zoom room"' \
         in out
     assert f"      To: tech@x.org\n      Reply-To: {ALERT_EMAIL}\n" in out
-    assert "      Hi Technology Circle,\n\n      Technology Circle now has its own" in out
+    assert "      Hello Technology Circle,\n\n      The Technology Circle now has its own" in out
     assert "(Google Groups appends the group's footer" in out
 
 

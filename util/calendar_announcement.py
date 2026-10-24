@@ -20,11 +20,16 @@ from util.gather_utils import log
 # the same address the group_meetings Apps Script sends its alerts to.
 ALERT_EMAIL = "calendaring-alerts@berkeleymoshav.org"
 
-# How to put a group's meetings on its calendar. Must be viewable by every
-# group member.
+# Sections of the BM Meetings FAQ, which must be viewable by every group
+# member: how to put a group's meetings on its calendar (linked from
+# add_new_group.py's welcome message), and the one this email links.
 GROUP_CALENDAR_HOWTO_URL = (
     "https://docs.google.com/document/d/1rr8WqPnsLKw-tgVea40NkyTxlwLFVVLnXbL3UVFQcZY"
     "/edit?tab=t.0#heading=h.5orsgyhrirdv"
+)
+ANNOUNCEMENT_HOWTO_URL = (
+    "https://docs.google.com/document/d/1rr8WqPnsLKw-tgVea40NkyTxlwLFVVLnXbL3UVFQcZY"
+    "/edit?tab=t.0#heading=h.bmtey5imkq8w"
 )
 
 
@@ -33,9 +38,9 @@ def build_calendar_announcement(group_name: str) -> tuple[str, str]:
     calendar and Zoom room."""
     subject = f"{group_name}'s new calendar and Zoom room"
     body = (
-        f"Hi {group_name},\n"
+        f"Hello {group_name},\n"
         "\n"
-        f"{group_name} now has its own Google calendar for its meetings and a "
+        f"The {group_name} now has its own Google calendar for its meetings and a "
         "permanent Zoom meeting room. Links to both are in the footer at the "
         "bottom of this message.\n"
         "\n"
@@ -45,7 +50,7 @@ def build_calendar_announcement(group_name: str) -> tuple[str, str]:
         "Please put the group's meetings on this calendar rather than on your "
         "own: everyone in the group is then invited automatically, and each "
         "meeting gets the Zoom room's details. Here's how:\n"
-        f"{GROUP_CALENDAR_HOWTO_URL}\n"
+        f"{ANNOUNCEMENT_HOWTO_URL}\n"
         "\n"
         "The Zoom room is the group's permanent meeting place: its link never "
         "changes, and anyone with the link can join, with or without a host.\n"
