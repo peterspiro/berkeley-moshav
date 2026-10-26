@@ -16,6 +16,7 @@ same ground.
 import base64
 import html
 from email.message import EmailMessage
+from pathlib import Path
 
 from util.gather_utils import log
 from util.google_group_footer import calendar_url
@@ -33,9 +34,19 @@ GROUP_CALENDAR_HOWTO_URL = (
 )
 
 
+# Google Calendar's "calendar event" icon (Material Symbols "event"), shown
+# in the HTML version where {icon} appears in a step, as an image attached
+# to the email.
+ICON_PATH = Path(__file__).parent / "calendar_event_icon.png"
+ICON_CID = "calendar-event-icon"
+_ICON_HTML = (f' <img src="cid:{ICON_CID}" width="18" height="18" alt="(calendar event icon)" '
+              'style="vertical-align:middle">')
+
 _ORGANIZER_STEPS = [
     "On Google calendar, open the existing meeting for editing.",
-    "Select your circle’s calendar in the list of calendars (next to the calendar icon).",
+    "Select your circle’s calendar in the list of calendars.  This list is next to the "
+    "calendar event icon{icon} and most likely currently displays your name (if the "
+    "meeting is currently on your personal calendar).",
     "Delete any Zoom info from the location and description fields.  Your circle’s "
     "permanent Zoom link will be added automatically a few minutes after you click Save.",
     "Delete individual guests (including yourself).  Your circle’s email list will be "
@@ -71,7 +82,7 @@ def build_calendar_announcement(group_name: str, calendar_link: str) -> tuple[st
         "\n"
         "Meeting organizers:\n"
         "    Please move the group's meetings to your new calendar:\n"
-        f"{_text_list(_ORGANIZER_STEPS)}"
+        f"{_text_list([step.format(icon='') for step in _ORGANIZER_STEPS])}"
     )
     link = f'<a href="{html.escape(calendar_link)}">this link</a>'
     rich = (
@@ -81,7 +92,8 @@ def build_calendar_announcement(group_name: str, calendar_link: str) -> tuple[st
         f"{_html_list([f'Click {link}', 'Click Add'])}\n"
         "<p><b>Meeting organizers:</b><br>\n"
         "Please move the group's meetings to your new calendar:</p>\n"
-        f"{_html_list([html.escape(step, quote=False) for step in _ORGANIZER_STEPS])}\n"
+        f"{_html_list([html.escape(step, quote=False).format(icon=_ICON_HTML)
+                       for step in _ORGANIZER_STEPS])}\n"
     )
     return subject, text, rich
 
@@ -89,15 +101,18 @@ def build_calendar_announcement(group_name: str, calendar_link: str) -> tuple[st
 def send_email(gmail_service, to: str, subject: str, text: str, rich: str,
                reply_to: str) -> None:
     """Send an email from the signed-in account, as plain text with an HTML
-    version (rich) that mail programs show instead. Unlike plain text,
-    which gets wrapped at about 78 characters on the way, HTML is reflowed
-    to fit the reader's window."""
+    version (rich) that mail programs show instead, with the icon attached
+    for it. Unlike plain text, which gets wrapped at about 78 characters on
+    the way, HTML is reflowed to fit the reader's window."""
     message = EmailMessage()
     message["To"] = to
     message["Subject"] = subject
     message["Reply-To"] = reply_to
     message.set_content(text)
     message.add_alternative(rich, subtype="html")
+    message.get_payload()[1].add_related(
+        ICON_PATH.read_bytes(), "image", "png", cid=f"<{ICON_CID}>",
+        filename="calendar_event_icon.png", disposition="inline")
     raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
     gmail_service.users().messages().send(userId="me", body={"raw": raw}).execute()
 

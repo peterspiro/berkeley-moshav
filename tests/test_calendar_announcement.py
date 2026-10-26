@@ -59,6 +59,10 @@ def test_message():
                          "emails to removed Google Calendar guests.\n")
     assert f'<ol><li>Click <a href="{LINK}">this link</a></li><li>Click Add</li></ol>' in rich
     assert rich.count("<li>") == 7
+    assert "next to the calendar event icon and most likely currently displays your name" \
+        in text
+    assert (f'next to the calendar event icon <img src="cid:{ca.ICON_CID}"' in rich
+            and '"> and most likely currently displays your name' in rich)
     assert "<p><b>Everyone:</b><br>" in rich and "<p><b>Meeting organizers:</b><br>" in rich
 
 
@@ -74,12 +78,18 @@ def test_sends_text_and_html_to_list_with_replies_to_alerts():
     assert user == "me"
     assert (msg["To"], msg["Reply-To"]) == ("tech@x.org", ALERT_EMAIL)
     assert msg["Subject"] == "Technology Circle's new calendar and Zoom room"
-    plain, rich = msg.get_payload()
+    plain, related = msg.get_payload()
     assert plain.get_content_type() == "text/plain"
     assert "Hello Technology Circle," in plain.get_payload(decode=True).decode()
+    assert related.get_content_type() == "multipart/related"
+    rich, icon = related.get_payload()
     assert rich.get_content_type() == "text/html"
-    assert ('<a href="https://calendar.google.com/calendar/u/0?cid=YzE">this link</a>'
-            in rich.get_payload(decode=True).decode())
+    rich_html = rich.get_payload(decode=True).decode()
+    assert '<a href="https://calendar.google.com/calendar/u/0?cid=YzE">this link</a>' in rich_html
+    assert f'<img src="cid:{ca.ICON_CID}"' in rich_html
+    assert icon.get_content_type() == "image/png"
+    assert icon["Content-ID"] == f"<{ca.ICON_CID}>"
+    assert icon.get_payload(decode=True) == ca.ICON_PATH.read_bytes()
 
 
 def test_dry_run_shows_email_and_sends_nothing(capsys):
