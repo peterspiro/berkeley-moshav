@@ -59,6 +59,7 @@ def test_message():
                          "emails to removed Google Calendar guests.\n")
     assert f'<ol><li>Click <a href="{LINK}">this link</a></li><li>Click Add</li></ol>' in rich
     assert rich.count("<li>") == 7
+    assert "<p><b>Everyone:</b><br>" in rich and "<p><b>Meeting organizers:</b><br>" in rich
 
 
 def test_html_is_escaped():

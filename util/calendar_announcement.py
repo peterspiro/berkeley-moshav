@@ -77,9 +77,9 @@ def build_calendar_announcement(group_name: str, calendar_link: str) -> tuple[st
     rich = (
         f"<p>Hello {html.escape(group_name, quote=False)},</p>\n"
         "<p>You now have your own Google calendar and Zoom meeting room.</p>\n"
-        "<p>Everyone:<br>\nPlease add the calendar as follows:</p>\n"
+        "<p><b>Everyone:</b><br>\nPlease add the calendar as follows:</p>\n"
         f"{_html_list([f'Click {link}', 'Click Add'])}\n"
-        "<p>Meeting organizers:<br>\n"
+        "<p><b>Meeting organizers:</b><br>\n"
         "Please move the group's meetings to your new calendar:</p>\n"
         f"{_html_list([html.escape(step, quote=False) for step in _ORGANIZER_STEPS])}\n"
     )
