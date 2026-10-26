@@ -70,7 +70,7 @@ def build_calendar_announcement(group_name: str, calendar_link: str) -> tuple[st
         f"{_text_list([f'Click this link: {calendar_link}', 'Click Add'])}"
         "\n"
         "Meeting organizers:\n"
-        "    Please move the group's meetings to this calendar, as follows:\n"
+        "    Please move the group's meetings to your new calendar:\n"
         f"{_text_list(_ORGANIZER_STEPS)}"
     )
     link = f'<a href="{html.escape(calendar_link)}">this link</a>'
@@ -80,7 +80,7 @@ def build_calendar_announcement(group_name: str, calendar_link: str) -> tuple[st
         "<p>Everyone:<br>\nPlease add the calendar as follows:</p>\n"
         f"{_html_list([f'Click {link}', 'Click Add'])}\n"
         "<p>Meeting organizers:<br>\n"
-        "Please move the group's meetings to this calendar, as follows:</p>\n"
+        "Please move the group's meetings to your new calendar:</p>\n"
         f"{_html_list([html.escape(step, quote=False) for step in _ORGANIZER_STEPS])}\n"
     )
     return subject, text, rich
