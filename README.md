@@ -213,9 +213,9 @@ status line as "calendar (members can view, not edit)".
   "All Berkeley Moshav Events" calendar, which it shares view-only with the
   everybody groups. When it creates a group's calendar, it emails the
   group's list from `admin@` (replies going to `calendaring-alerts@`), once
-  the footer links the calendar and Zoom room: how to add the calendar to
-  your own Google Calendar from the footer link, that meetings belong on
-  it, and what the Zoom room is. A dry run shows each email it would send.
+  the footer links the calendar and Zoom room: a link for everyone to add
+  the calendar, and steps for meeting organizers to move the group's
+  meetings onto it. A dry run shows each email it would send.
   `--announce-calendar` sends it even when the calendar already existed
   (with `-g`, to one group; without, it asks before emailing every group).
   Calendars are shared with groups without Google's

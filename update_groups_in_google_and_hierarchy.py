@@ -1092,7 +1092,8 @@ def announce_new_calendars(
     for group_id in created_calendar_group_ids:
         if dry_run or (group_id in calendar_id_by_group_id and group_id in room_by_group_id):
             announce_calendar(gmail_service, group_info[group_id]["name"],
-                              email_by_group_id[group_id], dry_run)
+                              email_by_group_id[group_id],
+                              calendar_id_by_group_id.get(group_id), dry_run)
 
 
 def _meeting_rooms_status(

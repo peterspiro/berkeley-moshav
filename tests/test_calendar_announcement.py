@@ -14,7 +14,6 @@ import update_groups_in_google_and_hierarchy as m
 import util.calendar_announcement as ca
 from util.calendar_announcement import (
     ALERT_EMAIL,
-    ANNOUNCEMENT_HOWTO_URL,
     announce_calendar,
     build_calendar_announcement,
 )
@@ -44,18 +43,32 @@ class FakeGmail:
         return {}
 
 
+LINK = "https://calendar.google.com/calendar/u/0?cid=YzE"
+
+
 def test_message():
-    subject, body = build_calendar_announcement("Technology Circle")
-    assert subject == "Technology Circle's new calendar and Zoom room"
-    assert body.startswith("Hello Technology Circle,\n\nThe Technology Circle now has its own")
-    assert "click its link in the footer" in body
-    assert f"Here's how:\n{ANNOUNCEMENT_HOWTO_URL}\n" in body
-    assert body.endswith(f"Questions? Reply to {ALERT_EMAIL}.\n")
+    subject, text, rich = build_calendar_announcement("Safety and Security Circle", LINK)
+    assert subject == "Safety and Security Circle's new calendar and Zoom room"
+    assert text.startswith("Hello Safety and Security Circle,\n\n"
+                           "You now have your own Google calendar and Zoom meeting room.\n\n"
+                           "Everyone:\n    Please add the calendar as follows:\n"
+                           f"    1. Click this link: {LINK}\n    2. Click Add\n\n"
+                           "Meeting organizers:\n")
+    assert "    1. On Google calendar, open the existing meeting for editing.\n" in text
+    assert text.endswith("    5. Click Save.  You may want to choose not to send cancellation "
+                         "emails to removed Google Calendar guests.\n")
+    assert f'<ol><li>Click <a href="{LINK}">this link</a></li><li>Click Add</li></ol>' in rich
+    assert rich.count("<li>") == 7
 
 
-def test_sends_to_list_with_replies_to_alerts():
+def test_html_is_escaped():
+    _, _, rich = build_calendar_announcement("R&D Circle", LINK)
+    assert "<p>Hello R&amp;D Circle,</p>" in rich
+
+
+def test_sends_text_and_html_to_list_with_replies_to_alerts():
     gmail = FakeGmail()
-    announce_calendar(gmail, "Technology Circle", "tech@x.org", dry_run=False)
+    announce_calendar(gmail, "Technology Circle", "tech@x.org", "c1", dry_run=False)
     (user, msg), = gmail.sent
     assert user == "me"
     assert (msg["To"], msg["Reply-To"]) == ("tech@x.org", ALERT_EMAIL)
@@ -64,27 +77,20 @@ def test_sends_to_list_with_replies_to_alerts():
     assert plain.get_content_type() == "text/plain"
     assert "Hello Technology Circle," in plain.get_payload(decode=True).decode()
     assert rich.get_content_type() == "text/html"
-    html_body = rich.get_payload(decode=True).decode()
-    assert "<p>Hello Technology Circle,</p>" in html_body
-    assert f'Here\'s how:<br>\n<a href="{ANNOUNCEMENT_HOWTO_URL}">' in html_body
-    assert (f'Questions? Reply to <a href="mailto:{ALERT_EMAIL}">{ALERT_EMAIL}</a>.</p>'
-            in html_body)
+    assert ('<a href="https://calendar.google.com/calendar/u/0?cid=YzE">this link</a>'
+            in rich.get_payload(decode=True).decode())
 
 
-def test_html_paragraphs_are_not_broken_and_text_is_escaped():
-    out = ca.to_html("One long line that must stay whole & unbroken.\n\nTwo")
-    assert out == "<p>One long line that must stay whole &amp; unbroken.</p>\n<p>Two</p>"
-
-
-def test_dry_run_sends_nothing(capsys):
+def test_dry_run_shows_email_and_sends_nothing(capsys):
     gmail = FakeGmail()
-    announce_calendar(gmail, "Technology Circle", "tech@x.org", dry_run=True)
+    announce_calendar(gmail, "Technology Circle", "tech@x.org", None, dry_run=True)
     assert gmail.sent == []
     out = capsys.readouterr().out
     assert '[dry-run] would email tech@x.org: "Technology Circle\'s new calendar and Zoom room"' \
         in out
     assert f"      To: tech@x.org\n      Reply-To: {ALERT_EMAIL}\n" in out
-    assert "      Hello Technology Circle,\n\n      The Technology Circle now has its own" in out
+    assert "      Hello Technology Circle,\n" in out
+    assert "1. Click this link: (the new calendar's link)" in out
     assert "(Google Groups appends the group's footer" in out
 
 
