@@ -291,9 +291,17 @@ function overlapMessage(c, opts) {
   } else {
     to = groupEmails; cc = [opts.alertEmail];
     greeting = joinNames(names);
-    ask = `Please agree between you which meeting moves, and change its time on its ` +
-      `group calendar${spacing}.`;
+    ask = null;  // the options below
   }
+  const findTime = `To find a free time, check the All Berkeley Moshav Events calendar, ` +
+    `which shows every group's meetings:\n${opts.allEventsUrl}`;
+  const options = ask ? `${ask} ${findTime}` :
+    `Your options are:\n` +
+    `- Request the Tech Circle to move one of your ${names.length === 2 ? 'two ' : ''}` +
+    `groups' Zoom rooms to our second Zoom user account.  This may or may not be ` +
+    `possible, depending on your meeting schedule.\n` +
+    `- Agree between you to move one of these meetings, and change its time on its ` +
+    `group calendar${spacing}. ${findTime}`;
 
   const line = m => {
     const where = (m.names || []).length
@@ -313,12 +321,35 @@ function overlapMessage(c, opts) {
     body:
       `Hi ${greeting},\n\n` +
       `These two meetings ${what}:\n${line(c.a)}\n${line(c.b)}\n\n` +
-      `All our meetings use one Zoom account, which can host only one meeting at a ` +
-      `time, ${why}\n\n` +
-      `${ask} To find a free time, check the All Berkeley Moshav Events calendar, ` +
-      `which shows every group's meetings:\n${opts.allEventsUrl}\n\n` +
+      `Both meetings use the same Zoom user account, which can host only one meeting ` +
+      `at a time, ${why}\n\n` +
+      `${options}\n\n` +
       `This message was sent automatically. Questions? Reply to ${opts.alertEmail}.\n`,
   };
+}
+
+/**
+ * An email's plain text as HTML, so mail programs reflow it to fit rather
+ * than showing the line breaks plain text gets on the way: blank-line-
+ * separated paragraphs, lines starting "- " as a bulleted list (a line
+ * after one continuing that item), and web links clickable.
+ */
+function textToHtml(text) {
+  const escape = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const linked = s => escape(s).replace(/https?:\/\/[^\s<]+/g, url => `<a href="${url}">${url}</a>`);
+  return text.trim().split(/\n{2,}/).map(block => {
+    const lines = [];
+    let items = null;
+    for (const line of block.split('\n')) {
+      const item = line.match(/^\s*- (.*)$/);
+      if (item) (items = items || []).push(linked(item[1]));
+      else if (items) items[items.length - 1] += `<br>${linked(line)}`;
+      else lines.push(linked(line));
+    }
+    return (lines.length ? `<p>${lines.join('<br>')}</p>` : '') +
+      (items ? `<ul>${items.map(i => `<li>${i}</li>`).join('')}</ul>` : '');
+  }).join('\n');
 }
 
 /** Stable ID for a conflict, and a fingerprint that changes with its times. */

@@ -408,6 +408,7 @@ function sendOverlapAlert(c) {
     replyTo: ALERT_EMAIL,
     subject: message.subject,
     body: message.body,
+    htmlBody: textToHtml(message.body),
   });
   console.log(`Overlap alert: ${conflictId(c)}`);
 }

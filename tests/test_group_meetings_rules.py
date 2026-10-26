@@ -288,12 +288,16 @@ class TestOverlapMessage:
             "These two meetings overlap:\n"
             '  - "Finance meeting" (Finance Circle), 0-90\n'
             '  - "Care meeting" (Care Circle), 60-120\n\n'
-            "All our meetings use one Zoom account, which can host only one meeting at a "
-            "time, so the second meeting won't be able to start while the first is still "
-            "going.\n\n"
-            "Please agree between you which meeting moves, and change its time on its group "
-            "calendar. To find a free time, check the All Berkeley Moshav Events calendar, "
-            "which shows every group's meetings:\nhttps://cal/all\n\n"
+            "Both meetings use the same Zoom user account, which can host only one meeting "
+            "at a time, so the second meeting won't be able to start while the first is "
+            "still going.\n\n"
+            "Your options are:\n"
+            "- Request the Tech Circle to move one of your two groups' Zoom rooms to our "
+            "second Zoom user account.  This may or may not be possible, depending on your "
+            "meeting schedule.\n"
+            "- Agree between you to move one of these meetings, and change its time on its "
+            "group calendar. To find a free time, check the All Berkeley Moshav Events "
+            "calendar, which shows every group's meetings:\nhttps://cal/all\n\n"
             "This message was sent automatically. Questions? Reply to alerts@x.org.\n")
 
     def test_two_groups_too_close(self):
@@ -344,6 +348,33 @@ class TestOverlapMessage:
         msg = message(joint, group_meeting("C", "Garden Club", 30, 90))
         assert msg["body"].startswith("Hi Finance Circle, Care Circle and Garden Club,\n")
         assert '  - "Joint" (Finance Circle and Care Circle), 0-60' in msg["body"]
+        assert "move one of your groups' Zoom rooms" in msg["body"]
+
+    def test_same_group_and_zoom_cases_keep_a_single_ask(self):
+        for msg in (message(group_meeting("A", "Finance Circle", 0, 60),
+                            group_meeting("B", "Finance Circle", 30, 90)),
+                    message(zoom_meeting("A", 0, 60), zoom_meeting("B", 30, 90))):
+            assert "Your options are" not in msg["body"]
+            assert "Both meetings use the same Zoom user account" in msg["body"]
+            assert "To find a free time" in msg["body"]
+
+
+class TestTextToHtml:
+    def test_paragraphs_lists_and_links(self):
+        html = js("textToHtml(t)", t=(
+            "Hi A & B,\n\nThese two meetings overlap:\n  - \"X\" (A), 1\n  - \"Y\" (B), 2\n\n"
+            "Your options are:\n- One.\n- Two:\nhttps://cal/all?a=1&b=2\n\nBye.\n"))
+        assert html == (
+            "<p>Hi A &amp; B,</p>\n"
+            "<p>These two meetings overlap:</p><ul><li>&quot;X&quot; (A), 1</li>"
+            "<li>&quot;Y&quot; (B), 2</li></ul>\n"
+            "<p>Your options are:</p><ul><li>One.</li><li>Two:<br>"
+            '<a href="https://cal/all?a=1&amp;b=2">https://cal/all?a=1&amp;b=2</a></li></ul>\n'
+            "<p>Bye.</p>")
+
+    def test_long_lines_stay_whole(self):
+        line = "word " * 40
+        assert js("textToHtml(t)", t=line) == f"<p>{line.strip()}</p>"
 
 
 def test_merge_keeps_every_group_name():

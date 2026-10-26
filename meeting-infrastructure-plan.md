@@ -112,8 +112,10 @@ are; this note keeps the reasoning and the remaining work.
 - Each clash is emailed once (again if its times change, or if it's resolved
   and recurs), with a link to the all-events calendar for finding a free time,
   replies going to `calendaring-alerts@` (the Technology Circle):
-  - two group meetings: the groups are asked to agree which moves, cc the
-    Technology Circle (a group clashing with itself is asked to move one);
+  - two group meetings: the groups are offered two options, cc the
+    Technology Circle: ask the Technology Circle to move one group's room to
+    the second Zoom user (if their schedules allow), or agree which meeting
+    moves (a group clashing with itself is asked to move one);
   - a group meeting and a meeting scheduled directly in Zoom: the group and
     the Technology Circle are asked to agree which moves;
   - two meetings scheduled in Zoom: the Technology Circle is asked to move one.
@@ -236,7 +238,8 @@ regularly, or have the hourly Apps Script run send the warning.
 
 - How long recordings are kept, in Zoom and in Drive.
 - Nonprofit discounts: Zoom through TechSoup; Zapier or Make, if used.
-- What the second licensed Zoom user is for, now that it holds no permanent
-  rooms: a spare for ad hoc meetings and for resolving clashes, or dropped to
-  save a license.
+- How the second licensed Zoom user takes rooms: clash emails offer moving a
+  group's room there, but Zoom can't move a meeting between users, so it
+  means a new room (and link) under that user, made by hand in Zoom and put
+  in the group's footer; no script does this yet.
 - Where community-wide calendars and their room are recorded (see 1).

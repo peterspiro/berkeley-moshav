@@ -309,7 +309,8 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
   directly in Zoom, and emails the groups involved (and, for a meeting
   scheduled directly in Zoom, calendaring-alerts@berkeleymoshav.org, for the
   Technology Circle), asking them to agree which meeting moves, with a link to
-  the all-events calendar for finding a free time. Its rules are
+  the all-events calendar for finding a free time (two groups are also offered
+  having one group's room moved to the second Zoom user). Its rules are
   in `group_meetings/event_rules.gs`, tested under Node. See
   `group_meetings/README.md` for deployment, including the Zoom credentials
   it reads from Script Properties.
