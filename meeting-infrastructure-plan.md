@@ -27,8 +27,8 @@ are; this note keeps the reasoning and the remaining work.
   an email list gets a calendar and a room. Existing ones are found through
   the footer, or offered by name, before anything is created. For a room,
   every meeting in the Zoom account whose name matches is listed, and for
-  each you choose to use it (only a no-fixed-time meeting of `zoomhosts@`,
-  since Zoom can't change a meeting's type or owner), ignore it, or delete
+  each you choose to use it (only a no-fixed-time meeting of either room
+  user, since Zoom can't change a meeting's type), ignore it, or delete
   it; deletions are confirmed by typing `delete`.
 - **Moving existing meetings** (`util/calendar_event_moves.py`): when a
   group's calendar is created, or with `update_groups_... --move-events`,
@@ -57,9 +57,11 @@ are; this note keeps the reasoning and the remaining work.
 - Calendars are owned by `admin@berkeleymoshav.org`, which also runs the Apps
   Scripts. The Python scripts refuse to work on calendars signed in as anyone
   else, since other admins can't see calendars they don't own.
-- Every room belongs to the `zoomhosts@berkeleymoshav.org` Zoom user. The
-  account has a second licensed user, which holds no permanent rooms (see
-  "Open decisions").
+- New rooms are made under the `zoomhosts@berkeleymoshav.org` Zoom user. The
+  account's second licensed user, `berkeley@urbanmoshav.org`, can take a
+  group's room, transferred to it in Zoom, when the group's meetings keep
+  clashing with others' (see "Open decisions"). Both are `ROOM_USERS` in
+  `util/zoom_utils.py`.
 - Zoom is reached through a Server-to-Server OAuth app ("Berkeley Moshav Admin
   Scripts"). Its credentials are the project's, not a person's, so they live
   in the repo's git-ignored `zoom_credentials` file (Python) and the Apps
@@ -242,6 +244,5 @@ regularly, or have the hourly Apps Script run send the warning.
   Zoom can transfer a meeting (a room included) between users who both have
   scheduling privilege, keeping its ID and link, so the footer and events
   don't change. Done by hand in Zoom for now; a script could do it (the
-  API's `schedule_for`), and `update_groups_...`'s warning about rooms not
-  owned by `zoomhosts@` would need to accept the second user.
+  API's `schedule_for`).
 - Where community-wide calendars and their room are recorded (see 1).

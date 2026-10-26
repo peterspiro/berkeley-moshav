@@ -11,7 +11,7 @@ ensure_group_calendar() and ensure_zoom_room():
      these" creating a new one — so a calendar made by an earlier,
      interrupted run is picked up rather than duplicated. For a room, list
      every meeting in the Zoom account whose name matches, and ask of each
-     whether to use it (only a no-fixed-time meeting of ROOMS_USER can be
+     whether to use it (only a no-fixed-time meeting of ROOM_USERS can be
      a room), ignore it, or delete it, then create a room unless one is
      used (decide_on_matching_meetings());
   3. then bring it into line: a calendar named after the group, and shared
@@ -48,7 +48,7 @@ from util.google_group_utils import TOKEN_PATH, list_all_groups
 from util.zoom_utils import (
     MEETING_TYPE_NO_FIXED_TIME,
     ROOM_TOPIC_SUFFIX,
-    ROOMS_USER,
+    ROOM_USERS,
     ZoomClient,
     is_numeric_passcode,
     meeting_id_from_url,
@@ -411,10 +411,10 @@ def room_candidates(meetings: list[dict]) -> list[dict]:
 
 
 def _can_be_room(meeting: dict) -> bool:
-    """Only a no-fixed-time meeting of ROOMS_USER can be a group's room (a
-    meeting's type can't be changed, nor its owner)."""
+    """Only a no-fixed-time meeting of one of ROOM_USERS can be a group's
+    room (a meeting's type can't be changed)."""
     return (meeting.get("type") == MEETING_TYPE_NO_FIXED_TIME
-            and (meeting.get("host_email") or "").lower() == ROOMS_USER)
+            and (meeting.get("host_email") or "").lower() in ROOM_USERS)
 
 
 # ── Describing a meeting's schedule ──
@@ -663,10 +663,10 @@ def ensure_zoom_room(
             print(f"  + created Zoom room '{topic}' ({meeting['id']})")
             log("INFO", "create_room", f"{group_name}: {meeting['id']}")
 
-    if meeting.get("host_email") and meeting["host_email"].lower() != ROOMS_USER:
+    if meeting.get("host_email") and meeting["host_email"].lower() not in ROOM_USERS:
         log("WARN", "room_host",
             f"{group_name}: room {meeting['id']} belongs to {meeting['host_email']}, "
-            f"not {ROOMS_USER}")
+            f"not to one of {', '.join(ROOM_USERS)}")
 
     body = room_settings_differences(meeting, topic)
     described = dict(body)

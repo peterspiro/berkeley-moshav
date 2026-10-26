@@ -4,8 +4,10 @@ Zoom API access for the groups' permanent meeting rooms.
 Uses a Server-to-Server OAuth app in the community's Zoom account (its
 credentials live in the repo's zoom_credentials file — see
 util/credentials.py and README.md). Every
-group room is a recurring meeting with no fixed time (type 3) owned by
-ROOMS_USER, so its link never changes and members only ever click it.
+group room is a recurring meeting with no fixed time (type 3), so its link
+never changes and members only ever click it. New rooms are made under
+ROOMS_USER; a room can be moved (transferred in Zoom, keeping its link) to
+another of ROOM_USERS, to keep its meetings from clashing with others'.
 
 Room settings (ROOM_SETTINGS) let a meeting run with no host present:
 participants can join before the host at any time, there's no waiting room
@@ -25,8 +27,10 @@ import requests
 API_BASE = "https://api.zoom.us/v2"
 TOKEN_URL = "https://zoom.us/oauth/token"
 
-# The licensed Zoom user that owns every group room.
+# The licensed Zoom user that new group rooms are made under, and every
+# licensed user that may own one (a Zoom user can run one meeting at a time).
 ROOMS_USER = "zoomhosts@berkeleymoshav.org"
+ROOM_USERS = (ROOMS_USER, "berkeley@urbanmoshav.org")
 
 ROOM_TOPIC_SUFFIX = " Meeting Room"
 MEETING_TYPE_NO_FIXED_TIME = 3

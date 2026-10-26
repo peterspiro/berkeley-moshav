@@ -284,6 +284,17 @@ class TestEnsureZoomRoom:
         _room(zoom, "https://zoom.us/j/1?pwd=p")
         assert not any(a == "room_idle" for _, a, _ in quiet_log)
 
+    def test_room_moved_to_second_zoom_user_does_not_warn(self, quiet_log):
+        zoom = FakeZoom({1: room(1, "Technology Circle Meeting Room",
+                                 host_email="berkeley@urbanmoshav.org")})
+        _room(zoom, "https://zoom.us/j/1?pwd=p")
+        assert not any(a == "room_host" for _, a, _ in quiet_log)
+
+    def test_second_zoom_users_room_can_be_used(self):
+        zoom = FakeZoom({7: room(7, "Technology Circle Meeting Room",
+                                 host_email="berkeley@urbanmoshav.org")})
+        assert _room(zoom, input_fn=_inputs("u")).join_url == "https://zoom.us/j/7?pwd=p"
+
     def test_room_owned_by_someone_else_warns(self, quiet_log):
         zoom = FakeZoom({1: room(1, "Technology Circle Meeting Room",
                                  host_email="someone@berkeleymoshav.org")})

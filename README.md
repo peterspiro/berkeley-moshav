@@ -232,8 +232,9 @@ status line as "calendar (members can view, not edit)".
   matches the group's (any user's, of any kind, with its owner and schedule,
   and the matching calendar events held in it),
   then asks of each one in turn whether to use it as the room, ignore it, or
-  delete it. Only a no-fixed-time meeting of `zoomhosts@` can be used, since
-  Zoom can't change a meeting's type or owner; choosing a second one to use
+  delete it. Only a no-fixed-time meeting of `zoomhosts@` or
+  `berkeley@urbanmoshav.org` (the second Zoom user) can be used, since Zoom
+  can't change a meeting's type; choosing a second one to use
   asks to confirm the switch, and what to do with the first. Nothing changes
   until the end, when it shows what it will do and, if it will delete any
   meeting (whose link then stops working), asks you to type `delete`. Unless
