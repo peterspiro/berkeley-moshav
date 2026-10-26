@@ -238,8 +238,10 @@ regularly, or have the hourly Apps Script run send the warning.
 
 - How long recordings are kept, in Zoom and in Drive.
 - Nonprofit discounts: Zoom through TechSoup; Zapier or Make, if used.
-- How the second licensed Zoom user takes rooms: clash emails offer moving a
-  group's room there, but Zoom can't move a meeting between users, so it
-  means a new room (and link) under that user, made by hand in Zoom and put
-  in the group's footer; no script does this yet.
+- Moving a room to the second licensed Zoom user, which clash emails offer:
+  Zoom can transfer a meeting (a room included) between users who both have
+  scheduling privilege, keeping its ID and link, so the footer and events
+  don't change. Done by hand in Zoom for now; a script could do it (the
+  API's `schedule_for`), and `update_groups_...`'s warning about rooms not
+  owned by `zoomhosts@` would need to accept the second user.
 - Where community-wide calendars and their room are recorded (see 1).

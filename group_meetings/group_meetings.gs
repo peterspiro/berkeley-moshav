@@ -102,10 +102,15 @@ function recheckIfRulesChanged() {
   console.log(`Rules version ${RULES_VERSION}: rechecking every upcoming event.`);
 }
 
-/** Every hour: re-read footers and Zoom's meetings, then check overlaps. */
+/**
+ * Every hour: re-read footers and Zoom's meetings (including which user owns
+ * each room, since a room can be transferred to another Zoom user), then
+ * check overlaps.
+ */
 function hourly() {
   withLock(() => {
     const groups = refreshGroups();
+    forgetRoomOwners();
     refreshZoomMeetings();
     checkOverlaps(groups);
   });
@@ -431,6 +436,14 @@ function roomOwner(meetingId) {
   const value = meeting ? { owner: lower(meeting.host_email), type: meeting.type } : null;
   props.setProperty(key, value ? JSON.stringify(value) : '');
   return value;
+}
+
+/** Drop the cached room owners, so roomOwner() asks Zoom again. */
+function forgetRoomOwners() {
+  const props = PropertiesService.getScriptProperties();
+  for (const key of props.getKeys()) {
+    if (key.startsWith(PROP_ROOM_OWNER_PREFIX)) props.deleteProperty(key);
+  }
 }
 
 function loadZoomMeetings() {
