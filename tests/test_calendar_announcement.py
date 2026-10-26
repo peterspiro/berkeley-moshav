@@ -60,7 +60,20 @@ def test_sends_to_list_with_replies_to_alerts():
     assert user == "me"
     assert (msg["To"], msg["Reply-To"]) == ("tech@x.org", ALERT_EMAIL)
     assert msg["Subject"] == "Technology Circle's new calendar and Zoom room"
-    assert "Hello Technology Circle," in msg.get_payload()
+    plain, rich = msg.get_payload()
+    assert plain.get_content_type() == "text/plain"
+    assert "Hello Technology Circle," in plain.get_payload(decode=True).decode()
+    assert rich.get_content_type() == "text/html"
+    html_body = rich.get_payload(decode=True).decode()
+    assert "<p>Hello Technology Circle,</p>" in html_body
+    assert f'Here\'s how:<br>\n<a href="{ANNOUNCEMENT_HOWTO_URL}">' in html_body
+    assert (f'Questions? Reply to <a href="mailto:{ALERT_EMAIL}">{ALERT_EMAIL}</a>.</p>'
+            in html_body)
+
+
+def test_html_paragraphs_are_not_broken_and_text_is_escaped():
+    out = ca.to_html("One long line that must stay whole & unbroken.\n\nTwo")
+    assert out == "<p>One long line that must stay whole &amp; unbroken.</p>\n<p>Two</p>"
 
 
 def test_dry_run_sends_nothing(capsys):

@@ -12,6 +12,8 @@ same ground.
 """
 
 import base64
+import html
+import re
 from email.message import EmailMessage
 
 from util.gather_utils import log
@@ -60,13 +62,50 @@ def build_calendar_announcement(group_name: str) -> tuple[str, str]:
     return subject, body
 
 
+_LINK_RE = re.compile(r"https?://\S+|[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
+
+
+def _linked(match: re.Match) -> str:
+    text = match.group()
+    if text.endswith("."):  # an email address ending a sentence
+        return _linked_text(text[:-1]) + "."
+    return _linked_text(text)
+
+
+def _linked_text(text: str) -> str:
+    href = text if text.startswith("http") else f"mailto:{text}"
+    return f'<a href="{html.escape(href)}">{html.escape(text, quote=False)}</a>'
+
+
+def to_html(body: str) -> str:
+    """body as HTML: each blank-line-separated paragraph a <p> (line breaks
+    within one kept), with links and email addresses clickable. Mail
+    programs reflow it to fit, unlike plain text, which gets wrapped at
+    about 78 characters on the way."""
+    paragraphs = []
+    for paragraph in body.strip().split("\n\n"):
+        lines = []
+        for line in paragraph.split("\n"):
+            parts, last = [], 0
+            for m in _LINK_RE.finditer(line):
+                parts.append(html.escape(line[last:m.start()], quote=False))
+                parts.append(_linked(m))
+                last = m.end()
+            parts.append(html.escape(line[last:], quote=False))
+            lines.append("".join(parts))
+        paragraphs.append("<p>" + "<br>\n".join(lines) + "</p>")
+    return "\n".join(paragraphs)
+
+
 def send_email(gmail_service, to: str, subject: str, body: str, reply_to: str) -> None:
-    """Send a plain-text email from the signed-in account."""
+    """Send an email from the signed-in account, as plain text with an HTML
+    version (to_html()) that mail programs show instead."""
     message = EmailMessage()
     message["To"] = to
     message["Subject"] = subject
     message["Reply-To"] = reply_to
     message.set_content(body)
+    message.add_alternative(to_html(body), subtype="html")
     raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
     gmail_service.users().messages().send(userId="me", body={"raw": raw}).execute()
 
