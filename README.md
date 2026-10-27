@@ -20,7 +20,7 @@ Their main job is keeping these things linked together and consistent:
   its permanent **Zoom meeting room**, owned by the
   `zoomhosts@berkeleymoshav.org` Zoom user. A room's link never changes, and
   meetings in it can run with no host present. There's also one "All Berkeley
-  Moshav Events" calendar for every meeting.
+  Moshav Events" calendar for every meeting, which everyone can view.
 
 Three Google Apps Script projects run inside Google Workspace alongside the
 Python scripts:
@@ -77,9 +77,11 @@ and read out.
 
 The footer is the only record of which calendar and Zoom room belong to a
 group; `update_groups_in_google_and_hierarchy.py` and `add_new_group.py`
-create them and write the links. Each calendar is shared with the group's
+create them and write the links. A new calendar is shared with the group's
 Google Group as "Make changes to events", so membership of the Google Group
-(kept in step with Drive above) decides who can use it.
+(kept in step with Drive above) decides who can use it. The scripts only set
+that starting access: a circle can be restricted so only some members edit
+(see "Letting only some members edit a group's calendar" below).
 
 A group linked to a shared drive has a "Shared Drive:" line instead of
 "Google Docs folder:". `groups_drive_sync.gs` reads that footer to know which
@@ -102,8 +104,9 @@ playwright install chromium
   ```
 - **Google APIs**: create a Desktop OAuth 2.0 client in Google Cloud Console,
   save its JSON as `client_secret.json` in the repo root (or pass `-c`), and
-  enable the Drive, Admin SDK (Directory), Groups Settings, and Google
-  Calendar APIs. On first run, a script prints a sign-in URL; open it signed
+  enable the Drive, Admin SDK (Directory), Groups Settings, Google
+  Calendar, and Gmail APIs (Gmail sends the email telling a group about its
+  new calendar). On first run, a script prints a sign-in URL; open it signed
   in as `admin@berkeleymoshav.org`, which owns the group calendars (the
   scripts that make calendars refuse to run as anyone else). The sign-in is
   saved to `~/.google_setup_token.pkl`; delete that file to sign in as a
@@ -120,9 +123,10 @@ playwright install chromium
   | `meeting:read:meeting:admin` | View a meeting | Checking a group's room still exists, and reading its settings and link |
   | `meeting:write:meeting:admin` | Create a meeting for a user | Creating a group's room |
   | `meeting:update:meeting:admin` | Update a meeting | Fixing a room's topic or settings; new passcodes (`reset_zoom_room.py`) |
-  | `meeting:read:list_meetings:admin` | View a user's meetings | Listing the rooms, to offer ones matching a group's name |
+  | `meeting:read:list_meetings:admin` | View a user's meetings | Listing the account's meetings, to offer ones matching a group's name |
+  | `meeting:delete:meeting:admin` | Delete a meeting | Deleting a meeting that matches a group's name, when you choose to |
   | `meeting:read:list_past_instances:admin` | View a past meeting's instances | Warning about rooms unused for 300 days, before Zoom deletes them at 365 |
-  | `user:read:list_users:admin` | View users | Finding every Zoom user's scheduled meetings, to check for overlaps (`group_meetings`) |
+  | `user:read:list_users:admin` | View users | Finding every Zoom user's scheduled meetings, to offer ones matching a group's name, and to check for overlaps (`group_meetings`) |
 
   If its creator's role is later reduced, Zoom removes those scopes, so
   transfer the app to another admin first. Put its credentials in a file
@@ -155,6 +159,27 @@ group then needs the new one. It's changed by hand, not by a script: sign in
 to the Zoom web portal as `zoomhosts@berkeleymoshav.org`, open **Profile**,
 and edit **Host Key** (6 to 10 digits; Zoom rejects easy ones like 123456).
 
+
+### Letting only some members edit a group's calendar
+
+Every member of a group can add and change events on its calendar to begin
+with. If a circle wants only a few designated members to do that, change the
+calendar's sharing by hand; the scripts leave it alone afterwards (they only
+share a calendar with its group when it isn't shared with the group at all).
+
+1. Sign in to Google Calendar as `admin@berkeleymoshav.org` and open the
+   group calendar's **Settings and sharing**.
+2. Under **Share with specific people or groups**, change the group's email
+   list to **See all event details**.
+3. Add each designated member with **Make changes to events**. They need a
+   Google account (a personal Gmail address is fine).
+4. Optionally, give the circle's admin **Make changes and manage sharing**, so
+   they can change who edits without asking the Technology Circle.
+
+Members who can't edit still get every meeting's invitation.
+`update_groups_in_google_and_hierarchy.py` shows a restricted calendar in its
+status line as "calendar (members can view, not edit)".
+
 ## Directories
 
 | Directory | Used for |
@@ -183,10 +208,67 @@ and edit **Host Key** (6 to 10 digits; Zoom rejects easy ones like 123456).
 - **`update_groups_in_google_and_hierarchy.py`** brings every group (or one,
   with `-g`) into line: offers to find or create a missing Drive folder or
   email list, enforces the Google Group settings, gives each group a calendar
-  and Zoom room (asking which one is the group's when existing ones match its
-  name), writes the footer links, and updates the Circle Structure page
+  and Zoom room, writes the footer links, and updates the Circle Structure page
   (renames, links, missing and stale entries). Its first run also creates the
-  "All Berkeley Moshav Events" calendar.
+  "All Berkeley Moshav Events" calendar, which it shares view-only with the
+  everybody groups (with `-g`, only if `--share-all-events` is given, since
+  finding them means reading every group from Gather). When it creates a group's calendar, it emails the
+  group's list from `admin@` (replies going to `calendaring-alerts@`), once
+  the footer links the calendar and Zoom room: a link for everyone to add
+  the calendar, and steps for meeting organizers to move the group's
+  meetings onto it. A dry run shows each email it would send.
+  `--announce-calendar` sends it even when the calendar already existed
+  (with `-g`, to one group; without, it asks before emailing every group).
+  Calendars are shared with groups without Google's
+  "shared a calendar" email, which for a group goes to the group's address
+  and has a button that does nothing for members; members add a calendar
+  from the link in the group's footer.
+
+  Calendars, Zoom meetings, and events match a group when their names are
+  like the group's, or contain its acronym (for the "Development, Finance,
+  & Legal Circle", "DF&L", "DFL", or "D.F.L."). When a group's footer links
+  no calendar, it asks which of the matching calendars is the group's, or
+  creates one. When it links no
+  Zoom room, it lists every scheduled meeting in the Zoom account whose name
+  matches the group's (any user's, of any kind, with its owner and schedule,
+  and the matching calendar events held in it),
+  then asks of each one in turn whether to use it as the room, ignore it, or
+  delete it. Only a no-fixed-time meeting of `zoomhosts@` or
+  `berkeley@urbanmoshav.org` (the second Zoom user) can be used, since Zoom
+  can't change a meeting's type; choosing a second one to use
+  asks to confirm the switch, and what to do with the first. Nothing changes
+  until the end, when it shows what it will do and, if it will delete any
+  meeting (whose link then stops working), asks you to type `delete`. Unless
+  a meeting is used, it creates a room. A dry run asks the same questions but
+  changes nothing. `add_new_group.py` does the same.
+
+  When it creates a group's calendar, or for every group with
+  `--move-events`, it looks for the group's meetings on other calendars:
+  every calendar on `admin@`'s calendar list (its own, including its primary
+  calendar, and the ones it's subscribed to) except the group calendars, the
+  all-events calendar, and Google's holiday and birthday calendars. It lists
+  the events in the next 12 months whose titles match the group's name
+  (each repeating series once, leaving out series that have ended, and
+  naming the matching Zoom meeting an event is held in, if any), then asks
+  of each whether to copy it to the group's calendar, delete it, both, or
+  skip it. A copy keeps the title, description, location, times, and repeat
+  rule, but not any Zoom or Meet link (so the group's room is
+  added); occurrences of a series that were moved or changed become one-off
+  events. For each of a copied event's guests who isn't in the group, it
+  asks whether to invite them to the copy (they're emailed along with the
+  group, once the copy gets the group's room), share the group's calendar
+  with them (view only, with Google's email), both, or neither. A series'
+  copy starts at its next occurrence (the list shows both
+  the original's first date and the copy's), and ends when the original
+  would. Copies are tagged with the original, so they aren't offered again.
+  Deleting needs edit access to the event's calendar: an event organized
+  there is cancelled for everyone, with Google's cancellation emails; an
+  invitation is removed from that calendar only. As with Zoom meetings,
+  nothing changes until the summary, and deleting asks you to type
+  `delete`. `add_new_group.py` does this when it creates the calendar.
+  Calendars `admin@` can't see (other members' own calendars) aren't
+  searched; to include one, share it with `admin@` and add it to
+  `admin@`'s calendar list.
 - **`reset_zoom_room.py`** gives a group's Zoom room a new passcode, and so a
   new link, both of which it writes into the group's footer, for when a link has
   leaked.
@@ -219,13 +301,18 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
 - **`group_meetings/group_meetings.gs`** runs every 5 minutes, as
   `admin@berkeleymoshav.org`, over every group calendar linked from a footer.
   Each event the group calendar organizes gets the group's Zoom room (link,
-  meeting ID, and passcode) and the group and the all-events calendar as
-  guests, unless it's marked `[no zoom]` or has another meeting link typed in.
+  meeting ID, and passcode) with a link to the "BM Meetings FAQ", and the
+  group and the all-events calendar as guests, unless it's marked `[no zoom]`
+  or has another meeting link typed in (then it gets only the guests).
   An event that's only a copy of someone's invitation gets its organizer an
   email asking them to create it on the group calendar instead. It also
-  checks the next 8 weeks for meetings that overlap in rooms of the same Zoom
-  user, including ones scheduled directly in Zoom, and emails
-  calendaring-alerts@berkeleymoshav.org and the groups involved. Its rules are
+  checks the next 8 weeks for meetings in rooms of the same Zoom user that
+  overlap or are less than 15 minutes apart, including ones scheduled
+  directly in Zoom, and emails the groups involved (and, for a meeting
+  scheduled directly in Zoom, calendaring-alerts@berkeleymoshav.org, for the
+  Technology Circle), asking them to agree which meeting moves, with a link to
+  the all-events calendar for finding a free time (two groups are also offered
+  having one group's room moved to the second Zoom user). Its rules are
   in `group_meetings/event_rules.gs`, tested under Node. See
   `group_meetings/README.md` for deployment, including the Zoom credentials
   it reads from Script Properties.
@@ -244,9 +331,15 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
   page
 - **`wiki_utils.py`**: per-group wiki pages
 - **`folder_matching.py`**: fuzzy matching of group names to folder and
-  Google Group names
+  Google Group names (and, including acronyms, to calendars, Zoom meetings,
+  and events)
 - **`meeting_rooms.py`**: finding, choosing, or creating each group's
-  calendar and Zoom room, and keeping them named, shared, and configured
+  calendar and Zoom room (and deleting matching meetings you don't want),
+  and keeping them named, shared, and configured
+- **`calendar_announcement.py`**: the email telling a group about its new
+  calendar and Zoom room
+- **`calendar_event_moves.py`**: finding a group's meetings on other
+  calendars, and copying them to its calendar or deleting them
 - **`zoom_utils.py`**: the Zoom API, and the standard room settings
 - **`credentials.py`**: reading `~/.gather` and `zoom_credentials`
 
@@ -292,6 +385,9 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
 
 - `calendar-notifications-plan.md`: design of the calendar notifications
   script
+- `meeting-infrastructure-plan.md`: decisions behind the group calendars,
+  Zoom rooms, and `group_meetings`, and the meeting features not built yet
+  (community-wide calendars, recording archive, and more)
 - `archive/gather-sandbox-plan.md` and `archive/gather-import-plan.md`: plans
   for the local Gather test instance and the member import
 

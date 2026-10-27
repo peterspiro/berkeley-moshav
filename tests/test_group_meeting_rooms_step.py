@@ -57,11 +57,26 @@ class _Settings:
 
 class _Directory:
     """Directory API stand-in: groups().get(groupKey=...) resolves aliases
-    ({alias: primary}) and returns any other address as its own primary."""
+    ({alias: primary}) and returns any other address as its own primary;
+    members().list(groupKey=...) returns members ({group: [email, ...]})."""
 
-    def __init__(self, aliases=None):
+    def __init__(self, aliases=None, members=None):
         self.aliases = aliases or {}
+        self.members_by_group = members or {}
         self._key = None
+
+    def members(self):
+        directory = self
+
+        class _Members:
+            def list(self, groupKey, **kwargs):
+                emails = directory.members_by_group.get(groupKey, [])
+
+                class _Call:
+                    def execute(self):
+                        return {"members": [{"email": e, "role": "MEMBER"} for e in emails]}
+                return _Call()
+        return _Members()
 
     def groups(self):
         return self
@@ -168,3 +183,39 @@ def test_dry_run_status_says_what_would_be_created(capsys):
     out = capsys.readouterr().out
     assert ("'Technology Circle': calendar would be created; Zoom room would be created"
             in out)
+
+
+def test_status_marks_calendar_members_cannot_edit(capsys):
+    footer = build_footer_block("1", "F1", "https://g", "Technology Circle",
+                                calendar_id="c1", zoom_url="https://zoom.us/j/7?pwd=p",
+                                zoom_passcode="135790")
+    cal = FakeCalendarService(
+        {"ae": "All Berkeley Moshav Events", "c1": "Technology Circle"},
+        {"c1": [{"id": "r", "role": "reader", "scope": {"type": "group", "value": "tech@x.org"}}]})
+    zoom = FakeZoom({7: room(7, "Technology Circle Meeting Room")},
+                    last_used={"7": "2026-10-01T00:00:00Z"})
+    m.ensure_group_meeting_rooms(
+        _Directory(), _Settings({"tech@x.org": footer}), cal, zoom, {"1": GROUPS["1"]},
+        FOLDERS, EMAILS, lambda: LinkedResources(), False, {}, {},
+    )
+    assert cal.writes == []
+    assert ("'Technology Circle': calendar (members can view, not edit) and Zoom room "
+            "in place") in capsys.readouterr().out
+
+
+def test_all_events_calendar_shared_with_everybody_groups():
+    cal = FakeCalendarService({"ae": "All Berkeley Moshav Events"})
+    _run(_Settings({}), cal, FakeZoom())
+    shared = [(w[1], w[2]["scope"]["value"], w[2]["role"], w[3])
+              for w in cal.writes if w[0] == "acl_insert" and w[1] == "ae"]
+    assert shared == [("ae", "all@x.org", "reader", False)]
+
+
+def test_all_events_shared_with_everybody_groups_given_to_a_single_group_run():
+    cal = FakeCalendarService({"ae": "All Berkeley Moshav Events"})
+    everybody = {"2": dict(GROUPS["2"], list_name="all", list_domain="berkeleymoshav.org")}
+    m.ensure_group_meeting_rooms(
+        _Directory(), _Settings({}), cal, FakeZoom(), {"1": GROUPS["1"]}, FOLDERS, EMAILS,
+        lambda: LinkedResources(), False, {}, {}, everybody_groups=everybody)
+    shares = [(w[1], w[2]) for w in cal.writes if w[0] == "acl_insert" and w[1] == "ae"]
+    assert shares == [("ae", {"role": "reader", "scope": {"type": "group", "value": "all@berkeleymoshav.org"}})]

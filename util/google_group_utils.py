@@ -48,6 +48,8 @@ SCOPES = [
     "https://www.googleapis.com/auth/apps.groups.settings",
     # Group calendars (util/meeting_rooms.py): create, rename, share.
     "https://www.googleapis.com/auth/calendar",
+    # Telling a group about its new calendar (util/calendar_announcement.py).
+    "https://www.googleapis.com/auth/gmail.send",
 ]
 
 

@@ -91,6 +91,8 @@ from urllib.parse import quote
 from googleapiclient.discovery import build
 from playwright.sync_api import sync_playwright
 
+from util.calendar_announcement import GROUP_CALENDAR_HOWTO_URL
+from util.calendar_event_moves import EventMover
 from util.credentials import load_credentials, load_zoom_credentials
 from util.gather_utils import (
     close_log,
@@ -216,7 +218,12 @@ def build_welcome_message(
         "and edit files in the folder, and can add and change events on the "
         "calendar. Anyone can post to the list.\n"
         "\n"
+        "To see the calendar in your own Google Calendar, click its link in the "
+        "footer.\n"
+        "\n"
         "Please put the group's meetings on its calendar rather than on your own. "
+        f"Here's how:\n{GROUP_CALENDAR_HOWTO_URL}\n"
+        "\n"
         "The Zoom room is the group's permanent meeting place: its link never "
         "changes, and anyone with the link can join, with or without a host.\n"
         "\n"
@@ -548,14 +555,22 @@ def main(
         get_linked = functools.cache(lambda: find_linked_resources(dir_service, settings_service))
         calendar_id = room = None
         try:
+            created = []
             calendar_id = ensure_group_calendar(
                 calendar_service, gdisplay, gemail, linked_calendar_id,
                 owned_calendars=lambda: list_owned_calendars(calendar_service),
-                linked=get_linked, dry_run=False,
+                linked=get_linked, dry_run=False, on_create=lambda: created.append(True),
             )
+            zoom_meetings = functools.cache(zoom.list_account_meetings)
+            mover = EventMover(calendar_service, lambda: set(get_linked().calendars),
+                               dry_run=False, zoom_meetings=zoom_meetings,
+                               dir_service=dir_service)
+            if created:
+                mover.offer(gdisplay, calendar_id, gemail)
             room = ensure_zoom_room(
                 zoom, gdisplay, linked_zoom_url, gemail,
-                rooms=zoom.list_rooms, linked=get_linked, dry_run=False,
+                meetings=zoom_meetings, linked=get_linked, dry_run=False,
+                events_using=lambda meeting_id: mover.events_using_meeting(gdisplay, meeting_id),
             )
         except QuitRequested:
             log("INFO", "quit", "User quit during the calendar/Zoom room step")

@@ -133,15 +133,34 @@ class TestZoomClient:
             "settings": ROOM_SETTINGS,
         }
 
-    def test_list_rooms_pages_and_keeps_only_type_3(self):
-        path = f"/users/{ROOMS_USER}/meetings"
-        zoom, session = _client({("GET", path): [
-            _Resp(200, {"meetings": [{"id": 1, "type": 3}, {"id": 2, "type": 2}],
-                        "next_page_token": "P2"}),
-            _Resp(200, {"meetings": [{"id": 3, "type": 3}], "next_page_token": ""}),
-        ]})
-        assert [r["id"] for r in zoom.list_rooms()] == [1, 3]
-        assert session.calls[1][2]["params"]["next_page_token"] == "P2"
+    def test_list_account_meetings_pages_through_every_user(self):
+        zoom, session = _client({
+            ("GET", "/users"): _Resp(200, {"users": [
+                {"id": "U1", "email": "zoomhosts@x.org"}, {"id": "U2", "email": "b@x.org"}]}),
+            ("GET", "/users/U1/meetings"): [
+                _Resp(200, {"meetings": [{"id": 1, "type": 3}, {"id": 2, "type": 8}],
+                            "next_page_token": "P2"}),
+                _Resp(200, {"meetings": [{"id": 2, "type": 8}], "next_page_token": ""}),
+            ],
+            ("GET", "/users/U2/meetings"): _Resp(200, {"meetings": [{"id": 3, "type": 2}]}),
+        })
+        assert [(m["id"], m["host_email"]) for m in zoom.list_account_meetings()] == [
+            (1, "zoomhosts@x.org"), (2, "zoomhosts@x.org"), (3, "b@x.org")]
+        page2 = [kw for method, path, kw in session.calls if path == "/users/U1/meetings"][1]
+        assert page2["params"]["next_page_token"] == "P2"
+        assert page2["params"]["type"] == "scheduled"
+
+    def test_delete_meeting_sends_no_emails(self):
+        zoom, session = _client({("DELETE", "/meetings/5"): _Resp(204)})
+        zoom.delete_meeting("5")
+        method, path, kwargs = session.calls[0]
+        assert (method, path) == ("DELETE", "/meetings/5")
+        assert kwargs["params"] == {"schedule_for_reminder": "false",
+                                    "cancel_meeting_reminder": "false"}
+
+    def test_delete_missing_meeting_is_fine(self):
+        zoom, _ = _client({("DELETE", "/meetings/5"): _Resp(404)})
+        zoom.delete_meeting("5")
 
     def test_last_used(self):
         zoom, _ = _client({("GET", "/past_meetings/1/instances"): _Resp(200, {"meetings": [

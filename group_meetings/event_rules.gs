@@ -79,6 +79,8 @@ const ZOOM_BLOCK_END = '(Added automatically from the group\'s Zoom room.)';
 const ZOOM_BLOCK_RE =
   /(?:\n|<br\s*\/?>)*Join Zoom meeting: [\s\S]*?\(Added automatically from the group's Zoom room\.\)/i;
 const STAMP_KEY = 'groupZoomUrl';
+const FAQ_TEXT = 'Questions about joining? See the BM Meetings FAQ:';
+const GOOGLE_DOC_ID_RE = /\/document\/d\/([\w-]+)/;
 
 function lower(s) { return (s || '').toLowerCase(); }
 
@@ -93,7 +95,8 @@ function zoomBlock(room, br) {
 
 /**
  * What to change on an event organized by a group's own calendar, or null
- * if nothing. ctx: { zoomUrl, passcode, groupEmail, allEventsCalendarId }.
+ * if nothing. ctx: { zoomUrl, passcode, groupEmail, allEventsCalendarId,
+ * faqUrl }.
  *
  * Returns { patch, sendUpdates } where patch is an Events.patch body:
  *   - Zoom details: location set to the room link if empty (or still the
@@ -101,6 +104,9 @@ function zoomBlock(room, br) {
  *     description, unless the event is marked "[no zoom]" or already has
  *     another Zoom or Meet link. The link written is remembered in a
  *     private extended property, so a changed room link replaces it.
+ *     Such an event also gets a line linking the meetings FAQ
+ *     (ctx.faqUrl), just above the block, unless the description already
+ *     links that document anywhere.
  *   - Guests: the all-events calendar and the group's Google Group.
  * sendUpdates is 'all' when the group is newly invited (so members get the
  * invitation), else 'none'.
@@ -119,9 +125,13 @@ function computeEventPatch(event, ctx) {
     }
 
     const br = /<[a-z][^>]*>/i.test(description) ? '<br>' : '\n';
-    const without = description.replace(ZOOM_BLOCK_RE, '').replace(/\s+$/, '');
+    let text = description.replace(ZOOM_BLOCK_RE, '').replace(/\s+$/, '');
+    if (ctx.faqUrl && !linksDocument(text, ctx.faqUrl)) {
+      const faq = `${FAQ_TEXT} ${ctx.faqUrl}`;
+      text = text ? `${text}${br}${br}${faq}` : faq;
+    }
     const block = zoomBlock(ctx, br);
-    const desired = without ? `${without}${br}${br}${block}` : block;
+    const desired = text ? `${text}${br}${br}${block}` : block;
     if (desired !== description) patch.description = desired;
 
     if (stamped !== ctx.zoomUrl) {
@@ -140,6 +150,13 @@ function computeEventPatch(event, ctx) {
   if (!Object.keys(patch).length) return null;
   const invitesGroup = added.some(a => lower(a.email) === lower(ctx.groupEmail));
   return { patch, sendUpdates: invitesGroup ? 'all' : 'none' };
+}
+
+/** True if text links the Google Doc at docUrl, in any form (a section
+ * link, an /edit link, inside formatted text): it contains the doc's ID. */
+function linksDocument(text, docUrl) {
+  const m = docUrl.match(GOOGLE_DOC_ID_RE);
+  return (text || '').includes(m ? m[1] : docUrl);
 }
 
 function hasNoZoomMarker(event) {
@@ -184,16 +201,18 @@ function zoomIdsInEvent(event) {
 }
 
 /**
- * Pairs of meetings that overlap in rooms owned by the same Zoom user.
+ * Pairs of meetings in rooms owned by the same Zoom user that overlap, or
+ * where the second starts less than minGapMs after the first ends (so the
+ * first running over would block it).
  *
  * meetings: [{ key, owner, start, end, ... }] with start/end in ms. A
  * meeting that appears more than once (the same calendar event on several
  * calendars, or a Zoom meeting also on a calendar) shares its key and is
- * merged first. Back-to-back meetings (one ends as the other starts) are fine.
+ * merged first.
  *
  * Returns [{ a, b }] with a.start <= b.start.
  */
-function findOverlaps(meetings) {
+function findOverlaps(meetings, minGapMs = 0) {
   const byKey = new Map();
   for (const m of meetings) {
     const prev = byKey.get(m.key);
@@ -208,7 +227,7 @@ function findOverlaps(meetings) {
   for (const list of byOwner.values()) {
     list.sort((x, y) => x.start - y.start || x.end - y.end);
     for (let i = 0; i < list.length; i++) {
-      for (let j = i + 1; j < list.length && list[j].start < list[i].end; j++) {
+      for (let j = i + 1; j < list.length && list[j].start < list[i].end + minGapMs; j++) {
         conflicts.push({ a: list[i], b: list[j] });
       }
     }
@@ -219,7 +238,118 @@ function findOverlaps(meetings) {
 /** Combine two sightings of the same meeting, keeping every group named. */
 function mergeMeetings(x, y) {
   const groups = [...new Set([...(x.groups || []), ...(y.groups || [])])];
-  return Object.assign({}, x, { groups, title: x.title || y.title });
+  const names = [...new Set([...(x.names || []), ...(y.names || [])])];
+  return Object.assign({}, x, { groups, names, title: x.title || y.title });
+}
+
+/** "A", "A and B", "A, B and C". */
+function joinNames(names) {
+  return names.length < 3
+    ? names.join(' and ')
+    : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+}
+
+/**
+ * The email about a conflict from findOverlaps: { to, cc, subject, body }.
+ *
+ * A meeting with groups ([emails]) and names ([group names]) is on group
+ * calendars; one with neither was scheduled directly in Zoom, and the
+ * Technology Circle (opts.alertEmail, opts.techName) is asked about it:
+ *   - two group meetings: the groups are asked to agree which moves (cc the
+ *     Technology Circle);
+ *   - a group meeting and a Zoom meeting: the group and the Technology
+ *     Circle are asked to agree which moves;
+ *   - two Zoom meetings: the Technology Circle is asked to move one.
+ * Each email links the all-events calendar (opts.allEventsUrl) for finding
+ * a free time. opts.formatRange(startMs, endMs) formats a meeting's time;
+ * opts.minGapMinutes is the gap meetings should leave.
+ */
+function overlapMessage(c, opts) {
+  const overlap = c.b.start < c.a.end;
+  const gap = Math.round((c.b.start - c.a.end) / 60000);
+  const groupEmails = [...new Set([...(c.a.groups || []), ...(c.b.groups || [])])];
+  const names = [...new Set([...(c.a.names || []), ...(c.b.names || [])])];
+  const zoomOnly = [c.a, c.b].filter(m => !(m.groups || []).length).length;
+  const spacing = overlap ? '' : `, leaving at least ${opts.minGapMinutes} minutes between them`;
+
+  let to, cc, greeting, ask;
+  if (zoomOnly === 2) {
+    to = [opts.alertEmail]; cc = [];
+    greeting = opts.techName;
+    ask = `Please move one of them in Zoom${spacing}.`;
+  } else if (zoomOnly === 1) {
+    to = groupEmails.concat([opts.alertEmail]); cc = [];
+    greeting = joinNames([opts.techName].concat(names));
+    const where = names.length === 1 ? `the ${names[0]} calendar` : 'its group calendar';
+    ask = `Please agree between you which meeting moves${spacing}. The ` +
+      `${joinNames(names)} meeting can be moved on ${where}; the other meeting can be ` +
+      `moved in Zoom.`;
+  } else if (names.length === 1) {
+    to = groupEmails; cc = [opts.alertEmail];
+    greeting = names[0];
+    ask = `Please move one of them to another time on the ${names[0]} calendar${spacing}.`;
+  } else {
+    to = groupEmails; cc = [opts.alertEmail];
+    greeting = joinNames(names);
+    ask = null;  // the options below
+  }
+  const findTime = `To find a free time, check the All Berkeley Moshav Events calendar, ` +
+    `which shows every group's meetings:\n${opts.allEventsUrl}`;
+  const options = ask ? `${ask} ${findTime}` :
+    `Your options are:\n` +
+    `- Request the Tech Circle to move one of your ${names.length === 2 ? 'two ' : ''}` +
+    `groups' Zoom rooms to our second Zoom user account.  This may or may not be ` +
+    `possible, depending on your meeting schedule.\n` +
+    `- Agree between you to move one of these meetings, and change its time on its ` +
+    `group calendar${spacing}. ${findTime}`;
+
+  const line = m => {
+    const where = (m.names || []).length
+      ? joinNames(m.names) : 'a meeting scheduled in our Zoom account';
+    return `  - "${m.title}" (${where}), ${opts.formatRange(m.start, m.end)}`;
+  };
+  const what = overlap ? 'overlap'
+    : gap === 0 ? 'are back to back'
+    : `are only ${gap} minute${gap === 1 ? '' : 's'} apart`;
+  const why = overlap
+    ? "so the second meeting won't be able to start while the first is still going."
+    : "so if the first runs over, the second won't be able to start until it ends.";
+  return {
+    to, cc,
+    subject: `Zoom meetings ${overlap ? 'overlap' : 'too close together'}: ` +
+      `"${c.a.title}" and "${c.b.title}"`,
+    body:
+      `Hi ${greeting},\n\n` +
+      `These two meetings ${what}:\n${line(c.a)}\n${line(c.b)}\n\n` +
+      `Both meetings use the same Zoom user account, which can host only one meeting ` +
+      `at a time, ${why}\n\n` +
+      `${options}\n\n` +
+      `This message was sent automatically. Questions? Reply to ${opts.alertEmail}.\n`,
+  };
+}
+
+/**
+ * An email's plain text as HTML, so mail programs reflow it to fit rather
+ * than showing the line breaks plain text gets on the way: blank-line-
+ * separated paragraphs, lines starting "- " as a bulleted list (a line
+ * after one continuing that item), and web links clickable.
+ */
+function textToHtml(text) {
+  const escape = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const linked = s => escape(s).replace(/https?:\/\/[^\s<]+/g, url => `<a href="${url}">${url}</a>`);
+  return text.trim().split(/\n{2,}/).map(block => {
+    const lines = [];
+    let items = null;
+    for (const line of block.split('\n')) {
+      const item = line.match(/^\s*- (.*)$/);
+      if (item) (items = items || []).push(linked(item[1]));
+      else if (items) items[items.length - 1] += `<br>${linked(line)}`;
+      else lines.push(linked(line));
+    }
+    return (lines.length ? `<p>${lines.join('<br>')}</p>` : '') +
+      (items ? `<ul>${items.map(i => `<li>${i}</li>`).join('')}</ul>` : '');
+  }).join('\n');
 }
 
 /** Stable ID for a conflict, and a fingerprint that changes with its times. */

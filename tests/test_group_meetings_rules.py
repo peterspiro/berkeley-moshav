@@ -139,6 +139,56 @@ class TestComputeEventPatch:
         assert "Meeting ID" not in p["description"]
 
 
+FAQ = "https://docs.google.com/document/d/1rr8WqPnsLKw-tgVea40NkyTxlwLFVVLnXbL3UVFQcZY"
+FAQ_LINE = f"Questions about joining? See the BM Meetings FAQ: {FAQ}"
+CTX_FAQ = {**CTX, "faqUrl": FAQ}
+
+
+def done_with(event, ctx):
+    change = patch(event, ctx)
+    return {**event, **change["patch"]} if change else event
+
+
+class TestMeetingsFaq:
+    def test_added_above_zoom_block(self):
+        desc = patch({"description": "Agenda"}, CTX_FAQ)["patch"]["description"]
+        assert desc.startswith(f"Agenda\n\n{FAQ_LINE}\n\nJoin Zoom meeting: ")
+
+    def test_empty_description(self):
+        desc = patch({}, CTX_FAQ)["patch"]["description"]
+        assert desc.startswith(f"{FAQ_LINE}\n\nJoin Zoom meeting: ")
+
+    def test_second_pass_changes_nothing(self):
+        assert patch(done_with({"description": "Agenda"}, CTX_FAQ), CTX_FAQ) is None
+
+    def test_existing_link_in_any_form_not_duplicated(self):
+        event = {"description": f"See {FAQ}/edit?tab=t.0#heading=h.abc for help"}
+        desc = patch(event, CTX_FAQ)["patch"]["description"]
+        assert "BM Meetings FAQ" not in desc and desc.count("1rr8WqPn") == 1
+
+    def test_html_description(self):
+        desc = patch({"description": "<b>Agenda</b>"}, CTX_FAQ)["patch"]["description"]
+        assert desc.startswith(f"<b>Agenda</b><br><br>{FAQ_LINE}<br><br>Join Zoom meeting: ")
+
+    def test_deleted_line_is_added_back(self):
+        event = done_with({"description": "Agenda"}, CTX_FAQ)
+        event["description"] = event["description"].replace(f"{FAQ_LINE}\n\n", "")
+        assert FAQ_LINE in patch(event, CTX_FAQ)["patch"]["description"]
+
+    def test_room_link_change_keeps_faq_in_place(self):
+        event = done_with({"description": "Agenda"}, CTX_FAQ)
+        new = {**CTX_FAQ, "zoomUrl": "https://us06web.zoom.us/j/81234567890?pwd=NEW"}
+        desc = patch(event, new)["patch"]["description"]
+        assert desc.count(FAQ_LINE) == 1
+        assert desc.index(FAQ_LINE) < desc.index("Join Zoom meeting")
+
+    def test_not_added_without_zoom_room(self):
+        for event in ({"summary": "Walk [no zoom]"},
+                      {"description": "Join https://zoom.us/j/99999999999"}):
+            change = patch(event, CTX_FAQ)
+            assert change is None or "description" not in change["patch"]
+
+
 class TestInvitationCopy:
     def test_own_event_is_not_a_copy(self):
         assert js("isInvitationCopy(e, cal, [])", e={"organizer": {"email": CAL}}, cal=CAL) is False
@@ -165,6 +215,22 @@ class TestFindOverlaps:
     def test_back_to_back_is_fine(self):
         assert js("findOverlaps(m)", m=[meeting("a", "u1", 0, 60), meeting("b", "u1", 60, 90)]) == []
 
+    def test_less_than_gap_apart_is_flagged(self):
+        conflicts = js("findOverlaps(m, 15)", m=[meeting("a", "u1", 0, 60), meeting("b", "u1", 70, 90)])
+        assert [(c["a"]["key"], c["b"]["key"]) for c in conflicts] == [("a", "b")]
+
+    def test_exactly_gap_apart_is_fine(self):
+        assert js("findOverlaps(m, 15)", m=[meeting("a", "u1", 0, 60), meeting("b", "u1", 75, 90)]) == []
+
+    def test_gap_measured_from_the_later_end(self):
+        # "a" runs past "b", so "c" is measured from a's end, not b's.
+        conflicts = js("findOverlaps(m, 15)", m=[
+            meeting("a", "u1", 0, 100), meeting("b", "u1", 10, 20), meeting("c", "u1", 105, 120)])
+        assert sorted((c["a"]["key"], c["b"]["key"]) for c in conflicts) == [("a", "b"), ("a", "c")]
+
+    def test_gap_applies_only_to_same_owner(self):
+        assert js("findOverlaps(m, 15)", m=[meeting("a", "u1", 0, 60), meeting("b", "u2", 65, 90)]) == []
+
     def test_different_owners_fine(self):
         assert js("findOverlaps(m)", m=[meeting("a", "u1", 0, 60), meeting("b", "u2", 30, 90)]) == []
 
@@ -189,3 +255,130 @@ def test_zoom_ids_in_event():
     event = {"location": "https://us06web.zoom.us/j/111?pwd=x",
              "description": "or https://zoom.us/j/222 and again https://zoom.us/j/111"}
     assert js("zoomIdsInEvent(e)", e=event) == ["111", "222"]
+
+
+OPTS = {"alertEmail": "alerts@x.org", "techName": "Technology Circle",
+        "allEventsUrl": "https://cal/all", "minGapMinutes": 15}
+MIN = 60 * 1000
+
+
+def message(a, b):
+    return js("overlapMessage({a: a, b: b}, Object.assign(o, {formatRange: (s, e) => "
+              "`${s / 60000}-${e / 60000}`}))", a=a, b=b, o=OPTS)
+
+
+def group_meeting(title, group, start, end):
+    return meeting(title, "u1", start * MIN, end * MIN, title=title,
+                   groups=[f"{group.split()[0].lower()}@x.org"], names=[group])
+
+
+def zoom_meeting(title, start, end):
+    return meeting(title, "u1", start * MIN, end * MIN, title=title, groups=[], names=[])
+
+
+class TestOverlapMessage:
+    def test_two_groups_overlap(self):
+        msg = message(group_meeting("Finance meeting", "Finance Circle", 0, 90),
+                      group_meeting("Care meeting", "Care Circle", 60, 120))
+        assert msg["to"] == ["finance@x.org", "care@x.org"]
+        assert msg["cc"] == ["alerts@x.org"]
+        assert msg["subject"] == 'Zoom meetings overlap: "Finance meeting" and "Care meeting"'
+        assert msg["body"] == (
+            "Hi Finance Circle and Care Circle,\n\n"
+            "These two meetings overlap:\n"
+            '  - "Finance meeting" (Finance Circle), 0-90\n'
+            '  - "Care meeting" (Care Circle), 60-120\n\n'
+            "Both meetings use the same Zoom user account, which can host only one meeting "
+            "at a time, so the second meeting won't be able to start while the first is "
+            "still going.\n\n"
+            "Your options are:\n"
+            "- Request the Tech Circle to move one of your two groups' Zoom rooms to our "
+            "second Zoom user account.  This may or may not be possible, depending on your "
+            "meeting schedule.\n"
+            "- Agree between you to move one of these meetings, and change its time on its "
+            "group calendar. To find a free time, check the All Berkeley Moshav Events "
+            "calendar, which shows every group's meetings:\nhttps://cal/all\n\n"
+            "This message was sent automatically. Questions? Reply to alerts@x.org.\n")
+
+    def test_two_groups_too_close(self):
+        msg = message(group_meeting("Finance meeting", "Finance Circle", 0, 90),
+                      group_meeting("Care meeting", "Care Circle", 100, 120))
+        assert msg["subject"].startswith("Zoom meetings too close together: ")
+        assert "These two meetings are only 10 minutes apart:" in msg["body"]
+        assert "so if the first runs over, the second won't be able to start until it ends." \
+            in msg["body"]
+        assert ("change its time on its group calendar, leaving at least 15 minutes "
+                "between them.") in msg["body"]
+
+    def test_back_to_back(self):
+        msg = message(group_meeting("A", "Finance Circle", 0, 60),
+                      group_meeting("B", "Care Circle", 60, 90))
+        assert "These two meetings are back to back:" in msg["body"]
+
+    def test_same_group_twice(self):
+        msg = message(group_meeting("A", "Finance Circle", 0, 60),
+                      group_meeting("B", "Finance Circle", 30, 90))
+        assert msg["to"] == ["finance@x.org"]
+        assert msg["body"].startswith("Hi Finance Circle,\n")
+        assert "Please move one of them to another time on the Finance Circle calendar." \
+            in msg["body"]
+
+    def test_group_and_zoom_meeting(self):
+        msg = message(group_meeting("Finance meeting", "Finance Circle", 0, 90),
+                      zoom_meeting("Board training", 60, 120))
+        assert msg["to"] == ["finance@x.org", "alerts@x.org"]
+        assert msg["cc"] == []
+        assert msg["body"].startswith("Hi Technology Circle and Finance Circle,\n")
+        assert '  - "Board training" (a meeting scheduled in our Zoom account), 60-120' \
+            in msg["body"]
+        assert ("Please agree between you which meeting moves. The Finance Circle meeting "
+                "can be moved on the Finance Circle calendar; the other meeting can be moved "
+                "in Zoom.") in msg["body"]
+
+    def test_two_zoom_meetings(self):
+        msg = message(zoom_meeting("A", 0, 60), zoom_meeting("B", 30, 90))
+        assert msg["to"] == ["alerts@x.org"] and msg["cc"] == []
+        assert msg["body"].startswith("Hi Technology Circle,\n")
+        assert "Please move one of them in Zoom." in msg["body"]
+
+    def test_joint_meeting_names_both_groups(self):
+        joint = group_meeting("Joint", "Finance Circle", 0, 60)
+        joint["groups"].append("care@x.org")
+        joint["names"].append("Care Circle")
+        msg = message(joint, group_meeting("C", "Garden Club", 30, 90))
+        assert msg["body"].startswith("Hi Finance Circle, Care Circle and Garden Club,\n")
+        assert '  - "Joint" (Finance Circle and Care Circle), 0-60' in msg["body"]
+        assert "move one of your groups' Zoom rooms" in msg["body"]
+
+    def test_same_group_and_zoom_cases_keep_a_single_ask(self):
+        for msg in (message(group_meeting("A", "Finance Circle", 0, 60),
+                            group_meeting("B", "Finance Circle", 30, 90)),
+                    message(zoom_meeting("A", 0, 60), zoom_meeting("B", 30, 90))):
+            assert "Your options are" not in msg["body"]
+            assert "Both meetings use the same Zoom user account" in msg["body"]
+            assert "To find a free time" in msg["body"]
+
+
+class TestTextToHtml:
+    def test_paragraphs_lists_and_links(self):
+        html = js("textToHtml(t)", t=(
+            "Hi A & B,\n\nThese two meetings overlap:\n  - \"X\" (A), 1\n  - \"Y\" (B), 2\n\n"
+            "Your options are:\n- One.\n- Two:\nhttps://cal/all?a=1&b=2\n\nBye.\n"))
+        assert html == (
+            "<p>Hi A &amp; B,</p>\n"
+            "<p>These two meetings overlap:</p><ul><li>&quot;X&quot; (A), 1</li>"
+            "<li>&quot;Y&quot; (B), 2</li></ul>\n"
+            "<p>Your options are:</p><ul><li>One.</li><li>Two:<br>"
+            '<a href="https://cal/all?a=1&amp;b=2">https://cal/all?a=1&amp;b=2</a></li></ul>\n'
+            "<p>Bye.</p>")
+
+    def test_long_lines_stay_whole(self):
+        line = "word " * 40
+        assert js("textToHtml(t)", t=line) == f"<p>{line.strip()}</p>"
+
+
+def test_merge_keeps_every_group_name():
+    merged = js("mergeMeetings(x, y)",
+                x={"key": "k", "groups": ["a@x"], "names": ["A"], "title": "T"},
+                y={"key": "k", "groups": ["b@x"], "names": ["B"], "title": "T"})
+    assert merged["groups"] == ["a@x", "b@x"] and merged["names"] == ["A", "B"]

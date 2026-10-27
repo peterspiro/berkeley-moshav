@@ -4,8 +4,10 @@ Zoom API access for the groups' permanent meeting rooms.
 Uses a Server-to-Server OAuth app in the community's Zoom account (its
 credentials live in the repo's zoom_credentials file — see
 util/credentials.py and README.md). Every
-group room is a recurring meeting with no fixed time (type 3) owned by
-ROOMS_USER, so its link never changes and members only ever click it.
+group room is a recurring meeting with no fixed time (type 3), so its link
+never changes and members only ever click it. New rooms are made under
+ROOMS_USER; a room can be moved (transferred in Zoom, keeping its link) to
+another of ROOM_USERS, to keep its meetings from clashing with others'.
 
 Room settings (ROOM_SETTINGS) let a meeting run with no host present:
 participants can join before the host at any time, there's no waiting room
@@ -25,8 +27,10 @@ import requests
 API_BASE = "https://api.zoom.us/v2"
 TOKEN_URL = "https://zoom.us/oauth/token"
 
-# The licensed Zoom user that owns every group room.
+# The licensed Zoom user that new group rooms are made under, and every
+# licensed user that may own one (a Zoom user can run one meeting at a time).
 ROOMS_USER = "zoomhosts@berkeleymoshav.org"
+ROOM_USERS = (ROOMS_USER, "berkeley@urbanmoshav.org")
 
 ROOM_TOPIC_SUFFIX = " Meeting Room"
 MEETING_TYPE_NO_FIXED_TIME = 3
@@ -142,21 +146,43 @@ class ZoomClient:
         if resp.status_code == 404:
             raise ZoomError(f"Zoom meeting {meeting_id} not found")
 
-    def list_rooms(self, user: str = ROOMS_USER) -> list[dict]:
-        """Every no-fixed-time meeting the user owns ({"id", "topic",
-        "join_url", ...})."""
-        rooms = []
-        params = {"type": "scheduled", "page_size": 300}
+    def list_users(self) -> list[dict]:
+        """Every active user in the account ({"id", "email", ...})."""
+        return self._list_pages("/users", "users", {"status": "active"})
+
+    def list_meetings(self, user: str) -> list[dict]:
+        """Every scheduled meeting the user owns, of any type ({"id",
+        "topic", "type", "start_time", ...})."""
+        return self._list_pages(f"/users/{user}/meetings", "meetings", {"type": "scheduled"})
+
+    def list_account_meetings(self) -> list[dict]:
+        """Every scheduled meeting in the account, each once (a recurring
+        one can be listed per occurrence), with "host_email" set to its
+        owner's address."""
+        meetings = {}
+        for user in self.list_users():
+            for m in self.list_meetings(user["id"]):
+                meetings.setdefault(str(m["id"]), {**m, "host_email": user["email"]})
+        return list(meetings.values())
+
+    def _list_pages(self, path: str, key: str, params: dict) -> list[dict]:
+        items = []
+        params = {**params, "page_size": 300}
         while True:
-            resp = self._request("GET", f"/users/{user}/meetings", params=params)
+            resp = self._request("GET", path, params=params)
             if resp.status_code == 404:
-                raise ZoomError(f"Zoom user {user} not found")
+                raise ZoomError(f"Zoom GET {path}: not found")
             data = resp.json()
-            rooms += [m for m in data.get("meetings", [])
-                      if m.get("type") == MEETING_TYPE_NO_FIXED_TIME]
+            items += data.get(key, [])
             if not data.get("next_page_token"):
-                return rooms
+                return items
             params["next_page_token"] = data["next_page_token"]
+
+    def delete_meeting(self, meeting_id: str) -> None:
+        """Delete the meeting (every occurrence of a recurring one), without
+        Zoom's cancellation emails. A meeting that's already gone is fine."""
+        self._request("DELETE", f"/meetings/{meeting_id}", params={
+            "schedule_for_reminder": "false", "cancel_meeting_reminder": "false"})
 
     def last_used(self, meeting_id: str) -> str | None:
         """Start time (ISO 8601) of the meeting's latest past instance, or

@@ -89,3 +89,33 @@ def find_matching_folders(group_name: str, folders: list[dict]) -> list[dict]:
         elif shares_significant_term(group_name, f["name"]):
             matches.append({**f, "match_kind": "term"})
     return matches
+
+
+def group_acronym(group_name: str) -> str:
+    """The initials of the group's name, without stop words or a suffix
+    like "Circle": 'Development, Finance, & Legal Circle' -> 'dfl'."""
+    return folder_abbreviation(group_name)
+
+
+def mentions_acronym(group_name: str, name: str) -> bool:
+    """True if name contains the group's acronym (at least two letters) as
+    a word, written with or without '&' or periods: 'DF&L meeting', 'DF & L
+    meeting', or 'Budget (D.F.L.)' for 'Development, Finance, & Legal
+    Circle'."""
+    acronym = group_acronym(group_name)
+    if len(acronym) < 2:
+        return False
+    text = re.sub(r"\s*&\s*", "&", name.lower())
+    return any(re.sub(r"[&.]", "", word) == acronym
+               for word in re.findall(r"[a-z0-9&.]+", text))
+
+
+def find_matching_names(group_name: str, items: list[dict]) -> list[dict]:
+    """find_matching_folders(), plus items whose names contain the group's
+    acronym (tagged "acronym"). Used for calendars, Zoom meetings, and
+    calendar events, whose names often use a group's acronym."""
+    matches = find_matching_folders(group_name, items)
+    matched_ids = {m["id"] for m in matches}
+    return matches + [{**item, "match_kind": "acronym"} for item in items
+                      if item["id"] not in matched_ids
+                      and mentions_acronym(group_name, item["name"])]

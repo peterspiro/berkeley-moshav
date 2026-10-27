@@ -32,9 +32,13 @@ excluding hidden groups:
       footer are used if they still exist; otherwise calendars/rooms with
       matching names are offered to choose from (even if only one
       matches), or a new one is created. Each calendar is named after the
-      group and shared with its Google Group as "Make changes to events";
+      group and, if it isn't shared with its Google Group at all, shared
+      with it as "Make changes to events" (other access, such as a circle
+      restricted by hand to "See all event details", is left alone);
       each room is titled "<Group> Meeting Room" with the standard room
-      settings. Also makes sure the all-events calendar exists.
+      settings. Also makes sure the all-events calendar exists, and is
+      shared read-only, without an email, with the everybody groups (in a
+      -g run, only if the group named is one).
   0e. Once every group's folder and mailing-list state is settled, ensures
       each associated Google Group's custom footer carries an up-to-date
       "Gather group"/Drive-item link block (this is what
@@ -123,6 +127,8 @@ from pathlib import Path
 from googleapiclient.discovery import build
 from playwright.sync_api import sync_playwright
 
+from util.calendar_announcement import announce_calendar
+from util.calendar_event_moves import EventMover
 from util.credentials import load_credentials, load_zoom_credentials
 from util.folder_matching import find_matching_folders
 from util.gather_utils import (
@@ -188,6 +194,8 @@ from util.meeting_rooms import (
     RoomLink,
     ensure_zoom_room,
     find_linked_resources,
+    group_calendar_role,
+    group_can_edit,
     list_owned_calendars,
 )
 from util.zoom_utils import ZoomClient
@@ -975,11 +983,24 @@ def ensure_group_meeting_rooms(
     google_file_id_by_group_id: dict[str, str], email_by_group_id: dict[str, str],
     get_linked: Callable[[], LinkedResources], dry_run: bool,
     calendar_id_by_group_id: dict[str, str], room_by_group_id: dict[str, RoomLink],
+    move_events: bool = False, created_calendar_group_ids: list[str] | None = None,
+    announce_calendars: bool = False, everybody_groups: dict[str, dict] | None = None,
 ) -> None:
     """Make sure every eligible group has a Google calendar and a Zoom
     meeting room (see util/meeting_rooms.py), recording them in
     calendar_id_by_group_id / room_by_group_id (mutated in place) for
     ensure_group_footers() to write into the footers.
+
+    When a group's calendar is created, and for every group with
+    move_events, offer to move its meetings from other calendars onto it
+    (util/calendar_event_moves.py). Groups whose calendars are created (or
+    would be, in a dry run), or every group with announce_calendars, are
+    appended to created_calendar_group_ids, to be told about their calendar
+    once their footers are written (announce_new_calendars()).
+
+    The all-events calendar is shared view-only with the everybody groups:
+    those in group_info, or everybody_groups ({group_id: info}, as from
+    fetch_group_info()) if given, so a single-group run can share it too.
 
     Only groups that will get a footer — ones with both a Drive item and a
     mailing list — are covered, since the footer is the only record of
@@ -1012,9 +1033,26 @@ def ensure_group_meeting_rooms(
             eligible.append((gid, info))
 
     owned_calendars = functools.cache(lambda: list_owned_calendars(calendar_service))
-    rooms = functools.cache(zoom.list_rooms)
+    zoom_meetings = functools.cache(zoom.list_account_meetings)
+    mover = EventMover(calendar_service, lambda: set(get_linked().calendars), dry_run=dry_run,
+                       zoom_meetings=zoom_meetings, dir_service=dir_service)
 
-    ensure_all_events_calendar(calendar_service, owned_calendars=owned_calendars, dry_run=dry_run)
+    # The everybody groups' primary addresses (a Gather list may use an alias).
+    if everybody_groups is None:
+        everybody_groups = {gid: info for gid, info in group_info.items() if _is_everybody(info)}
+        everybody_list_emails = {gid: email_by_group_id.get(gid) for gid in everybody_groups}
+    else:
+        everybody_list_emails = build_email_by_group_id(everybody_groups)
+    everybody_emails = []
+    for gid in everybody_groups:
+        if everybody_list_emails.get(gid):
+            google_group = get_group_by_email(dir_service, everybody_list_emails[gid])
+            if google_group:
+                everybody_emails.append(google_group["email"].lower())
+    ensure_all_events_calendar(
+        calendar_service, owned_calendars=owned_calendars, dry_run=dry_run,
+        reader_groups=everybody_emails,
+    )
 
     for group_id, info in eligible:
         group_name = info["name"]
@@ -1026,29 +1064,59 @@ def ensure_group_meeting_rooms(
             log("WARN", "meeting_rooms", f"{group_name}: Google Group {email} not found")
             continue
         email = google_group["email"]
+        created = []
         calendar_id = ensure_group_calendar(
             calendar_service, group_name, email, parse_footer_calendar_id(footer),
             owned_calendars=owned_calendars, linked=get_linked, dry_run=dry_run,
+            on_create=lambda: created.append(True),
         )
         if calendar_id:
             calendar_id_by_group_id[group_id] = calendar_id
+        if (created or announce_calendars) and created_calendar_group_ids is not None:
+            created_calendar_group_ids.append(group_id)
+        if created or move_events:
+            mover.offer(group_name, calendar_id, email)
         room = ensure_zoom_room(
             zoom, group_name, parse_footer_zoom_url(footer), email,
-            rooms=rooms, linked=get_linked, dry_run=dry_run,
+            meetings=zoom_meetings, linked=get_linked, dry_run=dry_run,
+            events_using=lambda meeting_id: mover.events_using_meeting(group_name, meeting_id),
         )
         if room:
             room_by_group_id[group_id] = room
-        print(f"'{group_name}': {_meeting_rooms_status(calendar_id, room)}")
+        role = group_calendar_role(calendar_service, calendar_id, email) if calendar_id else None
+        restricted = role is not None and not group_can_edit(role)
+        print(f"'{group_name}': {_meeting_rooms_status(calendar_id, room, restricted)}")
 
 
-def _meeting_rooms_status(calendar_id: str | None, room: RoomLink | None) -> str:
+def announce_new_calendars(
+    gmail_service, group_info: dict[str, dict], email_by_group_id: dict[str, str],
+    created_calendar_group_ids: list[str], calendar_id_by_group_id: dict[str, str],
+    room_by_group_id: dict[str, RoomLink], dry_run: bool,
+) -> None:
+    """Email each group whose calendar this run created about its calendar
+    and Zoom room (util/calendar_announcement.py), at its list address.
+    Only groups whose footer now links both are emailed, since the message
+    points to the footer's links (the user may have quit before the room
+    was made); a dry run says who would be."""
+    for group_id in created_calendar_group_ids:
+        if dry_run or (group_id in calendar_id_by_group_id and group_id in room_by_group_id):
+            announce_calendar(gmail_service, group_info[group_id]["name"],
+                              email_by_group_id[group_id],
+                              calendar_id_by_group_id.get(group_id), dry_run)
+
+
+def _meeting_rooms_status(
+    calendar_id: str | None, room: RoomLink | None, restricted: bool = False,
+) -> str:
     """Status line text for a group after ensure_group_meeting_rooms(); a
     missing calendar or room only happens in a dry run that would create
-    it."""
+    it. restricted marks a calendar whose group can't edit it (only some
+    members were given edit access by hand)."""
+    calendar = "calendar (members can view, not edit)" if restricted else "calendar"
     if calendar_id and room:
-        return "calendar and Zoom room in place"
+        return f"{calendar} and Zoom room in place"
     return "; ".join([
-        "calendar in place" if calendar_id else "calendar would be created",
+        f"{calendar} in place" if calendar_id else "calendar would be created",
         "Zoom room in place" if room else "Zoom room would be created",
     ])
 
@@ -1325,7 +1393,9 @@ def add_missing_groups(
 
 
 def main(base_url: str, email: str, password: str, dry_run: bool,
-         credentials_path: str, drive_id: str, group_prefix: str | None = None):
+         credentials_path: str, drive_id: str, group_prefix: str | None = None,
+         move_events: bool = False, announce_calendars: bool = False,
+         share_all_events: bool = False):
     base_url = base_url.rstrip("/")
     init_log()
     log("INFO", "start", f"base_url={base_url} dry_run={dry_run} group={group_prefix!r}")
@@ -1335,6 +1405,7 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
     dir_service = build("admin", "directory_v1", credentials=creds)
     settings_service = build("groupssettings", "v1", credentials=creds)
     calendar_service = build("calendar", "v3", credentials=creds)
+    gmail_service = build("gmail", "v1", credentials=creds)
     check_calendar_owner(calendar_service)
     zoom = ZoomClient(**load_zoom_credentials())
 
@@ -1355,7 +1426,9 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
 
         # Single-group mode (-g): target_id is that group, and group_info
         # holds only it. Otherwise target_id is None and every group is
-        # processed.
+        # processed. everybody_groups is set only to share the all-events
+        # calendar from a single-group run (--share-all-events).
+        everybody_groups = None
         if group_prefix:
             try:
                 group_info = fetch_single_group_info(page, base_url, group_prefix)
@@ -1367,6 +1440,12 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
             target_id = next(iter(group_info))
             target = group_info[target_id]
             print(f"Resolved '{group_prefix}' → '{target['name']}' (id={target_id})")
+            if share_all_events:
+                print("Reading every group, to find the everybody groups to share the "
+                      "all-events calendar with…")
+                everybody_groups = {gid: info for gid, info
+                                    in fetch_group_info(page, base_url)[0].items()
+                                    if _is_everybody(info)}
             if target["kind"] not in ELIGIBLE_KINDS:
                 log("WARN", "resolve_group",
                     f"'{target['name']}' is of kind {target['kind']!r}, not one of "
@@ -1452,6 +1531,7 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
         # Step 2b: give each group a calendar and a Zoom room.
         calendar_id_by_group_id: dict[str, str] = {}
         room_by_group_id: dict[str, RoomLink] = {}
+        created_calendar_group_ids: list[str] = []
         if not quit_requested:
             get_linked = functools.cache(
                 lambda: find_linked_resources(dir_service, settings_service))
@@ -1459,7 +1539,8 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
                 ensure_group_meeting_rooms(
                     dir_service, settings_service, calendar_service, zoom, group_info,
                     google_file_id_by_group_id, email_by_group_id, get_linked, dry_run,
-                    calendar_id_by_group_id, room_by_group_id,
+                    calendar_id_by_group_id, room_by_group_id, move_events,
+                    created_calendar_group_ids, announce_calendars, everybody_groups,
                 )
             except QuitRequested:
                 quit_requested = True
@@ -1472,6 +1553,12 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
             item_type_by_group_id, email_by_group_id, dry_run,
             calendar_id_by_group_id, room_by_group_id,
         )
+
+        # Step 3b: tell groups about their new calendars, now that their
+        # footers link them.
+        announce_new_calendars(gmail_service, group_info, email_by_group_id,
+                               created_calendar_group_ids, calendar_id_by_group_id,
+                               room_by_group_id, dry_run)
 
         if not quit_requested:
             try:
@@ -1534,7 +1621,28 @@ def cli():
         help="Process only the Gather group whose name starts with this prefix "
              "(case-insensitive; must match exactly one group)",
     )
+    parser.add_argument(
+        "--move-events", action="store_true",
+        help="For each group, offer to copy its meetings from other calendars to its own "
+             "calendar and delete them there (always offered for a newly created calendar)",
+    )
+    parser.add_argument(
+        "--share-all-events", action="store_true",
+        help="With -g, also share the all-events calendar with the everybody groups, as a "
+             "full run does (reads every group from Gather to find them)",
+    )
+    parser.add_argument(
+        "--announce-calendar", action="store_true",
+        help="Email each group's list about its calendar and Zoom room even if the calendar "
+             "already existed (always sent for a newly created calendar); use with -g",
+    )
     args = parser.parse_args()
+
+    if args.announce_calendar and not args.group and not args.dry_run:
+        answer = input("--announce-calendar without -g emails every group's list. "
+                       "Continue? [y/N]: ").strip().lower()
+        if answer not in ("y", "yes"):
+            sys.exit("Stopped; nothing was changed.")
 
     if not os.path.exists(args.credentials):
         sys.exit(
@@ -1544,7 +1652,7 @@ def cli():
 
     email, password = load_credentials()
     main(args.base_url, email, password, args.dry_run, args.credentials, args.drive_id,
-         args.group)
+         args.group, args.move_events, args.announce_calendar, args.share_all_events)
 
 
 if __name__ == "__main__":

@@ -7,7 +7,7 @@ All names and addresses are fictional.
 
 from urllib.parse import parse_qs, unquote, urlsplit
 
-from add_new_group import build_welcome_message, mailto_url
+from add_new_group import GROUP_CALENDAR_HOWTO_URL, build_welcome_message, mailto_url
 
 
 def _msg(**kw):
@@ -32,7 +32,10 @@ class TestBuildWelcomeMessage:
         assert ("Everyone in the Gather group receives messages sent to the list, can "
                 "add and edit files in the folder, and can add and change events on the "
                 "calendar. Anyone can post to the list.") in body
-        assert "Please put the group's meetings on its calendar rather than on your own." in body
+        assert ("Please put the group's meetings on its calendar rather than on your own. "
+                f"Here's how:\n{GROUP_CALENDAR_HOWTO_URL}\n\nThe Zoom room is") in body
+        assert ("To see the calendar in your own Google Calendar, click its link in the "
+                "footer.") in body
         assert "its link never changes" in body
         assert ("I've made you a manager of the Gather group, which allows you to add "
                 "members to it, and to make other members managers.") in body

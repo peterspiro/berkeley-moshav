@@ -17,9 +17,11 @@
  *      and ALERT_EMAIL get one email asking them to create it on the group
  *      calendar instead.
  * Then, if anything changed, and every hour regardless (hourly), it looks for
- * meetings in the next OVERLAP_WEEKS weeks that overlap in rooms owned by the
- * same Zoom user (a Zoom user can run only one meeting at a time) and emails
- * ALERT_EMAIL and the groups involved, once per conflict.
+ * meetings in the next OVERLAP_WEEKS weeks in rooms owned by the same Zoom
+ * user (a Zoom user can run only one meeting at a time) that overlap or are
+ * less than MIN_GAP_MINUTES apart, and emails the groups involved (and
+ * ALERT_EMAIL, the Technology Circle) once per conflict, asking them to agree
+ * which meeting moves (see overlapMessage in event_rules.gs).
  *
  * Which calendar and room are a group's comes from the group's own email
  * footer (written by update_groups_in_google_and_hierarchy.py), read hourly,
@@ -33,9 +35,22 @@
 const DOMAIN = 'berkeleymoshav.org';
 const ALL_EVENTS_CALENDAR_ID =
   'c_301c808f640b3a04f5344b1bbf266955d51fecaabd7835936b7591f9cff09222@group.calendar.google.com';
+// The Technology Circle's address for alerts; it's also asked to move
+// meetings scheduled directly in Zoom.
 const ALERT_EMAIL = 'calendaring-alerts@berkeleymoshav.org';
+const TECH_CIRCLE_NAME = 'Technology Circle';
 const TIME_ZONE = 'America/Los_Angeles';
+// Linked from every group-calendar event that gets the group's Zoom room.
+const MEETINGS_FAQ_URL =
+  'https://docs.google.com/document/d/1rr8WqPnsLKw-tgVea40NkyTxlwLFVVLnXbL3UVFQcZY';
+// Bump when computeEventPatch's rules change, so the next syncAll rechecks
+// every upcoming event, not just changed ones (see recheckIfRulesChanged).
+const RULES_VERSION = 2;
 const OVERLAP_WEEKS = 8;
+// Meetings in rooms of the same Zoom user are flagged if they overlap, or if
+// the second starts less than this many minutes after the first ends (in
+// case the first runs over).
+const MIN_GAP_MINUTES = 15;
 
 // Script Properties keys.
 const PROP_GROUPS = 'groups';                // JSON [{ email, name, calendarId, zoomUrl, passcode }]
@@ -44,6 +59,7 @@ const PROP_COPY_ALERTS = 'copyAlerts';       // JSON { iCalUID: forgetAfterMs }
 const PROP_OVERLAP_ALERTS = 'overlapAlerts'; // JSON { conflictId: fingerprint }
 const PROP_ZOOM_MEETINGS = 'zoomMeetings';   // JSON, fixed-time Zoom meetings
 const PROP_ROOM_OWNER_PREFIX = 'roomOwner:'; // + Zoom meeting ID -> JSON { owner, type } or ''
+const PROP_RULES_VERSION = 'rulesVersion';
 // Zoom app credentials (Script Properties, set by hand; see README.md).
 const PROP_ZOOM_ACCOUNT_ID = 'ZOOM_ACCOUNT_ID';
 const PROP_ZOOM_CLIENT_ID = 'ZOOM_CLIENT_ID';
@@ -56,6 +72,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 /** Every 5 minutes: fix changed events; check overlaps if anything changed. */
 function syncAll() {
   withLock(() => {
+    recheckIfRulesChanged();
     const groups = loadGroups();
     let changed = 0;
     for (const group of groups) {
@@ -69,10 +86,31 @@ function syncAll() {
   });
 }
 
-/** Every hour: re-read footers and Zoom's meetings, then check overlaps. */
+/**
+ * If RULES_VERSION changed since the last run, drop every calendar's sync
+ * token, so this run handles every upcoming event (adding whatever the new
+ * rules add) rather than only changed ones. Those changes send no email:
+ * the groups are already invited.
+ */
+function recheckIfRulesChanged() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty(PROP_RULES_VERSION) === String(RULES_VERSION)) return;
+  for (const key of props.getKeys()) {
+    if (key.startsWith(PROP_SYNC_PREFIX)) props.deleteProperty(key);
+  }
+  props.setProperty(PROP_RULES_VERSION, String(RULES_VERSION));
+  console.log(`Rules version ${RULES_VERSION}: rechecking every upcoming event.`);
+}
+
+/**
+ * Every hour: re-read footers and Zoom's meetings (including which user owns
+ * each room, since a room can be transferred to another Zoom user), then
+ * check overlaps.
+ */
 function hourly() {
   withLock(() => {
     const groups = refreshGroups();
+    forgetRoomOwners();
     refreshZoomMeetings();
     checkOverlaps(groups);
   });
@@ -236,6 +274,7 @@ function handleEvent(event, group, groups) {
     passcode: group.passcode,
     groupEmail: group.email,
     allEventsCalendarId: ALL_EVENTS_CALENDAR_ID,
+    faqUrl: MEETINGS_FAQ_URL,
   });
   if (!change) return;
   Calendar.Events.patch(change.patch, group.calendarId, event.id,
@@ -280,8 +319,9 @@ function alertInvitationCopy(event, group) {
       `invitation like that, so its Zoom room link can't be added and the group isn't ` +
       `invited.\n\n` +
       `To fix it, create the meeting on the ${group.name} calendar itself (there's a link ` +
-      `to it at the bottom of every message to the group's email list), then delete your ` +
-      `original or remove the group calendar from its guests.\n\n` +
+      `to it at the bottom of every message to the group's email list), or, if you can't ` +
+      `add events to that calendar, ask someone who can to create it there. Then delete ` +
+      `your original or remove the group calendar from its guests.\n\n` +
       `This message was sent automatically.\n`,
   });
   console.log(`${group.email}: alerted ${organizer} about invitation copy "${event.summary}"`);
@@ -328,7 +368,7 @@ function checkOverlaps(groups) {
             key: room.type === 3 ? `${event.iCalUID}@${start}` : `zoom:${id}@${start}`,
             owner: room.owner, start, end,
             title: event.summary || '(untitled)',
-            groups: [group.email], where: group.name,
+            groups: [group.email], names: [group.name],
           });
           break;
         }
@@ -338,10 +378,10 @@ function checkOverlaps(groups) {
   }
 
   for (const m of loadZoomMeetings()) {
-    if (m.end > now && m.start < until) meetings.push(Object.assign({ groups: [] }, m));
+    if (m.end > now && m.start < until) meetings.push(Object.assign({ groups: [], names: [] }, m));
   }
 
-  alertOverlaps(findOverlaps(meetings));
+  alertOverlaps(findOverlaps(meetings, MIN_GAP_MINUTES * 60 * 1000));
 }
 
 function alertOverlaps(conflicts) {
@@ -359,20 +399,21 @@ function alertOverlaps(conflicts) {
 }
 
 function sendOverlapAlert(c) {
-  const describe = m =>
-    `"${m.title}" (${m.where}), ${formatRange(m.start, m.end)}`;
-  const groups = [...new Set([...(c.a.groups || []), ...(c.b.groups || [])])];
+  const message = overlapMessage(c, {
+    alertEmail: ALERT_EMAIL,
+    techName: TECH_CIRCLE_NAME,
+    allEventsUrl: 'https://calendar.google.com/calendar/embed?src=' +
+      encodeURIComponent(ALL_EVENTS_CALENDAR_ID) + '&ctz=' + encodeURIComponent(TIME_ZONE),
+    minGapMinutes: MIN_GAP_MINUTES,
+    formatRange,
+  });
   MailApp.sendEmail({
-    to: [ALERT_EMAIL].concat(groups).join(','),
-    subject: `Zoom meetings overlap: "${c.a.title}" and "${c.b.title}"`,
-    body:
-      `These two meetings overlap, and both use Zoom rooms belonging to ${c.a.owner}, ` +
-      `which can run only one meeting at a time, so whichever starts second won't be ` +
-      `able to start:\n\n` +
-      `  - ${describe(c.a)}\n  - ${describe(c.b)}\n\n` +
-      `Please move one of them to another time, or ask the Technology Circle to host ` +
-      `one in a room belonging to a different Zoom user.\n\n` +
-      `This message was sent automatically.\n`,
+    to: message.to.join(','),
+    cc: message.cc.join(',') || undefined,
+    replyTo: ALERT_EMAIL,
+    subject: message.subject,
+    body: message.body,
+    htmlBody: textToHtml(message.body),
   });
   console.log(`Overlap alert: ${conflictId(c)}`);
 }
@@ -395,6 +436,14 @@ function roomOwner(meetingId) {
   const value = meeting ? { owner: lower(meeting.host_email), type: meeting.type } : null;
   props.setProperty(key, value ? JSON.stringify(value) : '');
   return value;
+}
+
+/** Drop the cached room owners, so roomOwner() asks Zoom again. */
+function forgetRoomOwners() {
+  const props = PropertiesService.getScriptProperties();
+  for (const key of props.getKeys()) {
+    if (key.startsWith(PROP_ROOM_OWNER_PREFIX)) props.deleteProperty(key);
+  }
 }
 
 function loadZoomMeetings() {
@@ -422,7 +471,7 @@ function refreshZoomMeetings() {
         if (end < now) continue;
         meetings.push({
           key: `zoom:${m.id}@${start}`, owner: lower(user.email), start, end,
-          title: m.topic || '(untitled)', where: `scheduled in Zoom by ${user.email}`,
+          title: m.topic || '(untitled)',
         });
       }
     }
