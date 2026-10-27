@@ -211,7 +211,8 @@ status line as "calendar (members can view, not edit)".
   and Zoom room, writes the footer links, and updates the Circle Structure page
   (renames, links, missing and stale entries). Its first run also creates the
   "All Berkeley Moshav Events" calendar, which it shares view-only with the
-  everybody groups. When it creates a group's calendar, it emails the
+  everybody groups (with `-g`, only if `--share-all-events` is given, since
+  finding them means reading every group from Gather). When it creates a group's calendar, it emails the
   group's list from `admin@` (replies going to `calendaring-alerts@`), once
   the footer links the calendar and Zoom room: a link for everyone to add
   the calendar, and steps for meeting organizers to move the group's

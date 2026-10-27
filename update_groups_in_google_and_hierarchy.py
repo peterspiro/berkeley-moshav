@@ -984,7 +984,7 @@ def ensure_group_meeting_rooms(
     get_linked: Callable[[], LinkedResources], dry_run: bool,
     calendar_id_by_group_id: dict[str, str], room_by_group_id: dict[str, RoomLink],
     move_events: bool = False, created_calendar_group_ids: list[str] | None = None,
-    announce_calendars: bool = False,
+    announce_calendars: bool = False, everybody_groups: dict[str, dict] | None = None,
 ) -> None:
     """Make sure every eligible group has a Google calendar and a Zoom
     meeting room (see util/meeting_rooms.py), recording them in
@@ -997,6 +997,10 @@ def ensure_group_meeting_rooms(
     would be, in a dry run), or every group with announce_calendars, are
     appended to created_calendar_group_ids, to be told about their calendar
     once their footers are written (announce_new_calendars()).
+
+    The all-events calendar is shared view-only with the everybody groups:
+    those in group_info, or everybody_groups ({group_id: info}, as from
+    fetch_group_info()) if given, so a single-group run can share it too.
 
     Only groups that will get a footer — ones with both a Drive item and a
     mailing list — are covered, since the footer is the only record of
@@ -1034,10 +1038,15 @@ def ensure_group_meeting_rooms(
                        zoom_meetings=zoom_meetings, dir_service=dir_service)
 
     # The everybody groups' primary addresses (a Gather list may use an alias).
+    if everybody_groups is None:
+        everybody_groups = {gid: info for gid, info in group_info.items() if _is_everybody(info)}
+        everybody_list_emails = {gid: email_by_group_id.get(gid) for gid in everybody_groups}
+    else:
+        everybody_list_emails = build_email_by_group_id(everybody_groups)
     everybody_emails = []
-    for gid, info in group_info.items():
-        if _is_everybody(info) and email_by_group_id.get(gid):
-            google_group = get_group_by_email(dir_service, email_by_group_id[gid])
+    for gid in everybody_groups:
+        if everybody_list_emails.get(gid):
+            google_group = get_group_by_email(dir_service, everybody_list_emails[gid])
             if google_group:
                 everybody_emails.append(google_group["email"].lower())
     ensure_all_events_calendar(
@@ -1385,7 +1394,8 @@ def add_missing_groups(
 
 def main(base_url: str, email: str, password: str, dry_run: bool,
          credentials_path: str, drive_id: str, group_prefix: str | None = None,
-         move_events: bool = False, announce_calendars: bool = False):
+         move_events: bool = False, announce_calendars: bool = False,
+         share_all_events: bool = False):
     base_url = base_url.rstrip("/")
     init_log()
     log("INFO", "start", f"base_url={base_url} dry_run={dry_run} group={group_prefix!r}")
@@ -1416,7 +1426,9 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
 
         # Single-group mode (-g): target_id is that group, and group_info
         # holds only it. Otherwise target_id is None and every group is
-        # processed.
+        # processed. everybody_groups is set only to share the all-events
+        # calendar from a single-group run (--share-all-events).
+        everybody_groups = None
         if group_prefix:
             try:
                 group_info = fetch_single_group_info(page, base_url, group_prefix)
@@ -1428,6 +1440,12 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
             target_id = next(iter(group_info))
             target = group_info[target_id]
             print(f"Resolved '{group_prefix}' → '{target['name']}' (id={target_id})")
+            if share_all_events:
+                print("Reading every group, to find the everybody groups to share the "
+                      "all-events calendar with…")
+                everybody_groups = {gid: info for gid, info
+                                    in fetch_group_info(page, base_url)[0].items()
+                                    if _is_everybody(info)}
             if target["kind"] not in ELIGIBLE_KINDS:
                 log("WARN", "resolve_group",
                     f"'{target['name']}' is of kind {target['kind']!r}, not one of "
@@ -1522,7 +1540,7 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
                     dir_service, settings_service, calendar_service, zoom, group_info,
                     google_file_id_by_group_id, email_by_group_id, get_linked, dry_run,
                     calendar_id_by_group_id, room_by_group_id, move_events,
-                    created_calendar_group_ids, announce_calendars,
+                    created_calendar_group_ids, announce_calendars, everybody_groups,
                 )
             except QuitRequested:
                 quit_requested = True
@@ -1609,6 +1627,11 @@ def cli():
              "calendar and delete them there (always offered for a newly created calendar)",
     )
     parser.add_argument(
+        "--share-all-events", action="store_true",
+        help="With -g, also share the all-events calendar with the everybody groups, as a "
+             "full run does (reads every group from Gather to find them)",
+    )
+    parser.add_argument(
         "--announce-calendar", action="store_true",
         help="Email each group's list about its calendar and Zoom room even if the calendar "
              "already existed (always sent for a newly created calendar); use with -g",
@@ -1629,7 +1652,7 @@ def cli():
 
     email, password = load_credentials()
     main(args.base_url, email, password, args.dry_run, args.credentials, args.drive_id,
-         args.group, args.move_events, args.announce_calendar)
+         args.group, args.move_events, args.announce_calendar, args.share_all_events)
 
 
 if __name__ == "__main__":

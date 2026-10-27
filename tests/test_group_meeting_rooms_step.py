@@ -209,3 +209,13 @@ def test_all_events_calendar_shared_with_everybody_groups():
     shared = [(w[1], w[2]["scope"]["value"], w[2]["role"], w[3])
               for w in cal.writes if w[0] == "acl_insert" and w[1] == "ae"]
     assert shared == [("ae", "all@x.org", "reader", False)]
+
+
+def test_all_events_shared_with_everybody_groups_given_to_a_single_group_run():
+    cal = FakeCalendarService({"ae": "All Berkeley Moshav Events"})
+    everybody = {"2": dict(GROUPS["2"], list_name="all", list_domain="berkeleymoshav.org")}
+    m.ensure_group_meeting_rooms(
+        _Directory(), _Settings({}), cal, FakeZoom(), {"1": GROUPS["1"]}, FOLDERS, EMAILS,
+        lambda: LinkedResources(), False, {}, {}, everybody_groups=everybody)
+    shares = [(w[1], w[2]) for w in cal.writes if w[0] == "acl_insert" and w[1] == "ae"]
+    assert shares == [("ae", {"role": "reader", "scope": {"type": "group", "value": "all@berkeleymoshav.org"}})]
