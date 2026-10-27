@@ -81,6 +81,16 @@ const ZOOM_BLOCK_RE =
 const STAMP_KEY = 'groupZoomUrl';
 const FAQ_TEXT = 'Questions about joining? See the BM Meetings FAQ:';
 const GOOGLE_DOC_ID_RE = /\/document\/d\/([\w-]+)/;
+// A line saying the Zoom link is still to come ("Zoom link to follow",
+// "(Zoom details will follow.)"), removed once the block is added. The
+// line may hold formatting tags around the words; those are kept.
+const TO_FOLLOW = String.raw`[(\[]?\s*zoom (?:link|details|info) (?:to follow|will follow|to come|coming soon)\s*[.!)\]]*`;
+const LINE_BREAK = String.raw`(?:\n|<br\s*\/?>)`;
+const TAGS = String.raw`((?:[^\S\n]|&nbsp;|<(?!br\b)[^>]*>)*)`;
+const TO_FOLLOW_LINE_RE = new RegExp(`${LINE_BREAK}+${TAGS}${TO_FOLLOW}${TAGS}(?=${LINE_BREAK}|$)`, 'gi');
+const TO_FOLLOW_FIRST_LINE_RE = new RegExp(`^${TAGS}${TO_FOLLOW}${TAGS}(?:${LINE_BREAK}+|$)`, 'i');
+// The words as the whole text of an HTML element, as in <p>Zoom link to follow</p>.
+const TO_FOLLOW_ELEMENT_RE = new RegExp(`>(?:\s|&nbsp;)*${TO_FOLLOW}(?:\s|&nbsp;)*<`, 'gi');
 
 function lower(s) { return (s || '').toLowerCase(); }
 
@@ -106,7 +116,8 @@ function zoomBlock(room, br) {
  *     private extended property, so a changed room link replaces it.
  *     Such an event also gets a line linking the meetings FAQ
  *     (ctx.faqUrl), just above the block, unless the description already
- *     links that document anywhere.
+ *     links that document anywhere, and loses any "Zoom link to follow"
+ *     line.
  *   - Guests: the all-events calendar and the group's Google Group.
  * sendUpdates is 'all' when the group is newly invited (so members get the
  * invitation), else 'none'.
@@ -125,7 +136,7 @@ function computeEventPatch(event, ctx) {
     }
 
     const br = /<[a-z][^>]*>/i.test(description) ? '<br>' : '\n';
-    let text = description.replace(ZOOM_BLOCK_RE, '').replace(/\s+$/, '');
+    let text = removeToFollowLines(description.replace(ZOOM_BLOCK_RE, '')).replace(/\s+$/, '');
     if (ctx.faqUrl && !linksDocument(text, ctx.faqUrl)) {
       const faq = `${FAQ_TEXT} ${ctx.faqUrl}`;
       text = text ? `${text}${br}${br}${faq}` : faq;
@@ -150,6 +161,14 @@ function computeEventPatch(event, ctx) {
   if (!Object.keys(patch).length) return null;
   const invitesGroup = added.some(a => lower(a.email) === lower(ctx.groupEmail));
   return { patch, sendUpdates: invitesGroup ? 'all' : 'none' };
+}
+
+/** text without its "Zoom link to follow" lines. */
+function removeToFollowLines(text) {
+  return text
+    .replace(TO_FOLLOW_FIRST_LINE_RE, '$1$2')
+    .replace(TO_FOLLOW_LINE_RE, '$1$2')
+    .replace(TO_FOLLOW_ELEMENT_RE, '><');
 }
 
 /** True if text links the Google Doc at docUrl, in any form (a section

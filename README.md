@@ -301,8 +301,8 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
 - **`group_meetings/group_meetings.gs`** runs every 5 minutes, as
   `admin@berkeleymoshav.org`, over every group calendar linked from a footer.
   Each event the group calendar organizes gets the group's Zoom room (link,
-  meeting ID, and passcode) with a link to the "BM Meetings FAQ", and the
-  group and the all-events calendar as guests, unless it's marked `[no zoom]`
+  meeting ID, and passcode) with a link to the "BM Meetings FAQ", in place of
+  any "Zoom link to follow" line, and the group and the all-events calendar as guests, unless it's marked `[no zoom]`
   or has another meeting link typed in (then it gets only the guests).
   An event that's only a copy of someone's invitation gets its organizer an
   email asking them to create it on the group calendar instead. It also
