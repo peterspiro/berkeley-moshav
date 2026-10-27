@@ -189,6 +189,45 @@ class TestMeetingsFaq:
             assert change is None or "description" not in change["patch"]
 
 
+class TestZoomLinkToFollow:
+    def desc(self, description):
+        return patch({"description": description})["patch"]["description"]
+
+    def test_last_line_removed(self):
+        assert self.desc("Agenda\n\nZoom link to follow.").startswith(
+            "Agenda\n\nJoin Zoom meeting: ")
+
+    def test_middle_line_removed(self):
+        assert self.desc("Agenda\nZoom link to follow\nBring snacks").startswith(
+            "Agenda\nBring snacks\n\nJoin Zoom meeting: ")
+
+    def test_first_line_removed(self):
+        assert self.desc("(Zoom link to follow)\n\nAgenda").startswith(
+            "Agenda\n\nJoin Zoom meeting: ")
+
+    def test_only_line_removed(self):
+        assert self.desc("zoom details will follow").startswith("Join Zoom meeting: ")
+
+    def test_html_line_removed_keeping_tags(self):
+        assert self.desc("Agenda<br><br><b>Zoom link to follow</b><br>More").startswith(
+            "Agenda<b></b><br>More<br><br>Join Zoom meeting: ")
+
+    def test_html_element_removed(self):
+        assert self.desc("<p>Agenda</p><p>Zoom link to follow</p>").startswith(
+            "<p>Agenda</p><p></p><br><br>Join Zoom meeting: ")
+
+    def test_mention_within_a_line_kept(self):
+        text = "Agenda; Zoom link to follow by email"
+        assert self.desc(text).startswith(text + "\n\nJoin Zoom meeting: ")
+
+    def test_second_pass_changes_nothing(self):
+        assert patch(done({"description": "Agenda\n\nZoom link to follow"})) is None
+
+    def test_kept_when_no_zoom(self):
+        assert patch({"description": "Zoom link to follow [no zoom]"},
+                     {**CTX, "groupEmail": None, "allEventsCalendarId": None}) is None
+
+
 class TestInvitationCopy:
     def test_own_event_is_not_a_copy(self):
         assert js("isInvitationCopy(e, cal, [])", e={"organizer": {"email": CAL}}, cal=CAL) is False

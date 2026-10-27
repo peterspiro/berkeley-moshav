@@ -7,7 +7,8 @@ Apps Script that looks after every group's Google calendar (the calendars
   - an event the group calendar organizes gets the group's Zoom room (link in
     the location; link, meeting ID, and passcode in the description, with a
     line linking the "BM Meetings FAQ" just above them, unless the
-    description already links it), and the group's Google Group and the "All
+    description already links it; a "Zoom link to follow" line in the
+    description is removed), and the group's Google Group and the "All
     Berkeley Moshav Events" calendar as guests. The group's members get an
     invitation; adding the room details or the all-events calendar sends no
     email. Events marked `[no zoom]`, or with another Zoom or Meet link typed
