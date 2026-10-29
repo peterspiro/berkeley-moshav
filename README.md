@@ -34,6 +34,8 @@ Python scripts:
   group's meetings its Zoom room and invites the group and the all-events
   calendar, and emails warnings about meetings that would clash over a Zoom
   user, and about meetings set up as invitations from someone's own calendar.
+  It also invites the all-events calendar to the events created on the admin
+  account's other calendars, including the shared community calendar.
 
 The repo also keeps, in `archive/`, the one-off scripts that were used to
 migrate the community into Gather (members, households, groups, photos) and
@@ -335,7 +337,11 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
   scheduled directly in Zoom, calendaring-alerts@berkeleymoshav.org, for the
   Technology Circle), asking them to agree which meeting moves, with a link to
   the all-events calendar for finding a free time (two groups are also offered
-  having one group's room moved to the second Zoom user). Its rules are
+  having one group's room moved to the second Zoom user). On every other
+  calendar `admin@` owns (its primary, which is the shared community calendar,
+  and any others; re-read hourly), each event the calendar organizes gets the
+  all-events calendar as a guest, with no email; invitation copies there are
+  left alone. Its rules are
   in `group_meetings/event_rules.gs`, tested under Node. See
   `group_meetings/README.md` for deployment, including the Zoom credentials
   it reads from Script Properties.

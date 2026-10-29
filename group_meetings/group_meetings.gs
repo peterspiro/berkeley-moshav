@@ -16,6 +16,10 @@
  *      since changes to a copy don't reach the other guests; its organizer
  *      and ALERT_EMAIL get one email asking them to create it on the group
  *      calendar instead.
+ * It does the same for the account's other calendars (its primary, the
+ * shared community calendar, and any others it owns), except that an event
+ * one of them organizes gets only the all-events calendar as a guest, and
+ * invitation copies on them are left alone.
  * Then, if anything changed, and every hour regardless (hourly), it looks for
  * meetings in the next OVERLAP_WEEKS weeks in rooms owned by the same Zoom
  * user (a Zoom user can run only one meeting at a time) that overlap or are
@@ -61,6 +65,7 @@ const ZOOM_USER_NUMBERS = {
 
 // Script Properties keys.
 const PROP_GROUPS = 'groups';                // JSON [{ email, name, calendarId, zoomUrl, passcode }]
+const PROP_OTHER_CALENDARS = 'otherCalendars'; // JSON [{ id, name }], see refreshOtherCalendars
 const PROP_SYNC_PREFIX = 'syncToken:';       // + calendar ID
 const PROP_COPY_ALERTS = 'copyAlerts';       // JSON { iCalUID: forgetAfterMs }
 const PROP_OVERLAP_ALERTS = 'overlapAlerts'; // JSON { conflictId: fingerprint }
@@ -85,9 +90,17 @@ function syncAll() {
     let changed = 0;
     for (const group of groups) {
       try {
-        changed += syncCalendar(group, groups);
+        changed += syncCalendar(group.calendarId, group.email,
+                                event => handleEvent(event, group, groups));
       } catch (err) {
         console.error(`Error syncing ${group.email}: ${err}`);
+      }
+    }
+    for (const cal of loadOtherCalendars(groups)) {
+      try {
+        syncCalendar(cal.id, cal.name, event => handleOtherEvent(event, cal));
+      } catch (err) {
+        console.error(`Error syncing ${cal.name}: ${err}`);
       }
     }
     if (changed) checkOverlaps(groups);
@@ -111,13 +124,14 @@ function recheckIfRulesChanged() {
 }
 
 /**
- * Every hour: re-read footers and Zoom's meetings (including which user owns
- * each room, since a room can be transferred to another Zoom user), then
- * check overlaps.
+ * Every hour: re-read footers, the account's other calendars, and Zoom's
+ * meetings (including which user owns each room, since a room can be
+ * transferred to another Zoom user), then check overlaps.
  */
 function hourly() {
   withLock(() => {
     const groups = refreshGroups();
+    refreshOtherCalendars(groups);
     recheckZoomUsers(groups);
     refreshZoomMeetings();
     checkOverlaps(groups);
@@ -226,6 +240,36 @@ function refreshGroups() {
   return groups;
 }
 
+function loadOtherCalendars(groups) {
+  return getJson(PROP_OTHER_CALENDARS, null) || refreshOtherCalendars(groups);
+}
+
+/**
+ * The calendars the account owns besides the group calendars and the
+ * all-events calendar (see otherOwnedCalendars in event_rules.gs). A
+ * calendar the account no longer has loses its sync token, so it's
+ * rechecked in full if it comes back.
+ */
+function refreshOtherCalendars(groups) {
+  const items = [];
+  let pageToken;
+  do {
+    const resp = Calendar.CalendarList.list({ minAccessRole: 'owner', maxResults: 250, pageToken });
+    items.push(...(resp.items || []));
+    pageToken = resp.nextPageToken;
+  } while (pageToken);
+  const calendars = otherOwnedCalendars(
+    items, Session.getEffectiveUser().getEmail(), managedCalendarIds(groups));
+  const props = PropertiesService.getScriptProperties();
+  const ids = new Set(calendars.map(c => c.id));
+  for (const c of getJson(PROP_OTHER_CALENDARS, [])) {
+    if (!ids.has(c.id)) props.deleteProperty(PROP_SYNC_PREFIX + c.id);
+  }
+  setJson(PROP_OTHER_CALENDARS, calendars);
+  console.log(`${calendars.length} other calendar(s): ${calendars.map(c => c.name).join(', ')}.`);
+  return calendars;
+}
+
 function managedCalendarIds(groups) {
   return groups.map(g => g.calendarId).concat([ALL_EVENTS_CALENDAR_ID]);
 }
@@ -233,13 +277,13 @@ function managedCalendarIds(groups) {
 // ── Calendar sync ────────────────────────────────────────────────────────────
 
 /**
- * Handle every event that changed on the group's calendar since the last
- * run (on the first run, every event that hasn't ended). Returns how many
- * events changed.
+ * Pass handle every event that changed on the calendar since the last run
+ * (on the first run, every event that hasn't ended); label names the
+ * calendar in the log. Returns how many events changed.
  */
-function syncCalendar(group, groups) {
+function syncCalendar(calendarId, label, handle) {
   const props = PropertiesService.getScriptProperties();
-  const tokenKey = PROP_SYNC_PREFIX + group.calendarId;
+  const tokenKey = PROP_SYNC_PREFIX + calendarId;
   const syncToken = props.getProperty(tokenKey);
   const now = Date.now();
   let pageToken, nextSyncToken, changed = 0;
@@ -249,19 +293,19 @@ function syncCalendar(group, groups) {
     else params.timeMin = new Date(now).toISOString();
     let resp;
     try {
-      resp = Calendar.Events.list(group.calendarId, params);
+      resp = Calendar.Events.list(calendarId, params);
     } catch (err) {
       if (syncToken && isExpiredSyncToken(err)) {
         props.deleteProperty(tokenKey);
-        console.warn(`Sync token for ${group.email} expired; starting over.`);
-        return syncCalendar(group, groups);
+        console.warn(`Sync token for ${label} expired; starting over.`);
+        return syncCalendar(calendarId, label, handle);
       }
       throw err;
     }
     for (const event of resp.items || []) {
       changed++;
       if (event.status === 'cancelled' || eventEndMs(event) < now) continue;
-      handleEvent(event, group, groups);
+      handle(event);
     }
     pageToken = resp.nextPageToken;
     if (resp.nextSyncToken) nextSyncToken = resp.nextSyncToken;
@@ -289,6 +333,20 @@ function handleEvent(event, group, groups) {
   Calendar.Events.patch(change.patch, group.calendarId, event.id,
                         { sendUpdates: change.sendUpdates });
   console.log(`${group.email}: updated "${event.summary}" (${Object.keys(change.patch).join(', ')})`);
+}
+
+/**
+ * An event on one of the account's other calendars: if the calendar
+ * organizes it, invite the all-events calendar, sending no email.
+ * Invitation copies are left alone (they're how events reach the
+ * community calendar).
+ */
+function handleOtherEvent(event, cal) {
+  if (lower((event.organizer || {}).email) !== lower(cal.id)) return;
+  const change = computeEventPatch(event, { allEventsCalendarId: ALL_EVENTS_CALENDAR_ID });
+  if (!change) return;
+  Calendar.Events.patch(change.patch, cal.id, event.id, { sendUpdates: change.sendUpdates });
+  console.log(`${cal.name}: invited the all-events calendar to "${event.summary}"`);
 }
 
 /**
