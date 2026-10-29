@@ -133,7 +133,7 @@ def test_footer_links_reused():
     assert cal.writes == [] and zoom.writes == []
 
 
-def _run_one(name, kind, calendar_name, full_calendar_names):
+def _run_one(name, kind, calendar_name, full_calendar_names, move_events=False):
     """Run the step for one group whose footer links a calendar named
     calendar_name; returns the calendar service's writes."""
     footer = build_footer_block("1", "F1", "https://g", name, calendar_id="c1",
@@ -145,7 +145,8 @@ def _run_one(name, kind, calendar_name, full_calendar_names):
     groups = {"1": {"name": name, "kind": kind, "availability": "closed"}}
     m.ensure_group_meeting_rooms(
         _Directory(), _Settings({"tech@x.org": footer}), cal, zoom, groups, FOLDERS, EMAILS,
-        lambda: LinkedResources(), False, {}, {}, full_calendar_names=full_calendar_names,
+        lambda: LinkedResources(), False, {}, {}, move_events,
+        full_calendar_names=full_calendar_names,
     )
     return cal.writes
 
@@ -164,6 +165,19 @@ def test_full_calendar_names_keeps_a_name_already_full():
 def test_calendar_with_full_name_kept_without_the_option():
     assert _run_one("Technology", "circle", "Technology Circle", False) == []
     assert _run_one("Technology", "circle", "Tech", False) == [("rename", "c1", "Technology")]
+
+
+@pytest.mark.parametrize("move_events", [False, True])
+def test_move_events_hint_only_when_events_not_offered(monkeypatch, move_events):
+    notes = []
+
+    def fake_room(*args, events_note=None, **kwargs):
+        notes.append(events_note)
+        return RoomLink("https://zoom.us/j/7?pwd=p", "135790")
+    monkeypatch.setattr(m, "ensure_zoom_room", fake_room)
+    monkeypatch.setattr(m.EventMover, "offer", lambda *a, **k: None)
+    _run_one("Technology Circle", "circle", "Technology Circle", False, move_events)
+    assert notes == [None if move_events else m.MOVE_EVENTS_HINT]
 
 
 def test_dry_run_changes_nothing():

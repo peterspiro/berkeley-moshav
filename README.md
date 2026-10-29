@@ -235,7 +235,9 @@ status line as "calendar (members can view, not edit)".
   creates one. When it links no
   Zoom room, it lists every scheduled meeting in the Zoom account whose name
   matches the group's (any user's, of any kind, with its owner and schedule,
-  and the matching calendar events held in it),
+  and the matching calendar events held in it; if those events weren't
+  offered for moving, because the group's calendar already existed, it says
+  so and suggests `-m`/`--move-events`),
   then asks of each one in turn whether to use it as the room, ignore it, or
   delete it. Only a no-fixed-time meeting of `zoomhosts@` or
   `berkeley@urbanmoshav.org` (the second Zoom user) can be used, since Zoom
@@ -247,7 +249,7 @@ status line as "calendar (members can view, not edit)".
   changes nothing. `add_new_group.py` does the same.
 
   When it creates a group's calendar, or for every group with
-  `--move-events`, it looks for the group's meetings on other calendars:
+  `-m`/`--move-events`, it looks for the group's meetings on other calendars:
   every calendar on `admin@`'s calendar list (its own, including its primary
   calendar, and the ones it's subscribed to) except the group calendars, the
   all-events calendar, and Google's holiday and birthday calendars. It lists

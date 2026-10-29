@@ -530,7 +530,7 @@ def _candidate_line(c: dict) -> str:
 
 def decide_on_matching_meetings(
     group_name: str, available: list[dict], taken: list[dict], dry_run: bool,
-    input_fn: Callable[[str], str] = input,
+    input_fn: Callable[[str], str] = input, events_note: str | None = None,
 ) -> tuple[dict | None, list[dict]]:
     """List the meetings matching the group's name, then ask about each in
     turn whether to use it as the group's room (only a meeting that
@@ -542,7 +542,8 @@ def decide_on_matching_meetings(
 
     available and taken are candidates with "schedule" (describe_schedule)
     and "can_use" set; taken ones are linked to another group and only
-    listed."""
+    listed. events_note, if given, is printed after the list when any
+    meeting has matching events held in it ("used_by")."""
     room = room_topic(group_name)
     prefix = "[dry-run] " if dry_run else ""
     while True:
@@ -551,6 +552,8 @@ def decide_on_matching_meetings(
             print(f"    {i}. {_candidate_line(c)}")
         for c in taken:
             print(f"       {_candidate_line(c)} — linked to {c['owner']}, not selectable")
+        if events_note and any(c.get("used_by") for c in available + taken):
+            print(f"  {events_note}")
         print()
 
         actions: dict[int, str] = {}
@@ -611,7 +614,7 @@ def ensure_zoom_room(
     zoom: ZoomClient, group_name: str, linked_join_url: str | None, group_email: str, *,
     meetings: Callable[[], list[dict]], linked: Callable[[], LinkedResources], dry_run: bool,
     input_fn: Callable[[str], str] = input, now: datetime.datetime | None = None,
-    events_using: Callable[[str], list[str]] | None = None,
+    events_using: Callable[[str], list[str]] | None = None, events_note: str | None = None,
 ) -> RoomLink | None:
     """Return the group's room's join link and passcode, finding, choosing,
     or creating the room (see the module docstring), and make sure its
@@ -620,7 +623,8 @@ def ensure_zoom_room(
     scheduled meeting in the Zoom account) and linked are called only when
     there's no room in the footer. events_using(meeting ID), if given,
     describes the calendar events matching the group that are held in
-    that meeting, to show beside it. Returns None only in a dry
+    that meeting, to show beside it, followed by events_note if any are
+    shown (decide_on_matching_meetings()). Returns None only in a dry
     run that would create a room. Raises QuitRequested if the user quits."""
     group_email = group_email.lower()
     topic = room_topic(group_name)
@@ -643,7 +647,7 @@ def ensure_zoom_room(
             c["can_use"] = _can_be_room(c["details"])
             c["used_by"] = events_using(c["id"]) if events_using else []
         use, delete = (decide_on_matching_meetings(group_name, available, taken, dry_run,
-                                                   input_fn)
+                                                   input_fn, events_note)
                        if available else (None, []))
         if not available:
             for c in taken:

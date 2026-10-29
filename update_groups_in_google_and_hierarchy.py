@@ -218,6 +218,11 @@ configure(_LOG_FILE, _SCREENSHOT_DIR)
 
 ELIGIBLE_KINDS = {"circle", "committee", "club"}
 
+# Shown under a group's matching Zoom meetings when the events held in them
+# weren't offered for moving, because the group's calendar already existed.
+MOVE_EVENTS_HINT = ("(Those events weren't offered for moving onto the group's calendar, "
+                    "since it already existed; run with -m/--move-events to move them.)")
+
 # Clubs get a Drive folder, Google Group, and mailing list like any other
 # group, but are never added to the Circle Hierarchy wiki page.
 HIERARCHY_ELIGIBLE_KINDS = {"circle", "committee"}
@@ -1090,6 +1095,7 @@ def ensure_group_meeting_rooms(
             zoom, group_name, parse_footer_zoom_url(footer), email,
             meetings=zoom_meetings, linked=get_linked, dry_run=dry_run,
             events_using=lambda meeting_id: mover.events_using_meeting(group_name, meeting_id),
+            events_note=None if created or move_events else MOVE_EVENTS_HINT,
         )
         if room:
             room_by_group_id[group_id] = room
@@ -1633,7 +1639,7 @@ def cli():
              "(case-insensitive; must match exactly one group)",
     )
     parser.add_argument(
-        "--move-events", action="store_true",
+        "-m", "--move-events", action="store_true",
         help="For each group, offer to copy its meetings from other calendars to its own "
              "calendar and delete them there (always offered for a newly created calendar)",
     )

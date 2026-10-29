@@ -454,6 +454,19 @@ class TestZoomLinks:
                 "no fixed time) — the location of matching event(s): "
                 "'Technology Circle meeting' on Shared Events") in capsys.readouterr().out
 
+    @pytest.mark.parametrize("events", [True, False])
+    def test_events_note_only_with_events_held_there(self, capsys, events):
+        zoom = FakeZoom({81234567890: room(81234567890, "Technology Circle weekly")})
+        mover = EventMover(self._svc(), lambda: {GROUP_CAL}, dry_run=False, now=NOW)
+        mr.ensure_zoom_room(
+            zoom, "Technology Circle", None, "tech@x.org",
+            meetings=zoom.list_account_meetings, linked=lambda: LinkedResources(),
+            dry_run=False, input_fn=_Answers("u"), now=NOW,
+            events_using=lambda mid: (mover.events_using_meeting("Technology Circle", mid)
+                                      if events else []),
+            events_note="(run with -m)")
+        assert ("(run with -m)" in capsys.readouterr().out) == events
+
     def test_deleted_event_no_longer_named(self):
         svc = self._svc()
         mover = EventMover(svc, lambda: {GROUP_CAL}, dry_run=False,
