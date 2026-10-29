@@ -14,7 +14,8 @@ ensure_group_calendar() and ensure_zoom_room():
      whether to use it (only a no-fixed-time meeting of ROOM_USERS can be
      a room), ignore it, or delete it, then create a room unless one is
      used (decide_on_matching_meetings());
-  3. then bring it into line: a calendar named after the group, and shared
+  3. then bring it into line: a calendar named after the group (or by a
+     name the caller gives, such as the group's full name), and shared
      with the group's Google Group as editors ("Make changes to events") if
      it isn't shared with the group at all (any other access is left alone,
      so a circle can be restricted by hand); a room titled
@@ -32,7 +33,7 @@ group_meetings clash alerts link to it).
 """
 
 import datetime
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from dataclasses import dataclass, field
 from typing import NamedTuple
 from zoneinfo import ZoneInfo
@@ -293,14 +294,18 @@ def ensure_group_calendar(
     owned_calendars: Callable[[], list[dict]], linked: Callable[[], LinkedResources],
     dry_run: bool, input_fn: Callable[[str], str] = input,
     on_create: Callable[[], None] | None = None,
+    calendar_name: str | None = None, other_names: Collection[str] = (),
 ) -> str | None:
     """Return the group's calendar ID, finding, choosing, or creating it
-    (see the module docstring), and make sure it's named after the group
-    and shared with group_email (if it isn't at all). owned_calendars and linked are called
+    (see the module docstring), and make sure it's named calendar_name
+    (default: group_name) and shared with group_email (if it isn't at all).
+    A calendar already named one of other_names keeps its name.
+    owned_calendars and linked are called
     only when a choice has to be made. on_create is called when a calendar
     is created (or would be, in a dry run). Returns None only in a dry run
     that would create a calendar. Raises QuitRequested if the user quits."""
     group_email = group_email.lower()
+    calendar_name = calendar_name or group_name
     calendar = get_calendar(calendar_service, linked_calendar_id) if linked_calendar_id else None
     if calendar is None:
         if linked_calendar_id:
@@ -318,35 +323,37 @@ def ensure_group_calendar(
             calendar = {"id": chosen["id"], "summary": chosen["name"]}
             linked().calendars[chosen["id"]] = group_email
         elif dry_run:
-            print(f"  [dry-run] would create calendar '{group_name}' and share it with "
+            print(f"  [dry-run] would create calendar '{calendar_name}' and share it with "
                   f"{group_email}{_UNLESS_CHOSEN if available else ''}")
-            log("INFO", "would_create_calendar", f"{group_name} ({group_email})")
+            log("INFO", "would_create_calendar", f"{calendar_name} ({group_email})")
             if on_create:
                 on_create()
             return None
         else:
-            calendar_id = create_calendar(calendar_service, group_name)
-            calendar = {"id": calendar_id, "summary": group_name}
+            calendar_id = create_calendar(calendar_service, calendar_name)
+            calendar = {"id": calendar_id, "summary": calendar_name}
             linked().calendars[calendar_id] = group_email
-            print(f"  + created calendar '{group_name}' ({calendar_id})")
-            log("INFO", "create_calendar", f"{group_name}: {calendar_id}")
+            print(f"  + created calendar '{calendar_name}' ({calendar_id})")
+            log("INFO", "create_calendar", f"{calendar_name}: {calendar_id}")
             if on_create:
                 on_create()
 
     calendar_id = calendar["id"]
     prefix = "[dry-run] would " if dry_run else ""
-    if calendar.get("summary") != group_name:
+    if calendar.get("summary") != calendar_name and calendar.get("summary") not in other_names:
         if not dry_run:
             calendar_service.calendars().patch(
-                calendarId=calendar_id, body={"summary": group_name}).execute()
-        print(f"  {prefix}rename calendar '{calendar.get('summary')}' -> '{group_name}'")
+                calendarId=calendar_id, body={"summary": calendar_name}).execute()
+        print(f"  {prefix}rename calendar '{calendar.get('summary')}' -> '{calendar_name}'")
         log("INFO", f"{'would_' if dry_run else ''}rename_calendar",
-            f"{calendar.get('summary')!r} -> {group_name!r} ({calendar_id})")
+            f"{calendar.get('summary')!r} -> {calendar_name!r} ({calendar_id})")
+        calendar["summary"] = calendar_name
 
     change = ensure_calendar_shared_with_group(calendar_service, calendar_id, group_email, dry_run)
     if change:
-        print(f"  {prefix}{change} (calendar '{group_name}')")
-        log("INFO", f"{'would_' if dry_run else ''}share_calendar", f"{group_name}: {change}")
+        print(f"  {prefix}{change} (calendar '{calendar['summary']}')")
+        log("INFO", f"{'would_' if dry_run else ''}share_calendar",
+            f"{calendar['summary']}: {change}")
     return calendar_id
 
 
@@ -523,7 +530,7 @@ def _candidate_line(c: dict) -> str:
 
 def decide_on_matching_meetings(
     group_name: str, available: list[dict], taken: list[dict], dry_run: bool,
-    input_fn: Callable[[str], str] = input,
+    input_fn: Callable[[str], str] = input, events_note: str | None = None,
 ) -> tuple[dict | None, list[dict]]:
     """List the meetings matching the group's name, then ask about each in
     turn whether to use it as the group's room (only a meeting that
@@ -535,7 +542,8 @@ def decide_on_matching_meetings(
 
     available and taken are candidates with "schedule" (describe_schedule)
     and "can_use" set; taken ones are linked to another group and only
-    listed."""
+    listed. events_note, if given, is printed after the list when any
+    meeting has matching events held in it ("used_by")."""
     room = room_topic(group_name)
     prefix = "[dry-run] " if dry_run else ""
     while True:
@@ -544,6 +552,8 @@ def decide_on_matching_meetings(
             print(f"    {i}. {_candidate_line(c)}")
         for c in taken:
             print(f"       {_candidate_line(c)} — linked to {c['owner']}, not selectable")
+        if events_note and any(c.get("used_by") for c in available + taken):
+            print(f"  {events_note}")
         print()
 
         actions: dict[int, str] = {}
@@ -604,7 +614,7 @@ def ensure_zoom_room(
     zoom: ZoomClient, group_name: str, linked_join_url: str | None, group_email: str, *,
     meetings: Callable[[], list[dict]], linked: Callable[[], LinkedResources], dry_run: bool,
     input_fn: Callable[[str], str] = input, now: datetime.datetime | None = None,
-    events_using: Callable[[str], list[str]] | None = None,
+    events_using: Callable[[str], list[str]] | None = None, events_note: str | None = None,
 ) -> RoomLink | None:
     """Return the group's room's join link and passcode, finding, choosing,
     or creating the room (see the module docstring), and make sure its
@@ -613,7 +623,8 @@ def ensure_zoom_room(
     scheduled meeting in the Zoom account) and linked are called only when
     there's no room in the footer. events_using(meeting ID), if given,
     describes the calendar events matching the group that are held in
-    that meeting, to show beside it. Returns None only in a dry
+    that meeting, to show beside it, followed by events_note if any are
+    shown (decide_on_matching_meetings()). Returns None only in a dry
     run that would create a room. Raises QuitRequested if the user quits."""
     group_email = group_email.lower()
     topic = room_topic(group_name)
@@ -636,7 +647,7 @@ def ensure_zoom_room(
             c["can_use"] = _can_be_room(c["details"])
             c["used_by"] = events_using(c["id"]) if events_using else []
         use, delete = (decide_on_matching_meetings(group_name, available, taken, dry_run,
-                                                   input_fn)
+                                                   input_fn, events_note)
                        if available else (None, []))
         if not available:
             for c in taken:

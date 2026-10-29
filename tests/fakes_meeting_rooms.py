@@ -36,6 +36,7 @@ class FakeCalendarService:
         self.instances_by_series = dict(instances or {})
         self.writes = []
         self._next_id = 1
+        self.unmovable = set()  # calendars whose events Google refuses to move
 
     # events()
     def events(self):
@@ -136,6 +137,26 @@ class _Events:
             self.svc.events_by_calendar[calendarId] = [
                 e for e in self.svc.events_by_calendar[calendarId] if e["id"] != eventId]
             self.svc.writes.append(("delete_event", calendarId, eventId, sendUpdates))
+        return _Call(fn)
+
+    def move(self, calendarId, eventId, destination, sendUpdates=None):
+        def fn():
+            if calendarId in self.svc.unmovable:
+                raise _http_error(403)
+            moving = [e for e in self.svc.events_by_calendar[calendarId]
+                      if e["id"] == eventId or e.get("recurringEventId") == eventId]
+            self.svc.events_by_calendar[calendarId] = [
+                e for e in self.svc.events_by_calendar[calendarId] if e not in moving]
+            self.svc.events_by_calendar.setdefault(destination, []).extend(
+                {**e, "organizer": {"email": destination}} for e in moving)
+            self.svc.writes.append(("move_event", calendarId, eventId, destination, sendUpdates))
+            return moving[0]
+        return _Call(fn)
+
+    def patch(self, calendarId, eventId, body, conferenceDataVersion=None, sendUpdates=None):
+        def fn():
+            self.svc.writes.append(("patch_event", calendarId, eventId, body, sendUpdates))
+            return body
         return _Call(fn)
 
 

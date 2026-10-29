@@ -9,7 +9,8 @@ calendar, and the ones it's subscribed to) except the group calendars, the
 all-events calendar, and Google's built-in ones, for events in the next
 EVENT_WINDOW_DAYS whose titles match the group's name. It lists them all,
 then asks of each whether to copy it to the group's calendar, delete it,
-both, or to skip it:
+both, or to skip it; or, for an event that can be moved (can_move()), to
+move it instead of both:
 
 - A copy keeps the title, description, location, times, and repeat rule
   (a series' copy starts at its next occurrence, and ends when it would),
@@ -25,6 +26,14 @@ both, or to skip it:
 - Deleting needs edit access to the calendar the event is on. An event
   organized there is cancelled for everyone, with Google's cancellation
   emails; an invitation copy is removed from that calendar only.
+- Moving uses Google's own move, which makes the group's calendar the
+  event's organizer, so it needs an event organized on a calendar with
+  edit access (an invitation can't be moved). The event keeps its ID,
+  guests, and past occurrences, and nobody's invitation is cancelled; its
+  Zoom or Meet link, and any rooms, are then removed from it and its
+  changed occurrences (so group_meetings adds the group's room). Guests
+  who aren't in the group stay invited; it asks of each whether to share
+  the group's calendar with them too.
 
 An event on several of these calendars (say, organized on one, and an
 invitation on the owner's primary calendar) is offered once, from the
@@ -322,6 +331,13 @@ def can_delete(c: dict) -> bool:
     return c["calendar"]["role"] in EDIT_ROLES
 
 
+def can_move(c: dict) -> bool:
+    """Google moves only an organizer's event, and only an ordinary one
+    (not, say, an out-of-office or birthday event)."""
+    return (can_delete(c) and c["organized_here"]
+            and c["event"].get("eventType", "default") == "default")
+
+
 # ── Copying ───────────────────────────────────────────────────────────────────
 
 def strip_meeting_links(text: str | None) -> tuple[str, bool]:
@@ -462,6 +478,24 @@ def copy_bodies(c: dict, members: set[str] = frozenset()) -> list[dict]:
     return [main] + [_copy_body(o, c["uid"], members) for o in c["changed"]]
 
 
+def moved_event_cleanup(event: dict) -> dict:
+    """The patch that removes a moved event's (or changed occurrence's)
+    Zoom or Meet link and rooms, as a copy leaves them out, or {} if it
+    has none."""
+    body = {}
+    for key in ("description", "location"):
+        text, removed = strip_meeting_links(event.get(key))
+        if removed:
+            body[key] = text
+    if event.get("conferenceData"):
+        body["conferenceData"] = None
+    attendees = event.get("attendees") or []
+    kept = [a for a in attendees if not a.get("resource")]
+    if len(kept) != len(attendees):
+        body["attendees"] = kept
+    return body
+
+
 def had_meeting_link(c: dict) -> bool:
     e = c["event"]
     return any(strip_meeting_links(e.get(k))[1] for k in ("description", "location"))
@@ -469,16 +503,23 @@ def had_meeting_link(c: dict) -> bool:
 
 # ── Asking ────────────────────────────────────────────────────────────────────
 
-_ACTIONS = {"c": "copy", "d": "delete", "b": "both", "s": "skip"}
+_ACTIONS = {"c": "copy", "m": "move", "d": "delete", "b": "both", "s": "skip"}
 
 
-def _ask(label: str, deletable: bool, dry_run: bool, input_fn: Callable[[str], str]) -> str:
-    keys = ["c", "d", "b", "s"] if deletable else ["c", "s"]
-    names = {"c": "[c]opy to the group's calendar", "d": "[d]elete",
-             "b": "[b]oth", "s": "[s]kip"}
+def _ask(label: str, deletable: bool, dry_run: bool, input_fn: Callable[[str], str],
+         movable: bool = False) -> str:
+    """Ask what to do with an event: [m]ove takes the place of [b]oth
+    for an event that can be moved."""
+    if movable:
+        keys = ["c", "m", "d", "s"]
+    else:
+        keys = ["c", "d", "b", "s"] if deletable else ["c", "s"]
+    names = {"c": "[c]opy to the group's calendar", "m": "[m]ove to the group's calendar",
+             "d": "[d]elete", "b": "[b]oth", "s": "[s]kip"}
     note = ""
     if dry_run:
-        note = (" (DRY-RUN: NOTHING WILL BE COPIED OR DELETED)" if deletable
+        note = (" (DRY-RUN: NOTHING WILL BE COPIED, MOVED, OR DELETED)" if movable
+                else " (DRY-RUN: NOTHING WILL BE COPIED OR DELETED)" if deletable
                 else " (DRY-RUN: NOTHING WILL BE COPIED)")
     prefix = "[dry-run] " if dry_run else ""
     prompt = f"  {prefix}{label} — {', '.join(names[k] for k in keys)}, or [q]uit{note}: "
@@ -495,48 +536,60 @@ def _ask(label: str, deletable: bool, dry_run: bool, input_fn: Callable[[str], s
 _GUEST_ACTIONS = {"e": "event", "c": "calendar", "b": "both", "s": "skip"}
 
 
-def _ask_guest(email: str, dry_run: bool, input_fn: Callable[[str], str]) -> str:
+def _ask_guest(email: str, dry_run: bool, input_fn: Callable[[str], str],
+               moving: bool = False) -> str:
     """Ask what to do with a guest who isn't in the group: add them to the
-    copied event, share the group's calendar with them, both, or neither."""
-    note = " (DRY-RUN: NOTHING WILL BE ADDED OR SHARED)" if dry_run else ""
+    copied event, share the group's calendar with them, both, or neither.
+    A moved event keeps its guests, so then it only asks about sharing."""
     prefix = "[dry-run] " if dry_run else ""
-    prompt = (f"    {prefix}{email} isn't in the group — add to the [e]vent, share the "
-              f"[c]alendar (view only), [b]oth, [s]kip, or [q]uit{note}: ")
+    if moving:
+        keys = ["c", "s"]
+        note = " (DRY-RUN: NOTHING WILL BE SHARED)" if dry_run else ""
+        prompt = (f"    {prefix}{email} isn't in the group (and stays invited) — share the "
+                  f"[c]alendar (view only), [s]kip, or [q]uit{note}: ")
+    else:
+        keys = list(_GUEST_ACTIONS)
+        note = " (DRY-RUN: NOTHING WILL BE ADDED OR SHARED)" if dry_run else ""
+        prompt = (f"    {prefix}{email} isn't in the group — add to the [e]vent, share the "
+                  f"[c]alendar (view only), [b]oth, [s]kip, or [q]uit{note}: ")
     while True:
         answer = input_fn(prompt).strip().lower()
         if answer in ("q", "quit"):
             raise QuitRequested
-        for key, action in _GUEST_ACTIONS.items():
-            if answer in (key, action):
-                return action
+        for key in keys:
+            if answer in (key, _GUEST_ACTIONS[key]):
+                return _GUEST_ACTIONS[key]
         print("  Invalid choice.")
 
 
 def decide_on_events(
     group_name: str, matches: list[dict], dry_run: bool, input_fn: Callable[[str], str] = input,
-) -> tuple[list[dict], list[dict]]:
+) -> tuple[list[dict], list[dict], list[dict]]:
     """List the matching events, then ask about each in turn, and, for an
     event to copy, about each of its guests who aren't in the group
     (c["outside_guests"]): whether to invite them to the copy (recorded
     in c["invite"]), share the group's calendar with them (c["share"]),
-    both, or neither. Nothing is changed here: returns (events to copy,
-    events to delete), confirmed by typing 'delete' when there are any to
-    delete (except in a dry run). Raises QuitRequested on 'q'."""
+    both, or neither; for an event to move, only whether to share the
+    calendar with them. Nothing is changed here: returns (events to copy,
+    events to move, events to delete), confirmed by typing 'delete' when
+    there are any to delete (except in a dry run). Raises QuitRequested
+    on 'q'."""
     while True:
         print(f"  Events on other calendars matching '{group_name}':")
         for i, c in enumerate(matches, start=1):
             note = "" if can_delete(c) else " — can't be deleted (view-only calendar)"
             print(f"    {i}. {describe_candidate(c)}{note}")
         print()
-        copy, delete = [], []
+        copy, move, delete = [], [], []
         for i, c in enumerate(matches, start=1):
             action = _ask(f"{i}. {c['event'].get('summary') or '(no title)'}", can_delete(c),
-                          dry_run, input_fn)
+                          dry_run, input_fn, movable=can_move(c))
             c["invite"], c["share"] = [], []
-            if action in ("copy", "both"):
-                copy.append(c)
+            if action in ("copy", "both", "move"):
+                (move if action == "move" else copy).append(c)
                 for email in c.get("outside_guests", []):
-                    guest_action = _ask_guest(email, dry_run, input_fn)
+                    guest_action = _ask_guest(email, dry_run, input_fn,
+                                              moving=action == "move")
                     if guest_action in ("event", "both"):
                         c["invite"].append(email)
                     if guest_action in ("calendar", "both"):
@@ -544,9 +597,9 @@ def decide_on_events(
             if action in ("delete", "both"):
                 delete.append(c)
         verb = "Would" if dry_run else "Will"
-        if not copy and not delete:
+        if not copy and not move and not delete:
             print("  Leaving them all as they are.")
-            return copy, delete
+            return copy, move, delete
         if copy:
             print(f"  {verb} copy to the '{group_name}' calendar:")
             for c in copy:
@@ -555,10 +608,17 @@ def decide_on_events(
                 if c["invite"]:
                     note += f" — also inviting {', '.join(c['invite'])}"
                 print(f"    {describe_candidate(c)}{note}")
-            shares = _shares(copy)
-            if shares:
-                print(f"  {verb} share the '{group_name}' calendar (view only) with: "
-                      f"{', '.join(shares)}")
+        if move:
+            print(f"  {verb} move to the '{group_name}' calendar, keeping its guests and "
+                  f"past occurrences:")
+            for c in move:
+                note = " (its Zoom/Meet link removed; the group's room will be added)" \
+                    if had_meeting_link(c) or c["event"].get("conferenceData") else ""
+                print(f"    {describe_candidate(c)}{note}")
+        shares = _shares(copy + move)
+        if shares:
+            print(f"  {verb} share the '{group_name}' calendar (view only) with: "
+                  f"{', '.join(shares)}")
         if delete:
             print(f"  {verb} delete:")
             for c in delete:
@@ -568,11 +628,11 @@ def decide_on_events(
                           f"stays")
                 print(f"    {describe_candidate(c)} — {effect}")
         if not delete or dry_run:
-            return copy, delete
+            return copy, move, delete
         confirm = input_fn("  Type 'delete' to confirm, or anything else to go back and "
                            "choose again: ").strip().lower()
         if confirm == "delete":
-            return copy, delete
+            return copy, move, delete
         print()
 
 
@@ -641,7 +701,7 @@ class EventMover:
             c["outside_guests"] = sorted(
                 {g["email"] for e in [c["event"]] + c["changed"]
                  for g in outside_guests(e, members)}, key=str.lower)
-        copy, delete = decide_on_events(group_name, matches, self.dry_run, self.input_fn)
+        copy, move, delete = decide_on_events(group_name, matches, self.dry_run, self.input_fn)
         for c in copy:
             self._done.add(c["uid"])
             if self.dry_run:
@@ -654,7 +714,13 @@ class EventMover:
                     calendarId=group_calendar_id, body=body, sendUpdates="none").execute()
             print(f"  + copied '{c['event'].get('summary')}' to the group's calendar")
             log("INFO", "copy_event", f"{group_name}: {c['uid']} from {c['calendar']['id']}")
-        for email in _shares(copy):
+        for c in move:
+            self._done.add(c["uid"])
+            if self.dry_run:
+                log("INFO", "would_move_event", f"{group_name}: {c['uid']}")
+                continue
+            self._move(group_name, c, group_calendar_id)
+        for email in _shares(copy + move):
             self._share(group_name, group_calendar_id, email)
         for c in delete:
             self._done.add(c["uid"])
@@ -667,6 +733,37 @@ class EventMover:
             self._deleted.add(c["uid"])
             print(f"  - deleted '{c['event'].get('summary')}' from {c['calendar']['name']}")
             log("INFO", "delete_event", f"{group_name}: {c['uid']} from {c['calendar']['id']}")
+
+    def _move(self, group_name: str, c: dict, group_calendar_id: str) -> None:
+        """Move c's event to the group's calendar, without emailing its
+        guests, then remove its meeting links and rooms, and those of its
+        changed occurrences. If Google refuses the move, the event is left
+        where it was."""
+        e = c["event"]
+        try:
+            self.service.events().move(
+                calendarId=c["calendar"]["id"], eventId=e["id"],
+                destination=group_calendar_id, sendUpdates="none").execute()
+        except HttpError as err:
+            print(f"  ! couldn't move '{e.get('summary')}' from {c['calendar']['name']} "
+                  f"({err}); it's left as it was")
+            log("WARN", "move_event", f"{group_name}: {c['uid']}: {err}")
+            return
+        self._deleted.add(c["uid"])  # no longer held in its old Zoom meeting
+        print(f"  > moved '{e.get('summary')}' to the group's calendar")
+        log("INFO", "move_event", f"{group_name}: {c['uid']} from {c['calendar']['id']}")
+        for event in [e] + c["changed"]:
+            body = moved_event_cleanup(event)
+            if not body:
+                continue
+            try:
+                self.service.events().patch(
+                    calendarId=group_calendar_id, eventId=event["id"], body=body,
+                    conferenceDataVersion=1, sendUpdates="none").execute()
+            except HttpError as err:
+                print(f"  ! moved '{e.get('summary')}', but couldn't remove its meeting "
+                      f"link ({err}); remove it by hand")
+                log("WARN", "clean_moved_event", f"{group_name}: {event['id']}: {err}")
 
     def _share(self, group_name: str, calendar_id: str | None, email: str) -> None:
         """Share the group's calendar with email as "See all event details",

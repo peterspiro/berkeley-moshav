@@ -216,9 +216,19 @@ status line as "calendar (members can view, not edit)".
   group's list from `admin@` (replies going to `calendaring-alerts@`), once
   the footer links the calendar and Zoom room: a link for everyone to add
   the calendar, and steps for meeting organizers to move the group's
-  meetings onto it. A dry run shows each email it would send.
+  meetings onto it. The email names the group by its full name
+  ("Membership Circle", not "Membership"; a pod's name, like "Garden Pod",
+  is left as it is). A dry run shows each email it would send.
   `--announce-calendar` sends it even when the calendar already existed
   (with `-g`, to one group; without, it asks before emailing every group).
+  With `-g`, `-e`/`--email-draft` opens the email as a draft in your own
+  mail program instead, for you to review and send from your own address;
+  a draft is plain text, without the Reply-To or the calendar icon.
+  A group's calendar is named after its Gather group; with `-g`,
+  `-f`/`--full-calendar-name` names it by the group's full name instead, ending
+  with its type ("Technology Circle", "Garden Working Group"), creating or
+  renaming it so (a pod's name, like "Garden Pod", gets no type added).
+  Later runs leave a calendar named that way as it is.
   Calendars are shared with groups without Google's
   "shared a calendar" email, which for a group goes to the group's address
   and has a button that does nothing for members; members add a calendar
@@ -231,7 +241,9 @@ status line as "calendar (members can view, not edit)".
   creates one. When it links no
   Zoom room, it lists every scheduled meeting in the Zoom account whose name
   matches the group's (any user's, of any kind, with its owner and schedule,
-  and the matching calendar events held in it),
+  and the matching calendar events held in it; if those events weren't
+  offered for moving, because the group's calendar already existed, it says
+  so and suggests `-m`/`--move-events`),
   then asks of each one in turn whether to use it as the room, ignore it, or
   delete it. Only a no-fixed-time meeting of `zoomhosts@` or
   `berkeley@urbanmoshav.org` (the second Zoom user) can be used, since Zoom
@@ -243,7 +255,7 @@ status line as "calendar (members can view, not edit)".
   changes nothing. `add_new_group.py` does the same.
 
   When it creates a group's calendar, or for every group with
-  `--move-events`, it looks for the group's meetings on other calendars:
+  `-m`/`--move-events`, it looks for the group's meetings on other calendars:
   every calendar on `admin@`'s calendar list (its own, including its primary
   calendar, and the ones it's subscribed to) except the group calendars, the
   all-events calendar, and Google's holiday and birthday calendars. It lists
@@ -263,7 +275,17 @@ status line as "calendar (members can view, not edit)".
   would. Copies are tagged with the original, so they aren't offered again.
   Deleting needs edit access to the event's calendar: an event organized
   there is cancelled for everyone, with Google's cancellation emails; an
-  invitation is removed from that calendar only. As with Zoom meetings,
+  invitation is removed from that calendar only.
+
+  For an event organized on a calendar `admin@` can edit, "both" is
+  replaced by "move", which uses Google's own move: the group's calendar
+  becomes the organizer, and the event keeps its ID, guests, and past
+  occurrences, so nobody's invitation is cancelled. Its Zoom or Meet link
+  and any rooms are then removed, from its changed occurrences too.
+  Its guests who aren't in the group stay invited, and it asks only
+  whether to share the group's calendar with each. Invitations can't be
+  moved (Google moves only the organizer's event), so they're offered
+  "both" as before. As with Zoom meetings,
   nothing changes until the summary, and deleting asks you to type
   `delete`. `add_new_group.py` does this when it creates the calendar.
   Calendars `admin@` can't see (other members' own calendars) aren't

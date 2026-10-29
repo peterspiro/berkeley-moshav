@@ -83,10 +83,8 @@ import functools
 import os
 import re
 import sys
-import webbrowser
 from enum import Enum
 from pathlib import Path
-from urllib.parse import quote
 
 from googleapiclient.discovery import build
 from playwright.sync_api import sync_playwright
@@ -143,6 +141,7 @@ from util.google_group_utils import (
     group_exists,
     truncate_local_part,
 )
+from util.mail_draft import open_draft
 from util.meeting_rooms import (
     QuitRequested,
     check_calendar_owner,
@@ -236,16 +235,6 @@ def build_welcome_message(
         f"{sender_first_name}\n"
     )
     return subject, body
-
-
-def mailto_url(to: str, subject: str, body: str) -> str:
-    """Return a mailto: URL that opens a draft with these fields filled in.
-    Line breaks are sent as CRLF, as RFC 6068 requires."""
-    return (
-        f"mailto:{quote(to, safe='@')}"
-        f"?subject={quote(subject, safe='')}"
-        f"&body={quote(body.replace(chr(10), chr(13) + chr(10)), safe='')}"
-    )
 
 
 def print_welcome_message(to: str, subject: str, body: str) -> None:
@@ -629,7 +618,7 @@ def main(
 
         # ── Open the welcome message as a draft ──────────────────────────────
         if send_email:
-            if webbrowser.open(mailto_url(list_address, subject, body)):
+            if open_draft(list_address, subject, body):
                 log("INFO", "welcome_draft", f"opened draft to {list_address}")
                 print(f"Opened a draft to {list_address} in your mail program — "
                       "review it and click Send.")

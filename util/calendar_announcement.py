@@ -7,7 +7,9 @@ calendar, after writing the group's footer: how to add the calendar, and
 how meeting organizers move the group's meetings onto it. Google Groups
 appends the footer, with the calendar and Zoom links, when it delivers the
 message. Replies go to ALERT_EMAIL (the Technology Circle), not to the
-list.
+list. Or, with draft, it's opened in the user's own mail program for them
+to review and send (util/mail_draft.py), in plain text and without the
+Reply-To.
 
 Groups made by add_new_group.py don't get it: its welcome message covers the
 same ground.
@@ -20,6 +22,7 @@ from pathlib import Path
 
 from util.gather_utils import log
 from util.google_group_footer import calendar_url
+from util.mail_draft import open_draft
 
 # Who answers questions about calendars and meetings (the Technology Circle);
 # the same address the group_meetings Apps Script sends its alerts to.
@@ -121,19 +124,40 @@ def _indented(text: str) -> str:
     return "\n".join(f"      {line}" if line else "" for line in text.split("\n"))
 
 
+def _show(list_email: str, subject: str, body: str, reply_to: str | None) -> None:
+    reply_line = f"Reply-To: {reply_to}\n" if reply_to else ""
+    print(_indented(f"To: {list_email}\n{reply_line}Subject: {subject}\n\n"
+                    f"{body.rstrip()}\n\n(Google Groups appends the group's footer, with "
+                    f"the calendar and Zoom links, when it delivers the message.)"))
+
+
 def announce_calendar(gmail_service, group_name: str, list_email: str,
-                      calendar_id: str | None, dry_run: bool) -> None:
-    """Email the group's list about its new calendar and Zoom room (or, in
-    a dry run, show the email it would send; calendar_id is None there if
-    the calendar would be created)."""
+                      calendar_id: str | None, dry_run: bool, draft: bool = False) -> None:
+    """Email the group's list about its new calendar and Zoom room, or with
+    draft, open the email as a draft in the user's mail program (or, in a
+    dry run, show the email it would send or open; calendar_id is None
+    there if the calendar would be created)."""
     link = calendar_url(calendar_id) if calendar_id else "(the new calendar's link)"
     subject, body, rich = build_calendar_announcement(group_name, link)
     if dry_run:
-        print(f"  [dry-run] would email {list_email}: \"{subject}\"")
-        print(_indented(f"To: {list_email}\nReply-To: {ALERT_EMAIL}\nSubject: {subject}\n\n"
-                        f"{body.rstrip()}\n\n(Google Groups appends the group's footer, with "
-                        f"the calendar and Zoom links, when it delivers the message.)"))
+        if draft:
+            print(f"  [dry-run] would open a draft to {list_email} in your mail program: "
+                  f"\"{subject}\"")
+        else:
+            print(f"  [dry-run] would email {list_email}: \"{subject}\"")
+        _show(list_email, subject, body, None if draft else ALERT_EMAIL)
         log("INFO", "would_announce_calendar", f"{group_name}: {list_email}")
+        return
+    if draft:
+        if open_draft(list_email, subject, body):
+            print(f"  + opened a draft to {list_email} in your mail program: \"{subject}\" "
+                  f"— review it and click Send")
+            log("INFO", "announce_calendar_draft", f"{group_name}: {list_email}")
+        else:
+            print(f"  ! couldn't open a draft in a mail program; send this to {list_email} "
+                  f"yourself:")
+            _show(list_email, subject, body, None)
+            log("WARN", "announce_calendar_draft", f"{group_name}: no mail program")
         return
     send_email(gmail_service, list_email, subject, body, rich, ALERT_EMAIL)
     print(f"  + emailed {list_email}: \"{subject}\"")
