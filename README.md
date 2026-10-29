@@ -269,7 +269,17 @@ status line as "calendar (members can view, not edit)".
   would. Copies are tagged with the original, so they aren't offered again.
   Deleting needs edit access to the event's calendar: an event organized
   there is cancelled for everyone, with Google's cancellation emails; an
-  invitation is removed from that calendar only. As with Zoom meetings,
+  invitation is removed from that calendar only.
+
+  For an event organized on a calendar `admin@` can edit, "both" is
+  replaced by "move", which uses Google's own move: the group's calendar
+  becomes the organizer, and the event keeps its ID, guests, and past
+  occurrences, so nobody's invitation is cancelled. Its Zoom or Meet link
+  and any rooms are then removed, from its changed occurrences too.
+  Its guests who aren't in the group stay invited, and it asks only
+  whether to share the group's calendar with each. Invitations can't be
+  moved (Google moves only the organizer's event), so they're offered
+  "both" as before. As with Zoom meetings,
   nothing changes until the summary, and deleting asks you to type
   `delete`. `add_new_group.py` does this when it creates the calendar.
   Calendars `admin@` can't see (other members' own calendars) aren't

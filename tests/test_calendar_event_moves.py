@@ -168,20 +168,28 @@ class TestDescriptions:
 
 class TestOffer:
     def test_lists_then_copies_and_deletes_after_confirming(self, capsys):
-        e = _event("e1", "Technology Circle meeting", SHARED)
-        svc = _service({SHARED: [e]})
+        # An invitation can't be moved, so it's offered [b]oth instead.
+        e = {**_event("e1", "Technology Circle meeting", OWNER),
+             "organizer": {"email": "someone@gmail.com"}}
+        svc = _service({OWNER: [e]})
         answers = _Answers("b", "delete")
         _mover(svc, answers).offer("Technology Circle", GROUP_CAL)
         out = capsys.readouterr().out
-        assert ("1. Technology Circle meeting   (Mon Nov 2, 7:00–8:00 PM; on Shared Events)"
-                in out)
-        assert "cancelled for everyone invited, with Google's cancellation emails" in out
+        assert ("1. Technology Circle meeting   (Mon Nov 2, 7:00–8:00 PM; on "
+                "admin@berkeleymoshav.org, an invitation from someone@gmail.com)" in out)
         assert answers.prompts[0] == (
             "  1. Technology Circle meeting — [c]opy to the group's calendar, [d]elete, "
             "[b]oth, [s]kip, or [q]uit: ")
         (insert, delete) = svc.writes
         assert insert[:2] == ("insert_event", GROUP_CAL) and insert[3] == "none"
-        assert delete == ("delete_event", SHARED, "e1", "all")
+        assert delete == ("delete_event", OWNER, "e1", "all")
+
+    def test_organized_event_deleted_for_everyone(self, capsys):
+        svc = _service({SHARED: [_event("e1", "Technology Circle meeting", SHARED)]})
+        _mover(svc, _Answers("d", "delete")).offer("Technology Circle", GROUP_CAL)
+        assert "cancelled for everyone invited, with Google's cancellation emails" in \
+            capsys.readouterr().out
+        assert svc.writes == [("delete_event", SHARED, "e1", "all")]
 
     def test_series_copy_starts_at_next_occurrence(self, capsys):
         series = _event("s1", "Technology Circle", SHARED, start="2023-01-17T03:00:00Z",
@@ -259,12 +267,13 @@ class TestOffer:
 
     def test_dry_run_asks_but_changes_nothing(self, capsys):
         svc = _service({SHARED: [_event("e1", "Technology Circle meeting", SHARED)]})
-        answers = _Answers("b")
+        answers = _Answers("m")
         _mover(svc, answers, dry_run=True).offer("Technology Circle", None)
         assert svc.writes == []
         assert answers.prompts[0].startswith("  [dry-run] 1. Technology Circle meeting")
-        assert answers.prompts[0].endswith("(DRY-RUN: NOTHING WILL BE COPIED OR DELETED): ")
-        assert "Would copy to the 'Technology Circle' calendar:" in capsys.readouterr().out
+        assert answers.prompts[0].endswith(
+            "(DRY-RUN: NOTHING WILL BE COPIED, MOVED, OR DELETED): ")
+        assert "Would move to the 'Technology Circle' calendar" in capsys.readouterr().out
 
     def test_dry_run_view_only_note_mentions_copying_only(self):
         svc = _service({VIEW_ONLY: [_event("e1", "Technology Circle meeting", VIEW_ONLY)]})
@@ -319,6 +328,88 @@ class TestOffer:
 
 def _no_input(prompt):
     raise AssertionError(f"unexpected prompt: {prompt}")
+
+
+ZOOM_DESCRIPTION = ("Monthly meeting.\nJoin Zoom Meeting\nhttps://us06web.zoom.us/j/81234567890"
+                    "\nMeeting ID: 812 3456 7890")
+
+
+class TestMove:
+    def test_movable_event_offers_move_instead_of_both(self, capsys):
+        svc = _service({SHARED: [_event("e1", "Technology Circle meeting", SHARED)]})
+        answers = _Answers("m")
+        _mover(svc, answers).offer("Technology Circle", GROUP_CAL)
+        assert answers.prompts[0] == (
+            "  1. Technology Circle meeting — [c]opy to the group's calendar, [m]ove to the "
+            "group's calendar, [d]elete, [s]kip, or [q]uit: ")
+        assert svc.writes == [("move_event", SHARED, "e1", GROUP_CAL, "none")]
+        out = capsys.readouterr().out
+        assert "Will move to the 'Technology Circle' calendar, keeping its guests" in out
+        assert "> moved 'Technology Circle meeting' to the group's calendar" in out
+
+    @pytest.mark.parametrize("event", [
+        {**_event("e1", "Technology Circle meeting", OWNER),
+         "organizer": {"email": "someone@gmail.com"}},  # an invitation
+        {**_event("e1", "Technology Circle meeting", OWNER), "eventType": "outOfOffice"},
+    ])
+    def test_unmovable_event_offers_both(self, event):
+        answers = _Answers("s")
+        _mover(_service({OWNER: [event]}), answers).offer("Technology Circle", GROUP_CAL)
+        assert "[b]oth" in answers.prompts[0] and "[m]ove" not in answers.prompts[0]
+
+    def test_meeting_links_and_rooms_removed_after_moving(self, capsys):
+        series = _event("s1", "Technology Circle", SHARED, recurrence=["RRULE:FREQ=MONTHLY"],
+                        description=ZOOM_DESCRIPTION, conferenceData={"conferenceId": "x"},
+                        attendees=[{"email": "a@gmail.com"},
+                                   {"email": "room@resource.calendar.google.com",
+                                    "resource": True}])
+        changed = {**_event("s1_1", "Technology Circle", SHARED, recurringEventId="s1",
+                            location="https://us06web.zoom.us/j/81234567890"),
+                   "originalStartTime": {"dateTime": "2026-12-01T03:00:00Z"}}
+        plain = {**_event("s1_2", "Technology Circle", SHARED, recurringEventId="s1"),
+                 "originalStartTime": {"dateTime": "2027-01-01T03:00:00Z"}}
+        svc = _service({SHARED: [series, changed, plain]})
+        svc.instances_by_series[(SHARED, "s1")] = [
+            {"originalStartTime": {"dateTime": "2026-11-17T03:00:00Z"},
+             "start": {"dateTime": "2026-11-17T03:00:00Z"}}]
+        _mover(svc, _Answers("m", "s")).offer("Technology Circle", GROUP_CAL)
+        assert "(its Zoom/Meet link removed; the group's room will be added)" in \
+            capsys.readouterr().out
+        move, patch_series, patch_changed = svc.writes
+        assert move == ("move_event", SHARED, "s1", GROUP_CAL, "none")
+        assert patch_series == ("patch_event", GROUP_CAL, "s1", {
+            "description": "Monthly meeting.", "conferenceData": None,
+            "attendees": [{"email": "a@gmail.com"}]}, "none")
+        assert patch_changed == ("patch_event", GROUP_CAL, "s1_1", {"location": ""}, "none")
+
+    def test_outside_guests_stay_and_are_asked_only_about_sharing(self, capsys):
+        from tests.test_group_meeting_rooms_step import _Directory
+        e = _event("e1", "Technology Circle meeting", SHARED,
+                   attendees=[{"email": "member@x.org"}, {"email": "guest@gmail.com"}])
+        svc = _service({SHARED: [e]})
+        answers = _Answers("m", "c")
+        EventMover(svc, lambda: {GROUP_CAL}, dry_run=False, input_fn=answers, now=NOW,
+                   dir_service=_Directory(members={"tech@x.org": ["member@x.org"]})
+                   ).offer("Technology Circle", GROUP_CAL, "tech@x.org")
+        assert answers.prompts[1] == (
+            "    guest@gmail.com isn't in the group (and stays invited) — share the "
+            "[c]alendar (view only), [s]kip, or [q]uit: ")
+        assert [w[0] for w in svc.writes] == ["move_event", "acl_insert"]
+
+    def test_refused_move_leaves_the_event(self, capsys):
+        svc = _service({SHARED: [_event("e1", "Technology Circle meeting", SHARED)]})
+        svc.unmovable.add(SHARED)
+        mover = _mover(svc, _Answers("m"))
+        mover.offer("Technology Circle", GROUP_CAL)
+        assert svc.writes == []
+        assert "couldn't move 'Technology Circle meeting'" in capsys.readouterr().out
+
+    def test_moved_event_no_longer_named_beside_its_zoom_meeting(self):
+        e = _event("e1", "Technology Circle meeting", SHARED, description=ZOOM_DESCRIPTION)
+        svc = _service({SHARED: [e]})
+        mover = _mover(svc, _Answers("m"))
+        mover.offer("Technology Circle", GROUP_CAL)
+        assert mover.events_using_meeting("Technology Circle", "81234567890") == []
 
 
 class TestOutsideGuests:
