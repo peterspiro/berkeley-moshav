@@ -529,28 +529,50 @@ def login(page: Page, base_url: str, email: str, password: str) -> None:
     log("INFO", "login", f"Signed in as {email}")
 
 
+# Run before each page's own scripts: forget the wiki editor's autosaved
+# text. Gather's editor (EasyMDE) saves a page's text to localStorage as
+# soon as its edit form opens, and on the next visit loads it back before
+# the editor has finished starting up, where Gather's status-bar handler
+# (since Oct 2026) throws, reading this.editor before it's set. The
+# editor is then broken for the rest of that visit, and setting its text
+# (_codemirror_set) fails with "Cannot read properties of undefined
+# (reading 'value')". A script opening the same edit form twice in one
+# run (as update_groups_in_google_and_hierarchy.py does, to read the
+# Circle Structure page and later to write it) hit that every time.
+CLEAR_EDITOR_AUTOSAVE_JS = """
+try {
+  for (const key of Object.keys(localStorage)) {
+    if (key.startsWith("smde_")) localStorage.removeItem(key);
+  }
+} catch (e) {}
+"""
+
+
 def launch_browser(pw, headless: bool = True) -> BrowserContext:
     """Launch Chrome in a fresh temporary profile via launch_persistent_context.
 
     Uses system Chrome (channel="chrome") to avoid CDN TLS-fingerprint blocking.
     The temporary user_data_dir prevents profile-lock conflicts with an already-
     running Chrome instance. Falls back to bundled Chromium on Linux CI.
+    Every page clears the wiki editor's autosaved text before loading
+    (CLEAR_EDITOR_AUTOSAVE_JS).
     Returns a BrowserContext; callers use context.new_page() directly.
     """
     tmp_profile = tempfile.mkdtemp(prefix="pw_chrome_")
     atexit.register(shutil.rmtree, tmp_profile, ignore_errors=True)
 
     try:
-        return pw.chromium.launch_persistent_context(
+        context = pw.chromium.launch_persistent_context(
             tmp_profile, channel="chrome", headless=headless,
         )
     except Exception as e:
         log("WARN", "launch_browser",
             f"system Chrome unavailable ({e}); falling back to bundled Chromium")
-
-    return pw.chromium.launch_persistent_context(
-        tmp_profile, headless=headless, args=["--no-sandbox"],
-    )
+        context = pw.chromium.launch_persistent_context(
+            tmp_profile, headless=headless, args=["--no-sandbox"],
+        )
+    context.add_init_script(CLEAR_EDITOR_AUTOSAVE_JS)
+    return context
 
 
 # ── Sheet fetching ────────────────────────────────────────────────────────────
