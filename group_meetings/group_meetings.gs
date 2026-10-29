@@ -45,15 +45,16 @@ const MEETINGS_FAQ_URL =
   'https://docs.google.com/document/d/1rr8WqPnsLKw-tgVea40NkyTxlwLFVVLnXbL3UVFQcZY';
 // Bump when computeEventPatch's rules change, so the next syncAll rechecks
 // every upcoming event, not just changed ones (see recheckIfRulesChanged).
-const RULES_VERSION = 3;
+const RULES_VERSION = 4;
 const OVERLAP_WEEKS = 8;
 // Meetings in rooms of the same Zoom user are flagged if they overlap, or if
 // the second starts less than this many minutes after the first ends (in
 // case the first runs over).
 const MIN_GAP_MINUTES = 15;
-// How each Zoom user that owns rooms is named in event descriptions (see
-// ROOM_USERS in util/zoom_utils.py); any other owner is named by email.
-const ZOOM_USER_LABELS = {
+// The number each Zoom user that owns rooms (see ROOM_USERS in
+// util/zoom_utils.py) goes by in event descriptions, next to its name in
+// Zoom; any other owner is shown by name or email alone.
+const ZOOM_USER_NUMBERS = {
   'zoomhosts@berkeleymoshav.org': '1',
   'berkeley@urbanmoshav.org': '2',
 };
@@ -65,6 +66,7 @@ const PROP_COPY_ALERTS = 'copyAlerts';       // JSON { iCalUID: forgetAfterMs }
 const PROP_OVERLAP_ALERTS = 'overlapAlerts'; // JSON { conflictId: fingerprint }
 const PROP_ZOOM_MEETINGS = 'zoomMeetings';   // JSON, fixed-time Zoom meetings
 const PROP_ROOM_OWNER_PREFIX = 'roomOwner:'; // + Zoom meeting ID -> JSON { owner, type } or ''
+const PROP_ZOOM_USER_NAMES = 'zoomUserNames'; // JSON { email: name in Zoom }
 const PROP_RULES_VERSION = 'rulesVersion';
 // Zoom app credentials (Script Properties, set by hand; see README.md).
 const PROP_ZOOM_ACCOUNT_ID = 'ZOOM_ACCOUNT_ID';
@@ -116,7 +118,7 @@ function recheckIfRulesChanged() {
 function hourly() {
   withLock(() => {
     const groups = refreshGroups();
-    recheckMovedRooms(groups);
+    recheckZoomUsers(groups);
     refreshZoomMeetings();
     checkOverlaps(groups);
   });
@@ -278,7 +280,7 @@ function handleEvent(event, group, groups) {
   const change = computeEventPatch(event, {
     zoomUrl: group.zoomUrl,
     passcode: group.passcode,
-    zoomUser: zoomUserLabel(group),
+    zoomUser: groupZoomUser(group),
     groupEmail: group.email,
     allEventsCalendarId: ALL_EVENTS_CALENDAR_ID,
     faqUrl: MEETINGS_FAQ_URL,
@@ -290,21 +292,20 @@ function handleEvent(event, group, groups) {
 }
 
 /**
- * How the description should name the Zoom user owning the group's room:
- * its label, null if the room isn't in our Zoom account, or undefined
- * (keep what the description says) if Zoom can't be asked right now.
+ * How the description should name the Zoom user owning the group's room
+ * (see zoomUserLabel): null if the room isn't in our Zoom account, or
+ * undefined (keep what the description says) if Zoom can't be asked now.
  */
-function zoomUserLabel(group) {
+function groupZoomUser(group) {
   const id = meetingIdFromUrl(group.zoomUrl);
   if (!id) return null;
-  let room;
   try {
-    room = roomOwner(id);
+    const room = roomOwner(id);
+    return room ? zoomUserLabel(room.owner, ZOOM_USER_NUMBERS, loadZoomUserNames()) : null;
   } catch (err) {
     console.error(`Couldn't look up the owner of ${group.email}'s room: ${err}`);
     return undefined;
   }
-  return room ? (ZOOM_USER_LABELS[room.owner] || room.owner) : null;
 }
 
 function eventEndMs(event) {
@@ -464,21 +465,30 @@ function roomOwner(meetingId) {
 }
 
 /**
- * Forget the cached room owners, so roomOwner() asks Zoom again, and drop
- * the sync token of each group whose room moved to another Zoom user, so
- * the next syncAll rewrites the Zoom user in all its upcoming events.
+ * Forget the cached room owners, so roomOwner() asks Zoom again, re-read
+ * the Zoom users' names, and drop the sync token of each group whose room
+ * moved to another Zoom user or whose Zoom user was renamed, so the next
+ * syncAll rewrites the Zoom user in all its upcoming events.
  */
-function recheckMovedRooms(groups) {
+function recheckZoomUsers(groups) {
   const props = PropertiesService.getScriptProperties();
-  const cached = id => {
-    const value = props.getProperty(PROP_ROOM_OWNER_PREFIX + id);
-    return value === null ? undefined : (value ? JSON.parse(value).owner : null);
-  };
-  const before = groups.map(g => cached(meetingIdFromUrl(g.zoomUrl)));
+  const label = (owner, names) => owner ? zoomUserLabel(owner, ZOOM_USER_NUMBERS, names) : null;
+  const oldNames = getJson(PROP_ZOOM_USER_NAMES, {});
+  const before = groups.map(g => {
+    const value = props.getProperty(PROP_ROOM_OWNER_PREFIX + meetingIdFromUrl(g.zoomUrl));
+    if (value === null) return undefined;  // never looked up, so never written
+    return label(value ? JSON.parse(value).owner : null, oldNames);
+  });
   forgetRoomOwners();
+  let names = oldNames;
+  try {
+    names = refreshZoomUserNames();
+  } catch (err) {
+    console.error(`Couldn't read the Zoom users' names: ${err}`);
+  }
   groups.forEach((g, i) => {
     const id = meetingIdFromUrl(g.zoomUrl);
-    if (!id || before[i] === undefined) return;  // never looked up, so never written
+    if (!id || before[i] === undefined) return;
     let room;
     try {
       room = roomOwner(id);
@@ -486,11 +496,27 @@ function recheckMovedRooms(groups) {
       console.error(`Couldn't look up the owner of ${g.email}'s room: ${err}`);
       return;
     }
-    if ((room ? room.owner : null) !== before[i]) {
+    if (label(room ? room.owner : null, names) !== before[i]) {
       props.deleteProperty(PROP_SYNC_PREFIX + g.calendarId);
       console.log(`${g.email}: room's Zoom user changed; rechecking its events.`);
     }
   });
+}
+
+/** { email: name } for every Zoom user, read from Zoom the first time. */
+function loadZoomUserNames() {
+  return getJson(PROP_ZOOM_USER_NAMES, null) || refreshZoomUserNames();
+}
+
+/** Read every Zoom user's name (as Zoom shows it) and store them. */
+function refreshZoomUserNames() {
+  const names = {};
+  for (const user of zoomList('/users', 'users')) {
+    const name = user.display_name || [user.first_name, user.last_name].filter(Boolean).join(' ');
+    if (name) names[lower(user.email)] = name;
+  }
+  setJson(PROP_ZOOM_USER_NAMES, names);
+  return names;
 }
 
 /** Drop the cached room owners, so roomOwner() asks Zoom again. */
