@@ -8,8 +8,8 @@
  * Every 5 minutes (syncAll), for each event that changed on a group's
  * calendar:
  *   1. An event the group calendar organizes gets the group's Zoom room —
- *      its link in the location, and the link, meeting ID, and passcode in
- *      the description — plus the all-events calendar and the group's
+ *      its link in the location, and the link, meeting ID, passcode, and
+ *      the Zoom user that owns the room in the description — plus the all-events calendar and the group's
  *      Google Group as guests (see computeEventPatch in event_rules.gs).
  *   2. An event that's only a copy of someone's invitation (made on their
  *      own calendar, with the group calendar invited) can't be given those,
@@ -45,12 +45,18 @@ const MEETINGS_FAQ_URL =
   'https://docs.google.com/document/d/1rr8WqPnsLKw-tgVea40NkyTxlwLFVVLnXbL3UVFQcZY';
 // Bump when computeEventPatch's rules change, so the next syncAll rechecks
 // every upcoming event, not just changed ones (see recheckIfRulesChanged).
-const RULES_VERSION = 2;
+const RULES_VERSION = 3;
 const OVERLAP_WEEKS = 8;
 // Meetings in rooms of the same Zoom user are flagged if they overlap, or if
 // the second starts less than this many minutes after the first ends (in
 // case the first runs over).
 const MIN_GAP_MINUTES = 15;
+// How each Zoom user that owns rooms is named in event descriptions (see
+// ROOM_USERS in util/zoom_utils.py); any other owner is named by email.
+const ZOOM_USER_LABELS = {
+  'zoomhosts@berkeleymoshav.org': '1',
+  'berkeley@urbanmoshav.org': '2',
+};
 
 // Script Properties keys.
 const PROP_GROUPS = 'groups';                // JSON [{ email, name, calendarId, zoomUrl, passcode }]
@@ -110,7 +116,7 @@ function recheckIfRulesChanged() {
 function hourly() {
   withLock(() => {
     const groups = refreshGroups();
-    forgetRoomOwners();
+    recheckMovedRooms(groups);
     refreshZoomMeetings();
     checkOverlaps(groups);
   });
@@ -272,6 +278,7 @@ function handleEvent(event, group, groups) {
   const change = computeEventPatch(event, {
     zoomUrl: group.zoomUrl,
     passcode: group.passcode,
+    zoomUser: zoomUserLabel(group),
     groupEmail: group.email,
     allEventsCalendarId: ALL_EVENTS_CALENDAR_ID,
     faqUrl: MEETINGS_FAQ_URL,
@@ -280,6 +287,24 @@ function handleEvent(event, group, groups) {
   Calendar.Events.patch(change.patch, group.calendarId, event.id,
                         { sendUpdates: change.sendUpdates });
   console.log(`${group.email}: updated "${event.summary}" (${Object.keys(change.patch).join(', ')})`);
+}
+
+/**
+ * How the description should name the Zoom user owning the group's room:
+ * its label, null if the room isn't in our Zoom account, or undefined
+ * (keep what the description says) if Zoom can't be asked right now.
+ */
+function zoomUserLabel(group) {
+  const id = meetingIdFromUrl(group.zoomUrl);
+  if (!id) return null;
+  let room;
+  try {
+    room = roomOwner(id);
+  } catch (err) {
+    console.error(`Couldn't look up the owner of ${group.email}'s room: ${err}`);
+    return undefined;
+  }
+  return room ? (ZOOM_USER_LABELS[room.owner] || room.owner) : null;
 }
 
 function eventEndMs(event) {
@@ -436,6 +461,36 @@ function roomOwner(meetingId) {
   const value = meeting ? { owner: lower(meeting.host_email), type: meeting.type } : null;
   props.setProperty(key, value ? JSON.stringify(value) : '');
   return value;
+}
+
+/**
+ * Forget the cached room owners, so roomOwner() asks Zoom again, and drop
+ * the sync token of each group whose room moved to another Zoom user, so
+ * the next syncAll rewrites the Zoom user in all its upcoming events.
+ */
+function recheckMovedRooms(groups) {
+  const props = PropertiesService.getScriptProperties();
+  const cached = id => {
+    const value = props.getProperty(PROP_ROOM_OWNER_PREFIX + id);
+    return value === null ? undefined : (value ? JSON.parse(value).owner : null);
+  };
+  const before = groups.map(g => cached(meetingIdFromUrl(g.zoomUrl)));
+  forgetRoomOwners();
+  groups.forEach((g, i) => {
+    const id = meetingIdFromUrl(g.zoomUrl);
+    if (!id || before[i] === undefined) return;  // never looked up, so never written
+    let room;
+    try {
+      room = roomOwner(id);
+    } catch (err) {
+      console.error(`Couldn't look up the owner of ${g.email}'s room: ${err}`);
+      return;
+    }
+    if ((room ? room.owner : null) !== before[i]) {
+      props.deleteProperty(PROP_SYNC_PREFIX + g.calendarId);
+      console.log(`${g.email}: room's Zoom user changed; rechecking its events.`);
+    }
+  });
 }
 
 /** Drop the cached room owners, so roomOwner() asks Zoom again. */
