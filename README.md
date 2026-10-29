@@ -333,9 +333,10 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
   overlap or are less than 15 minutes apart, including ones scheduled
   directly in Zoom, and emails the groups involved (and, for a meeting
   scheduled directly in Zoom, calendaring-alerts@berkeleymoshav.org, for the
-  Technology Circle), asking them to agree which meeting moves, with a link to
-  the all-events calendar for finding a free time (two groups are also offered
-  having one group's room moved to the second Zoom user). Its rules are
+  Technology Circle), listing their options: moving one meeting to another
+  time (with a link to the all-events calendar for finding a free time),
+  holding one on a personal or work Zoom account, and, where a group's room
+  could help, having it moved to the second Zoom user. Its rules are
   in `group_meetings/event_rules.gs`, tested under Node. See
   `group_meetings/README.md` for deployment, including the Zoom credentials
   it reads from Script Properties.
