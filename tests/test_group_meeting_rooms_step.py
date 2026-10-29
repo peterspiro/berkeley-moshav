@@ -133,6 +133,39 @@ def test_footer_links_reused():
     assert cal.writes == [] and zoom.writes == []
 
 
+def _run_one(name, kind, calendar_name, full_calendar_names):
+    """Run the step for one group whose footer links a calendar named
+    calendar_name; returns the calendar service's writes."""
+    footer = build_footer_block("1", "F1", "https://g", name, calendar_id="c1",
+                                zoom_url="https://zoom.us/j/7?pwd=p")
+    cal = FakeCalendarService(
+        {"ae": "All Berkeley Moshav Events", "c1": calendar_name},
+        {"c1": [{"id": "r", "role": "writer", "scope": {"type": "group", "value": "tech@x.org"}}]})
+    zoom = FakeZoom({7: room(7, f"{name} Meeting Room")}, last_used={"7": "2026-10-01T00:00:00Z"})
+    groups = {"1": {"name": name, "kind": kind, "availability": "closed"}}
+    m.ensure_group_meeting_rooms(
+        _Directory(), _Settings({"tech@x.org": footer}), cal, zoom, groups, FOLDERS, EMAILS,
+        lambda: LinkedResources(), False, {}, {}, full_calendar_names=full_calendar_names,
+    )
+    return cal.writes
+
+
+@pytest.mark.parametrize("kind, full_name", [
+    ("circle", "Technology Circle"), ("committee", "Technology Working Group"),
+])
+def test_full_calendar_names_renames_to_full_name(kind, full_name):
+    assert _run_one("Technology", kind, "Technology", True) == [("rename", "c1", full_name)]
+
+
+def test_full_calendar_names_keeps_a_name_already_full():
+    assert _run_one("Technology Circle", "circle", "Technology Circle", True) == []
+
+
+def test_calendar_with_full_name_kept_without_the_option():
+    assert _run_one("Technology", "circle", "Technology Circle", False) == []
+    assert _run_one("Technology", "circle", "Tech", False) == [("rename", "c1", "Technology")]
+
+
 def test_dry_run_changes_nothing():
     cal = FakeCalendarService({"ae": "All Berkeley Moshav Events"})
     zoom = FakeZoom()

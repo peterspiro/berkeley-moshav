@@ -219,6 +219,10 @@ status line as "calendar (members can view, not edit)".
   meetings onto it. A dry run shows each email it would send.
   `--announce-calendar` sends it even when the calendar already existed
   (with `-g`, to one group; without, it asks before emailing every group).
+  A group's calendar is named after its Gather group; with `-g`,
+  `--full-calendar-name` names it by the group's full name instead, ending
+  with its type ("Technology Circle", "Garden Working Group"), creating or
+  renaming it so. Later runs leave a calendar named that way as it is.
   Calendars are shared with groups without Google's
   "shared a calendar" email, which for a group goes to the group's address
   and has a button that does nothing for members; members add a calendar

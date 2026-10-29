@@ -166,18 +166,27 @@ def standardize_name(name: str) -> str:
     return " ".join(result)
 
 
-def folder_name_for_group_type(raw_name: str, kind: str) -> str:
-    """Standardize a user-entered folder name and append the type's suffix
-    (e.g. "Working Group" for a committee-kind group) if not already
-    present. Raises ValueError for any kind this sync system doesn't know
-    how to place in the Shared Drive."""
+def full_group_name(name: str, kind: str) -> str:
+    """The group's name with its type's suffix (e.g. "Working Group" for a
+    committee-kind group) appended if not already present: "Technology" ->
+    "Technology Circle". Raises ValueError for any kind this sync system
+    doesn't know how to place in the Shared Drive."""
     if kind not in FOLDER_TYPE_SUFFIXES:
         raise ValueError(f"Don't know how to handle type {kind!r}")
-    name = standardize_name(raw_name)
+    name = name.strip()
     suffix = FOLDER_TYPE_SUFFIXES[kind]
     if not re.search(r"\b" + re.escape(suffix) + r"\s*$", name, re.IGNORECASE):
         name = f"{name} {suffix}"
     return name
+
+
+def folder_name_for_group_type(raw_name: str, kind: str) -> str:
+    """Standardize a user-entered folder name and append the type's suffix
+    (full_group_name()). Raises ValueError for any kind this sync system
+    doesn't know how to place in the Shared Drive."""
+    if kind not in FOLDER_TYPE_SUFFIXES:
+        raise ValueError(f"Don't know how to handle type {kind!r}")
+    return full_group_name(standardize_name(raw_name), kind)
 
 
 def parent_folder_id_for_group_type(drive_service, drive_id: str, kind: str) -> str:

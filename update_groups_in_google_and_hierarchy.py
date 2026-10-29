@@ -152,6 +152,7 @@ from util.gdrive_config import (
     dump_gdrive_config_row_html,
     ensure_folder_name_available,
     folder_name_for_group_type,
+    full_group_name,
     gdrive_item_url,
     get_drive_folder_by_id,
     list_shared_drives,
@@ -985,11 +986,17 @@ def ensure_group_meeting_rooms(
     calendar_id_by_group_id: dict[str, str], room_by_group_id: dict[str, RoomLink],
     move_events: bool = False, created_calendar_group_ids: list[str] | None = None,
     announce_calendars: bool = False, everybody_groups: dict[str, dict] | None = None,
+    full_calendar_names: bool = False,
 ) -> None:
     """Make sure every eligible group has a Google calendar and a Zoom
     meeting room (see util/meeting_rooms.py), recording them in
     calendar_id_by_group_id / room_by_group_id (mutated in place) for
     ensure_group_footers() to write into the footers.
+
+    Calendars are named after the Gather group, or with full_calendar_names
+    by the group's full name ("Technology Circle" for the circle
+    "Technology"; full_group_name()). Without it, a calendar already named
+    by the full name keeps that name.
 
     When a group's calendar is created, and for every group with
     move_events, offer to move its meetings from other calendars onto it
@@ -1065,10 +1072,13 @@ def ensure_group_meeting_rooms(
             continue
         email = google_group["email"]
         created = []
+        full_name = full_group_name(group_name, info["kind"])
         calendar_id = ensure_group_calendar(
             calendar_service, group_name, email, parse_footer_calendar_id(footer),
             owned_calendars=owned_calendars, linked=get_linked, dry_run=dry_run,
             on_create=lambda: created.append(True),
+            calendar_name=full_name if full_calendar_names else group_name,
+            other_names=() if full_calendar_names else (full_name,),
         )
         if calendar_id:
             calendar_id_by_group_id[group_id] = calendar_id
@@ -1395,7 +1405,7 @@ def add_missing_groups(
 def main(base_url: str, email: str, password: str, dry_run: bool,
          credentials_path: str, drive_id: str, group_prefix: str | None = None,
          move_events: bool = False, announce_calendars: bool = False,
-         share_all_events: bool = False):
+         share_all_events: bool = False, full_calendar_names: bool = False):
     base_url = base_url.rstrip("/")
     init_log()
     log("INFO", "start", f"base_url={base_url} dry_run={dry_run} group={group_prefix!r}")
@@ -1541,6 +1551,7 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
                     google_file_id_by_group_id, email_by_group_id, get_linked, dry_run,
                     calendar_id_by_group_id, room_by_group_id, move_events,
                     created_calendar_group_ids, announce_calendars, everybody_groups,
+                    full_calendar_names,
                 )
             except QuitRequested:
                 quit_requested = True
@@ -1636,7 +1647,16 @@ def cli():
         help="Email each group's list about its calendar and Zoom room even if the calendar "
              "already existed (always sent for a newly created calendar); use with -g",
     )
+    parser.add_argument(
+        "--full-calendar-name", action="store_true",
+        help="With -g, name the group's calendar by its full name, ending with its type "
+             "(\"Technology Circle\", \"Garden Working Group\"), creating or renaming it "
+             "so; later runs leave that name as it is",
+    )
     args = parser.parse_args()
+
+    if args.full_calendar_name and not args.group:
+        parser.error("--full-calendar-name needs -g")
 
     if args.announce_calendar and not args.group and not args.dry_run:
         answer = input("--announce-calendar without -g emails every group's list. "
@@ -1652,7 +1672,8 @@ def cli():
 
     email, password = load_credentials()
     main(args.base_url, email, password, args.dry_run, args.credentials, args.drive_id,
-         args.group, args.move_events, args.announce_calendar, args.share_all_events)
+         args.group, args.move_events, args.announce_calendar, args.share_all_events,
+         args.full_calendar_name)
 
 
 if __name__ == "__main__":

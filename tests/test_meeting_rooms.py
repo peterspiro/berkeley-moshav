@@ -100,6 +100,21 @@ class TestEnsureGroupCalendar:
         assert svc.writes[0] == ("create", {"summary": "Technology Circle",
                                             "timeZone": "America/Los_Angeles"})
 
+    def test_creates_with_calendar_name(self):
+        svc = FakeCalendarService({})
+        cid = ensure_group_calendar(
+            svc, "Technology", GROUP, None, owned_calendars=lambda: list_owned_calendars(svc),
+            linked=LinkedResources, dry_run=False, input_fn=_no_input,
+            calendar_name="Technology Circle")
+        assert svc.calendars_by_id[cid] == "Technology Circle"
+
+    def test_other_names_not_renamed(self):
+        svc = FakeCalendarService({"c1": "Technology Circle"}, {"c1": [WRITER_RULE]})
+        ensure_group_calendar(
+            svc, "Technology", GROUP, "c1", owned_calendars=lambda: list_owned_calendars(svc),
+            linked=LinkedResources, dry_run=False, other_names=("Technology Circle",))
+        assert svc.writes == []
+
     def test_prompts_even_for_one_match_and_uses_choice(self):
         svc = FakeCalendarService({"c1": "Technology Circle"}, {"c1": [WRITER_RULE]})
         assert _calendar(svc, input_fn=_inputs("1")) == "c1"
