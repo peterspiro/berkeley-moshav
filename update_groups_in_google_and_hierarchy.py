@@ -1648,7 +1648,7 @@ def cli():
              "already existed (always sent for a newly created calendar); use with -g",
     )
     parser.add_argument(
-        "--full-calendar-name", action="store_true",
+        "-f", "--full-calendar-name", action="store_true",
         help="With -g, name the group's calendar by its full name, ending with its type "
              "(\"Technology Circle\", \"Garden Working Group\"), creating or renaming it "
              "so; later runs leave that name as it is",

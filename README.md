@@ -220,7 +220,7 @@ status line as "calendar (members can view, not edit)".
   `--announce-calendar` sends it even when the calendar already existed
   (with `-g`, to one group; without, it asks before emailing every group).
   A group's calendar is named after its Gather group; with `-g`,
-  `--full-calendar-name` names it by the group's full name instead, ending
+  `-f`/`--full-calendar-name` names it by the group's full name instead, ending
   with its type ("Technology Circle", "Garden Working Group"), creating or
   renaming it so. Later runs leave a calendar named that way as it is.
   Calendars are shared with groups without Google's
