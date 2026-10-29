@@ -221,6 +221,9 @@ status line as "calendar (members can view, not edit)".
   would send.
   `--announce-calendar` sends it even when the calendar already existed
   (with `-g`, to one group; without, it asks before emailing every group).
+  With `-g`, `-e`/`--email-draft` opens the email as a draft in your own
+  mail program instead, for you to review and send from your own address;
+  a draft is plain text, without the Reply-To or the calendar icon.
   A group's calendar is named after its Gather group; with `-g`,
   `-f`/`--full-calendar-name` names it by the group's full name instead, ending
   with its type ("Technology Circle", "Garden Working Group"), creating or

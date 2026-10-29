@@ -7,7 +7,8 @@ All names and addresses are fictional.
 
 from urllib.parse import parse_qs, unquote, urlsplit
 
-from add_new_group import GROUP_CALENDAR_HOWTO_URL, build_welcome_message, mailto_url
+from add_new_group import GROUP_CALENDAR_HOWTO_URL, build_welcome_message
+from util.mail_draft import mailto_url
 
 
 def _msg(**kw):

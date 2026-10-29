@@ -1107,10 +1107,11 @@ def ensure_group_meeting_rooms(
 def announce_new_calendars(
     gmail_service, group_info: dict[str, dict], email_by_group_id: dict[str, str],
     created_calendar_group_ids: list[str], calendar_id_by_group_id: dict[str, str],
-    room_by_group_id: dict[str, RoomLink], dry_run: bool,
+    room_by_group_id: dict[str, RoomLink], dry_run: bool, draft: bool = False,
 ) -> None:
     """Email each group whose calendar this run created about its calendar
-    and Zoom room (util/calendar_announcement.py), at its list address.
+    and Zoom room (util/calendar_announcement.py), at its list address, or
+    with draft, open the email as a draft in the user's mail program.
     Only groups whose footer now links both are emailed, since the message
     points to the footer's links (the user may have quit before the room
     was made); a dry run says who would be. The email names the group by
@@ -1120,7 +1121,7 @@ def announce_new_calendars(
             info = group_info[group_id]
             announce_calendar(gmail_service, full_group_name(info["name"], info["kind"]),
                               email_by_group_id[group_id],
-                              calendar_id_by_group_id.get(group_id), dry_run)
+                              calendar_id_by_group_id.get(group_id), dry_run, draft)
 
 
 def _meeting_rooms_status(
@@ -1413,7 +1414,8 @@ def add_missing_groups(
 def main(base_url: str, email: str, password: str, dry_run: bool,
          credentials_path: str, drive_id: str, group_prefix: str | None = None,
          move_events: bool = False, announce_calendars: bool = False,
-         share_all_events: bool = False, full_calendar_names: bool = False):
+         share_all_events: bool = False, full_calendar_names: bool = False,
+         draft_email: bool = False):
     base_url = base_url.rstrip("/")
     init_log()
     log("INFO", "start", f"base_url={base_url} dry_run={dry_run} group={group_prefix!r}")
@@ -1577,7 +1579,7 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
         # footers link them.
         announce_new_calendars(gmail_service, group_info, email_by_group_id,
                                created_calendar_group_ids, calendar_id_by_group_id,
-                               room_by_group_id, dry_run)
+                               room_by_group_id, dry_run, draft_email)
 
         if not quit_requested:
             try:
@@ -1656,6 +1658,12 @@ def cli():
              "already existed (always sent for a newly created calendar); use with -g",
     )
     parser.add_argument(
+        "-e", "--email-draft", action="store_true",
+        help="With -g, open the email about the group's calendar and Zoom room as a draft in "
+             "your mail program, for you to review and send, instead of sending it from "
+             "admin@ (it's plain text, with no Reply-To)",
+    )
+    parser.add_argument(
         "-f", "--full-calendar-name", action="store_true",
         help="With -g, name the group's calendar by its full name, ending with its type "
              "(\"Technology Circle\", \"Garden Working Group\"), creating or renaming it "
@@ -1665,6 +1673,8 @@ def cli():
 
     if args.full_calendar_name and not args.group:
         parser.error("--full-calendar-name needs -g")
+    if args.email_draft and not args.group:
+        parser.error("--email-draft needs -g")
 
     if args.announce_calendar and not args.group and not args.dry_run:
         answer = input("--announce-calendar without -g emails every group's list. "
@@ -1681,7 +1691,7 @@ def cli():
     email, password = load_credentials()
     main(args.base_url, email, password, args.dry_run, args.credentials, args.drive_id,
          args.group, args.move_events, args.announce_calendar, args.share_all_events,
-         args.full_calendar_name)
+         args.full_calendar_name, args.email_draft)
 
 
 if __name__ == "__main__":
