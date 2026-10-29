@@ -216,7 +216,9 @@ status line as "calendar (members can view, not edit)".
   group's list from `admin@` (replies going to `calendaring-alerts@`), once
   the footer links the calendar and Zoom room: a link for everyone to add
   the calendar, and steps for meeting organizers to move the group's
-  meetings onto it. A dry run shows each email it would send.
+  meetings onto it. The email names the group by its full name
+  ("Membership Circle", not "Membership"). A dry run shows each email it
+  would send.
   `--announce-calendar` sends it even when the calendar already existed
   (with `-g`, to one group; without, it asks before emailing every group).
   A group's calendar is named after its Gather group; with `-g`,

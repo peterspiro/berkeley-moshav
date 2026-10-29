@@ -106,7 +106,8 @@ def test_dry_run_shows_email_and_sends_nothing(capsys):
 
 
 class TestAnnounceNewCalendars:
-    GROUPS = {"1": {"name": "Technology Circle"}, "2": {"name": "Book Club"}}
+    GROUPS = {"1": {"name": "Technology Circle", "kind": "circle"},
+              "2": {"name": "Book Club", "kind": "club"}}
     EMAILS = {"1": "tech@x.org", "2": "books@x.org"}
     ROOM = RoomLink("https://zoom.us/j/7?pwd=p", "135790")
 
@@ -116,6 +117,17 @@ class TestAnnounceNewCalendars:
         m.announce_new_calendars(gmail, self.GROUPS, self.EMAILS, ["1", "2"],
                                  {"1": "c1", "2": "c2"}, {"1": self.ROOM}, dry_run=False)
         assert [msg["To"] for _, msg in gmail.sent] == ["tech@x.org"]
+
+    def test_names_the_group_by_its_full_name(self, monkeypatch):
+        monkeypatch.setattr(m, "log", lambda *a, **k: None)
+        gmail = FakeGmail()
+        groups = {"1": {"name": "Membership", "kind": "circle"}}
+        m.announce_new_calendars(gmail, groups, self.EMAILS, ["1"], {"1": "c1"},
+                                 {"1": self.ROOM}, dry_run=False)
+        (_, msg), = gmail.sent
+        assert msg["Subject"] == "Membership Circle's new calendar and Zoom room"
+        plain, _ = msg.get_payload()
+        assert "Hello Membership Circle," in plain.get_payload(decode=True).decode()
 
     def test_none_created_none_sent(self):
         gmail = FakeGmail()

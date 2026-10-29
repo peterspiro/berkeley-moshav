@@ -1113,10 +1113,12 @@ def announce_new_calendars(
     and Zoom room (util/calendar_announcement.py), at its list address.
     Only groups whose footer now links both are emailed, since the message
     points to the footer's links (the user may have quit before the room
-    was made); a dry run says who would be."""
+    was made); a dry run says who would be. The email names the group by
+    its full name ("Membership Circle" for the circle "Membership")."""
     for group_id in created_calendar_group_ids:
         if dry_run or (group_id in calendar_id_by_group_id and group_id in room_by_group_id):
-            announce_calendar(gmail_service, group_info[group_id]["name"],
+            info = group_info[group_id]
+            announce_calendar(gmail_service, full_group_name(info["name"], info["kind"]),
                               email_by_group_id[group_id],
                               calendar_id_by_group_id.get(group_id), dry_run)
 
