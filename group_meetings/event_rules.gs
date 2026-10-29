@@ -79,6 +79,8 @@ const ZOOM_BLOCK_END = '(Added automatically from the group\'s Zoom room.)';
 const ZOOM_BLOCK_RE =
   /(?:\n|<br\s*\/?>)*Join Zoom meeting: [\s\S]*?\(Added automatically from the group's Zoom room\.\)/i;
 const STAMP_KEY = 'groupZoomUrl';
+const ZOOM_USER_NOTE = "(meetings with the same Zoom user can't overlap)";
+const ZOOM_USER_RE = /Zoom user: (.+?) \(meetings with the same Zoom user/;
 const FAQ_TEXT = 'Questions about joining? See the BM Meetings FAQ:';
 const GOOGLE_DOC_ID_RE = /\/document\/d\/([\w-]+)/;
 // A line saying the Zoom link is still to come ("Zoom link to follow",
@@ -94,25 +96,39 @@ const TO_FOLLOW_ELEMENT_RE = new RegExp(`>(?:\s|&nbsp;)*${TO_FOLLOW}(?:\s|&nbsp;
 
 function lower(s) { return (s || '').toLowerCase(); }
 
+/** "2 (Jane Doe)": how an event description names the Zoom user with this
+ * email, by its number and its name in Zoom (numbers and names map email
+ * to each), whichever are known, else by email. */
+function zoomUserLabel(email, numbers, names) {
+  const number = numbers[email], name = names[email];
+  if (number && name) return `${number} (${name})`;
+  return number || name || email;
+}
+
 /** The Zoom details block for an event description. */
 function zoomBlock(room, br) {
   const lines = [`Join Zoom meeting: ${room.zoomUrl}`];
   const id = meetingIdFromUrl(room.zoomUrl);
   if (id && room.passcode) lines.push(`Meeting ID ${formatMeetingId(id)}, passcode ${room.passcode}`);
+  if (room.zoomUser) lines.push(`Zoom user: ${room.zoomUser} ${ZOOM_USER_NOTE}`);
   lines.push(ZOOM_BLOCK_END);
   return lines.join(br);
 }
 
 /**
  * What to change on an event organized by a group's own calendar, or null
- * if nothing. ctx: { zoomUrl, passcode, groupEmail, allEventsCalendarId,
- * faqUrl }.
+ * if nothing. ctx: { zoomUrl, passcode, zoomUser, groupEmail,
+ * allEventsCalendarId, faqUrl }, where zoomUser names the Zoom user that
+ * owns the room (null if none is known, undefined to keep the one the
+ * description already names).
  *
  * Returns { patch, sendUpdates } where patch is an Events.patch body:
  *   - Zoom details: location set to the room link if empty (or still the
  *     link this script wrote before), and a marked block in the
  *     description, unless the event is marked "[no zoom]" or already has
- *     another Zoom or Meet link. The link written is remembered in a
+ *     another Zoom or Meet link. The block names the room's Zoom user, so
+ *     anyone can see which meetings can't overlap. The link written is
+ *     remembered in a
  *     private extended property, so a changed room link replaces it.
  *     Such an event also gets a line linking the meetings FAQ
  *     (ctx.faqUrl), just above the block, unless the description already
@@ -141,7 +157,12 @@ function computeEventPatch(event, ctx) {
       const faq = `${FAQ_TEXT} ${ctx.faqUrl}`;
       text = text ? `${text}${br}${br}${faq}` : faq;
     }
-    const block = zoomBlock(ctx, br);
+    let zoomUser = ctx.zoomUser;
+    if (zoomUser === undefined) {
+      const old = (description.match(ZOOM_BLOCK_RE) || [''])[0].match(ZOOM_USER_RE);
+      zoomUser = old ? old[1] : null;
+    }
+    const block = zoomBlock(Object.assign({}, ctx, { zoomUser }), br);
     const desired = text ? `${text}${br}${br}${block}` : block;
     if (desired !== description) patch.description = desired;
 

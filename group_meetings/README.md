@@ -5,7 +5,11 @@ Apps Script that looks after every group's Google calendar (the calendars
 
 - **Every 5 minutes**, for each changed event on a group calendar:
   - an event the group calendar organizes gets the group's Zoom room (link in
-    the location; link, meeting ID, and passcode in the description, with a
+    the location; link, meeting ID, passcode, and which Zoom user owns the
+    room (its number, `1` for `zoomhosts@berkeleymoshav.org` or `2` for
+    `berkeley@urbanmoshav.org`, and its name in Zoom, so anyone looking at
+    the all-events calendar can tell which meetings can't overlap) in the
+    description, with a
     line linking the "BM Meetings FAQ" just above them, unless the
     description already links it; a "Zoom link to follow" line in the
     description is removed), and the group's Google Group and the "All
@@ -32,7 +36,8 @@ Apps Script that looks after every group's Google calendar (the calendars
 
 Which calendar and room are a group's comes from the group's email footer,
 read hourly, so new groups need no redeploy. When a group's room link changes
-(say, after `reset_zoom_room.py`), its upcoming events are updated within the
+(say, after `reset_zoom_room.py`), or its room moves to the other Zoom user,
+or that user is renamed in Zoom, its upcoming events are updated within the
 hour.
 
 - `group_meetings.gs` — triggers, Calendar/Groups/Zoom calls, emails
