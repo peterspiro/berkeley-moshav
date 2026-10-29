@@ -166,27 +166,40 @@ def standardize_name(name: str) -> str:
     return " ".join(result)
 
 
-def full_group_name(name: str, kind: str) -> str:
-    """The group's name with its type's suffix (e.g. "Working Group" for a
-    committee-kind group) appended if not already present: "Technology" ->
-    "Technology Circle". Raises ValueError for any kind this sync system
-    doesn't know how to place in the Shared Drive."""
+# Name endings that already say what a group is, so full_group_name()
+# adds no type to them: a pod is a small circle ("Garden Pod").
+FULL_NAME_ENDINGS = ["Pod"]
+
+
+def _ends_with(name: str, word: str) -> bool:
+    return bool(re.search(r"\b" + re.escape(word) + r"\s*$", name, re.IGNORECASE))
+
+
+def _with_type_suffix(name: str, kind: str) -> str:
     if kind not in FOLDER_TYPE_SUFFIXES:
         raise ValueError(f"Don't know how to handle type {kind!r}")
     name = name.strip()
     suffix = FOLDER_TYPE_SUFFIXES[kind]
-    if not re.search(r"\b" + re.escape(suffix) + r"\s*$", name, re.IGNORECASE):
-        name = f"{name} {suffix}"
-    return name
+    return name if _ends_with(name, suffix) else f"{name} {suffix}"
+
+
+def full_group_name(name: str, kind: str) -> str:
+    """The group's name with its type's suffix (e.g. "Working Group" for a
+    committee-kind group) appended if not already present: "Technology" ->
+    "Technology Circle". A name ending in one of FULL_NAME_ENDINGS ("Garden
+    Pod") is left as it is. Raises ValueError for any kind this sync system
+    doesn't know how to place in the Shared Drive."""
+    if kind in FOLDER_TYPE_SUFFIXES and any(_ends_with(name, w) for w in FULL_NAME_ENDINGS):
+        return name.strip()
+    return _with_type_suffix(name, kind)
 
 
 def folder_name_for_group_type(raw_name: str, kind: str) -> str:
     """Standardize a user-entered folder name and append the type's suffix
-    (full_group_name()). Raises ValueError for any kind this sync system
-    doesn't know how to place in the Shared Drive."""
-    if kind not in FOLDER_TYPE_SUFFIXES:
-        raise ValueError(f"Don't know how to handle type {kind!r}")
-    return full_group_name(standardize_name(raw_name), kind)
+    (e.g. "Working Group" for a committee-kind group) if not already
+    present. Raises ValueError for any kind this sync system doesn't know
+    how to place in the Shared Drive."""
+    return _with_type_suffix(standardize_name(raw_name), kind)
 
 
 def parent_folder_id_for_group_type(drive_service, drive_id: str, kind: str) -> str:

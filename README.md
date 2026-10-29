@@ -217,8 +217,8 @@ status line as "calendar (members can view, not edit)".
   the footer links the calendar and Zoom room: a link for everyone to add
   the calendar, and steps for meeting organizers to move the group's
   meetings onto it. The email names the group by its full name
-  ("Membership Circle", not "Membership"). A dry run shows each email it
-  would send.
+  ("Membership Circle", not "Membership"; a pod's name, like "Garden Pod",
+  is left as it is). A dry run shows each email it would send.
   `--announce-calendar` sends it even when the calendar already existed
   (with `-g`, to one group; without, it asks before emailing every group).
   With `-g`, `-e`/`--email-draft` opens the email as a draft in your own
@@ -227,7 +227,8 @@ status line as "calendar (members can view, not edit)".
   A group's calendar is named after its Gather group; with `-g`,
   `-f`/`--full-calendar-name` names it by the group's full name instead, ending
   with its type ("Technology Circle", "Garden Working Group"), creating or
-  renaming it so. Later runs leave a calendar named that way as it is.
+  renaming it so (a pod's name, like "Garden Pod", gets no type added).
+  Later runs leave a calendar named that way as it is.
   Calendars are shared with groups without Google's
   "shared a calendar" email, which for a group goes to the group's address
   and has a button that does nothing for members; members add a calendar

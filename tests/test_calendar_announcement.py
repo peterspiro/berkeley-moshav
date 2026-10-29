@@ -173,6 +173,15 @@ class TestAnnounceNewCalendars:
         plain, _ = msg.get_payload()
         assert "Hello Membership Circle," in plain.get_payload(decode=True).decode()
 
+    def test_pod_gets_no_circle(self, monkeypatch):
+        monkeypatch.setattr(m, "log", lambda *a, **k: None)
+        gmail = FakeGmail()
+        groups = {"1": {"name": "Garden Pod", "kind": "circle"}}
+        m.announce_new_calendars(gmail, groups, self.EMAILS, ["1"], {"1": "c1"},
+                                 {"1": self.ROOM}, dry_run=False)
+        (_, msg), = gmail.sent
+        assert msg["Subject"] == "Garden Pod's new calendar and Zoom room"
+
     def test_none_created_none_sent(self):
         gmail = FakeGmail()
         m.announce_new_calendars(gmail, self.GROUPS, self.EMAILS, [], {"1": "c1"},
