@@ -96,12 +96,13 @@ const TO_FOLLOW_ELEMENT_RE = new RegExp(`>(?:\s|&nbsp;)*${TO_FOLLOW}(?:\s|&nbsp;
 
 function lower(s) { return (s || '').toLowerCase(); }
 
-/** "2, Jane Doe": how an event description names the Zoom user with this
+/** "2 (Jane Doe)": how an event description names the Zoom user with this
  * email, by its number and its name in Zoom (numbers and names map email
  * to each), whichever are known, else by email. */
 function zoomUserLabel(email, numbers, names) {
-  const parts = [numbers[email], names[email]].filter(Boolean);
-  return parts.length ? parts.join(', ') : email;
+  const number = numbers[email], name = names[email];
+  if (number && name) return `${number} (${name})`;
+  return number || name || email;
 }
 
 /** The Zoom details block for an event description. */

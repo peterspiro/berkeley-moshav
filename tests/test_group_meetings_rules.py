@@ -229,26 +229,26 @@ class TestZoomLinkToFollow:
 
 
 class TestZoomUser:
-    USER_LINE = "Zoom user: 2, Jane Doe (meetings with the same Zoom user can't overlap)"
+    USER_LINE = "Zoom user: 2 (Jane Doe) (meetings with the same Zoom user can't overlap)"
 
     def test_named_in_block(self):
-        desc = patch({}, {**CTX, "zoomUser": "2, Jane Doe"})["patch"]["description"]
+        desc = patch({}, {**CTX, "zoomUser": "2 (Jane Doe)"})["patch"]["description"]
         assert desc == (
             f"Join Zoom meeting: {URL}\nMeeting ID 812 3456 7890, passcode 123456\n"
             f"{self.USER_LINE}\n(Added automatically from the group's Zoom room.)")
 
     def test_added_to_existing_block(self):
         event = done({"description": "Agenda"})
-        desc = patch(event, {**CTX, "zoomUser": "2, Jane Doe"})["patch"]["description"]
+        desc = patch(event, {**CTX, "zoomUser": "2 (Jane Doe)"})["patch"]["description"]
         assert desc.startswith("Agenda\n\nJoin Zoom meeting: ") and self.USER_LINE in desc
 
     def test_changed_user_replaces_old(self):
-        event = done_with({"description": "Agenda"}, {**CTX, "zoomUser": "1, Ann Lee"})
-        desc = patch(event, {**CTX, "zoomUser": "2, Jane Doe"})["patch"]["description"]
+        event = done_with({"description": "Agenda"}, {**CTX, "zoomUser": "1 (Ann Lee)"})
+        desc = patch(event, {**CTX, "zoomUser": "2 (Jane Doe)"})["patch"]["description"]
         assert self.USER_LINE in desc and "Zoom user: 1" not in desc
 
     def test_unknown_keeps_existing(self):
-        ctx = {**CTX, "zoomUser": "2, Jane Doe"}
+        ctx = {**CTX, "zoomUser": "2 (Jane Doe)"}
         event = done_with({"description": "Agenda"}, ctx)
         assert patch(event, {k: v for k, v in ctx.items() if k != "zoomUser"}) is None
 
@@ -265,7 +265,7 @@ class TestZoomUser:
         assert patch(done_with({"description": "<b>Agenda</b>"}, ctx), ctx) is None
 
     @pytest.mark.parametrize("names, label", [
-        ({"b@x.org": "Jane Doe"}, "2, Jane Doe"), ({}, "2")])
+        ({"b@x.org": "Jane Doe"}, "2 (Jane Doe)"), ({}, "2")])
     def test_label_numbered_user(self, names, label):
         assert js("zoomUserLabel('b@x.org', n, m)", n={"b@x.org": "2"}, m=names) == label
 
@@ -275,7 +275,7 @@ class TestZoomUser:
         assert js("zoomUserLabel('c@x.org', n, m)", n={"b@x.org": "2"}, m=names) == label
 
     def test_second_pass_with_name_changes_nothing(self):
-        ctx = {**CTX, "zoomUser": "2, Jane Doe"}
+        ctx = {**CTX, "zoomUser": "2 (Jane Doe)"}
         assert patch(done_with({"description": "<b>Agenda</b>"}, ctx), ctx) is None
 
 

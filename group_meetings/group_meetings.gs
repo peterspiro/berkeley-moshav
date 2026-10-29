@@ -45,7 +45,7 @@ const MEETINGS_FAQ_URL =
   'https://docs.google.com/document/d/1rr8WqPnsLKw-tgVea40NkyTxlwLFVVLnXbL3UVFQcZY';
 // Bump when computeEventPatch's rules change, so the next syncAll rechecks
 // every upcoming event, not just changed ones (see recheckIfRulesChanged).
-const RULES_VERSION = 4;
+const RULES_VERSION = 5;
 const OVERLAP_WEEKS = 8;
 // Meetings in rooms of the same Zoom user are flagged if they overlap, or if
 // the second starts less than this many minutes after the first ends (in
