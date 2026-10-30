@@ -541,7 +541,7 @@ class TestZoomLinks:
             meetings=zoom.list_account_meetings, linked=lambda: LinkedResources(),
             dry_run=False, input_fn=_Answers("u"), now=NOW,
             events_using=lambda mid: mover.events_using_meeting("Technology Circle", mid))
-        assert ("1. Technology Circle weekly   (812 3456 7890, zoomhosts@berkeleymoshav.org, "
+        assert ("1. Technology Circle weekly   (812 3456 7890, circle-zoom-hosts@berkeleymoshav.org, "
                 "no fixed time) — the location of matching event(s): "
                 "'Technology Circle meeting' on Shared Events") in capsys.readouterr().out
 
