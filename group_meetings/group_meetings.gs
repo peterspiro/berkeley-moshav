@@ -55,7 +55,7 @@ const MIN_GAP_MINUTES = 15;
 // util/zoom_utils.py) goes by in event descriptions, next to its name in
 // Zoom; any other owner is shown by name or email alone.
 const ZOOM_USER_NUMBERS = {
-  'zoomhosts@berkeleymoshav.org': '1',
+  'circle-zoom-hosts@berkeleymoshav.org': '1',
   'berkeley@urbanmoshav.org': '2',
 };
 

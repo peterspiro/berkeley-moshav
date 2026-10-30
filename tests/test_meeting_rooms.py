@@ -329,7 +329,7 @@ class _Answers:
         return self.answers.pop(0)
 
 
-def _weekly(mid, topic, host="zoomhosts@berkeleymoshav.org"):
+def _weekly(mid, topic, host="circle-zoom-hosts@berkeleymoshav.org"):
     return room(mid, topic, type=8, host_email=host,
                 recurrence={"type": 2, "repeat_interval": 1, "weekly_days": "3"},
                 occurrences=[{"start_time": "2026-10-14T02:00:00Z", "status": "available"},
@@ -343,9 +343,9 @@ class TestMatchingMeetings:
         answers = _Answers("u", "i")
         _room(zoom, input_fn=answers)
         out = capsys.readouterr().out
-        assert "1. Technology Circle Meeting Room   (7, zoomhosts@berkeleymoshav.org, " \
+        assert "1. Technology Circle Meeting Room   (7, circle-zoom-hosts@berkeleymoshav.org, " \
                "no fixed time)" in out
-        assert "2. Technology Circle weekly   (8, zoomhosts@berkeleymoshav.org, " \
+        assert "2. Technology Circle weekly   (8, circle-zoom-hosts@berkeleymoshav.org, " \
                "weekly on Tue, 7:00 PM, next Tue Oct 20)" in out
         assert answers.prompts[0] == \
             "  1. Technology Circle Meeting Room — [u]se, [i]gnore, [d]elete, or [q]uit: "

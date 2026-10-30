@@ -136,7 +136,7 @@ class TestZoomClient:
     def test_list_account_meetings_pages_through_every_user(self):
         zoom, session = _client({
             ("GET", "/users"): _Resp(200, {"users": [
-                {"id": "U1", "email": "zoomhosts@x.org"}, {"id": "U2", "email": "b@x.org"}]}),
+                {"id": "U1", "email": "circle-zoom-hosts@x.org"}, {"id": "U2", "email": "b@x.org"}]}),
             ("GET", "/users/U1/meetings"): [
                 _Resp(200, {"meetings": [{"id": 1, "type": 3}, {"id": 2, "type": 8}],
                             "next_page_token": "P2"}),
@@ -145,7 +145,7 @@ class TestZoomClient:
             ("GET", "/users/U2/meetings"): _Resp(200, {"meetings": [{"id": 3, "type": 2}]}),
         })
         assert [(m["id"], m["host_email"]) for m in zoom.list_account_meetings()] == [
-            (1, "zoomhosts@x.org"), (2, "zoomhosts@x.org"), (3, "b@x.org")]
+            (1, "circle-zoom-hosts@x.org"), (2, "circle-zoom-hosts@x.org"), (3, "b@x.org")]
         page2 = [kw for method, path, kw in session.calls if path == "/users/U1/meetings"][1]
         assert page2["params"]["next_page_token"] == "P2"
         assert page2["params"]["type"] == "scheduled"
