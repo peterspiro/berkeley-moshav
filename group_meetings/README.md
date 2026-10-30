@@ -6,7 +6,7 @@ Apps Script that looks after every group's Google calendar (the calendars
 - **Every 5 minutes**, for each changed event on a group calendar:
   - an event the group calendar organizes gets the group's Zoom room (link in
     the location; link, meeting ID, passcode, and which Zoom user owns the
-    room (its number, `1` for `zoomhosts@berkeleymoshav.org` or `2` for
+    room (its number, `1` for `circle-zoom-hosts@berkeleymoshav.org` or `2` for
     `berkeley@urbanmoshav.org`, and its name in Zoom, so anyone looking at
     the all-events calendar can tell which meetings can't overlap) in the
     description, with a
@@ -33,10 +33,11 @@ Apps Script that looks after every group's Google calendar (the calendars
   only one meeting at a time) that overlap, or that are less than 15 minutes
   apart (in case the first runs over), including meetings scheduled
   directly in Zoom by any user in the account. It emails the groups involved,
-  once per conflict, asking them to agree which meeting moves, with a link
-  to the all-events calendar for finding a free time (two groups are also
-  offered asking the Technology Circle to move one group's Zoom room to the
-  second Zoom user). The email has an HTML version, so it isn't broken into
+  once per conflict, listing their options: moving one meeting to another
+  time (with a link to the all-events calendar for finding a free time),
+  holding one on a personal or work Zoom account instead, and, unless both
+  meetings are one group's or neither is a group's, asking the Technology
+  Circle to move a group's Zoom room to the second Zoom user. The email has an HTML version, so it isn't broken into
   short lines. `calendaring-alerts@`
   (the Technology Circle) is copied, or, when one of the meetings was
   scheduled directly in Zoom, asked to agree too.

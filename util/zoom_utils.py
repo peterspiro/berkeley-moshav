@@ -29,7 +29,7 @@ TOKEN_URL = "https://zoom.us/oauth/token"
 
 # The licensed Zoom user that new group rooms are made under, and every
 # licensed user that may own one (a Zoom user can run one meeting at a time).
-ROOMS_USER = "zoomhosts@berkeleymoshav.org"
+ROOMS_USER = "circle-zoom-hosts@berkeleymoshav.org"
 ROOM_USERS = (ROOMS_USER, "berkeley@urbanmoshav.org")
 
 ROOM_TOPIC_SUFFIX = " Meeting Room"

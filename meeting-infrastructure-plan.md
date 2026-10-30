@@ -57,8 +57,8 @@ are; this note keeps the reasoning and the remaining work.
 - Calendars are owned by `admin@berkeleymoshav.org`, which also runs the Apps
   Scripts. The Python scripts refuse to work on calendars signed in as anyone
   else, since other admins can't see calendars they don't own.
-- New rooms are made under the `zoomhosts@berkeleymoshav.org` Zoom user. The
-  account's second licensed user, `berkeley@urbanmoshav.org`, can take a
+- New rooms are made under the `circle-zoom-hosts@berkeleymoshav.org` Zoom
+  user. The account's second licensed user, `berkeley@urbanmoshav.org`, can take a
   group's room, transferred to it in Zoom, when the group's meetings keep
   clashing with others' (see "Open decisions"). Both are `ROOM_USERS` in
   `util/zoom_utils.py`.
@@ -134,7 +134,7 @@ admins (a different set for each calendar). Agreed design:
   groups, and clubs only).
 - Each calendar is shared with its admin group's Google Group as editors.
 - All community-wide calendars share **one Zoom room, owned by
-  `zoomhosts@`** like the group rooms, so members can easily keep track of it.
+  `circle-zoom-hosts@`** like the group rooms, so members can easily keep track of it.
   A skilled host claims host with the host key for host features such as
   breakout rooms. Being under the same Zoom user, community-wide meetings
   clash with overlapping group meetings, which the existing check catches.

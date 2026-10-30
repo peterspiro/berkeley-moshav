@@ -18,8 +18,8 @@ Their main job is keeping these things linked together and consistent:
 - Each group's **Google calendar**, owned by `admin@berkeleymoshav.org` and
   shared with the group's Google Group so its members can add meetings, and
   its permanent **Zoom meeting room**, owned by the
-  `zoomhosts@berkeleymoshav.org` Zoom user. A room's link never changes, and
-  meetings in it can run with no host present. There's also one "All Berkeley
+  `circle-zoom-hosts@berkeleymoshav.org` Zoom user. A room's link never
+  changes, and meetings in it can run with no host present. There's also one "All Berkeley
   Moshav Events" calendar for every meeting, which everyone can view.
 
 Three Google Apps Script projects run inside Google Workspace alongside the
@@ -153,13 +153,13 @@ screenshots go to `debug/` (git-ignored).
 
 ### Changing the host key
 
-All the group rooms share one host key: the `zoomhosts@berkeleymoshav.org`
-Zoom user's. It's given privately to each group's facilitators, so they can
+All the group rooms share one host key: the
+`circle-zoom-hosts@berkeleymoshav.org` Zoom user's. It's given privately to each group's facilitators, so they can
 claim host in their group's room. Change it only when it has leaked or a
 facilitator who knows it shouldn't any more, since every facilitator in every
 group then needs the new one. It's changed by hand, not by a script: sign in
-to the Zoom web portal as `zoomhosts@berkeleymoshav.org`, open **Profile**,
-and edit **Host Key** (6 to 10 digits; Zoom rejects easy ones like 123456).
+to the Zoom web portal as `circle-zoom-hosts@berkeleymoshav.org`, open
+**Profile**, and edit **Host Key** (6 to 10 digits; Zoom rejects easy ones like 123456).
 
 
 ### Letting only some members edit a group's calendar
@@ -247,7 +247,7 @@ status line as "calendar (members can view, not edit)".
   offered for moving, because the group's calendar already existed, it says
   so and suggests `-m`/`--move-events`),
   then asks of each one in turn whether to use it as the room, ignore it, or
-  delete it. Only a no-fixed-time meeting of `zoomhosts@` or
+  delete it. Only a no-fixed-time meeting of `circle-zoom-hosts@` or
   `berkeley@urbanmoshav.org` (the second Zoom user) can be used, since Zoom
   can't change a meeting's type; choosing a second one to use
   asks to confirm the switch, and what to do with the first. Nothing changes
@@ -335,9 +335,10 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
   overlap or are less than 15 minutes apart, including ones scheduled
   directly in Zoom, and emails the groups involved (and, for a meeting
   scheduled directly in Zoom, calendaring-alerts@berkeleymoshav.org, for the
-  Technology Circle), asking them to agree which meeting moves, with a link to
-  the all-events calendar for finding a free time (two groups are also offered
-  having one group's room moved to the second Zoom user). On every other
+  Technology Circle), listing their options: moving one meeting to another
+  time (with a link to the all-events calendar for finding a free time),
+  holding one on a personal or work Zoom account, and, where a group's room
+  could help, having it moved to the second Zoom user. On every other
   calendar `admin@` owns (its primary, which is the shared community calendar,
   and any others; re-read hourly), each event the calendar organizes gets the
   all-events calendar as a guest, with no email; invitation copies there are

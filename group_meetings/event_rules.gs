@@ -317,6 +317,9 @@ function joinNames(names) {
  *   - a group meeting and a Zoom meeting: the group and the Technology
  *     Circle are asked to agree which moves;
  *   - two Zoom meetings: the Technology Circle is asked to move one.
+ * Each email lists the options: moving a group's room to another Zoom user
+ * (unless both meetings are one group's or neither is), holding one meeting
+ * on a personal or work Zoom account, and moving one to another time.
  * Each email links the all-events calendar (opts.allEventsUrl) for finding
  * a free time. opts.formatRange(startMs, endMs) formats a meeting's time;
  * opts.minGapMinutes is the gap meetings should leave.
@@ -329,36 +332,56 @@ function overlapMessage(c, opts) {
   const zoomOnly = [c.a, c.b].filter(m => !(m.groups || []).length).length;
   const spacing = overlap ? '' : `, leaving at least ${opts.minGapMinutes} minutes between them`;
 
-  let to, cc, greeting, ask;
+  const findTime = `To find a free time, check the All Berkeley Moshav Events calendar, ` +
+    `which shows every group's meetings:\n${opts.allEventsUrl}`;
+  const moveRoom = rooms => `- Request the Tech Circle to move ${rooms} to our second ` +
+    `Zoom user account.  This may or may not be possible, depending on your meeting ` +
+    `schedule.`;
+  const ownAccount = how => `- Hold one of these meetings on a personal or work Zoom ` +
+    `account instead: ${how}.`;
+  const onCalendar = `replace the Zoom link in its calendar event with that account's ` +
+    `link, and delete the group room's "Join Zoom meeting" details from the event's ` +
+    `description`;
+  const inZoom = 'schedule it on that account and delete it from our Zoom account';
+
+  let to, cc, greeting, options;
   if (zoomOnly === 2) {
     to = [opts.alertEmail]; cc = [];
     greeting = opts.techName;
-    ask = `Please move one of them in Zoom${spacing}.`;
+    options = [
+      ownAccount(inZoom),
+      `- Move one of them to another time in Zoom${spacing}. ${findTime}`,
+    ];
   } else if (zoomOnly === 1) {
     to = groupEmails.concat([opts.alertEmail]); cc = [];
     greeting = joinNames([opts.techName].concat(names));
+    const group = joinNames(names);
     const where = names.length === 1 ? `the ${names[0]} calendar` : 'its group calendar';
-    ask = `Please agree between you which meeting moves${spacing}. The ` +
-      `${joinNames(names)} meeting can be moved on ${where}; the other meeting can be ` +
-      `moved in Zoom.`;
+    options = [
+      moveRoom(names.length === 1 ? `the ${names[0]}'s Zoom room` : "one of the groups' Zoom rooms"),
+      ownAccount(`for the ${group} meeting, ${onCalendar}; for the other meeting, ${inZoom}`),
+      `- Agree between you which meeting moves to another time${spacing}. The ${group} ` +
+        `meeting can be moved on ${where}; the other meeting can be moved in Zoom. ` +
+        findTime,
+    ];
   } else if (names.length === 1) {
     to = groupEmails; cc = [opts.alertEmail];
     greeting = names[0];
-    ask = `Please move one of them to another time on the ${names[0]} calendar${spacing}.`;
+    options = [
+      ownAccount(onCalendar),
+      `- Move one of them to another time on the ${names[0]} calendar${spacing}. ${findTime}`,
+    ];
   } else {
     to = groupEmails; cc = [opts.alertEmail];
     greeting = joinNames(names);
-    ask = null;  // the options below
+    options = [
+      moveRoom(`one of your ${names.length === 2 ? 'two ' : ''}groups' Zoom rooms`),
+      ownAccount(onCalendar),
+      `- Agree between you to move one of these meetings, and change its time on its ` +
+        `group calendar${spacing}. ${findTime}`,
+    ];
   }
-  const findTime = `To find a free time, check the All Berkeley Moshav Events calendar, ` +
-    `which shows every group's meetings:\n${opts.allEventsUrl}`;
-  const options = ask ? `${ask} ${findTime}` :
-    `Your options are:\n` +
-    `- Request the Tech Circle to move one of your ${names.length === 2 ? 'two ' : ''}` +
-    `groups' Zoom rooms to our second Zoom user account.  This may or may not be ` +
-    `possible, depending on your meeting schedule.\n` +
-    `- Agree between you to move one of these meetings, and change its time on its ` +
-    `group calendar${spacing}. ${findTime}`;
+  options = `Your options are:\n${options.join('\n')}`;
 
   const line = m => {
     const where = (m.names || []).length

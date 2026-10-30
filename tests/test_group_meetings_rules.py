@@ -430,6 +430,10 @@ class TestOverlapMessage:
             "- Request the Tech Circle to move one of your two groups' Zoom rooms to our "
             "second Zoom user account.  This may or may not be possible, depending on your "
             "meeting schedule.\n"
+            "- Hold one of these meetings on a personal or work Zoom account instead: "
+            "replace the Zoom link in its calendar event with that account's link, and "
+            "delete the group room's \"Join Zoom meeting\" details from the event's "
+            "description.\n"
             "- Agree between you to move one of these meetings, and change its time on its "
             "group calendar. To find a free time, check the All Berkeley Moshav Events "
             "calendar, which shows every group's meetings:\nhttps://cal/all\n\n"
@@ -455,7 +459,10 @@ class TestOverlapMessage:
                       group_meeting("B", "Finance Circle", 30, 90))
         assert msg["to"] == ["finance@x.org"]
         assert msg["body"].startswith("Hi Finance Circle,\n")
-        assert "Please move one of them to another time on the Finance Circle calendar." \
+        assert "move one of the groups' Zoom rooms" not in msg["body"]
+        assert "move one of your" not in msg["body"]
+        assert "- Hold one of these meetings on a personal or work Zoom account" in msg["body"]
+        assert "- Move one of them to another time on the Finance Circle calendar." \
             in msg["body"]
 
     def test_group_and_zoom_meeting(self):
@@ -466,15 +473,24 @@ class TestOverlapMessage:
         assert msg["body"].startswith("Hi Technology Circle and Finance Circle,\n")
         assert '  - "Board training" (a meeting scheduled in our Zoom account), 60-120' \
             in msg["body"]
-        assert ("Please agree between you which meeting moves. The Finance Circle meeting "
-                "can be moved on the Finance Circle calendar; the other meeting can be moved "
-                "in Zoom.") in msg["body"]
+        assert ("- Request the Tech Circle to move the Finance Circle's Zoom room to our "
+                "second Zoom user account.") in msg["body"]
+        assert ("for the Finance Circle meeting, replace the Zoom link in its calendar event "
+                "with that account's link") in msg["body"]
+        assert ("for the other meeting, schedule it on that account and delete it from our "
+                "Zoom account.") in msg["body"]
+        assert ("- Agree between you which meeting moves to another time. The Finance Circle "
+                "meeting can be moved on the Finance Circle calendar; the other meeting can "
+                "be moved in Zoom.") in msg["body"]
 
     def test_two_zoom_meetings(self):
         msg = message(zoom_meeting("A", 0, 60), zoom_meeting("B", 30, 90))
         assert msg["to"] == ["alerts@x.org"] and msg["cc"] == []
         assert msg["body"].startswith("Hi Technology Circle,\n")
-        assert "Please move one of them in Zoom." in msg["body"]
+        assert "second Zoom user account" not in msg["body"]
+        assert ("- Hold one of these meetings on a personal or work Zoom account instead: "
+                "schedule it on that account and delete it from our Zoom account.") in msg["body"]
+        assert "- Move one of them to another time in Zoom." in msg["body"]
 
     def test_joint_meeting_names_both_groups(self):
         joint = group_meeting("Joint", "Finance Circle", 0, 60)
@@ -485,12 +501,16 @@ class TestOverlapMessage:
         assert '  - "Joint" (Finance Circle and Care Circle), 0-60' in msg["body"]
         assert "move one of your groups' Zoom rooms" in msg["body"]
 
-    def test_same_group_and_zoom_cases_keep_a_single_ask(self):
+    def test_every_case_lists_options(self):
         for msg in (message(group_meeting("A", "Finance Circle", 0, 60),
+                            group_meeting("B", "Care Circle", 30, 90)),
+                    message(group_meeting("A", "Finance Circle", 0, 60),
+                            zoom_meeting("B", 30, 90)),
+                    message(group_meeting("A", "Finance Circle", 0, 60),
                             group_meeting("B", "Finance Circle", 30, 90)),
                     message(zoom_meeting("A", 0, 60), zoom_meeting("B", 30, 90))):
-            assert "Your options are" not in msg["body"]
-            assert "Both meetings use the same Zoom user account" in msg["body"]
+            assert "Your options are:\n- " in msg["body"]
+            assert "personal or work Zoom account" in msg["body"]
             assert "To find a free time" in msg["body"]
 
 
