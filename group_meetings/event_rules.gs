@@ -228,6 +228,23 @@ function isInvitationCopy(event, calendarId, managedCalendarIds) {
   return !managedCalendarIds.some(id => lower(id) === organizer);
 }
 
+/**
+ * [{ id, name }] for the calendars in the account's calendar list
+ * (Calendar.CalendarList.list items) that it owns, other than those in
+ * skipIds (the group calendars and the all-events calendar): its primary
+ * calendar and its other calendars. Another person's primary calendar
+ * shared with it as an owner is left out, since its ID is that person's
+ * address.
+ */
+function otherOwnedCalendars(items, account, skipIds) {
+  const skip = new Set(skipIds.map(lower));
+  return items
+    .filter(c => c.accessRole === 'owner' && !skip.has(lower(c.id)) &&
+                 (c.primary || lower(c.id) === lower(account) ||
+                  lower(c.id).endsWith('@group.calendar.google.com')))
+    .map(c => ({ id: c.id, name: c.summaryOverride || c.summary || c.id }));
+}
+
 // ── Overlaps ─────────────────────────────────────────────────────────────────
 
 /** Zoom meeting IDs linked anywhere in an event's location or description. */

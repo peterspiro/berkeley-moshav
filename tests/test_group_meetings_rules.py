@@ -292,6 +292,51 @@ class TestInvitationCopy:
                   cal=CAL, ids=["c_other@x"]) is False
 
 
+class TestOtherCalendarEvents:
+    """An event organized by one of the account's other calendars gets only
+    the all-events calendar (computeEventPatch with no group or room)."""
+
+    def test_gets_all_events_calendar_without_email(self):
+        change = patch({"summary": "Potluck", "description": "Bring a dish",
+                        "attendees": [{"email": "dana@gmail.com"}]},
+                       {"allEventsCalendarId": ALL_EVENTS})
+        assert change == {"patch": {"attendees": [{"email": "dana@gmail.com"},
+                                                  {"email": ALL_EVENTS}]},
+                          "sendUpdates": "none"}
+
+    def test_already_invited_changes_nothing(self):
+        assert patch({"attendees": [{"email": ALL_EVENTS.upper()}]},
+                     {"allEventsCalendarId": ALL_EVENTS}) is None
+
+
+class TestOtherOwnedCalendars:
+    ADMIN = "admin@x.org"
+
+    def other(self, items, skip=()):
+        return js("otherOwnedCalendars(items, account, skip)",
+                  items=items, account=self.ADMIN, skip=list(skip))
+
+    def test_primary_and_owned_secondary_calendars(self):
+        items = [
+            {"id": self.ADMIN, "summary": self.ADMIN, "accessRole": "owner", "primary": True},
+            {"id": "c_misc@group.calendar.google.com", "summary": "Misc",
+             "summaryOverride": "Misc (admin)", "accessRole": "owner"},
+        ]
+        assert self.other(items) == [
+            {"id": self.ADMIN, "name": self.ADMIN},
+            {"id": "c_misc@group.calendar.google.com", "name": "Misc (admin)"}]
+
+    def test_skips_group_and_all_events_calendars(self):
+        items = [{"id": CAL, "summary": "Tech", "accessRole": "owner"},
+                 {"id": ALL_EVENTS, "summary": "All", "accessRole": "owner"}]
+        assert self.other(items, [CAL.upper(), ALL_EVENTS]) == []
+
+    def test_skips_calendars_it_does_not_own(self):
+        items = [{"id": "c_r@group.calendar.google.com", "summary": "R", "accessRole": "writer"},
+                 {"id": "dana@x.org", "summary": "Dana", "accessRole": "owner"}]
+        assert self.other(items) == []
+
+
 def meeting(key, owner, start, end, **kw):
     return {"key": key, "owner": owner, "start": start, "end": end, "groups": [], **kw}
 

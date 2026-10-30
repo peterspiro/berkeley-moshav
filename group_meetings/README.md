@@ -21,6 +21,13 @@ Apps Script that looks after every group's Google calendar (the calendars
     calendar, with the group calendar invited) can't be changed that way, so
     its organizer and `calendaring-alerts@berkeleymoshav.org` get one email
     asking them to create it on the group calendar instead.
+- **Every 5 minutes**, for each changed event on the other calendars
+  `admin@berkeleymoshav.org` owns (its primary, which is the shared community
+  calendar, and any others, but not the all-events calendar; the list is
+  re-read hourly): an event the calendar organizes gets the all-events
+  calendar as a guest, sending no email. It gets no Zoom room and isn't
+  checked for overlaps, and invitation copies there (such as the
+  invitations people send the community calendar) are left alone.
 - **Every hour**, and after any change, it looks for meetings in the next 8
   weeks in Zoom rooms belonging to the same Zoom user (a Zoom user can run
   only one meeting at a time) that overlap, or that are less than 15 minutes
@@ -93,7 +100,10 @@ clasp push
 
 The triggers stay installed across pushes. When a change alters what events
 get (it bumps `RULES_VERSION` in `group_meetings.gs`), the next run rechecks
-every upcoming event once, sending no email.
+every upcoming event once, sending no email. The first run that finds a
+calendar (a new group's, or another calendar `admin@` owns) likewise handles
+all of its upcoming events, so the community calendar's existing events get
+the all-events calendar too.
 
 ## Smoke test
 
@@ -104,7 +114,10 @@ every upcoming event once, sending no email.
    get an invitation.
 2. Create an event on your own calendar and invite the test group's calendar:
    you and `calendaring-alerts@` should get one email about it.
-3. Create two overlapping events on group calendars: `calendaring-alerts@` and
+3. As `admin@`, create an event on the community calendar (admin's primary):
+   within 5 minutes it should have the all-events calendar as a guest, and
+   nothing else should change.
+4. Create two overlapping events on group calendars: `calendaring-alerts@` and
    both groups should get one overlap email. Then move one so they're 10
    minutes apart: one "too close together" email. At 15 minutes apart or
    more: no email.
