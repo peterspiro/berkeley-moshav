@@ -37,6 +37,10 @@ Python scripts:
   It also invites the all-events calendar to the events created on the admin
   account's other calendars, including the shared community calendar.
 
+A fourth, **`circle_agendas`**, will run the circle agenda docs (see
+`circle-agendas-plan.md`); for now it holds only a test of what Apps Script
+can do to them.
+
 The repo also keeps, in `archive/`, the one-off scripts that were used to
 migrate the community into Gather (members, households, groups, photos) and
 to set up the Google side, along with cleanup scripts from that migration.
@@ -190,6 +194,7 @@ status line as "calendar (members can view, not edit)".
 | `groups_drive_sync/` | Apps Script project that syncs each Google Group's membership from its Drive item |
 | `calendar_notifications/` | Apps Script project that announces and gatekeeps events on the shared community calendar |
 | `group_meetings/` | Apps Script project that adds Zoom rooms and guests to group calendar events, and warns about overlapping meetings |
+| `circle_agendas/` | Apps Script project for the circle agenda docs (so far, only a test) |
 | `util/` | Shared Python modules used by the scripts |
 | `tests/` | Unit tests (`pytest`) |
 | `archive/` | One-off scripts and plans that are no longer in use, kept for reference |
@@ -347,6 +352,13 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
   `group_meetings/README.md` for deployment, including the Zoom credentials
   it reads from Script Properties.
 
+- **`circle_agendas/agenda_probe.gs`** is a one-time test, run by hand,
+  of what Apps Script can do to a circle agenda doc: on a copy of the
+  template, it copies an agenda row and a whole meeting, adds an
+  attendance checklist, and tries inserting person and date chips, then
+  reports which smart chips and checklist ticks survived. See
+  `circle_agendas/README.md`.
+
 ### `util/`: shared modules
 
 - **`gather_utils.py`**: Gather login, page scraping and form helpers, the
@@ -418,6 +430,8 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
 - `meeting-infrastructure-plan.md`: decisions behind the group calendars,
   Zoom rooms, and `group_meetings`, and the meeting features not built yet
   (community-wide calendars, recording archive, and more)
+- `circle-agendas-plan.md`: design of the circle agenda docs, and the
+  test to run first
 - `archive/gather-sandbox-plan.md` and `archive/gather-import-plan.md`: plans
   for the local Gather test instance and the member import
 
