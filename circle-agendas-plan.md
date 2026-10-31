@@ -13,8 +13,9 @@ arithmetic and the setting up. Nothing is built yet except a test,
   the next event on the circle's calendar that isn't in the doc yet, and can
   then be edited. Its Place is the circle's Zoom room, its Minutes a link to
   the previous meeting, and its Next meeting the following calendar event.
-  Unticked items of the previous meeting's Action Items Recap are copied to
-  its Action Items Accountability.
+  The previous meeting's Action Items Recap is copied to its Action Items
+  Accountability (all of it: a script can't tell ticked items from
+  unticked).
 - **New agenda item**: a link in each meeting adds a topic after its last
   topic (before Action Items Recap), with a duration of 5 minutes.
 - **Times**: every item's duration can be edited except the closing
@@ -68,9 +69,27 @@ checklist ticks, whether the Docs API can add an unticked checklist, person
 chips, and date chips, and how ticks look to the API. See
 `circle_agendas/README.md`.
 
-Depending on the results:
-- If copies keep the chips, a new meeting is a copy of a blank meeting kept
-  in the doc (or in the template), and a new item a copy of a blank topic
-  row.
-- If not, the item-type column becomes plain text, or members add the chip
-  themselves by typing `@`, and dates are plain text the script parses.
+Results (run 2026-10-31 on a copy of the SoFA-based doc):
+- Copying a table row or a whole meeting table with Apps Script's
+  `copy()` keeps its dropdown chips, date chips, and checklist ticks. Apps
+  Script itself sees dropdowns only as `UNSUPPORTED` elements; the Docs API
+  sees them as `dropdown` and dates as `dateElement`.
+- The Docs API can add an unticked checklist (`BULLET_CHECKBOX`), a person
+  chip (`insertPerson`), and a date chip (`insertDate`).
+- Ticking a checklist item strikes it through, person chips included, for
+  every account. But the API can't tell a ticked item from an unticked one:
+  ticks aren't readable, so a script can't see who was absent or which
+  action items are done.
+- Each meeting is one table: its date chip in the first row, "Time" and
+  "Place" in the second, then the agenda rows, ending with "end". The
+  meeting's total duration is in the admin block's Duration row (in hours).
+
+So a new meeting will be a copy of a blank meeting, and a new item a copy
+of a blank topic row, both within the same doc. Still to test: whether
+dropdown chips survive a copy from another tab of the doc, and from
+another doc (a dropdown refers to a definition, which may belong to the
+doc).
+
+The SoFA template has a page header (its credit line). Pageless docs hide
+headers and show a notice saying so; deleting the header (switch to Pages
+format, delete it, switch back) removes the notice.

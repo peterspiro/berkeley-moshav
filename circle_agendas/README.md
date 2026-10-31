@@ -23,7 +23,11 @@ Either paste it into a new project:
 2. Replace `Code.gs` with the contents of `agenda_probe.gs`.
 3. Click **Services** (+), choose **Google Docs API**, and click **Add**.
 4. Choose `runProbe` in the function menu and click **Run**. Allow access
-   when asked.
+   when asked. If the run then stops with "You do not have permission to
+   call DriveApp.File.makeCopy", click the link in the error to allow Drive
+   access too, and run it again. (The editor works out which permissions to
+   ask for from the code and can miss some; with clasp, `appsscript.json`
+   lists them all, so they're asked for at once.)
 
 Or push it with clasp:
 
