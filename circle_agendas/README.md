@@ -75,6 +75,9 @@ code, keeping its URL: **Deploy → Manage deployments**, the pencil, then
 `clasp deployments` to find its ID and `clasp deploy -i <ID>`.) Changes to
 `build_template.gs` alone need no new deployment.
 
+"Script function not found: doGet" from a link means the deployment's
+version predates `web_app.gs`: deploy a new version as above.
+
 The links:
 
 - **+ Add item**, in each meeting's "Agenda" row, adds a Topic of 5 minutes
@@ -86,6 +89,9 @@ The links:
   closing round with no time left turns red. The page says why.
 
 Each opens a tab that says what it did; the doc shows the change at once.
+For anyone who can edit the doc, clicking a link shows a small box with its
+address, and clicking that opens it (or Ctrl-click, ⌘-click on a Mac, opens
+it directly).
 A link's address names the doc by its ID, so a doc copied by hand (File →
 Make a copy) still points at the doc it was copied from; the plan has how
 that's to be handled.

@@ -89,9 +89,14 @@ const SAMPLE_AGENDA = [
 ];
 const CLOSING_ROUND = {title: 'Closing Round / Check-out',
   note: ' (feedback on content, interpersonal, processes)', body: 'bullet', kind: 'round'};
-// The rows above the agenda items (date, time and place, "Agenda"), which
-// are merged across the table and repeat at the top of each page.
+// The rows above the agenda items (date, time and place, "Agenda"), each
+// merged across the table.
 const MEETING_HEADER_ROWS = 3;
+// Of those, the date and the time and place stay in view while scrolling
+// through the meeting. The "Agenda" row, with the links, isn't pinned:
+// Docs shows pinned rows, while they stick, as a copy that can't be
+// clicked into, so links there often can't be followed.
+const MEETING_PINNED_ROWS = 2;
 
 // ── Entry points ─────────────────────────────────────────────────────────────
 
@@ -492,8 +497,8 @@ function finishWithApi(docId) {
 
   replaceTokens(docId);
 
-  // The meeting table's top rows: pinned, so they repeat on each page, and
-  // each merged into one cell.
+  // The meeting table's top rows: each merged into one cell, and the first
+  // MEETING_PINNED_ROWS pinned, so they stay in view.
   let content = Docs.Documents.get(docId).body.content;
   const meeting = content.find(se => se.table && tableText(se.table).includes('Opening Round'));
   const tableStartLocation = {index: meeting.startIndex};
@@ -505,7 +510,7 @@ function finishWithApi(docId) {
     }}});
   }
   Docs.Documents.batchUpdate({requests: [
-    {pinTableHeaderRows: {tableStartLocation, pinnedHeaderRowsCount: MEETING_HEADER_ROWS}},
+    {pinTableHeaderRows: {tableStartLocation, pinnedHeaderRowsCount: MEETING_PINNED_ROWS}},
     ...merges,
   ]}, docId);
 
