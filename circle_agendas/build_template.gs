@@ -85,7 +85,7 @@ const AGENDA = [
   {admin: true, minutes: 3, kind: 'round', notes: false},
   {title: 'Consent to Agenda', minutes: 2, kind: 'report'},
   {title: 'Action Items Accountability', minutes: 3, actions: true,
-    note: ' (the action items from the previous meeting\'s recap; tick each one that\'s ' +
+    note: ' (the action items from the previous meeting\'s recap; check each one that\'s ' +
       'done, and its line is struck through)'},
   {title: 'Topic', minutes: 20},
   {title: 'Topic', minutes: 20},
@@ -93,7 +93,7 @@ const AGENDA = [
   {title: 'Action Items Recap', minutes: 5, kind: 'report', actions: true,
     note: ' (one line for each action agreed in this meeting, with who\'ll do it and by ' +
       'when; each is copied to the next meeting\'s Action Items Accountability, where ' +
-      'its box is ticked once it\'s done)'},
+      'its box is checked once it\'s done)'},
 ];
 const CLOSING_ROUND = {title: 'Closing Round / Check-out',
   note: ' (feedback on content, interpersonal, processes)', kind: 'round'};
@@ -101,14 +101,12 @@ const CLOSING_ROUND = {title: 'Closing Round / Check-out',
 const COL = {time: 0, duration: 1, presenter: 2, description: 3, notes: 4, followUp: 5};
 const MEETING_COLUMNS = 6;
 const MEETING_HEADINGS = ['Time', 'Duration', 'Presenter', 'Description', 'Notes', 'Follow-up'];
-// The rows above the agenda items (date, time and place, and the column
-// headings); the first two are each merged across the table.
-const MEETING_HEADER_ROWS = 3;
-const MEETING_MERGED_ROWS = 2;
-// Of those, the date and the time and place stay in view while scrolling
-// through the meeting. (Docs shows pinned rows, while they stick, as a copy
-// that can't be clicked into, so links there often can't be followed.)
-const MEETING_PINNED_ROWS = 2;
+// The rows above the agenda items: the column headings, which stay in view
+// while scrolling through the meeting. (Docs shows pinned rows, while they
+// stick, as a copy that can't be clicked into, so links there often can't
+// be followed.)
+const MEETING_HEADER_ROWS = 1;
+const MEETING_PINNED_ROWS = 1;
 
 // ── Entry points ─────────────────────────────────────────────────────────────
 
@@ -365,9 +363,9 @@ function backlogTable(body) {
   table.setColumnWidth(5, 65);
 }
 
-// Inserts a meeting at a position in the body (or, if at is undefined,
-// appends it), and returns its ID. The meeting: its date; time and place;
-// the column headings; one row per item, each with its start time and
+// Appends a meeting to a tab's body, and returns its ID. Above its table:
+// its date; its time and place; and its attendance. In its table: the
+// column headings; one row per item, each with its start time and
 // duration; just above Action Items Recap (where new items go), a row of
 // links that add an item and update the times (which also identify the
 // meeting; see meetings.gs); the closing round, which gets the time left;
@@ -378,7 +376,7 @@ function backlogTable(body) {
 // Presenter dropdown's choices), minutes (runs, for the Minutes row), next
 // (text, for Next meeting), and carryOver (list items to copy into Action
 // Items Accountability).
-function meetingTable(body, at, docId, details) {
+function meetingTable(body, docId, details) {
   const start = parseTime(details.start);
   const total = parseHours(details.hours);
   const times = scheduleTimes(start, AGENDA.map(item => item.minutes), total);
@@ -389,21 +387,20 @@ function meetingTable(body, at, docId, details) {
   const recap = items.findIndex(item => item.title === 'Action Items Recap');
   items.splice(recap < 0 ? items.length - 1 : recap, 0, {links: true});
 
-  const rowCount = MEETING_HEADER_ROWS + items.length + 1;
-  const table = newTable(body, rowCount, MEETING_COLUMNS, at);
   const meetingId = newMeetingId();
   const presenters = (details.attendees || []).length ? presenterDropdownId(meetingId) : null;
 
   // A date chip without a time is shown in UTC, so it's given noon UTC on
   // the local date, which is that date everywhere.
-  writeCell(table.getCell(0, 0), [[[token('date', details.date + 'T12:00:00Z')]]]);
-  table.getCell(0, 0).editAsText().setBold(true);
-  writeCell(table.getCell(1, 0), [[['Time  ', BOLD], [details.start], ['     Place  ', BOLD],
-    ...(details.place ? [['Zoom room', {[A.LINK_URL]: details.place}]] : [])]]);
-  for (let r = 0; r < MEETING_MERGED_ROWS; r++) {
-    for (let c = 1; c < MEETING_COLUMNS; c++) writeCell(table.getCell(r, c), [[]]);
-  }
-  MEETING_HEADINGS.forEach((h, c) => writeCell(table.getCell(2, c), [[[h, BOLD]]]));
+  body.appendParagraph(token('date', details.date + 'T12:00:00Z'))
+    .setHeading(DocumentApp.ParagraphHeading.HEADING2);
+  writeRuns(body.appendParagraph(''), [['Time  ', BOLD], [details.start], ['     Place  ', BOLD],
+    ...(details.place ? [['Zoom room', {[A.LINK_URL]: details.place}]] : [])]);
+  attendance(body, details.attendees || []);
+
+  const rowCount = MEETING_HEADER_ROWS + items.length + 1;
+  const table = newTable(body, rowCount, MEETING_COLUMNS);
+  MEETING_HEADINGS.forEach((h, c) => writeCell(table.getCell(0, c), [[[h, BOLD]]]));
 
   items.forEach((item, i) => {
     const r = MEETING_HEADER_ROWS + i;
@@ -450,6 +447,24 @@ function meetingTable(body, at, docId, details) {
   return meetingId;
 }
 
+// The meeting's attendance, above its table, closely spaced: the attendees
+// as a checklist, and a bulleted list for guests.
+function attendance(body, attendees) {
+  const paragraphs = [
+    [['Attendance', BOLD], ['   Check the box next to anyone who isn\'t here.', MUTED]],
+    ...(attendees.length
+      ? attendees.map(name => [[token('checkbox')], [name]])
+      : [[[token('checkbox')]]]),
+    [['Guests:', BOLD]],
+    [[token('bullet')]],
+  ];
+  for (const runs of paragraphs) {
+    const p = body.appendParagraph('');
+    writeRuns(p, runs);
+    p.setSpacingBefore(0).setSpacingAfter(0).setLineSpacing(1);
+  }
+}
+
 // The ID of a meeting's Presenter dropdown's list of choices (see
 // presenterDropdownRequest).
 function presenterDropdownId(meetingId) {
@@ -465,19 +480,9 @@ function linksRow(row, docId, meetingId) {
 }
 
 // The meeting's admin details, as a table inside its agenda row. Each row's
-// value is a list of paragraphs, each a list of runs. Attendance is the
-// attendees as a checklist, and a bulleted list for guests, closely spaced.
+// value is a list of paragraphs, each a list of runs.
 function adminBlock(cell, details) {
-  const attendees = details.attendees || [];
   const rows = [
-    ['Attendance', [
-      [['Tick the box next to anyone who isn\'t here.', MUTED]],
-      ...(attendees.length
-        ? attendees.map(name => [[token('checkbox')], [name]])
-        : [[[token('checkbox')]]]),
-      [['Guests:', BOLD]],
-      [[token('bullet')]],
-    ]],
     ['Duration (hours)', [[[details.hours]]]],
     ['Minutes', [details.minutes || [['No previous minutes']]]],
     ['Information', [[['(announcements)', HINT]]]],
@@ -489,13 +494,6 @@ function adminBlock(cell, details) {
     writeCell(table.getCell(r, 0), [[[label, BOLD]]]);
     writeCell(table.getCell(r, 1), value);
   });
-  const attendance = table.getCell(0, 1);
-  for (let i = 0; i < attendance.getNumChildren(); i++) {
-    const child = attendance.getChild(i);
-    if (child.getType() === DocumentApp.ElementType.PARAGRAPH) {
-      child.asParagraph().setSpacingBefore(0).setSpacingAfter(0).setLineSpacing(1);
-    }
-  }
   table.setBorderWidth(0);
   table.setColumnWidth(0, 120);
   // The empty paragraph a cell starts with, now above the table.
@@ -589,39 +587,14 @@ function apiTab(docId, tabId) {
   return {content: tab.documentTab.body.content, tabId: tabId || undefined};
 }
 
-// The Docs API's part of making a meeting table, in its tab: its top rows
-// each merged into one cell, and the first MEETING_PINNED_ROWS pinned, so
-// they stay in view.
+// The Docs API's part of making a meeting table, in its tab: its column
+// headings pinned, so they stay in view.
 function finishMeeting(docId, meetingId, tabId) {
-  let content = apiTab(docId, tabId).content;
+  const content = apiTab(docId, tabId).content;
   const meeting = content.find(se => se.table && apiMeetingId(se) === meetingId);
-  const tableStartLocation = {index: meeting.startIndex, tabId};
-  const merges = [];
-  for (let r = MEETING_MERGED_ROWS - 1; r >= 0; r--) {
-    merges.push({mergeTableCells: {tableRange: {
-      tableCellLocation: {tableStartLocation, rowIndex: r, columnIndex: 0},
-      rowSpan: 1, columnSpan: MEETING_COLUMNS,
-    }}});
-  }
-  Docs.Documents.batchUpdate({requests: [
-    {pinTableHeaderRows: {tableStartLocation, pinnedHeaderRowsCount: MEETING_PINNED_ROWS}},
-    ...merges,
-  ]}, docId);
-
-  // Merging keeps each merged cell's (empty) paragraphs; remove them.
-  content = apiTab(docId, tabId).content;
-  const merged = content.find(se => se.table && se.startIndex === meeting.startIndex).table;
-  const tidy = [];
-  for (let r = MEETING_MERGED_ROWS - 1; r >= 0; r--) {
-    const paras = merged.tableRows[r].tableCells[0].content;
-    const extra = paras.slice(1);
-    if (extra.length && extra.every(se => se.paragraph && !paraText(se.paragraph).trim())) {
-      tidy.push({deleteContentRange: {range: {
-        startIndex: paras[0].endIndex - 1, endIndex: paras[paras.length - 1].endIndex - 1, tabId,
-      }}});
-    }
-  }
-  if (tidy.length) Docs.Documents.batchUpdate({requests: tidy}, docId);
+  Docs.Documents.batchUpdate({requests: [{pinTableHeaderRows: {
+    tableStartLocation: {index: meeting.startIndex, tabId}, pinnedHeaderRowsCount: MEETING_PINNED_ROWS,
+  }}]}, docId);
 }
 
 // Replaces each token in a tab (by default, the first) with its chip or

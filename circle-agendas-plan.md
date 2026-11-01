@@ -41,10 +41,12 @@ they need will take their own scripts.
   the previous meeting's tab, and its Next meeting the following calendar
   event.
   The previous meeting's Action Items Recap is copied to its Action Items
-  Accountability (all of it: a script can't tell ticked items from
-  unticked). It can't be added until the newest meeting has started, and
+  Accountability (all of it: a script can't tell checked items from
+  unchecked). It can't be added until the newest meeting has started, and
   adding it removes the links from the meetings before it, which are then
   past and not to be changed.
+- **Layout**: each meeting's tab has its date, its time and place, and its
+  attendance, then the agenda table.
 - **Columns**: Time, Duration, Presenter (a dropdown of the meeting's
   attendees, made when the meeting is), Description, Notes, and Follow-up
   (light yellow).
@@ -60,9 +62,9 @@ they need will take their own scripts.
   A duration that can't be read as a number is flagged, not guessed.
 - **Attendance**: a checklist of the circle's members, from its Google
   Group, with names from the Drive item's permissions, closely spaced.
-  Names start unticked; ticking one marks that member absent, and Docs
+  Names start unchecked; checking one marks that member absent, and Docs
   strikes the name through (an instruction above the names says so; Docs
-  strikes through only ticked checklist items, or text formatted by hand).
+  strikes through only checked checklist items, or text formatted by hand).
   Below it, a bulleted list for guests' names. Guests aren't among the
   Presenter dropdown's choices.
 - **Tabs**: Apps Script can't make a tab, and doesn't see one the Docs API
@@ -70,8 +72,8 @@ they need will take their own scripts.
   (`runNewTabProbeLater`). So adding a meeting takes two runs: the link's
   run adds the tab, and the page it returns runs the second, which builds
   the meeting in it. Each tab has its own dropdowns' choices, so each
-  meeting's Presenter choices are made in its tab. Docs' Find searches only
-  the tab you're in.
+  meeting's Presenter choices are made in its tab. Docs' Find searches all
+  tabs.
 - **About this circle** is filled in when the doc is created: its email
   address and Drive folder from the group's footer, and its parent and
   sub-circles from the Circle Structure page. The Members and roles table
@@ -119,20 +121,20 @@ Script calls, tested under Node like `group_meetings/event_rules.gs`.
 
 `circle_agendas/agenda_probe.gs` tests, on a copy of the template, whether
 copying a row or a whole meeting keeps its dropdown and date chips and its
-checklist ticks, whether the Docs API can add an unticked checklist, person
-chips, and date chips, and how ticks look to the API. See
+checked boxes, whether the Docs API can add an unchecked checklist, person
+chips, and date chips, and how checked boxes look to the API. See
 `circle_agendas/README.md`.
 
 Results (run 2026-10-31 on a copy of the SoFA-based doc):
 - Copying a table row or a whole meeting table with Apps Script's
-  `copy()` keeps its dropdown chips, date chips, and checklist ticks. Apps
+  `copy()` keeps its dropdown chips, date chips, and checked boxes. Apps
   Script itself sees dropdowns only as `UNSUPPORTED` elements; the Docs API
   sees them as `dropdown` and dates as `dateElement`.
-- The Docs API can add an unticked checklist (`BULLET_CHECKBOX`), a person
+- The Docs API can add an unchecked checklist (`BULLET_CHECKBOX`), a person
   chip (`insertPerson`), and a date chip (`insertDate`).
-- Ticking a checklist item strikes it through, person chips included, for
-  every account. But the API can't tell a ticked item from an unticked one:
-  ticks aren't readable, so a script can't see who was absent or which
+- Checking a checklist item strikes it through, person chips included, for
+  every account. But the API can't tell a checked item from an unchecked one:
+  checked boxes aren't readable, so a script can't see who was absent or which
   action items are done.
 - Each meeting is one table: its date chip in the first row, "Time" and
   "Place" in the second, then the agenda rows, ending with "end". The

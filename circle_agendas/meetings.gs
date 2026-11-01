@@ -5,12 +5,12 @@
  * next meeting, and, to a meeting, update its times or add an agenda item.
  *
  * Each meeting has a tab of its own, titled with its date (newest first,
- * after the first tab), holding one table (see meetingTable in
- * build_template.gs): MEETING_HEADER_ROWS rows of date, time and place, and
- * column headings; then one row per item, in the columns COL names (start
- * time, duration in minutes, presenter, description, notes, follow-up), and
- * among them (just above Action Items Recap) the row of the meeting's
- * links; then the closing round; then the end time.
+ * after the first tab), holding its date, its "Time … Place …" line, and
+ * its attendance, then one table (see meetingTable in build_template.gs):
+ * a row of column headings; one row per item, in the columns COL names
+ * (start time, duration in minutes, presenter, description, notes,
+ * follow-up), and among them (just above Action Items Recap) the row of the
+ * meeting's links; then the closing round; then the end time.
  *
  * A meeting is found by its ID, which is in its links' addresses. Adding a
  * meeting removes the links from the meetings before it, which are past.
@@ -103,8 +103,10 @@ function startNewMeeting(docId) {
   let newestDate = null;
   if (newest) {
     newestDate = newest.tabProperties.title;
-    const table = newest.documentTab.body.content.find(se => se.table);
-    const startText = table ? headerTimeText(apiCellText(table.table.tableRows[1].tableCells[0])) : '';
+    const content = newest.documentTab.body.content;
+    const table = content.find(se => se.table);
+    const timeLine = content.find(se => se.paragraph && /^\s*Time\b/.test(paraText(se.paragraph)));
+    const startText = timeLine ? headerTimeText(paraText(timeLine.paragraph)) : '';
     const startsAt = Utilities.parseDate(newestDate, TIME_ZONE, 'yyyy-MM-dd').getTime() +
       (parseTime(startText) || 0) * 60000;
     if (!table || startsAt > Date.now()) {
@@ -175,7 +177,7 @@ function finishNewMeeting(key) {
   }
   const body = tab.asDocumentTab().getBody();
   const leftover = body.getChild(0);
-  const meetingId = meetingTable(body, undefined, docId, details);
+  const meetingId = meetingTable(body, docId, details);
   body.appendParagraph('');
   leftover.removeFromParent();
 
@@ -222,11 +224,6 @@ function recapItems(table) {
   return [];
 }
 
-// The text of a Docs API table cell.
-function apiCellText(cell) {
-  return cell.content.filter(se => se.paragraph).map(se => paraText(se.paragraph)).join('');
-}
-
 // A tab's dropdowns' lists of choices, by ID (each tab has its own).
 function dropdownDefinitions(docId, tabId) {
   const tab = Docs.Documents.get(docId, {includeTabsContent: true}).tabs
@@ -247,7 +244,7 @@ function notFound() {
 // 0. Returns what the reader should know.
 function recalculate(table) {
   const messages = [];
-  const startText = headerTimeText(table.getCell(1, 0).getText());
+  const startText = headerTimeText(timeLineText(table.getParent()));
   const start = parseTime(startText);
   if (start === null) {
     return ['Couldn\'t read the start time "' + startText + '" after "Time"; ' +
@@ -291,6 +288,18 @@ function recalculate(table) {
       ' minutes past the end of the meeting, so its duration is negative.');
   }
   return messages;
+}
+
+// The text of the "Time … Place …" line above a meeting's table, in the
+// body (its tab's) that holds it, or ''.
+function timeLineText(body) {
+  for (let i = 0; i < body.getNumChildren(); i++) {
+    const el = body.getChild(i);
+    if (el.getType() !== DocumentApp.ElementType.PARAGRAPH) continue;
+    const text = el.asParagraph().getText();
+    if (/^\s*Time\b/.test(text)) return text;
+  }
+  return '';
 }
 
 function writeMuted(cell, text, extra) {

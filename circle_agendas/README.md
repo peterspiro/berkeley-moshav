@@ -43,7 +43,7 @@ the same project. After any change here, `clasp push` again (and reload the
 editor if it's open). In the editor, choose a function in the menu at the
 top and click **Run**; its output is in the execution log below. The first
 run asks for access to Docs and Drive. Google's consent screen lets you
-choose which of them to allow: tick **Select all**. If you don't, a run
+choose which of them to allow: check **Select all**. If you don't, a run
 stops with "You do not have permission to call …"; click the link in the
 error, allow the rest, and run it again.
 
@@ -94,7 +94,7 @@ The links:
   after the day of the newest meeting in the doc (or after now, if there's
   none). It refuses while the newest meeting hasn't started yet. Its date,
   start time, and length come from the event; Place links the circle's
-  Zoom room; Attendance lists the circle's members, unticked, with space
+  Zoom room; Attendance lists the circle's members, unchecked, with space
   for guests below; each item's Presenter is a dropdown of the members;
   Minutes links the previous meeting's tab; Next meeting is the event after; and
   the previous meeting's Action Items Recap is copied into its Action Items
@@ -185,14 +185,14 @@ tries person and date chips. To check by hand:
 1. **Copied Topic row**, just below the first Topic: does it still have its
    Decision or Selection chip?
 2. **Copied meeting**, at the top of MEETINGS: are its date chip, its
-   Decision and Selection chips, and the ticked, struck-through "None as
+   Decision and Selection chips, and the checked, struck-through "None as
    first meeting!" all as in the original below it?
 3. **Attendance**, in the copied meeting: are Alice, Bob, and Carol
-   unticked? Does ticking one strike its name through, and unticking it
+   unchecked? Does checking one strike its name through, and unchecking it
    remove the strikethrough? Is the person chip before Alice struck
    through too?
 4. **Another account**: share the copy with a second account (ideally a
-   personal Gmail one) and tick a name there. Is it struck through for
+   personal Gmail one) and check a name there. Is it struck through for
    them, and for you?
 5. **Date chip** at the end of the doc: is it a chip, not plain text?
 

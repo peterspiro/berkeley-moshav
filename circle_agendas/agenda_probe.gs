@@ -17,10 +17,10 @@
  *      survives;
  *   3. copies the whole MEETINGS section and inserts the copy at the top
  *      of it (the way a new meeting would be added), to see whether the
- *      date chip, dropdown chips, and checklist ticks survive;
+ *      date chip, dropdown chips, and checked boxes survive;
  *   4. shows how the Docs API describes the checklists, including whether
- *      a ticked item can be told apart from an unticked one;
- *   5. adds three names to the first Attendance cell as an unticked
+ *      a checked item can be told apart from an unchecked one;
+ *   5. adds three names to the first Attendance cell as an unchecked
  *      checklist, and tries to put a person chip in front of the first;
  *   6. tries to insert a date chip at the end of the doc.
  *
@@ -143,7 +143,7 @@ function copyMeetings(docId) {
     'originals: ' + mergeCounts(originals),
     'copies:    ' + mergeCounts(copies),
     'CHECK BY HAND: in the copy, are the date chip, the Decision/Selection chips, ' +
-      'and the ticked "None as first meeting!" all as in the original?',
+      'and the checked "None as first meeting!" all as in the original?',
   ];
 }
 
@@ -190,7 +190,7 @@ function addAttendanceChecklist(docId) {
   ]}, docId);
   const lines = [
     'Added ' + TEST_NAMES.join(', ') + ' to the first Attendance cell as a checklist.',
-    'CHECK BY HAND: are they unticked? Does ticking one strike it through? ' +
+    'CHECK BY HAND: are they unchecked? Does checking one strike it through? ' +
       'Does it for another account too?',
   ];
 
@@ -200,7 +200,7 @@ function addAttendanceChecklist(docId) {
       {insertPerson: {location: {index}, personProperties: {email}}},
     ]}, docId);
     lines.push('Person chip for ' + email + ' inserted before "' + TEST_NAMES[0] + '".',
-      'CHECK BY HAND: does ticking that line strike through the chip too?');
+      'CHECK BY HAND: does checking that line strike through the chip too?');
   } catch (e) {
     lines.push('Person chip FAILED: ' + e.message);
   }

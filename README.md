@@ -383,7 +383,7 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
     All's template: copying agenda
     rows and whole meetings (from the same tab, another tab, or another
     doc), adding an attendance checklist, and inserting person and date
-    chips. Each reports which smart chips and checklist ticks survived.
+    chips. Each reports which smart chips and checked boxes survived.
   - **`circle_agendas/doc_helpers.gs`** holds the template's ID and the
     helpers the other two share.
 
