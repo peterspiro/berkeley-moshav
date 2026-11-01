@@ -224,3 +224,6 @@ table into it with DocumentApp, and adds a dropdown in it with the Docs
 API. The log, and the end of the scratch doc's first tab, say how each step
 went; check by hand that the "Meeting test" tab shows the paragraph, the
 table, and a working dropdown.
+
+Then run **`runNewTabProbeLater`**, a separate run on the same scratch doc,
+to see whether DocumentApp sees the tab once the run that added it is over.

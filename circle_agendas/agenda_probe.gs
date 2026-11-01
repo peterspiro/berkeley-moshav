@@ -440,8 +440,8 @@ function runNewTabProbe() {
       {createDropdownDefinition: {tabId, dropdownDefinition: {
         dropdownDefinitionId: 'kix.probe',
         dropdownDefinitionProperties: {title: 'Probe', options: [
-          {optionId: 'dropdownItem.a', displayValue: 'First'},
-          {optionId: 'dropdownItem.b', displayValue: 'Second'},
+          {optionId: 'dropdownItem.first', displayValue: 'First'},
+          {optionId: 'dropdownItem.second', displayValue: 'Second'},
         ]},
       }}},
       {insertText: {location: {index: end, tabId}, text: label}},
@@ -457,8 +457,65 @@ function runNewTabProbe() {
 }
 
 function finishNewTabProbe(docId, lines) {
+  PropertiesService.getScriptProperties().setProperty('newTabProbeDocId', docId);
   writeReport(docId, lines);
   Logger.log(lines.join('\n'));
   logLink('Scratch doc (report at the end of its first tab):',
     'https://docs.google.com/document/d/' + docId + '/edit');
+}
+
+// Run after runNewTabProbe, as a separate run: whether DocumentApp sees the
+// tab runNewTabProbe added in its own run, and can write into it; and
+// whether a dropdown can be added in it.
+function runNewTabProbeLater() {
+  const docId = PropertiesService.getScriptProperties().getProperty('newTabProbeDocId');
+  if (!docId) throw new Error('Run runNewTabProbe first.');
+  const lines = ['Later run:'];
+  const step = (name, fn) => {
+    try {
+      lines.push(name + ': ' + fn());
+    } catch (e) {
+      lines.push(name + ': FAILED: ' + e.message);
+    }
+  };
+  const tabId = Docs.Documents.get(docId, {includeTabsContent: true}).tabs
+    .map(t => t.tabProperties).find(p => p.title === 'Meeting test').tabId;
+
+  step('7. DocumentApp sees the tab', () => {
+    const doc = DocumentApp.openById(docId);
+    return 'tabs ' + JSON.stringify(doc.getTabs().map(t => t.getTitle())) +
+      '; getTab(id): ' + (doc.getTab(tabId) ? 'yes' : 'no');
+  });
+  step('8. Write a paragraph and a table into the tab with DocumentApp', () => {
+    const doc = DocumentApp.openById(docId);
+    const tab = doc.getTab(tabId);
+    if (!tab) return 'tab not visible, so nothing written';
+    const body = tab.asDocumentTab().getBody();
+    body.appendParagraph(PROBE_MARK + ' Written by DocumentApp in a later run');
+    body.appendTable([['Time', 'Description'], ['19:30', 'Opening round']]);
+    doc.saveAndClose();
+    return 'written';
+  });
+  step('9. Add a dropdown in the tab with the Docs API', () => {
+    const content = Docs.Documents.get(docId, {includeTabsContent: true}).tabs
+      .find(t => t.tabProperties.tabId === tabId).documentTab.body.content;
+    const end = content[content.length - 1].endIndex - 1;
+    const label = '\n' + PROBE_MARK + ' Dropdown: ';
+    Docs.Documents.batchUpdate({requests: [
+      {createDropdownDefinition: {tabId, dropdownDefinition: {
+        dropdownDefinitionId: 'kix.probe2',
+        dropdownDefinitionProperties: {title: 'Probe', options: [
+          {optionId: 'dropdownItem.first', displayValue: 'First'},
+          {optionId: 'dropdownItem.second', displayValue: 'Second'},
+        ]},
+      }}},
+      {insertText: {location: {index: end, tabId}, text: label}},
+      {insertDropdown: {location: {index: end + label.length, tabId},
+        dropdownDefinitionId: 'kix.probe2'}},
+    ]}, docId);
+    return 'added';
+  });
+  writeReport(docId, lines);
+  Logger.log(lines.join('\n'));
+  logLink('Scratch doc:', 'https://docs.google.com/document/d/' + docId + '/edit?tab=' + tabId);
 }
