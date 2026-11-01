@@ -10,6 +10,8 @@ from pathlib import Path
 
 import pytest
 
+from util.google_group_footer import ITEM_TYPE_SHARED_DRIVE, build_footer_block
+
 RULES = Path(__file__).resolve().parent.parent / "circle_agendas" / "agenda_rules.gs"
 
 pytestmark = pytest.mark.skipif(shutil.which("node") is None, reason="needs Node")
@@ -96,3 +98,33 @@ class TestMeetingIdFromUrl:
         ("", None)])
     def test_reads_id(self, url, meeting_id):
         assert js(f"meetingIdFromUrl({json.dumps(url)})") == meeting_id
+
+
+class TestFormatHours:
+    @pytest.mark.parametrize("minutes, text", [(90, "1.5"), (120, "2"), (45, "0.75"), (100, "1.67")])
+    def test_formats(self, minutes, text):
+        assert js(f"formatHours({minutes})") == text
+
+
+class TestParseCircleFooter:
+    CAL = "c_abc123@group.calendar.google.com"
+    ZOOM = "https://us06web.zoom.us/j/81234567890?pwd=enc"
+
+    def test_reads_python_written_folder_footer(self):
+        footer = "Notes\n\n" + build_footer_block(
+            "1093", "FOLDER_id-1", "https://g", "Technology Circle",
+            calendar_id=self.CAL, zoom_url=self.ZOOM, zoom_passcode="123456")
+        assert js(f"parseCircleFooter({json.dumps(footer)})") == {
+            "name": "Technology Circle", "driveItemId": "FOLDER_id-1",
+            "calendarId": self.CAL, "zoomUrl": self.ZOOM}
+
+    def test_reads_shared_drive_footer_without_calendar(self):
+        footer = build_footer_block("7", "0AFqDRIVE", "https://g", "Garden Pod",
+                                    item_type=ITEM_TYPE_SHARED_DRIVE)
+        assert js(f"parseCircleFooter({json.dumps(footer)})") == {
+            "name": "Garden Pod", "driveItemId": "0AFqDRIVE", "calendarId": None,
+            "zoomUrl": None}
+
+    def test_no_managed_block(self):
+        assert js("parseCircleFooter('Just notes')") == {
+            "name": None, "driveItemId": None, "calendarId": None, "zoomUrl": None}

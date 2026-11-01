@@ -1,0 +1,115 @@
+/**
+ * Circles
+ *
+ * Which circle an agenda doc belongs to, and that circle's calendar, Zoom
+ * room, and members. A circle is a Google Group whose footer (written by
+ * update_groups_in_google_and_hierarchy.py; see parseCircleFooter in
+ * agenda_rules.gs) links its Drive folder or shared drive, calendar, and
+ * Zoom room; a doc belongs to the circle whose Drive item it's in, at any
+ * depth. The groups' footers are cached for CIRCLES_CACHE_SECONDS, and
+ * read again when a doc's folder matches none of them.
+ */
+
+const DOMAIN = 'berkeleymoshav.org';
+const CIRCLES_CACHE_KEY = 'circles';
+const CIRCLES_CACHE_SECONDS = 6 * 60 * 60;
+
+// The circle whose Drive item holds the doc: {email, name, driveItemId,
+// calendarId, zoomUrl}, or null.
+function circleForDoc(docId) {
+  const ids = driveAncestors(docId);
+  const find = circles => circles.find(c => ids.includes(c.driveItemId)) || null;
+  return find(loadCircles()) || find(refreshCircles());
+}
+
+// The IDs of the folders holding a file, nearest first, and of its shared
+// drive, if it's in one.
+function driveAncestors(fileId) {
+  const file = Drive.Files.get(fileId, {fields: 'parents,driveId', supportsAllDrives: true});
+  const ids = [];
+  let parents = file.parents || [];
+  while (parents.length && ids.length < 20) {
+    const id = parents[0];
+    ids.push(id);
+    if (id === file.driveId) break;
+    try {
+      parents = Drive.Files.get(id, {fields: 'parents', supportsAllDrives: true}).parents || [];
+    } catch (e) {
+      break; // A folder the script can't see.
+    }
+  }
+  if (file.driveId && !ids.includes(file.driveId)) ids.push(file.driveId);
+  return ids;
+}
+
+function loadCircles() {
+  const cached = CacheService.getScriptCache().get(CIRCLES_CACHE_KEY);
+  return cached ? JSON.parse(cached) : refreshCircles();
+}
+
+// Every Google Group whose footer links a Drive item.
+function refreshCircles() {
+  const circles = [];
+  let pageToken;
+  do {
+    const resp = AdminDirectory.Groups.list({domain: DOMAIN, maxResults: 200, pageToken});
+    for (const g of resp.groups || []) {
+      let footer;
+      try {
+        footer = GroupsSettings.Groups.get(g.email).customFooterText;
+      } catch (e) {
+        console.error('Couldn\'t read ' + g.email + '\'s footer: ' + e.message);
+        continue;
+      }
+      const links = parseCircleFooter(footer);
+      if (links.driveItemId) {
+        circles.push({...links, email: g.email.toLowerCase(), name: links.name || g.name});
+      }
+    }
+    pageToken = resp.nextPageToken;
+  } while (pageToken);
+  CacheService.getScriptCache().put(CIRCLES_CACHE_KEY, JSON.stringify(circles), CIRCLES_CACHE_SECONDS);
+  return circles;
+}
+
+// The circle's members' names, sorted: each member of its Google Group, by
+// the name Drive gives them on the circle's Drive item (whose sharing
+// groups_drive_sync keeps in step with the group), or by email address if
+// it gives none.
+function circleMemberNames(circle) {
+  const emails = [];
+  let pageToken;
+  do {
+    const resp = AdminDirectory.Members.list(circle.email, {maxResults: 200, pageToken});
+    for (const m of resp.members || []) {
+      if (m.type === 'USER' && m.email) emails.push(m.email.toLowerCase());
+    }
+    pageToken = resp.nextPageToken;
+  } while (pageToken);
+
+  const names = {};
+  pageToken = undefined;
+  do {
+    const resp = Drive.Permissions.list(circle.driveItemId, {
+      supportsAllDrives: true, pageSize: 100, pageToken,
+      fields: 'nextPageToken,permissions(emailAddress,displayName)',
+    });
+    for (const p of resp.permissions || []) {
+      if (p.emailAddress && p.displayName) names[p.emailAddress.toLowerCase()] = p.displayName;
+    }
+    pageToken = resp.nextPageToken;
+  } while (pageToken);
+
+  return emails.map(e => names[e] || e).sort((a, b) => a.localeCompare(b));
+}
+
+// The circle's next count timed (not all-day) events starting after a
+// time.
+function nextEvents(circle, after, count) {
+  const resp = Calendar.Events.list(circle.calendarId, {
+    timeMin: after.toISOString(), singleEvents: true, orderBy: 'startTime', maxResults: 20,
+  });
+  return (resp.items || [])
+    .filter(e => e.status !== 'cancelled' && e.start && e.start.dateTime)
+    .slice(0, count);
+}

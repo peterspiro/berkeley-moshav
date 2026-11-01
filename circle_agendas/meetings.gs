@@ -1,13 +1,13 @@
 /**
  * Meetings
  *
- * What the web app (web_app.gs) does to a meeting in an agenda doc: update
- * its times, and add an agenda item. A meeting is one table (see
- * meetingTable in build_template.gs): MEETING_HEADER_ROWS rows of date,
- * time and place, and "Agenda"; then one row per item, with its start time,
- * its duration in minutes, its content, and its type, and among them (just
- * above Action Items Recap) the row of the meeting's links; then the
- * closing round; then the end time.
+ * What the web app (web_app.gs) does to an agenda doc: add the circle's
+ * next meeting, and, to a meeting, update its times or add an agenda item.
+ * A meeting is one table (see meetingTable in build_template.gs):
+ * MEETING_HEADER_ROWS rows of date, time and place, and "Agenda"; then one
+ * row per item, with its start time, its duration in minutes, its content,
+ * and its type, and among them (just above Action Items Recap) the row of
+ * the meeting's links; then the closing round; then the end time.
  *
  * A meeting is found by its ID, which is in its links' addresses, so the
  * links keep working wherever the meeting moves in the doc.
@@ -55,6 +55,120 @@ function addItem(docId, meetingId) {
   doc.saveAndClose();
   replaceTokens(docId);
   return {done: true, title: 'Item added', messages};
+}
+
+// Adds the circle's next meeting at the top of MEETINGS: the first timed
+// event on the circle's calendar after the day of the newest meeting in the
+// doc (or after now, if there's none). Its date, start, and length come
+// from the event; its Place is the circle's Zoom room; its attendance list
+// is the circle's members; its Minutes link to the previous meeting; its
+// Next meeting is the event after; and the previous meeting's Action Items
+// Recap is copied to its Action Items Accountability.
+function addMeeting(docId) {
+  const circle = circleForDoc(docId);
+  if (!circle) {
+    return {done: false, title: 'Circle not found', messages: [
+      'This doc isn\'t in a circle\'s Drive folder, so there\'s no calendar to take the ' +
+      'meeting from. Move it into the circle\'s folder and try again.']};
+  }
+  if (!circle.calendarId) {
+    return {done: false, title: 'No calendar', messages: [
+      circle.name + ' has no calendar yet; ask the Technology Circle to set one up.']};
+  }
+
+  const content = Docs.Documents.get(docId).body.content;
+  const newest = content.find(se => se.table && apiMeetingId(se));
+  const newestDate = newest ? apiMeetingDate(newest) : null;
+  const after = newestDate
+    ? new Date(Utilities.parseDate(newestDate, TIME_ZONE, 'yyyy-MM-dd').getTime() + 24 * 3600 * 1000)
+    : new Date();
+  const [event, following] = nextEvents(circle, after, 2);
+  if (!event) {
+    return {done: false, title: 'No meeting to add', messages: [
+      'There\'s no meeting on ' + circle.name + '\'s calendar after ' +
+      (newestDate || 'today') + '. Add it to the calendar first.']};
+  }
+  const start = new Date(event.start.dateTime);
+  const end = new Date(event.end.dateTime);
+  const details = {
+    date: Utilities.formatDate(start, TIME_ZONE, 'yyyy-MM-dd'),
+    start: Utilities.formatDate(start, TIME_ZONE, 'H:mm'),
+    hours: formatHours((end - start) / 60000),
+    place: circle.zoomUrl,
+    attendees: circleMemberNames(circle),
+    next: following ? Utilities.formatDate(new Date(following.start.dateTime), TIME_ZONE,
+      'EEE yyyy-MM-dd, H:mm') : 'Not on the calendar yet',
+  };
+
+  const doc = DocumentApp.openById(docId);
+  const body = firstTabBody(doc);
+  const previous = newest ? findMeeting(body, apiMeetingId(newest)) : null;
+  if (previous) {
+    const bookmark = doc.addBookmark(doc.newPosition(previous.getCell(1, 0).getChild(0), 0));
+    details.minutes = [['Previous meeting (' + newestDate + ')',
+      {[A.LINK_URL]: '#bookmark=' + bookmark.getId()}]];
+    details.carryOver = recapItems(previous);
+  }
+  const at = newMeetingPosition(body);
+  const meetingId = meetingTable(body, at, docId, details);
+  body.insertParagraph(at + 1, '');
+  doc.saveAndClose();
+  replaceTokens(docId);
+  finishMeeting(docId, meetingId);
+  return {done: true, title: 'Meeting added',
+    messages: ['Added the meeting on ' + details.date + ' at ' + details.start + '.']};
+}
+
+// Where a new meeting goes: just after the "+ New meeting" link, or the
+// MEETINGS heading, or else before the first meeting.
+function newMeetingPosition(body) {
+  let heading = -1;
+  for (let i = 0; i < body.getNumChildren(); i++) {
+    const el = body.getChild(i);
+    if (el.getType() === DocumentApp.ElementType.TABLE) {
+      if (meetingIdOf(el.asTable())) return heading >= 0 ? heading + 1 : i;
+      continue;
+    }
+    if (el.getType() !== DocumentApp.ElementType.PARAGRAPH) continue;
+    const text = el.asParagraph().editAsText();
+    if (text.getText().trim().toUpperCase() === 'MEETINGS') heading = i;
+    for (const j of text.getTextAttributeIndices()) {
+      if (/[?&]action=meeting\b/.test(text.getLinkUrl(j) || '')) return i + 1;
+    }
+  }
+  return heading >= 0 ? heading + 1 : body.getNumChildren() - 1;
+}
+
+// The non-empty items under a meeting's Action Items Recap.
+function recapItems(table) {
+  for (let r = MEETING_HEADER_ROWS; r < table.getNumRows(); r++) {
+    const cell = table.getCell(r, 2);
+    if (!cell.getText().trim().startsWith('Action Items Recap')) continue;
+    const items = [];
+    for (let i = 1; i < cell.getNumChildren(); i++) {
+      const el = cell.getChild(i);
+      const type = el.getType();
+      if ((type === DocumentApp.ElementType.LIST_ITEM || type === DocumentApp.ElementType.PARAGRAPH) &&
+          el.getText().trim()) {
+        items.push(el);
+      }
+    }
+    return items;
+  }
+  return [];
+}
+
+// The date ('yyyy-MM-dd') of the chip in a Docs API meeting table's first
+// row, or null.
+function apiMeetingDate(se) {
+  for (const cell of se.table.tableRows[0].tableCells) {
+    for (const part of cell.content) {
+      for (const pe of (part.paragraph && part.paragraph.elements) || []) {
+        if (pe.dateElement) return pe.dateElement.dateElementProperties.timestamp.slice(0, 10);
+      }
+    }
+  }
+  return null;
 }
 
 function notFound() {

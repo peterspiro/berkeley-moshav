@@ -7,16 +7,18 @@ the web app that the links in an agenda doc run.
   entirely from code
 - `web_app.gs` — the web app: takes a link's action, doc, and meeting, and
   shows a page saying what it did
-- `meetings.gs` — what the web app does to a meeting: update its times, and
-  add an agenda item
+- `meetings.gs` — what the web app does: add the circle's next meeting,
+  and, to a meeting, update its times or add an agenda item
+- `circles.gs` — which circle a doc belongs to (from the Google Groups'
+  footers), and its calendar's events and its members' names
 - `agenda_rules.gs` — the agenda's time arithmetic, with no Apps Script
   calls, tested under Node by `tests/test_circle_agenda_rules.py`
 - `agenda_probe.gs` — tests, already run, of what Apps Script can do to an
   agenda doc
 - `doc_helpers.gs` — the template's ID (`TEMPLATE_DOC_ID`), and helpers the
   others share
-- `appsscript.json` — the Docs and Drive advanced services, OAuth scopes,
-  and web app settings
+- `appsscript.json` — the advanced services (Docs, Drive, Calendar, Admin
+  Directory, Groups Settings), OAuth scopes, and web app settings
 
 All of them are one Apps Script project, so they share their functions and
 constants.
@@ -75,13 +77,30 @@ code, keeping its URL: **Deploy → Manage deployments**, the pencil, then
 `clasp deployments` to find its ID and `clasp deploy -i <ID>`.) Changes to
 `build_template.gs` alone need no new deployment.
 
+When a change adds permissions to `appsscript.json` (such as reading
+calendars and groups, for new meetings), run any function in the editor
+first, to allow them, and then deploy a new version: the web app runs with
+the permissions you've allowed.
+
 "Script function not found: doGet" from a link means the deployment's
 version predates `web_app.gs`: deploy a new version as above.
 
 The links:
 
-The links are in a row of their own just above each meeting's Action Items
-Recap, so they stay just below where new items go.
+- **+ New meeting**, just under the MEETINGS heading, adds the circle's next
+  meeting above the others: the first timed event on the circle's calendar
+  after the day of the newest meeting in the doc (or after now, if there's
+  none), so clicking twice adds the next two. Its date, start time, and
+  length come from the event; Place links the circle's Zoom room;
+  Attendance lists the circle's members, unticked; Minutes links the
+  previous meeting; Next meeting is the event after; and the previous
+  meeting's Action Items Recap is copied into its Action Items
+  Accountability. The circle is the Google Group whose footer links the
+  Drive folder (or shared drive) the doc is in, so this works only for a
+  doc in a circle's folder; elsewhere the page says so.
+
+Each meeting's own links are in a row just above its Action Items Recap,
+so they stay just below where new items go.
 
 - **+ Add item** adds a Topic of 5 minutes just above the links, and
   updates the times.
@@ -100,9 +119,10 @@ A link's address names the doc by its ID, so a doc copied by hand (File →
 Make a copy) still points at the doc it was copied from; the plan has how
 that's to be handled.
 
-To try the actions without the web app, run **`tryUpdateTimes`** or
-**`tryAddItem`** in the editor: each runs on the first meeting of the
-latest preview and logs what it returned.
+To try the actions without the web app, run **`tryUpdateTimes`**,
+**`tryAddItem`**, or **`tryAddMeeting`** in the editor: each runs on the
+latest preview (the first two on its first meeting) and logs what it
+returned. For a new meeting, the preview must be in a circle's folder.
 
 ## Building the template
 
@@ -116,9 +136,11 @@ pageless format, and merges and pins the meeting table's top rows.
 
 Building needs `WEB_APP_URL` (see above), for the meeting's links.
 
-1. **`previewTemplate`** builds a new "Template preview" doc in your My
-   Drive and logs its link. Each run moves the previous preview to the
-   trash, so there's only ever one.
+1. **`previewTemplate`** builds the "Template preview" doc and logs its
+   link. The first run makes it, in your My Drive; later runs empty it and
+   build it again in place, so it keeps its link and stays wherever you've
+   moved it (such as into a circle's folder, to try new meetings). If it's
+   been deleted or trashed, a new one is made.
 2. **`createTemplate`**, once: builds a new "Circle Agenda Template" doc.
    Move it to a folder of the Shared Drive that `admin@berkeleymoshav.org`
    can edit, and set `TEMPLATE_DOC_ID` in `doc_helpers.gs` to its ID (the

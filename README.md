@@ -40,7 +40,7 @@ Python scripts:
 A fourth, **`circle_agendas`**, will run the circle agenda docs (see
 `circle-agendas-plan.md`): it builds the agenda template from a blank doc,
 and runs the web app that the links in an agenda doc open (so far, to add
-an agenda item and update a meeting's times).
+a meeting, add an agenda item, and update a meeting's times).
 
 The repo also keeps, in `archive/`, the one-off scripts that were used to
 migrate the community into Gather (members, households, groups, photos) and
@@ -360,10 +360,17 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
     `admin@berkeleymoshav.org` for anyone with a Google account: a link in
     an agenda doc names an action, the doc, and a meeting, and the web app
     shows a page saying what it did.
-  - **`circle_agendas/meetings.gs`** holds those actions: updating a
-    meeting's times (each item's start, the closing round's share of what's
-    left, and the end, flagging durations it can't read), and adding an
-    agenda item just above the links, which sit above Action Items Recap.
+  - **`circle_agendas/meetings.gs`** holds those actions: adding the
+    circle's next meeting from its calendar (with its Zoom room, its
+    members as an attendance checklist, a link to the previous meeting,
+    and the previous meeting's action items); updating a meeting's times
+    (each item's start, the closing round's share of what's left, and the
+    end, flagging durations it can't read); and adding an agenda item just
+    above the links, which sit above Action Items Recap.
+  - **`circle_agendas/circles.gs`** finds the circle a doc belongs to: the
+    Google Group whose footer links the Drive folder (or shared drive) the
+    doc is in. It reads the circle's calendar events, and its members'
+    names (from its Drive item's sharing).
   - **`circle_agendas/build_template.gs`** builds the agenda template from
     a blank doc, entirely from code (so it depends on no other document):
     a preview in a new doc, or the template itself, rebuilt in place.

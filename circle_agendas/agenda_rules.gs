@@ -66,3 +66,60 @@ function meetingIdFromUrl(url) {
   const m = /[?&]meeting=([\w-]+)/.exec(url || '');
   return m ? m[1] : null;
 }
+
+// "1.5" from 90 minutes, "2" from 120: a meeting's length as written in
+// its Duration (hours) row.
+function formatHours(minutes) {
+  return String(Math.round(minutes / 60 * 100) / 100);
+}
+
+// ── A circle's Google Group footer ───────────────────────────────────────────
+
+// Must match util/google_group_footer.py (and group_meetings/event_rules.gs,
+// which reads the same footer).
+const FOOTER_MARKER = '--- Auto-managed links ---';
+const FOOTER_DRIVE_ITEM_RE =
+  /(?:Google Docs folder|Shared Drive):\s*https:\/\/drive\.google\.com\/drive\/folders\/([\w-]+)/;
+const FOOTER_CALENDAR_RE =
+  /Google calendar:\s*https:\/\/calendar\.google\.com\/calendar\/u\/0\?cid=([A-Za-z0-9%+\/_=-]+)/;
+const FOOTER_ZOOM_RE = /Zoom meeting:\s*(https:\/\/\S+)/;
+const FOOTER_NAME_RE = /^(.+)'s:$/m;
+
+// The links in a group's footer that a circle's agenda doc uses:
+// {name, driveItemId, calendarId, zoomUrl}, each null if absent. Only the
+// auto-managed block is read.
+function parseCircleFooter(footerText) {
+  const text = footerText || '';
+  const idx = text.indexOf(FOOTER_MARKER);
+  if (idx < 0) return {name: null, driveItemId: null, calendarId: null, zoomUrl: null};
+  const block = text.slice(idx);
+  const match = re => { const m = re.exec(block); return m ? m[1] : null; };
+  const cid = match(FOOTER_CALENDAR_RE);
+  return {
+    name: match(FOOTER_NAME_RE),
+    driveItemId: match(FOOTER_DRIVE_ITEM_RE),
+    calendarId: cid ? base64ToString(decodeURIComponent(cid)) : null,
+    zoomUrl: match(FOOTER_ZOOM_RE),
+  };
+}
+
+const BASE64_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+
+// Decodes base64 (standard or URL-safe, padding optional), or null.
+function base64ToString(text) {
+  const s = text.replace(/-/g, '+').replace(/_/g, '/').replace(/=+$/, '');
+  let bits = 0;
+  let value = 0;
+  let out = '';
+  for (const ch of s) {
+    const v = BASE64_ALPHABET.indexOf(ch);
+    if (v < 0) return null;
+    value = (value << 6) | v;
+    bits += 6;
+    if (bits >= 8) {
+      bits -= 8;
+      out += String.fromCharCode((value >> bits) & 0xff);
+    }
+  }
+  return out;
+}

@@ -5,34 +5,41 @@
  * shows a page saying what it did. It runs as the account that deployed it
  * (admin@berkeleymoshav.org), so members need no permission of their own
  * and see no "unverified app" screen; anyone signed in to a Google account
- * can use it. Each link's address names the action, the doc, and the
- * meeting:
+ * can use it. Each link's address names the action, the doc, and (but for
+ * a new meeting) the meeting:
  *   ?action=times&doc=<doc ID>&meeting=<meeting ID>   updates the times
  *   ?action=item&doc=<doc ID>&meeting=<meeting ID>    adds an agenda item
+ *   ?action=meeting&doc=<doc ID>                      adds the next meeting
  *
  * The links are written with the web app's address, from the WEB_APP_URL
  * script property, and the doc's own ID; a doc copied by hand still has
  * its original's ID in its links.
  *
- * tryUpdateTimes and tryAddItem run the same actions on the latest preview
- * from the editor, without the web app.
+ * tryUpdateTimes, tryAddItem, and tryAddMeeting run the same actions on the
+ * latest preview from the editor, without the web app.
  *
  * Setup: see README.md in this folder.
  */
 
-const ACTIONS = {times: updateTimes, item: addItem};
+// Each action, and whether it acts on one meeting (and so needs its ID).
+const ACTIONS = {
+  times: {run: updateTimes, perMeeting: true},
+  item: {run: addItem, perMeeting: true},
+  meeting: {run: addMeeting, perMeeting: false},
+};
 
 function doGet(e) {
   const p = e.parameter || {};
   const action = ACTIONS[p.action];
-  if (!action || !/^[\w-]{20,}$/.test(p.doc || '') || !/^[\w-]+$/.test(p.meeting || '')) {
+  if (!action || !/^[\w-]{20,}$/.test(p.doc || '') ||
+      (action.perMeeting && !/^[\w-]+$/.test(p.meeting || ''))) {
     return page({done: false, title: 'Not a link this app knows',
       messages: ['Use the links in a circle\'s agenda doc.']});
   }
   const lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
-    return page(action(p.doc, p.meeting));
+    return page(action.run(p.doc, p.meeting));
   } catch (err) {
     return page({done: false, title: 'Something went wrong', messages: [err.message]});
   } finally {
@@ -52,9 +59,11 @@ function page(result) {
   return HtmlService.createHtmlOutput(html).setTitle('Circle agenda');
 }
 
-// The address of a link that runs action on a meeting in a doc.
+// The address of a link that runs action on a doc (and, for most actions,
+// on one meeting in it).
 function actionUrl(action, docId, meetingId) {
-  return webAppUrl() + '?action=' + action + '&doc=' + docId + '&meeting=' + meetingId;
+  return webAppUrl() + '?action=' + action + '&doc=' + docId +
+    (meetingId ? '&meeting=' + meetingId : '');
 }
 
 function webAppUrl() {
@@ -74,6 +83,10 @@ function tryUpdateTimes() {
 
 function tryAddItem() {
   tryOnPreview(addItem);
+}
+
+function tryAddMeeting() {
+  tryOnPreview(addMeeting);
 }
 
 // Runs an action on the first meeting in the latest preview, and logs what

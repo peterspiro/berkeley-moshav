@@ -5,13 +5,21 @@ Sociocracy For All's "Session Circle Agenda" template (a starting point
 only; the design is expected to diverge from it), with scripts doing the
 arithmetic and the setting up. So far there's the template, built from a
 blank doc by `circle_agendas/build_template.gs`; the web app
-(`circle_agendas/web_app.gs`), whose links in each meeting add an agenda
-item and update the times (`circle_agendas/meetings.gs`); the time
-arithmetic in `circle_agendas/agenda_rules.gs`; and the tests in
+(`circle_agendas/web_app.gs`), whose links add the circle's next meeting
+from its calendar, and, in each meeting, add an agenda item and update the
+times (`circle_agendas/meetings.gs`, with `circle_agendas/circles.gs`
+finding the circle); the time arithmetic in
+`circle_agendas/agenda_rules.gs`; and the tests in
 `circle_agendas/agenda_probe.gs`.
 
-Next: the "+ New meeting" link, which needs the circle's calendar, so it
-can only be tried on a doc in a circle's Drive folder.
+A new meeting is the first event on the circle's calendar after the day of
+the newest meeting in the doc (or after now, if there's none), so adding
+twice adds the next two meetings, and none twice.
+
+Next: making circle docs (by `add_new_group.py`, a backfill for existing
+circles, and handling copies made by hand), filling in About this circle;
+and the template changes still to come. Still to decide: whether the
+template keeps a sample meeting, or starts with none.
 
 ## The template is built from code
 
