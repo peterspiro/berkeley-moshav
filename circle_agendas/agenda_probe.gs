@@ -2,10 +2,11 @@
  * Agenda Probe
  *
  * Tests, run by hand before building the circle agenda web app (see
- * circle-agendas-plan.md), of what Apps Script can do to an agenda doc. They
- * never change the template (TEMPLATE_DOC_ID in doc_helpers.gs): each makes
- * a copy, works on the copy, and writes what it found at the end of the
- * copy, under "Probe report".
+ * circle-agendas-plan.md), of what Apps Script can do to an agenda doc, run
+ * on Sociocracy For All's template (PROBE_SOURCE_DOC_ID), which they only
+ * read: each makes a copy, works on the copy, and writes what it found at
+ * the end of the copy, under "Probe report". Both have been run; their
+ * results are in the plan.
  *
  * runProbe, on the copy:
  *   1. lists the doc's structure: its top-level elements, its tables, and
@@ -41,6 +42,9 @@
  * Setup and what to check by hand: see README.md in this folder.
  */
 
+// Sociocracy For All's public "Session Circle Agenda" doc, which the probes
+// were run on; they only read it.
+const PROBE_SOURCE_DOC_ID = '18sHlQd8IzQlJ-2rEwO9undQSg79-_MCjCnKhmHm81M4';
 const BLANK_MEETING_TAB = 'Blank meeting';
 const TEST_NAMES = ['Alice Example', 'Bob Example', 'Carol Example'];
 
@@ -59,11 +63,11 @@ function runTabProbe() {
 
 // Copies the template, runs each step on the copy, and writes their report.
 function runSteps(name, steps) {
-  const copy = copyTemplate(name + ' ' + new Date().toISOString().slice(0, 16));
+  const copy = copyDoc(PROBE_SOURCE_DOC_ID, name + ' ' + new Date().toISOString().slice(0, 16));
   const docId = copy.getId();
   Logger.log('Working on a copy: ' + copy.getUrl());
 
-  const report = ['Copy of ' + TEMPLATE_DOC_ID + ', made ' + new Date()];
+  const report = ['Copy of ' + PROBE_SOURCE_DOC_ID + ', made ' + new Date()];
   for (const step of steps) {
     report.push('', '== ' + step.name);
     try {
@@ -271,7 +275,8 @@ function copyMeetingFromTab(docId) {
 // ── runTabProbe, step 3: copy from another doc ───────────────────────────────
 
 function copyMeetingFromOtherDoc(docId) {
-  const other = copyTemplate('Agenda tab probe, other doc ' + new Date().toISOString().slice(0, 16));
+  const other = copyDoc(PROBE_SOURCE_DOC_ID,
+    'Agenda tab probe, other doc ' + new Date().toISOString().slice(0, 16));
   const meeting = firstMeetingTable(firstTabBody(DocumentApp.openById(other.getId())));
   if (!meeting) return ['No meeting table in the other doc; skipped.'];
   const doc = DocumentApp.openById(docId);

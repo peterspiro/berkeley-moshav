@@ -4,10 +4,12 @@ This folder will hold the web app behind the circle agenda docs (see
 `../circle-agendas-plan.md`). For now it holds the scripts used while
 designing them:
 
-- `template_edits.gs` — changes to the agenda template, kept as code: each
-  is tried on a copy, then applied to the template
-- `agenda_probe.gs` — tests of what Apps Script can do to an agenda doc,
-  each run on a copy of the template
+- `build_template.gs` — builds the agenda template from a blank doc,
+  entirely from code
+- `agenda_rules.gs` — the agenda's time arithmetic, with no Apps Script
+  calls, tested under Node by `tests/test_circle_agenda_rules.py`
+- `agenda_probe.gs` — tests, already run, of what Apps Script can do to an
+  agenda doc
 - `doc_helpers.gs` — the template's ID (`TEMPLATE_DOC_ID`), and helpers the
   others share
 - `appsscript.json` — the Docs and Drive advanced services and OAuth scopes
@@ -48,49 +50,42 @@ link in the error and run it again. The clasp project asks for them all at
 once, from `appsscript.json`. A pasted project can be deleted once the
 clasp one works.)
 
-## The template
+## Building the template
 
-`TEMPLATE_DOC_ID` in `doc_helpers.gs` is the template's ID. For now it's
-Sociocracy For All's public doc, which the probes can copy but no one here
-can edit. Before the template can be changed, make the community's own
-copy (File → Make a copy, into a folder of the Shared Drive that
-`admin@berkeleymoshav.org` can edit) and put its ID there. Its record of
-applied edits starts empty, so `applyEdits` gives it every edit.
+The template is built from a blank doc by `build_template.gs`, so it
+depends on no other document and can be rebuilt at any time; every change
+to it is a change to that file. Building has two passes: DocumentApp lays
+out the text and tables, writing a token such as `⟦dropdown outcome
+decision⟧` wherever a smart chip or list goes, and then the Docs API creates
+the dropdowns' choices, replaces each token with its chip or list, sets the
+font and pageless format, and merges and pins the meeting table's top rows.
 
-## Changing the template
-
-Each change is a function in `template_edits.gs`, listed in `EDITS` with an
-id. The project's Script Properties record which edits the template has
-had, so each is applied once.
-
-1. **`previewEdits`** copies the template to your My Drive as "Template
-   preview", applies the edits the template hasn't had yet to the copy, and
-   logs the copy's link. Each run moves the previous run's copy to the
-   trash, so there's only ever one; but each is a new doc, with a new link.
-   (A doc's content can't be replaced wholesale by another's, so the same
-   doc can't be reused.)
-2. **`applyEdits`** applies those edits to the template itself. If one goes
-   wrong, File → Version history in the template can restore it.
-3. **`describeTemplate`** logs the template's structure: each element, each
-   table row's text, and its chips. Send it back when an edit needs to know
-   more about the template.
-4. **`checkTemplateAccess`** logs which account the script runs as, and
+1. **`previewTemplate`** builds a new "Template preview" doc in your My
+   Drive and logs its link. Each run moves the previous preview to the
+   trash, so there's only ever one.
+2. **`createTemplate`**, once: builds a new "Circle Agenda Template" doc.
+   Move it to a folder of the Shared Drive that `admin@berkeleymoshav.org`
+   can edit, and set `TEMPLATE_DOC_ID` in `doc_helpers.gs` to its ID (the
+   part of its link between `/d/` and `/edit`).
+3. **`buildTemplate`** empties the template and builds it again in place,
+   so it keeps its ID, link, and sharing. Anything typed into the template
+   by hand is lost; File → Version history can restore an earlier version.
+4. **`describeTemplate`** logs the template's structure: each element, each
+   table row's text, and its chips.
+5. **`checkTemplateAccess`** logs which account the script runs as, and
    whether it can edit the template (and whether the template is locked).
-   Run it if an edit fails with "Action not allowed", which is all
+   Run it if a build fails with "Action not allowed", which is all
    DocumentApp says when a change is refused.
 
-Each edit logs what it did, or that it found nothing to change. If one
-fails, the log says which, and neither it nor the edits after it are
-recorded as applied, so the next run tries them again.
+## The probes (done)
 
-## Running the probes
+The probes in `agenda_probe.gs` were run on copies of Sociocracy For All's
+public template (`PROBE_SOURCE_DOC_ID`), which they only read; their
+results are in the plan. Each copies it to your My Drive, changes only the
+copy, and writes what it found at the end of the copy, under "Probe
+report". What they insert is marked `⟦probe⟧`.
 
-The probes never change the template. Each copies it to your My Drive,
-changes only the copy, and writes what it found at the end of the copy,
-under "Probe report"; the execution log gives the copy's link. What they
-insert is marked `⟦probe⟧`.
-
-### `runProbe` (done 2026-10-31; results in the plan)
+### `runProbe` (run 2026-10-31)
 
 Copies a Topic row and a whole meeting, adds an attendance checklist, and
 tries person and date chips. To check by hand:
@@ -109,7 +104,7 @@ tries person and date chips. To check by hand:
    them, and for you?
 5. **Date chip** at the end of the doc: is it a chip, not plain text?
 
-### `runTabProbe`
+### `runTabProbe` (run 2026-11-01)
 
 Tests where the blank meeting that new meetings are copied from can be
 kept: in a "Blank meeting" tab of each circle's doc, or in one central doc.

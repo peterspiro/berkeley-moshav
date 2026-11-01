@@ -3,9 +3,20 @@
 A Google Doc for each circle holding its meetings' agendas, based loosely on
 Sociocracy For All's "Session Circle Agenda" template (a starting point
 only; the design is expected to diverge from it), with scripts doing the
-arithmetic and the setting up. Nothing is built yet except the tests in
-`circle_agendas/agenda_probe.gs`, and `circle_agendas/template_edits.gs`,
-which makes changes to the template as code (tried on a copy first).
+arithmetic and the setting up. So far there's the template, built from a
+blank doc by `circle_agendas/build_template.gs`, the time arithmetic in
+`circle_agendas/agenda_rules.gs`, and the tests in
+`circle_agendas/agenda_probe.gs`.
+
+## The template is built from code
+
+The template is built from a blank doc entirely by
+`circle_agendas/build_template.gs`, not copied from another doc and edited,
+so it can be rebuilt from scratch at any time and owes nothing to the doc
+it was modelled on. Every change to the template is a change to that file;
+`buildTemplate` rebuilds it in place, keeping its ID and link. Circle docs
+already copied from the template don't change when it's rebuilt; changes
+they need will take their own scripts.
 
 ## What a circle's doc does
 
@@ -34,7 +45,7 @@ which makes changes to the template as code (tried on a copy first).
   address and Drive folder from the group's footer, and its parent and
   sub-circles from the Circle Structure page. The Members and roles table
   keeps its role rows but has no Member rows.
-- The SoFA credit lines are removed.
+- The SoFA credit lines, and its page header and footer, are gone.
 
 ## How it works
 
@@ -62,7 +73,7 @@ Script calls, tested under Node like `group_meetings/event_rules.gs`.
   copy) asks where to put the copy; put it in the circle's folder. The first
   use of one of its links fills in About this circle.
 
-## First step: the probe
+## The probes
 
 `circle_agendas/agenda_probe.gs` tests, on a copy of the template, whether
 copying a row or a whole meeting keeps its dropdown and date chips and its
@@ -85,14 +96,24 @@ Results (run 2026-10-31 on a copy of the SoFA-based doc):
   "Place" in the second, then the agenda rows, ending with "end". The
   meeting's total duration is in the admin block's Duration row (in hours).
 
-So a new meeting will be a copy of a blank meeting, and a new item a copy
-of a blank topic row. Still to test, with `runTabProbe`: whether dropdown
-chips survive a copy from another tab of the doc, and from another doc (a
-dropdown refers to a definition, which may belong to the doc). That decides
-where the blank meeting lives: a "Blank meeting" tab in each circle's doc
-(which would let a circle add its own standing items), or one central
-template doc.
+`runTabProbe` (run 2026-11-01) found:
+- The Docs API can add a tab (`addDocumentTab`), but DocumentApp, opened
+  again in the same run, didn't see it, so the copy into the tab failed.
+- A meeting copied from another doc kept its chips. But that doc was a copy
+  of the same template, so its dropdowns had the same definition IDs as
+  the doc they were copied into; whether chips survive a copy between
+  unrelated docs is still unknown.
+- A doc keeps its dropdowns' lists of choices in `dropdownDefinitions`, and
+  each chip refers to one by ID.
+- Pageless docs hide headers and footers, and show a "some features are
+  hidden" notice while a doc has any.
 
-The SoFA template has a page header (its credit line). Pageless docs hide
-headers and show a notice saying so; deleting the header (switch to Pages
-format, delete it, switch back) removes the notice.
+Since then, the Docs API's reference (its discovery document, at
+https://docs.googleapis.com/$discovery/rest?version=v1) shows it can create
+dropdowns' lists of choices (`createDropdownDefinition`, with IDs of our
+choosing) and the chips (`insertDropdown`), and set a doc to pageless
+(`documentStyle.documentFormat.documentMode`). So nothing in the doc needs
+copying from another doc: new meetings can be built by the same code that
+builds the template's sample meeting, in the circle doc itself, with that
+doc's own dropdowns. Where a circle's own standing agenda items would live
+is still to decide.

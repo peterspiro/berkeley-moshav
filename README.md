@@ -38,9 +38,9 @@ Python scripts:
   account's other calendars, including the shared community calendar.
 
 A fourth, **`circle_agendas`**, will run the circle agenda docs (see
-`circle-agendas-plan.md`); for now it holds the scripts used while
-designing them: changes to the agenda template, and tests of what Apps
-Script can do to an agenda doc.
+`circle-agendas-plan.md`); for now it builds the agenda template, from a
+blank doc, and holds the tests of what Apps Script can do to an agenda doc
+that shaped it.
 
 The repo also keeps, in `archive/`, the one-off scripts that were used to
 migrate the community into Gather (members, households, groups, photos) and
@@ -195,7 +195,7 @@ status line as "calendar (members can view, not edit)".
 | `groups_drive_sync/` | Apps Script project that syncs each Google Group's membership from its Drive item |
 | `calendar_notifications/` | Apps Script project that announces and gatekeeps events on the shared community calendar |
 | `group_meetings/` | Apps Script project that adds Zoom rooms and guests to group calendar events, and warns about overlapping meetings |
-| `circle_agendas/` | Apps Script project for the circle agenda docs (so far, template changes and tests) |
+| `circle_agendas/` | Apps Script project for the circle agenda docs (so far, building the template, and tests) |
 | `util/` | Shared Python modules used by the scripts |
 | `tests/` | Unit tests (`pytest`) |
 | `archive/` | One-off scripts and plans that are no longer in use, kept for reference |
@@ -355,12 +355,15 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
 
 - **`circle_agendas/`** is run by hand from the Apps Script editor while the
   circle agenda docs are designed. See `circle_agendas/README.md`.
-  - **`circle_agendas/template_edits.gs`** holds each change to the agenda
-    template as code: it applies the changes the template hasn't had yet
-    to a copy, for checking, or to the template itself, and records which
-    it has had.
-  - **`circle_agendas/agenda_probe.gs`** holds tests of what Apps Script can
-    do to an agenda doc, each run on a copy of the template: copying agenda
+  - **`circle_agendas/build_template.gs`** builds the agenda template from
+    a blank doc, entirely from code (so it depends on no other document):
+    a preview in a new doc, or the template itself, rebuilt in place.
+  - **`circle_agendas/agenda_rules.gs`** holds the agenda's time arithmetic
+    (each item's start, and the closing round's share of what's left) and
+    the parsing of times and durations, tested under Node.
+  - **`circle_agendas/agenda_probe.gs`** holds tests, already run, of what
+    Apps Script can do to an agenda doc, each on a copy of Sociocracy For
+    All's template: copying agenda
     rows and whole meetings (from the same tab, another tab, or another
     doc), adding an attendance checklist, and inserting person and date
     chips. Each reports which smart chips and checklist ticks survived.
@@ -438,8 +441,8 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
 - `meeting-infrastructure-plan.md`: decisions behind the group calendars,
   Zoom rooms, and `group_meetings`, and the meeting features not built yet
   (community-wide calendars, recording archive, and more)
-- `circle-agendas-plan.md`: design of the circle agenda docs, and the
-  test to run first
+- `circle-agendas-plan.md`: design of the circle agenda docs, and what
+  the tests found
 - `archive/gather-sandbox-plan.md` and `archive/gather-import-plan.md`: plans
   for the local Gather test instance and the member import
 
@@ -449,5 +452,6 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
 python -m pytest
 ```
 
-The tests of `group_meetings/event_rules.gs` run it under Node, and are
+The tests of `group_meetings/event_rules.gs` and
+`circle_agendas/agenda_rules.gs` run them under Node, and are
 skipped if `node` isn't installed.
