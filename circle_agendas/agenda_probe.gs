@@ -24,6 +24,9 @@
  *      checklist, and tries to put a person chip in front of the first;
  *   6. tries to insert a date chip at the end of the doc.
  *
+ * runNewTabProbe tests what giving each meeting a tab of its own would
+ * need; see it below.
+ *
  * runTabProbe tests where the blank meeting that new meetings are copied
  * from can be kept. On the copy, it:
  *   1. adds a "Blank meeting" tab (if the copy has none) and copies the
@@ -367,4 +370,95 @@ function firstMeetingTable(body) {
     }
   }
   return null;
+}
+
+// ── runNewTabProbe ───────────────────────────────────────────────────────────
+
+// Tests what giving each meeting a tab would need: whether DocumentApp can
+// see, and write into, a tab the Docs API has just added in the same run
+// (runTabProbe found it couldn't, once), after waiting or not; and whether
+// a dropdown can be added in that tab (each tab keeps its own dropdowns'
+// choices). Works on a new scratch doc in your My Drive, whose link it logs.
+function runNewTabProbe() {
+  const scratch = DocumentApp.create('Agenda new-tab probe ' + new Date().toISOString().slice(0, 16));
+  const docId = scratch.getId();
+  scratch.getBody().appendParagraph('First tab: the report is below.');
+  scratch.saveAndClose();
+  const lines = [];
+  const step = (name, fn) => {
+    try {
+      lines.push(name + ': ' + fn());
+    } catch (e) {
+      lines.push(name + ': FAILED: ' + e.message);
+    }
+  };
+
+  // The doc open in DocumentApp before the tab is added, as in runTabProbe.
+  const before = DocumentApp.openById(docId);
+  let tabId = null;
+  step('Add a tab with the Docs API', () => {
+    const reply = Docs.Documents.batchUpdate({requests: [
+      {addDocumentTab: {tabProperties: {title: 'Meeting test'}}},
+    ]}, docId);
+    tabId = reply.replies[0].addDocumentTab.tabProperties.tabId;
+    return 'tab ' + tabId;
+  });
+  if (!tabId) return finishNewTabProbe(docId, lines);
+
+  const sees = doc => {
+    const titles = doc.getTabs().map(t => t.getTitle());
+    let byId = 'no';
+    try {
+      byId = doc.getTab(tabId) ? 'yes' : 'no';
+    } catch (e) {
+      byId = 'no (' + e.message + ')';
+    }
+    return 'tabs ' + JSON.stringify(titles) + '; getTab(id): ' + byId;
+  };
+  step('1. The doc opened before the tab was added', () => sees(before));
+  step('2. Opened again at once', () => sees(DocumentApp.openById(docId)));
+  Utilities.sleep(5000);
+  step('3. Opened again after 5 seconds', () => sees(DocumentApp.openById(docId)));
+
+  step('4. Write a paragraph and a table into the tab with DocumentApp', () => {
+    const doc = DocumentApp.openById(docId);
+    const tab = doc.getTab(tabId);
+    if (!tab) return 'tab not visible, so nothing written';
+    const body = tab.asDocumentTab().getBody();
+    body.appendParagraph(PROBE_MARK + ' Written by DocumentApp');
+    body.appendTable([['Time', 'Description'], ['19:30', 'Opening round']]);
+    doc.saveAndClose();
+    return 'written';
+  });
+
+  step('5. Add a dropdown in the tab with the Docs API', () => {
+    const content = Docs.Documents.get(docId, {includeTabsContent: true}).tabs
+      .find(t => t.tabProperties.tabId === tabId).documentTab.body.content;
+    const end = content[content.length - 1].endIndex - 1;
+    const label = '\n' + PROBE_MARK + ' Dropdown: ';
+    Docs.Documents.batchUpdate({requests: [
+      {createDropdownDefinition: {tabId, dropdownDefinition: {
+        dropdownDefinitionId: 'kix.probe',
+        dropdownDefinitionProperties: {title: 'Probe', options: [
+          {optionId: 'dropdownItem.a', displayValue: 'First'},
+          {optionId: 'dropdownItem.b', displayValue: 'Second'},
+        ]},
+      }}},
+      {insertText: {location: {index: end, tabId}, text: label}},
+      {insertDropdown: {location: {index: end + label.length, tabId},
+        dropdownDefinitionId: 'kix.probe'}},
+    ]}, docId);
+    return 'added';
+  });
+
+  step('6. The tab\'s own link', () =>
+    'https://docs.google.com/document/d/' + docId + '/edit?tab=' + tabId);
+  finishNewTabProbe(docId, lines);
+}
+
+function finishNewTabProbe(docId, lines) {
+  writeReport(docId, lines);
+  Logger.log(lines.join('\n'));
+  logLink('Scratch doc (report at the end of its first tab):',
+    'https://docs.google.com/document/d/' + docId + '/edit');
 }

@@ -213,3 +213,14 @@ The report's counts (such as `DATE×1, UNSUPPORTED×4`) are the chips and
 other elements Apps Script found in each place; it calls the dropdown chips
 `UNSUPPORTED`. If a copy's counts differ from its original's, something was
 lost.
+
+### `runNewTabProbe`
+
+Tests what giving each meeting a tab of its own would need, on a new
+scratch doc in your My Drive: it adds a tab with the Docs API, checks
+whether DocumentApp can see it (with the doc opened before the tab was
+added, opened again at once, and after 5 seconds), writes a paragraph and a
+table into it with DocumentApp, and adds a dropdown in it with the Docs
+API. The log, and the end of the scratch doc's first tab, say how each step
+went; check by hand that the "Meeting test" tab shows the paragraph, the
+table, and a working dropdown.
