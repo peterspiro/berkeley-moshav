@@ -329,9 +329,10 @@ function meetingTable(body) {
   const rowCount = MEETING_HEADER_ROWS + items.length + 1;
   const table = newTable(body, rowCount, 4);
 
-  const date = new Date();
-  date.setHours(Math.floor(start / 60), start % 60, 0, 0);
-  writeCell(table.getCell(0, 0), [[[token('date', date.toISOString())]]]);
+  // A date chip without a time is shown in UTC, so it's given noon UTC on
+  // the local date, which is that date everywhere.
+  const today = Utilities.formatDate(new Date(), TIME_ZONE, 'yyyy-MM-dd');
+  writeCell(table.getCell(0, 0), [[[token('date', today + 'T12:00:00Z')]]]);
   table.getCell(0, 0).editAsText().setBold(true).setFontSize(13);
   writeCell(table.getCell(1, 0), [[['Time  ', BOLD], [SAMPLE_START], ['     Place  ', BOLD]]]);
   writeCell(table.getCell(2, 0), [[['Agenda', BOLD]]]);
@@ -516,7 +517,7 @@ function tokenRequest(t) {
   }
   if (kind === 'date') {
     return {insertDate: {location, dateElementProperties: {
-      timestamp: args[0], timeZoneId: TIME_ZONE,
+      timestamp: args[0],
       dateFormat: 'DATE_FORMAT_ISO8601', timeFormat: 'TIME_FORMAT_DISABLED',
     }}};
   }
