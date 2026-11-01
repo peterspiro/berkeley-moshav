@@ -80,15 +80,19 @@ version predates `web_app.gs`: deploy a new version as above.
 
 The links:
 
-- **+ Add item**, in each meeting's "Agenda" row, adds a Topic of 5 minutes
-  before Action Items Recap, and updates the times.
+The links are in a row of their own just above each meeting's Action Items
+Recap, so they stay just below where new items go.
+
+- **+ Add item** adds a Topic of 5 minutes just above the links, and
+  updates the times.
 - **↻ Update times** rewrites each item's start time, the closing round's
   duration (the time left before the end), and the end time, from the
   start time after "Time", the meeting's Duration (hours), and the other
   items' durations. A duration it can't read turns red and counts as 0; a
   closing round with no time left turns red. The page says why.
 
-Each opens a tab that says what it did; the doc shows the change at once.
+Each opens a tab that says what it did, and to close it to return to the
+agenda, which already shows the change.
 For anyone who can edit the doc, clicking a link shows a small box with its
 address, and clicking that opens it (or Ctrl-click, ⌘-click on a Mac, opens
 it directly).

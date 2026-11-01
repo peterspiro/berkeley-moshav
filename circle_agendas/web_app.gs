@@ -32,24 +32,23 @@ function doGet(e) {
   const lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
-    return page(action(p.doc, p.meeting), p.doc);
+    return page(action(p.doc, p.meeting));
   } catch (err) {
-    return page({done: false, title: 'Something went wrong', messages: [err.message]}, p.doc);
+    return page({done: false, title: 'Something went wrong', messages: [err.message]});
   } finally {
     lock.releaseLock();
   }
 }
 
-function page(result, docId) {
+function page(result) {
   const esc = s => String(s).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'})[c]);
-  const back = docId
-    ? '<p><a target="_top" href="https://docs.google.com/document/d/' + esc(docId) + '/edit">' +
-      'Open the agenda</a>, or close this tab: the agenda already shows the change.</p>'
-    : '';
+  const close = '<p style="font-size: 1.6em; font-weight: bold; margin: 1em 0;">' +
+    'Close this tab to return to the agenda.</p>';
   const html = '<div style="font-family: Arial, sans-serif; max-width: 40em; margin: 2em auto;">' +
     '<h2>' + (result.done ? '✓ ' : '') + esc(result.title) + '</h2>' +
+    (result.done ? close : '') +
     result.messages.map(m => '<p>' + esc(m) + '</p>').join('') +
-    (result.done ? back : '') + '</div>';
+    (result.done ? '<p>The agenda already shows the change.</p>' : close) + '</div>';
   return HtmlService.createHtmlOutput(html).setTitle('Circle agenda');
 }
 

@@ -4,9 +4,10 @@
  * What the web app (web_app.gs) does to a meeting in an agenda doc: update
  * its times, and add an agenda item. A meeting is one table (see
  * meetingTable in build_template.gs): MEETING_HEADER_ROWS rows of date,
- * time and place, and "Agenda" with the meeting's links; then one row per
- * item, with its start time, its duration in minutes, its content, and its
- * type; then the closing round; then the end time.
+ * time and place, and "Agenda"; then one row per item, with its start time,
+ * its duration in minutes, its content, and its type, and among them (just
+ * above Action Items Recap) the row of the meeting's links; then the
+ * closing round; then the end time.
  *
  * A meeting is found by its ID, which is in its links' addresses, so the
  * links keep working wherever the meeting moves in the doc.
@@ -28,19 +29,20 @@ function updateTimes(docId, meetingId) {
   return {done: true, title: 'Times updated', messages};
 }
 
-// Adds a topic, with a duration of NEW_ITEM_MINUTES, before Action Items
-// Recap (or, if the meeting has none, before the closing round), and
-// updates the times.
+// Adds a topic, with a duration of NEW_ITEM_MINUTES, just above the links
+// (or, without them, Action Items Recap, or the closing round), so the links
+// stay just below the new item, and updates the times.
 function addItem(docId, meetingId) {
   const doc = DocumentApp.openById(docId);
   const table = findMeeting(firstTabBody(doc), meetingId);
   if (!table) return notFound();
 
   const closing = table.getNumRows() - 2;
-  let at = closing;
-  for (let r = MEETING_HEADER_ROWS; r < closing; r++) {
+  let at = linksRowIndex(table);
+  for (let r = MEETING_HEADER_ROWS; r < closing && at < 0; r++) {
     if (table.getCell(r, 2).getText().trim().startsWith('Action Items Recap')) at = r;
   }
+  if (at < 0) at = closing;
   const row = table.insertTableRow(at);
   for (let c = 0; c < 4; c++) row.appendTableCell();
   writeCell(row.getCell(0), [[]]);
@@ -57,8 +59,7 @@ function addItem(docId, meetingId) {
 
 function notFound() {
   return {done: false, title: 'Meeting not found', messages: [
-    'This meeting isn\'t in the doc any more, or its "Agenda" row (which holds its links) ' +
-    'was changed.']};
+    'This meeting isn\'t in the doc any more, or the row holding its links was changed.']};
 }
 
 // ── Times ────────────────────────────────────────────────────────────────────
@@ -85,8 +86,11 @@ function recalculate(table) {
 
   const last = table.getNumRows() - 1;
   const closing = last - 1;
+  const links = linksRowIndex(table);
+  const itemRows = [];
+  for (let r = MEETING_HEADER_ROWS; r < closing; r++) if (r !== links) itemRows.push(r);
   const durations = [];
-  for (let r = MEETING_HEADER_ROWS; r < closing; r++) {
+  for (const r of itemRows) {
     const cell = table.getCell(r, 1);
     const text = cell.getText().trim();
     const minutes = parseMinutes(text);
@@ -99,7 +103,7 @@ function recalculate(table) {
   }
 
   const times = scheduleTimes(start, durations, total);
-  times.starts.forEach((t, i) => writeSmall(table.getCell(MEETING_HEADER_ROWS + i, 0), formatTime(t)));
+  times.starts.forEach((t, i) => writeSmall(table.getCell(itemRows[i], 0), formatTime(t)));
   writeSmall(table.getCell(closing, 0), formatTime(times.closingStart));
   const overrun = times.closingMinutes < 0;
   writeSmall(table.getCell(closing, 1), String(times.closingMinutes),
@@ -153,11 +157,23 @@ function findMeeting(body, meetingId) {
   return null;
 }
 
-// The ID in the links in a meeting table's "Agenda" row, or null if the
-// table isn't a meeting.
+// The ID in a meeting table's links, or null if the table isn't a meeting.
 function meetingIdOf(table) {
-  if (table.getNumRows() <= MEETING_HEADER_ROWS) return null;
-  const text = table.getCell(MEETING_HEADER_ROWS - 1, 0).editAsText();
+  const r = linksRowIndex(table);
+  return r < 0 ? null : linkedMeetingId(table.getCell(r, 2));
+}
+
+// The index of the row holding a meeting's links, or -1.
+function linksRowIndex(table) {
+  for (let r = MEETING_HEADER_ROWS; r < table.getNumRows(); r++) {
+    if (table.getRow(r).getNumCells() > 2 && linkedMeetingId(table.getCell(r, 2))) return r;
+  }
+  return -1;
+}
+
+// The meeting ID in a link in a cell, or null.
+function linkedMeetingId(cell) {
+  const text = cell.editAsText();
   for (const i of text.getTextAttributeIndices()) {
     const id = meetingIdFromUrl(text.getLinkUrl(i));
     if (id) return id;

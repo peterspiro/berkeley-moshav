@@ -363,7 +363,7 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
   - **`circle_agendas/meetings.gs`** holds those actions: updating a
     meeting's times (each item's start, the closing round's share of what's
     left, and the end, flagging durations it can't read), and adding an
-    agenda item before Action Items Recap.
+    agenda item just above the links, which sit above Action Items Recap.
   - **`circle_agendas/build_template.gs`** builds the agenda template from
     a blank doc, entirely from code (so it depends on no other document):
     a preview in a new doc, or the template itself, rebuilt in place.

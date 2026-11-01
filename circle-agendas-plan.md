@@ -61,8 +61,9 @@ with personal Gmail accounts can use it, and there's one copy of the code
 to fix. The doc's links call the web app with the doc's ID (and the
 meeting's, for a new item); each opens a tab that says when it's done.
 
-A meeting's ID is in its links' addresses (in its "Agenda" row), which is
-how the web app finds its table wherever it is in the doc.
+A meeting's ID is in its links' addresses (in their row, just above Action
+Items Recap), which is how the web app finds its table wherever it is in
+the doc.
 
 A link names its doc by ID, so a doc copied by hand from the template
 (File → Make a copy, or a `/copy` link) points at the template until its

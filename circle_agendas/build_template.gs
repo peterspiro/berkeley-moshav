@@ -93,9 +93,8 @@ const CLOSING_ROUND = {title: 'Closing Round / Check-out',
 // merged across the table.
 const MEETING_HEADER_ROWS = 3;
 // Of those, the date and the time and place stay in view while scrolling
-// through the meeting. The "Agenda" row, with the links, isn't pinned:
-// Docs shows pinned rows, while they stick, as a copy that can't be
-// clicked into, so links there often can't be followed.
+// through the meeting. (Docs shows pinned rows, while they stick, as a copy
+// that can't be clicked into, so links there often can't be followed.)
 const MEETING_PINNED_ROWS = 2;
 
 // ── Entry points ─────────────────────────────────────────────────────────────
@@ -342,10 +341,11 @@ function backlogTable(body) {
   table.setColumnWidth(5, 65);
 }
 
-// One meeting: date; time and place; "Agenda", with the links that add an
-// item and update the times (which also identify the meeting; see
-// meetings.gs); one row per item, each with its start time and duration;
-// the closing round, which gets the time left; and the end time.
+// One meeting: date; time and place; "Agenda"; one row per item, each with
+// its start time and duration; just above Action Items Recap (where new
+// items go), a row of links that add an item and update the times (which
+// also identify the meeting; see meetings.gs); the closing round, which
+// gets the time left; and the end time.
 function meetingTable(body, docId) {
   const start = parseTime(SAMPLE_START);
   const total = parseHours(SAMPLE_HOURS);
@@ -354,6 +354,8 @@ function meetingTable(body, docId) {
   const items = SAMPLE_AGENDA.map((item, i) => ({...item, start: times.starts[i]}));
   items.push({...CLOSING_ROUND, start: times.closingStart, minutes: times.closingMinutes,
     computed: true});
+  const recap = items.findIndex(item => item.title === 'Action Items Recap');
+  items.splice(recap < 0 ? items.length - 1 : recap, 0, {links: true});
 
   const rowCount = MEETING_HEADER_ROWS + items.length + 1;
   const table = newTable(body, rowCount, 4);
@@ -364,16 +366,18 @@ function meetingTable(body, docId) {
   writeCell(table.getCell(0, 0), [[[token('date', today + 'T12:00:00Z')]]]);
   table.getCell(0, 0).editAsText().setBold(true).setFontSize(13);
   writeCell(table.getCell(1, 0), [[['Time  ', BOLD], [SAMPLE_START], ['     Place  ', BOLD]]]);
-  const meetingId = newMeetingId();
-  writeCell(table.getCell(2, 0), [[['Agenda', BOLD], ['      '],
-    ['+ Add item', {[A.LINK_URL]: actionUrl('item', docId, meetingId)}], ['      '],
-    ['↻ Update times', {[A.LINK_URL]: actionUrl('times', docId, meetingId)}]]]);
+  writeCell(table.getCell(2, 0), [[['Agenda', BOLD]]]);
   for (let r = 0; r < MEETING_HEADER_ROWS; r++) {
     for (let c = 1; c < 4; c++) writeCell(table.getCell(r, c), [[]]);
   }
 
+  const meetingId = newMeetingId();
   items.forEach((item, i) => {
     const r = MEETING_HEADER_ROWS + i;
+    if (item.links) {
+      linksRow(table.getRow(r), docId, meetingId);
+      return;
+    }
     writeCell(table.getCell(r, 0), [[[formatTime(item.start), SMALL]]]);
     writeCell(table.getCell(r, 1), [[[String(item.minutes),
       item.computed ? {...SMALL, [A.ITALIC]: true} : SMALL]]]);
@@ -402,6 +406,16 @@ function meetingTable(body, docId) {
   table.setColumnWidth(0, 45);
   table.setColumnWidth(1, 35);
   table.setColumnWidth(3, 85);
+}
+
+// The row of links that add an item and update the times.
+function linksRow(row, docId, meetingId) {
+  writeCell(row.getCell(0), [[]]);
+  writeCell(row.getCell(1), [[]]);
+  writeCell(row.getCell(2), [[
+    ['+ Add item', {[A.LINK_URL]: actionUrl('item', docId, meetingId)}], ['        '],
+    ['↻ Update times', {[A.LINK_URL]: actionUrl('times', docId, meetingId)}]]]);
+  writeCell(row.getCell(3), [[]]);
 }
 
 // The meeting's admin details, as a table inside its agenda row.
