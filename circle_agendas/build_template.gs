@@ -130,6 +130,24 @@ function describeTemplate() {
   Logger.log(describeStructure(TEMPLATE_DOC_ID).join('\n'));
 }
 
+function describePreview() {
+  const docId = PropertiesService.getScriptProperties().getProperty('previewDocId');
+  if (!docId) throw new Error('No preview; run previewTemplate first.');
+  Logger.log(describeStructure(docId).join('\n'));
+  const links = [];
+  const body = firstTabBody(DocumentApp.openById(docId));
+  let search = body.findElement(DocumentApp.ElementType.TEXT);
+  while (search) {
+    const text = search.getElement().asText();
+    for (const i of text.getTextAttributeIndices()) {
+      const url = text.getLinkUrl(i);
+      if (url) links.push('"' + snippet(text.getText().slice(i), 20) + '" → ' + url);
+    }
+    search = body.findElement(DocumentApp.ElementType.TEXT, search);
+  }
+  Logger.log('Links:\n' + (links.join('\n') || '(none)'));
+}
+
 // DocumentApp says only "Action not allowed" when it can't save a change;
 // this shows whether the running account can edit the template at all.
 function checkTemplateAccess() {

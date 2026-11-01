@@ -117,7 +117,8 @@ Building needs `WEB_APP_URL` (see above), for the meeting's links.
    so it keeps its ID, link, and sharing. Anything typed into the template
    by hand is lost; File → Version history can restore an earlier version.
 4. **`describeTemplate`** logs the template's structure: each element, each
-   table row's text, and its chips.
+   table row's text, and its chips. **`describePreview`** logs the same for
+   the latest preview, and every link in it.
 5. **`checkTemplateAccess`** logs which account the script runs as, and
    whether it can edit the template (and whether the template is locked).
    Run it if a build fails with "Action not allowed", which is all
