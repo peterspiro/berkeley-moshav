@@ -48,6 +48,15 @@ link in the error and run it again. The clasp project asks for them all at
 once, from `appsscript.json`. A pasted project can be deleted once the
 clasp one works.)
 
+## The template
+
+`TEMPLATE_DOC_ID` in `doc_helpers.gs` is the template's ID. For now it's
+Sociocracy For All's public doc, which the probes can copy but no one here
+can edit. Before the template can be changed, make the community's own
+copy (File → Make a copy, into a folder of the Shared Drive that
+`admin@berkeleymoshav.org` can edit) and put its ID there. Its record of
+applied edits starts empty, so `applyEdits` gives it every edit.
+
 ## Changing the template
 
 Each change is a function in `template_edits.gs`, listed in `EDITS` with an
@@ -55,8 +64,11 @@ id. The project's Script Properties record which edits the template has
 had, so each is applied once.
 
 1. **`previewEdits`** copies the template to your My Drive as "Template
-   preview" and the date, applies the edits the template hasn't had yet to
-   the copy, and logs the copy's link. Check it, then delete it.
+   preview", applies the edits the template hasn't had yet to the copy, and
+   logs the copy's link. Each run moves the previous run's copy to the
+   trash, so there's only ever one; but each is a new doc, with a new link.
+   (A doc's content can't be replaced wholesale by another's, so the same
+   doc can't be reused.)
 2. **`applyEdits`** applies those edits to the template itself. If one goes
    wrong, File → Version history in the template can restore it.
 3. **`describeTemplate`** logs the template's structure: each element, each

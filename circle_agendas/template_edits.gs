@@ -12,7 +12,8 @@
  * which ones the template has had. To add one, append it to EDITS, push,
  * and run:
  *   - previewEdits: copies the template, applies the edits it hasn't had to
- *     the copy, and logs the copy's link, for checking;
+ *     the copy, and logs the copy's link, for checking (each run moves the
+ *     previous run's copy to the trash);
  *   - applyEdits: applies them to the template itself;
  *   - describeTemplate: logs the template's structure, to send back when
  *     an edit needs to know more about it;
@@ -33,8 +34,17 @@ const EDITS = [
 function previewEdits() {
   const pending = pendingEdits();
   if (!pending.length) return Logger.log('The template has had every edit; nothing to preview.');
-  const copy = DriveApp.getFileById(TEMPLATE_DOC_ID)
-    .makeCopy('Template preview ' + new Date().toISOString().slice(0, 16));
+  const props = PropertiesService.getScriptProperties();
+  const previous = props.getProperty('previewDocId');
+  if (previous) {
+    try {
+      DriveApp.getFileById(previous).setTrashed(true);
+    } catch (e) {
+      // Already deleted.
+    }
+  }
+  const copy = copyTemplate('Template preview');
+  props.setProperty('previewDocId', copy.getId());
   applyTo(copy.getId(), pending);
   Logger.log('Preview: ' + copy.getUrl());
 }

@@ -9,10 +9,18 @@
  */
 
 // The circle agenda template, which template_edits.gs changes and the
-// probes copy.
+// probes copy. For now it's Sociocracy For All's public "Session Circle
+// Agenda" doc, which can only be read: replace it with the ID of the
+// community's own copy, which admin@berkeleymoshav.org can edit.
 const TEMPLATE_DOC_ID = '18sHlQd8IzQlJ-2rEwO9undQSg79-_MCjCnKhmHm81M4';
 // Marks what the probes insert.
 const PROBE_MARK = '⟦probe⟧';
+
+// Copies the template to the running account's My Drive (not beside the
+// template, where everyone who can see its folder would see the copy).
+function copyTemplate(name) {
+  return DriveApp.getFileById(TEMPLATE_DOC_ID).makeCopy(name, DriveApp.getRootFolder());
+}
 
 // ── Describing a doc ─────────────────────────────────────────────────────────
 

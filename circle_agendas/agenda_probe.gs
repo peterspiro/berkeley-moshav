@@ -59,8 +59,7 @@ function runTabProbe() {
 
 // Copies the template, runs each step on the copy, and writes their report.
 function runSteps(name, steps) {
-  const copy = DriveApp.getFileById(TEMPLATE_DOC_ID)
-    .makeCopy(name + ' ' + new Date().toISOString().slice(0, 16));
+  const copy = copyTemplate(name + ' ' + new Date().toISOString().slice(0, 16));
   const docId = copy.getId();
   Logger.log('Working on a copy: ' + copy.getUrl());
 
@@ -272,8 +271,7 @@ function copyMeetingFromTab(docId) {
 // ── runTabProbe, step 3: copy from another doc ───────────────────────────────
 
 function copyMeetingFromOtherDoc(docId) {
-  const other = DriveApp.getFileById(TEMPLATE_DOC_ID)
-    .makeCopy('Agenda tab probe, other doc ' + new Date().toISOString().slice(0, 16));
+  const other = copyTemplate('Agenda tab probe, other doc ' + new Date().toISOString().slice(0, 16));
   const meeting = firstMeetingTable(firstTabBody(DocumentApp.openById(other.getId())));
   if (!meeting) return ['No meeting table in the other doc; skipped.'];
   const doc = DocumentApp.openById(docId);
