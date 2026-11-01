@@ -369,8 +369,3 @@ function firstMeetingTable(body) {
   }
   return null;
 }
-
-// Every tab in a Docs API document, child tabs included.
-function allApiTabs(tabs) {
-  return (tabs || []).flatMap(tab => [tab, ...allApiTabs(tab.childTabs)]);
-}

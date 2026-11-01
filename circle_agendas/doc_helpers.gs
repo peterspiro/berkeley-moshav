@@ -155,3 +155,8 @@ function snippet(text, n) {
   const flat = text.replace(/\s+/g, ' ').trim();
   return flat.length > n ? flat.slice(0, n - 1) + '…' : flat;
 }
+
+// Every tab in a Docs API document, child tabs included.
+function allApiTabs(tabs) {
+  return (tabs || []).flatMap(tab => [tab, ...allApiTabs(tab.childTabs)]);
+}

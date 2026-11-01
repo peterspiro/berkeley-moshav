@@ -10,7 +10,7 @@ designing them:
   each run on a copy of the template
 - `doc_helpers.gs` — the template's ID (`TEMPLATE_DOC_ID`), and helpers the
   others share
-- `appsscript.json` — the Docs advanced service and OAuth scopes
+- `appsscript.json` — the Docs and Drive advanced services and OAuth scopes
 
 All of them are one Apps Script project, so they share their functions and
 constants.
@@ -34,7 +34,10 @@ Commit the `.clasp.json` that `clasp create` writes, so later pushes go to
 the same project. After any change here, `clasp push` again (and reload the
 editor if it's open). In the editor, choose a function in the menu at the
 top and click **Run**; its output is in the execution log below. The first
-run asks for access to Docs and Drive.
+run asks for access to Docs and Drive. Google's consent screen lets you
+choose which of them to allow: tick **Select all**. If you don't, a run
+stops with "You do not have permission to call …"; click the link in the
+error, allow the rest, and run it again.
 
 (The first probe was run by pasting `agenda_probe.gs` into a project made
 at https://script.google.com instead, with the Google Docs API added under
@@ -59,8 +62,14 @@ had, so each is applied once.
 3. **`describeTemplate`** logs the template's structure: each element, each
    table row's text, and its chips. Send it back when an edit needs to know
    more about the template.
+4. **`checkTemplateAccess`** logs which account the script runs as, and
+   whether it can edit the template (and whether the template is locked).
+   Run it if an edit fails with "Action not allowed", which is all
+   DocumentApp says when a change is refused.
 
-Each edit logs what it did, or that it found nothing to change.
+Each edit logs what it did, or that it found nothing to change. If one
+fails, the log says which, and neither it nor the edits after it are
+recorded as applied, so the next run tries them again.
 
 ## Running the probes
 
