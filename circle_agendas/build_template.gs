@@ -19,14 +19,13 @@
  * DocumentApp, writing a token like ⟦dropdown outcome decision⟧ wherever a
  * smart chip or list goes. The second, with the Docs API, which DocumentApp
  * can't do, creates the dropdowns' lists of choices, replaces each token
- * with its chip or list, sets the font and pageless format, and merges and
+ * with its chip or list, sets the pageless format, and merges and
  * pins the meeting table's top rows.
  *
  * Setup: see README.md in this folder.
  */
 
 const TIME_ZONE = 'America/Los_Angeles';
-const FONT = 'Montserrat';
 
 const COLOR = {
   title: '#4a7bc8',
@@ -415,8 +414,9 @@ function writeCell(cell, paragraphs) {
 
 function writeRuns(paragraph, runs) {
   const text = runs.map(run => run[0]).join('');
-  paragraph.setText(text);
+  // Paragraphs here start empty, and setText('') is refused.
   if (!text) return;
+  paragraph.setText(text);
   const edit = paragraph.editAsText();
   let at = 0;
   for (const [t, attrs] of runs) {
@@ -462,14 +462,10 @@ function finishWithApi(docId) {
     }},
   ]}, docId);
 
-  // The font everywhere, then each token replaced, last first so the
-  // earlier ones' positions don't move.
+  // Each token replaced, last first so the earlier ones' positions don't
+  // move.
   let content = Docs.Documents.get(docId).body.content;
-  const requests = [{updateTextStyle: {
-    range: {startIndex: 1, endIndex: content[content.length - 1].endIndex - 1},
-    textStyle: {weightedFontFamily: {fontFamily: FONT}},
-    fields: 'weightedFontFamily',
-  }}];
+  const requests = [];
   for (const t of findTokens(content)) {
     requests.push({deleteContentRange: {range: {startIndex: t.start, endIndex: t.end}}});
     requests.push(tokenRequest(t));

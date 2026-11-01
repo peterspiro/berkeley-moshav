@@ -58,7 +58,7 @@ to it is a change to that file. Building has two passes: DocumentApp lays
 out the text and tables, writing a token such as `⟦dropdown outcome
 decision⟧` wherever a smart chip or list goes, and then the Docs API creates
 the dropdowns' choices, replaces each token with its chip or list, sets the
-font and pageless format, and merges and pins the meeting table's top rows.
+pageless format, and merges and pins the meeting table's top rows.
 
 1. **`previewTemplate`** builds a new "Template preview" doc in your My
    Drive and logs its link. Each run moves the previous preview to the
