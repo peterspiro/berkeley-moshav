@@ -14,12 +14,23 @@ const DOMAIN = 'berkeleymoshav.org';
 const CIRCLES_CACHE_KEY = 'circles';
 const CIRCLES_CACHE_SECONDS = 6 * 60 * 60;
 
-// The circle whose Drive item holds the doc: {email, name, driveItemId,
-// calendarId, zoomUrl}, or null.
+// The circle whose Drive item holds the doc most closely: {email, name,
+// driveItemId, calendarId, zoomUrl}, or null. Nearest first matters: a doc
+// in a circle's folder is also in the shared drive that holds it, which an
+// everybody group (such as Full Community) may be linked to.
 function circleForDoc(docId) {
   const ids = driveAncestors(docId);
-  const find = circles => circles.find(c => ids.includes(c.driveItemId)) || null;
-  return find(loadCircles()) || find(refreshCircles());
+  const find = circles => {
+    for (const id of ids) {
+      const circle = circles.find(c => c.driveItemId === id);
+      if (circle) return circle;
+    }
+    return null;
+  };
+  const cached = find(loadCircles());
+  // Matching only the outermost item (such as the shared drive) may mean a
+  // circle newer than the cache owns a nearer folder, so look again.
+  return cached && cached.driveItemId !== ids[ids.length - 1] ? cached : find(refreshCircles());
 }
 
 // The IDs of the folders holding a file, nearest first, and of its shared
