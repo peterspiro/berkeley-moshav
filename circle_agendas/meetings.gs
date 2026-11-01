@@ -46,7 +46,7 @@ function addItem(docId, meetingId) {
   const row = table.insertTableRow(at);
   for (let c = 0; c < 4; c++) row.appendTableCell();
   writeCell(row.getCell(0), [[]]);
-  writeCell(row.getCell(1), [[[String(NEW_ITEM_MINUTES), SMALL]]]);
+  writeCell(row.getCell(1), [[[String(NEW_ITEM_MINUTES), MUTED]]]);
   writeCell(row.getCell(2), [[['Topic', BOLD]], [[token('bullet')]]]);
   writeCell(row.getCell(3), [[[token('dropdown', 'outcome', 'decision')]]]);
   alignCell(row.getCell(3), DocumentApp.HorizontalAlignment.RIGHT);
@@ -103,12 +103,12 @@ function recalculate(table) {
   }
 
   const times = scheduleTimes(start, durations, total);
-  times.starts.forEach((t, i) => writeSmall(table.getCell(itemRows[i], 0), formatTime(t)));
-  writeSmall(table.getCell(closing, 0), formatTime(times.closingStart));
+  times.starts.forEach((t, i) => writeMuted(table.getCell(itemRows[i], 0), formatTime(t)));
+  writeMuted(table.getCell(closing, 0), formatTime(times.closingStart));
   const overrun = times.closingMinutes < 0;
-  writeSmall(table.getCell(closing, 1), String(times.closingMinutes),
+  writeMuted(table.getCell(closing, 1), String(times.closingMinutes),
     {[A.ITALIC]: true, [A.FOREGROUND_COLOR]: overrun ? PROBLEM_COLOR : COLOR.muted});
-  writeSmall(table.getCell(last, 0), formatTime(times.end));
+  writeMuted(table.getCell(last, 0), formatTime(times.end));
   if (overrun) {
     messages.push('The items before the closing round run ' + -times.closingMinutes +
       ' minutes past the end of the meeting, so its duration is negative.');
@@ -116,8 +116,8 @@ function recalculate(table) {
   return messages;
 }
 
-function writeSmall(cell, text, extra) {
-  writeCell(cell, [[[text, {...SMALL, ...extra}]]]);
+function writeMuted(cell, text, extra) {
+  writeCell(cell, [[[text, {...MUTED, ...extra}]]]);
 }
 
 // The cell holding the meeting's length, beside "Duration" in the admin

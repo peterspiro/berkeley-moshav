@@ -205,7 +205,9 @@ function clearDoc(docId) {
 
 const A = DocumentApp.Attribute;
 const BOLD = {[A.BOLD]: true};
-const SMALL = {[A.FONT_SIZE]: 8, [A.FOREGROUND_COLOR]: COLOR.muted};
+// Table text is all Docs' default size; secondary text is grey.
+const MUTED = {[A.FOREGROUND_COLOR]: COLOR.muted};
+const SMALL = {...MUTED, [A.FONT_SIZE]: 8};
 const HINT = {[A.FOREGROUND_COLOR]: COLOR.hint};
 
 function layOut(body, docId) {
@@ -260,7 +262,7 @@ function aboutTable(body) {
   const table = newTable(body, rows.length, 2);
   rows.forEach(([label, value], r) => {
     const labelCell = table.getCell(r, 0);
-    writeCell(labelCell, [[[label[0], BOLD]], ...(label[1] ? [[[label[1], SMALL]]] : [])]);
+    writeCell(labelCell, [[[label[0], BOLD]], ...(label[1] ? [[[label[1], MUTED]]] : [])]);
     alignCell(labelCell, DocumentApp.HorizontalAlignment.RIGHT);
     labelCell.setBackgroundColor(COLOR.aboutLabel);
     writeCell(table.getCell(r, 1), [value]);
@@ -271,8 +273,8 @@ function aboutTable(body) {
 
 function rolesTable(body) {
   const header = label => [[[label, BOLD]], [['Name, surname, email address', BOLD]],
-    [['Term', BOLD], ['\nyyyy-mm-dd', SMALL]]];
-  const role = (name, what) => [[[name, BOLD], [' (' + what + ')', SMALL]], [], []];
+    [['Term', BOLD], ['\nyyyy-mm-dd', MUTED]]];
+  const role = (name, what) => [[[name, BOLD], [' (' + what + ')', MUTED]], [], []];
   const rows = [
     header('Circle Roles'),
     role('Leader', 'supports circle operations'),
@@ -297,10 +299,10 @@ function rolesTable(body) {
 
 function policiesTable(body) {
   const headers = [
-    [['Policy Title', BOLD], ['\nwith link to policy', SMALL]],
+    [['Policy Title', BOLD], ['\nwith link to policy', MUTED]],
     [['Brief Description', BOLD]],
-    [['Holder', BOLD], ['\ncircle or role', SMALL]],
-    [['Term', BOLD], ['\nmm/yyyy', SMALL]],
+    [['Holder', BOLD], ['\ncircle or role', MUTED]],
+    [['Term', BOLD], ['\nmm/yyyy', MUTED]],
   ];
   const table = newTable(body, 3, headers.length);
   for (let r = 0; r < 3; r++) {
@@ -364,7 +366,7 @@ function meetingTable(body, docId) {
   // the local date, which is that date everywhere.
   const today = Utilities.formatDate(new Date(), TIME_ZONE, 'yyyy-MM-dd');
   writeCell(table.getCell(0, 0), [[[token('date', today + 'T12:00:00Z')]]]);
-  table.getCell(0, 0).editAsText().setBold(true).setFontSize(13);
+  table.getCell(0, 0).editAsText().setBold(true);
   writeCell(table.getCell(1, 0), [[['Time  ', BOLD], [SAMPLE_START], ['     Place  ', BOLD]]]);
   writeCell(table.getCell(2, 0), [[['Agenda', BOLD]]]);
   for (let r = 0; r < MEETING_HEADER_ROWS; r++) {
@@ -378,9 +380,9 @@ function meetingTable(body, docId) {
       linksRow(table.getRow(r), docId, meetingId);
       return;
     }
-    writeCell(table.getCell(r, 0), [[[formatTime(item.start), SMALL]]]);
+    writeCell(table.getCell(r, 0), [[[formatTime(item.start), MUTED]]]);
     writeCell(table.getCell(r, 1), [[[String(item.minutes),
-      item.computed ? {...SMALL, [A.ITALIC]: true} : SMALL]]]);
+      item.computed ? {...MUTED, [A.ITALIC]: true} : MUTED]]]);
     const content = table.getCell(r, 2);
     if (item.admin) {
       adminBlock(content);
@@ -391,14 +393,14 @@ function meetingTable(body, docId) {
     }
     const type = table.getCell(r, 3);
     if (item.outcome) writeCell(type, [[[token('dropdown', 'outcome', item.outcome)]]]);
-    else writeCell(type, [item.type ? [[item.type, {...SMALL, [A.BOLD]: true}]] : []]);
+    else writeCell(type, [item.type ? [[item.type, {...MUTED, [A.BOLD]: true}]] : []]);
     alignCell(type, DocumentApp.HorizontalAlignment.RIGHT);
     shadeRow(table, r, item.kind);
   });
 
   const last = rowCount - 1;
-  writeCell(table.getCell(last, 0), [[[formatTime(times.end), SMALL]]]);
-  writeCell(table.getCell(last, 1), [[['end', {...SMALL, [A.ITALIC]: true}]]]);
+  writeCell(table.getCell(last, 0), [[[formatTime(times.end), MUTED]]]);
+  writeCell(table.getCell(last, 1), [[['end', {...MUTED, [A.ITALIC]: true}]]]);
   writeCell(table.getCell(last, 2), [[]]);
   writeCell(table.getCell(last, 3), [[]]);
   shadeRow(table, last, 'round');
