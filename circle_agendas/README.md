@@ -87,19 +87,27 @@ version predates `web_app.gs`: deploy a new version as above.
 
 The links:
 
-- **+ New meeting**, just under the MEETINGS heading, adds the circle's next
-  meeting above the others: the first timed event on the circle's calendar
+- **+ New meeting**, under the MEETINGS heading in the first tab, adds the
+  circle's next meeting in a tab of its own, titled with its date, just
+  after the first tab (so the newest is first): the first timed event on
+  the circle's calendar
   after the day of the newest meeting in the doc (or after now, if there's
   none). It refuses while the newest meeting hasn't started yet. Its date,
   start time, and length come from the event; Place links the circle's
   Zoom room; Attendance lists the circle's members, unticked, with space
   for guests below; each item's Presenter is a dropdown of the members;
-  Minutes links the previous meeting; Next meeting is the event after; and
+  Minutes links the previous meeting's tab; Next meeting is the event after; and
   the previous meeting's Action Items Recap is copied into its Action Items
   Accountability. The meetings before it lose their links, so they're no
   longer changed. The circle is the Google Group whose footer links the
   Drive folder (or shared drive) the doc is in, so this works only for a
   doc in a circle's folder; elsewhere the page says so.
+
+  It takes two runs: Apps Script (DocumentApp) doesn't see a tab the Docs
+  API added in the same run. The link's run adds the tab and returns a page
+  saying it's adding the meeting; the page's script then runs the second
+  step, which builds the meeting in the tab, and shows how it went. If the
+  second step fails, the page says so, and the empty tab can be deleted.
 
 Each meeting's own links are in a row just above its Action Items Recap,
 so they stay just below where new items go.
@@ -121,10 +129,11 @@ A link's address names the doc by its ID, so a doc copied by hand (File →
 Make a copy) still points at the doc it was copied from; the plan has how
 that's to be handled.
 
-To try the actions without the web app, run **`tryUpdateTimes`**,
-**`tryAddItem`**, or **`tryAddMeeting`** in the editor: each runs on the
-latest preview (the first two on its first meeting) and logs what it
-returned. For a new meeting, the preview must be in a circle's folder.
+To try the actions without the web app, run **`tryUpdateTimes`** or
+**`tryAddItem`** (on the newest meeting of the latest preview), or
+**`tryAddMeeting`** and then **`tryFinishMeeting`** (the two runs of a new
+meeting), in the editor; each logs what it returned. For a new meeting,
+the preview must be in a circle's folder.
 
 ## Building the template
 
@@ -134,9 +143,11 @@ to it is a change to that file. Building has two passes: DocumentApp lays
 out the text and tables, writing a token such as `⟦dropdown outcome
 decision⟧` wherever a smart chip or list goes, and then the Docs API creates
 the dropdowns' choices, replaces each token with its chip or list, sets the
-pageless format, and merges and pins the meeting table's top rows.
+pageless format, and names the first tab "Circle". The template has no
+meetings; each is added, in a tab of its own, by "+ New meeting".
 
-Building needs `WEB_APP_URL` (see above), for the meeting's links.
+Building needs `WEB_APP_URL` (see above), for the "+ New meeting" link.
+Rebuilding a doc deletes its meeting tabs.
 
 1. **`previewTemplate`** builds the "Template preview" doc and logs its
    link. The first run makes it, in your My Drive; later runs empty it and

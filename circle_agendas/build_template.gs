@@ -15,16 +15,17 @@
  *   - describeTemplate: logs the template's structure;
  *   - checkTemplateAccess: logs what the running account may do to it.
  *
- * The template's sample meeting has the links that run the web app
- * (web_app.gs), so building needs the web app's address, in the
- * WEB_APP_URL script property.
+ * The template's "+ New meeting" link runs the web app (web_app.gs), so
+ * building needs the web app's address, in the WEB_APP_URL script property.
+ * The template has no meetings: each meeting gets a tab of its own (see
+ * meetings.gs), built by meetingTable here.
  *
  * Building has two passes. The first lays out the text and tables with
  * DocumentApp, writing a token like ⟦dropdown outcome decision⟧ wherever a
  * smart chip or list goes. The second, with the Docs API, which DocumentApp
  * can't do, creates the dropdowns' lists of choices, replaces each token
- * with its chip or list, sets the pageless format, and merges and
- * pins the meeting table's top rows.
+ * with its chip or list, sets the pageless format, and names the first
+ * tab.
  *
  * Setup: see README.md in this folder.
  */
@@ -70,9 +71,10 @@ const DROPDOWNS = {
   ]},
 };
 
-// The template's sample meeting, at the top of MEETINGS.
-const SAMPLE_START = '19:30';
-const SAMPLE_HOURS = '1.5';
+// The first tab's title; each meeting has a tab of its own, titled with its
+// date, after it.
+const MAIN_TAB_TITLE = 'Circle';
+const MEETING_TAB_TITLE_RE = /^\d{4}-\d{2}-\d{2}$/;
 // Each meeting's items before the closing round, in the template and in
 // new meetings. kind: 'round' and 'report' items are shaded; round items
 // get no presenter; actions: a checklist under the description, for action
@@ -190,9 +192,9 @@ function checkTemplateAccess() {
 
 function build(docId) {
   const doc = DocumentApp.openById(docId);
-  const meetingId = layOut(doc.getTabs()[0].asDocumentTab().getBody(), docId);
+  layOut(doc.getTabs()[0].asDocumentTab().getBody(), docId);
   doc.saveAndClose();
-  finishWithApi(docId, meetingId);
+  finishWithApi(docId);
 }
 
 // Empties a doc: its first tab's body, its other tabs, its headers and
@@ -225,7 +227,8 @@ const MUTED = {[A.FOREGROUND_COLOR]: COLOR.muted};
 const SMALL = {...MUTED, [A.FONT_SIZE]: 8};
 const HINT = {[A.FOREGROUND_COLOR]: COLOR.hint};
 
-// Lays out the template, and returns its sample meeting's ID.
+// Lays out the template's first tab. It has no meetings: each gets a tab of
+// its own, added by "+ New meeting".
 function layOut(body, docId) {
   const leftover = body.getChild(0);
 
@@ -253,19 +256,13 @@ function layOut(body, docId) {
   body.appendHorizontalRule();
 
   section(body, 'MEETINGS');
+  body.appendParagraph('Each meeting has a tab of its own, titled with its date; the tabs ' +
+    'are listed at the left (under ☰ on a phone), newest first.').editAsText().setAttributes(MUTED);
   writeRuns(body.appendParagraph(''),
     [['+ New meeting', {[A.LINK_URL]: actionUrl('meeting', docId)}]]);
-  // Dated yesterday, so it's already past and doesn't stop "+ New meeting"
-  // adding the next one.
-  const yesterday = Utilities.formatDate(new Date(Date.now() - 24 * 3600 * 1000), TIME_ZONE,
-    'yyyy-MM-dd');
-  const meetingId = meetingTable(body, undefined, docId, {
-    date: yesterday, start: SAMPLE_START, hours: SAMPLE_HOURS, attendees: [],
-  });
   body.appendParagraph('');
 
   leftover.removeFromParent();
-  return meetingId;
 }
 
 function section(body, text) {
@@ -559,7 +556,7 @@ function token(kind, ...args) {
 
 // ── Pass 2: the Docs API ─────────────────────────────────────────────────────
 
-function finishWithApi(docId, meetingId) {
+function finishWithApi(docId) {
   // The dropdowns' lists of choices, and the pageless format.
   Docs.Documents.batchUpdate({requests: [
     ...Object.values(DROPDOWNS).map(def => ({createDropdownDefinition: {dropdownDefinition: {
@@ -575,18 +572,30 @@ function finishWithApi(docId, meetingId) {
       fields: 'documentFormat.documentMode',
     }},
   ]}, docId);
+  const firstTabId = Docs.Documents.get(docId, {includeTabsContent: true}).tabs[0].tabProperties.tabId;
+  Docs.Documents.batchUpdate({requests: [{updateDocumentTabProperties: {
+    tabProperties: {tabId: firstTabId, title: MAIN_TAB_TITLE}, fields: 'title',
+  }}]}, docId);
 
   replaceTokens(docId);
-  finishMeeting(docId, meetingId);
 }
 
-// The Docs API's part of making a meeting table: its top rows each merged
-// into one cell, and the first MEETING_PINNED_ROWS pinned, so they stay in
-// view.
-function finishMeeting(docId, meetingId) {
-  let content = Docs.Documents.get(docId).body.content;
+// A tab's Docs API content, and its ID for requests (undefined for the
+// first tab, which requests without one apply to).
+function apiTab(docId, tabId) {
+  const tabs = Docs.Documents.get(docId, {includeTabsContent: true}).tabs;
+  const tab = tabId ? tabs.find(t => t.tabProperties.tabId === tabId) : tabs[0];
+  if (!tab) throw new Error('No tab ' + tabId);
+  return {content: tab.documentTab.body.content, tabId: tabId || undefined};
+}
+
+// The Docs API's part of making a meeting table, in its tab: its top rows
+// each merged into one cell, and the first MEETING_PINNED_ROWS pinned, so
+// they stay in view.
+function finishMeeting(docId, meetingId, tabId) {
+  let content = apiTab(docId, tabId).content;
   const meeting = content.find(se => se.table && apiMeetingId(se) === meetingId);
-  const tableStartLocation = {index: meeting.startIndex};
+  const tableStartLocation = {index: meeting.startIndex, tabId};
   const merges = [];
   for (let r = MEETING_MERGED_ROWS - 1; r >= 0; r--) {
     merges.push({mergeTableCells: {tableRange: {
@@ -600,7 +609,7 @@ function finishMeeting(docId, meetingId) {
   ]}, docId);
 
   // Merging keeps each merged cell's (empty) paragraphs; remove them.
-  content = Docs.Documents.get(docId).body.content;
+  content = apiTab(docId, tabId).content;
   const merged = content.find(se => se.table && se.startIndex === meeting.startIndex).table;
   const tidy = [];
   for (let r = MEETING_MERGED_ROWS - 1; r >= 0; r--) {
@@ -608,27 +617,27 @@ function finishMeeting(docId, meetingId) {
     const extra = paras.slice(1);
     if (extra.length && extra.every(se => se.paragraph && !paraText(se.paragraph).trim())) {
       tidy.push({deleteContentRange: {range: {
-        startIndex: paras[0].endIndex - 1, endIndex: paras[paras.length - 1].endIndex - 1,
+        startIndex: paras[0].endIndex - 1, endIndex: paras[paras.length - 1].endIndex - 1, tabId,
       }}});
     }
   }
   if (tidy.length) Docs.Documents.batchUpdate({requests: tidy}, docId);
 }
 
-// Replaces each token in the doc's first tab with its chip or list, last
-// first so the earlier ones' positions don't move.
-function replaceTokens(docId) {
+// Replaces each token in a tab (by default, the first) with its chip or
+// list, last first so the earlier ones' positions don't move.
+function replaceTokens(docId, tabId) {
   const requests = [];
-  for (const t of findTokens(Docs.Documents.get(docId).body.content)) {
-    requests.push({deleteContentRange: {range: {startIndex: t.start, endIndex: t.end}}});
-    requests.push(tokenRequest(t));
+  for (const t of findTokens(apiTab(docId, tabId).content)) {
+    requests.push({deleteContentRange: {range: {startIndex: t.start, endIndex: t.end, tabId}}});
+    requests.push(tokenRequest(t, tabId));
   }
   if (requests.length) Docs.Documents.batchUpdate({requests}, docId);
 }
 
 // The request that puts a token's chip or list at its place.
-function tokenRequest(t) {
-  const location = {index: t.start};
+function tokenRequest(t, tabId) {
+  const location = {index: t.start, tabId};
   const [kind, ...args] = t.parts;
   if (kind === 'dropdown') {
     const def = DROPDOWNS[args[0]];
@@ -646,7 +655,7 @@ function tokenRequest(t) {
   }
   if (kind === 'checkbox' || kind === 'bullet') {
     return {createParagraphBullets: {
-      range: {startIndex: t.start, endIndex: t.start + 1},
+      range: {startIndex: t.start, endIndex: t.start + 1, tabId},
       bulletPreset: kind === 'checkbox' ? 'BULLET_CHECKBOX' : 'BULLET_DISC_CIRCLE_SQUARE',
     }};
   }
@@ -688,10 +697,11 @@ function apiMeetingId(se) {
   return id;
 }
 
-// The request that creates a meeting's Presenter dropdown's choices: none
-// ("—"), then each attendee (up to Docs' limit of 50 choices).
-function presenterDropdownRequest(meetingId, attendees) {
-  return {createDropdownDefinition: {dropdownDefinition: {
+// The request that creates a meeting's Presenter dropdown's choices, in its
+// tab (each tab has its own): none ("—"), then each attendee (up to Docs'
+// limit of 50 choices).
+function presenterDropdownRequest(meetingId, attendees, tabId) {
+  return {createDropdownDefinition: {tabId, dropdownDefinition: {
     dropdownDefinitionId: presenterDropdownId(meetingId),
     dropdownDefinitionProperties: {title: 'Presenter', options: [
       {optionId: optionId('none'), displayValue: '—'},

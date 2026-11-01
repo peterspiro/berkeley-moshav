@@ -19,8 +19,7 @@ and only one upcoming meeting is in the doc at a time.
 
 Next: making circle docs (by `add_new_group.py`, a backfill for existing
 circles, and handling copies made by hand), filling in About this circle;
-and the template changes still to come. Still to decide: whether the
-template keeps a sample meeting, or starts with none.
+and the template changes still to come.
 
 ## The template is built from code
 
@@ -34,11 +33,13 @@ they need will take their own scripts.
 
 ## What a circle's doc does
 
-- **New meeting**: a link at the top of MEETINGS adds a meeting above the
-  others (newest first). Its date, start time, and total duration come from
+- **New meeting**: a link under MEETINGS, in the first tab ("Circle"), adds
+  a meeting in a tab of its own, titled with its date, just after the
+  first tab (so the newest is first). The template has no meetings. Its date, start time, and total duration come from
   the next event on the circle's calendar that isn't in the doc yet, and can
   then be edited. Its Place is the circle's Zoom room, its Minutes a link to
-  the previous meeting, and its Next meeting the following calendar event.
+  the previous meeting's tab, and its Next meeting the following calendar
+  event.
   The previous meeting's Action Items Recap is copied to its Action Items
   Accountability (all of it: a script can't tell ticked items from
   unticked). It can't be added until the newest meeting has started, and
@@ -64,10 +65,12 @@ they need will take their own scripts.
   strikes through only ticked checklist items, or text formatted by hand).
   Below it, a bulleted list for guests' names. Guests aren't among the
   Presenter dropdown's choices.
-- **Tabs**: each meeting could have a tab of its own. Not done yet: Apps
-  Script can't make a tab (only the Docs API can), and in the probe it
-  didn't see one the API had just made, so building a meeting in a new tab
-  may mean doing it all through the Docs API. Docs' Find also searches only
+- **Tabs**: Apps Script can't make a tab, and doesn't see one the Docs API
+  made in the same run (`runNewTabProbe`), but does in a later run
+  (`runNewTabProbeLater`). So adding a meeting takes two runs: the link's
+  run adds the tab, and the page it returns runs the second, which builds
+  the meeting in it. Each tab has its own dropdowns' choices, so each
+  meeting's Presenter choices are made in its tab. Docs' Find searches only
   the tab you're in.
 - **About this circle** is filled in when the doc is created: its email
   address and Drive folder from the group's footer, and its parent and
@@ -152,7 +155,6 @@ https://docs.googleapis.com/$discovery/rest?version=v1) shows it can create
 dropdowns' lists of choices (`createDropdownDefinition`, with IDs of our
 choosing) and the chips (`insertDropdown`), and set a doc to pageless
 (`documentStyle.documentFormat.documentMode`). So nothing in the doc needs
-copying from another doc: new meetings can be built by the same code that
-builds the template's sample meeting, in the circle doc itself, with that
-doc's own dropdowns. Where a circle's own standing agenda items would live
+copying from another doc: new meetings are built by code, in the circle
+doc itself, with that doc's own dropdowns. Where a circle's own standing agenda items would live
 is still to decide.

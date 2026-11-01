@@ -3,15 +3,21 @@
  *
  * What the web app (web_app.gs) does to an agenda doc: add the circle's
  * next meeting, and, to a meeting, update its times or add an agenda item.
- * A meeting is one table (see meetingTable in build_template.gs):
- * MEETING_HEADER_ROWS rows of date, time and place, and column headings;
- * then one row per item, in the columns COL names (start time, duration in
- * minutes, presenter, description, notes, follow-up), and among them (just
- * above Action Items Recap) the row of the meeting's links; then the
- * closing round; then the end time.
  *
- * A meeting is found by its ID, which is in its links' addresses, so the
- * links keep working wherever the meeting moves in the doc.
+ * Each meeting has a tab of its own, titled with its date (newest first,
+ * after the first tab), holding one table (see meetingTable in
+ * build_template.gs): MEETING_HEADER_ROWS rows of date, time and place, and
+ * column headings; then one row per item, in the columns COL names (start
+ * time, duration in minutes, presenter, description, notes, follow-up), and
+ * among them (just above Action Items Recap) the row of the meeting's
+ * links; then the closing round; then the end time.
+ *
+ * A meeting is found by its ID, which is in its links' addresses. Adding a
+ * meeting removes the links from the meetings before it, which are past.
+ *
+ * Adding a meeting takes two runs, startNewMeeting and finishNewMeeting:
+ * the first adds its tab with the Docs API, and DocumentApp, which builds
+ * the meeting, doesn't see a tab added in the same run.
  *
  * Each returns {done, title, messages}: whether it changed the doc, a
  * heading for the page the web app shows, and anything the reader should
@@ -20,12 +26,13 @@
 
 const PROBLEM_COLOR = '#cc0000';
 const NEW_ITEM_MINUTES = 5;
+const PENDING_MEETING_SECONDS = 600;
 
 function updateTimes(docId, meetingId) {
   const doc = DocumentApp.openById(docId);
-  const table = findMeeting(firstTabBody(doc), meetingId);
-  if (!table) return notFound();
-  const messages = recalculate(table);
+  const found = findMeeting(doc, meetingId);
+  if (!found) return notFound();
+  const messages = recalculate(found.table);
   doc.saveAndClose();
   return {done: true, title: 'Times updated', messages};
 }
@@ -35,8 +42,9 @@ function updateTimes(docId, meetingId) {
 // stay just below the new item, and updates the times.
 function addItem(docId, meetingId) {
   const doc = DocumentApp.openById(docId);
-  const table = findMeeting(firstTabBody(doc), meetingId);
-  if (!table) return notFound();
+  const found = findMeeting(doc, meetingId);
+  if (!found) return notFound();
+  const {table, tabId} = found;
 
   const closing = table.getNumRows() - 2;
   let at = linksRowIndex(table);
@@ -45,7 +53,7 @@ function addItem(docId, meetingId) {
   }
   if (at < 0) at = closing;
   const presenters = presenterDropdownId(meetingId);
-  const hasPresenters = presenters in (dropdownDefinitions(docId));
+  const hasPresenters = presenters in dropdownDefinitions(docId, tabId);
   const row = table.insertTableRow(at);
   for (let c = 0; c < MEETING_COLUMNS; c++) row.appendTableCell();
   for (let c = 0; c < MEETING_COLUMNS; c++) writeCell(row.getCell(c), [[]]);
@@ -57,21 +65,26 @@ function addItem(docId, meetingId) {
 
   const messages = recalculate(table);
   doc.saveAndClose();
-  replaceTokens(docId);
+  replaceTokens(docId, tabId);
   return {done: true, title: 'Item added', messages};
 }
 
-// Adds the circle's next meeting at the top of MEETINGS: the first timed
-// event on the circle's calendar after the day of the newest meeting in the
-// doc (or after now, if there's none). Refuses while the newest meeting
-// hasn't started yet. The new meeting's date, start, and length come from
-// the event; its Place is the circle's Zoom room; its attendance list, and
-// its Presenter dropdowns' choices, are the circle's members; its Minutes
-// link to the previous meeting; its Next meeting is the event after; and
-// the previous meeting's Action Items Recap is copied to its Action Items
-// Accountability. The links that change a meeting are removed from the
-// meetings before it, which are then no longer to be changed.
-function addMeeting(docId) {
+// ── New meetings ─────────────────────────────────────────────────────────────
+
+// The first of the two runs that add the circle's next meeting: the first
+// timed event on the circle's calendar after the day of the newest meeting
+// in the doc (or after now, if there's none). Refuses while the newest
+// meeting hasn't started yet. Adds the meeting's tab, and keeps what the
+// second run needs for PENDING_MEETING_SECONDS; returns {pending: key} for
+// finishNewMeeting, or a result saying why it didn't.
+//
+// The meeting's date, start, and length come from the event; its Place is
+// the circle's Zoom room; its attendance list, and its Presenter
+// dropdowns' choices, are the circle's members; its Minutes link to the
+// previous meeting's tab; its Next meeting is the event after; and the
+// previous meeting's Action Items Recap is copied to its Action Items
+// Accountability.
+function startNewMeeting(docId) {
   const circle = circleForDoc(docId);
   if (!circle) {
     return {done: false, title: 'Circle not found', messages: [
@@ -83,19 +96,24 @@ function addMeeting(docId) {
       circle.name + ' has no calendar yet; ask the Technology Circle to set one up.']};
   }
 
-  const content = Docs.Documents.get(docId).body.content;
-  const newest = content.find(se => se.table && apiMeetingId(se));
-  const newestDate = newest ? apiMeetingDate(newest) : null;
-  if (newestDate) {
-    const startText = headerTimeText(apiCellText(newest.table.tableRows[1].tableCells[0]));
+  const api = Docs.Documents.get(docId, {includeTabsContent: true});
+  const meetingTabs = api.tabs.filter(t => MEETING_TAB_TITLE_RE.test(t.tabProperties.title))
+    .sort((a, b) => b.tabProperties.title.localeCompare(a.tabProperties.title));
+  const newest = meetingTabs[0];
+  let newestDate = null;
+  if (newest) {
+    newestDate = newest.tabProperties.title;
+    const table = newest.documentTab.body.content.find(se => se.table);
+    const startText = table ? headerTimeText(apiCellText(table.table.tableRows[1].tableCells[0])) : '';
     const startsAt = Utilities.parseDate(newestDate, TIME_ZONE, 'yyyy-MM-dd').getTime() +
       (parseTime(startText) || 0) * 60000;
-    if (startsAt > Date.now()) {
+    if (!table || startsAt > Date.now()) {
       return {done: false, title: 'Next meeting not started yet', messages: [
         'The newest meeting in the agenda, on ' + newestDate + (startText ? ' at ' + startText : '') +
         ', hasn\'t started yet. The one after it can be added once it has.']};
     }
   }
+
   const after = newestDate
     ? new Date(Utilities.parseDate(newestDate, TIME_ZONE, 'yyyy-MM-dd').getTime() + 24 * 3600 * 1000)
     : new Date();
@@ -116,54 +134,73 @@ function addMeeting(docId) {
     next: following ? Utilities.formatDate(new Date(following.start.dateTime), TIME_ZONE,
       'EEE yyyy-MM-dd, H:mm') : 'Not on the calendar yet',
   };
-
-  const doc = DocumentApp.openById(docId);
-  const body = firstTabBody(doc);
-  const previous = newest ? findMeeting(body, apiMeetingId(newest)) : null;
-  if (previous) {
-    const bookmark = doc.addBookmark(doc.newPosition(previous.getCell(1, 0).getChild(0), 0));
+  if (newest) {
+    details.previousTabId = newest.tabProperties.tabId;
     details.minutes = [['Previous meeting (' + newestDate + ')',
-      {[A.LINK_URL]: '#bookmark=' + bookmark.getId()}]];
-    details.carryOver = recapItems(previous);
+      {[A.LINK_URL]: tabUrl(docId, details.previousTabId)}]];
   }
-  const at = newMeetingPosition(body);
-  const meetingId = meetingTable(body, at, docId, details);
-  body.insertParagraph(at + 1, '');
-  for (let i = 0; i < body.getNumChildren(); i++) {
-    const el = body.getChild(i);
-    if (el.getType() !== DocumentApp.ElementType.TABLE) continue;
-    const links = linksRowIndex(el.asTable());
-    if (links >= 0 && meetingIdOf(el.asTable()) !== meetingId) el.asTable().removeRow(links);
-  }
-  doc.saveAndClose();
-  if (details.attendees.length) {
-    Docs.Documents.batchUpdate({requests: [presenterDropdownRequest(meetingId, details.attendees)]},
-      docId);
-  }
-  replaceTokens(docId);
-  finishMeeting(docId, meetingId);
-  return {done: true, title: 'Meeting added',
-    messages: ['Added the meeting on ' + details.date + ' at ' + details.start + '.']};
+
+  const reply = Docs.Documents.batchUpdate({requests: [{addDocumentTab: {
+    tabProperties: {title: details.date, index: 1},
+  }}]}, docId);
+  details.tabId = reply.replies[0].addDocumentTab.tabProperties.tabId;
+  details.docId = docId;
+  const key = 'newMeeting:' + Utilities.getUuid();
+  CacheService.getScriptCache().put(key, JSON.stringify(details), PENDING_MEETING_SECONDS);
+  return {pending: key, date: details.date};
 }
 
-// Where a new meeting goes: just after the "+ New meeting" link, or the
-// MEETINGS heading, or else before the first meeting.
-function newMeetingPosition(body) {
-  let heading = -1;
-  for (let i = 0; i < body.getNumChildren(); i++) {
-    const el = body.getChild(i);
-    if (el.getType() === DocumentApp.ElementType.TABLE) {
-      if (meetingIdOf(el.asTable())) return heading >= 0 ? heading + 1 : i;
-      continue;
-    }
-    if (el.getType() !== DocumentApp.ElementType.PARAGRAPH) continue;
-    const text = el.asParagraph().editAsText();
-    if (text.getText().trim().toUpperCase() === 'MEETINGS') heading = i;
-    for (const j of text.getTextAttributeIndices()) {
-      if (/[?&]action=meeting\b/.test(text.getLinkUrl(j) || '')) return i + 1;
-    }
+// The second run: builds the meeting in the tab startNewMeeting added, and
+// removes the links from the meetings before it.
+function finishNewMeeting(key) {
+  const cached = CacheService.getScriptCache().get(key);
+  if (!cached) {
+    return {done: false, title: 'Meeting not finished', messages: [
+      'Its details were lost, so its tab was left empty. Delete the tab, and click ' +
+      '"+ New meeting" again.']};
   }
-  return heading >= 0 ? heading + 1 : body.getNumChildren() - 1;
+  const details = JSON.parse(cached);
+  const docId = details.docId;
+  const doc = DocumentApp.openById(docId);
+  const tab = doc.getTab(details.tabId);
+  if (!tab) {
+    return {done: false, title: 'Meeting not finished', messages: [
+      'Its tab wasn\'t ready yet. Delete the empty tab dated ' + details.date + ', and click ' +
+      '"+ New meeting" again.']};
+  }
+  if (details.previousTabId) {
+    const previousTab = doc.getTab(details.previousTabId);
+    const previous = previousTab && meetingTableIn(previousTab.asDocumentTab().getBody());
+    if (previous) details.carryOver = recapItems(previous);
+  }
+  const body = tab.asDocumentTab().getBody();
+  const leftover = body.getChild(0);
+  const meetingId = meetingTable(body, undefined, docId, details);
+  body.appendParagraph('');
+  leftover.removeFromParent();
+
+  for (const other of allTabs(doc)) {
+    if (other.getId() === details.tabId) continue;
+    const table = meetingTableIn(other.asDocumentTab().getBody());
+    const links = table ? linksRowIndex(table) : -1;
+    if (links >= 0) table.removeRow(links);
+  }
+  doc.saveAndClose();
+
+  if (details.attendees.length) {
+    Docs.Documents.batchUpdate({requests: [
+      presenterDropdownRequest(meetingId, details.attendees, details.tabId)]}, docId);
+  }
+  replaceTokens(docId, details.tabId);
+  finishMeeting(docId, meetingId, details.tabId);
+  CacheService.getScriptCache().remove(key);
+  return {done: true, title: 'Meeting added', messages: [
+    'Added the meeting on ' + details.date + ' at ' + details.start + ', in a tab of its own ' +
+    'at the left, titled with its date.']};
+}
+
+function tabUrl(docId, tabId) {
+  return 'https://docs.google.com/document/d/' + docId + '/edit?tab=' + tabId;
 }
 
 // The non-empty items under a meeting's Action Items Recap.
@@ -185,28 +222,16 @@ function recapItems(table) {
   return [];
 }
 
-// The date ('yyyy-MM-dd') of the chip in a Docs API meeting table's first
-// row, or null.
-function apiMeetingDate(se) {
-  for (const cell of se.table.tableRows[0].tableCells) {
-    for (const part of cell.content) {
-      for (const pe of (part.paragraph && part.paragraph.elements) || []) {
-        if (pe.dateElement) return pe.dateElement.dateElementProperties.timestamp.slice(0, 10);
-      }
-    }
-  }
-  return null;
-}
-
 // The text of a Docs API table cell.
 function apiCellText(cell) {
   return cell.content.filter(se => se.paragraph).map(se => paraText(se.paragraph)).join('');
 }
 
-// The doc's first tab's dropdowns' lists of choices, by ID.
-function dropdownDefinitions(docId) {
-  return Docs.Documents.get(docId, {includeTabsContent: true}).tabs[0].documentTab
-    .dropdownDefinitions || {};
+// A tab's dropdowns' lists of choices, by ID (each tab has its own).
+function dropdownDefinitions(docId, tabId) {
+  const tab = Docs.Documents.get(docId, {includeTabsContent: true}).tabs
+    .find(t => t.tabProperties.tabId === tabId);
+  return (tab && tab.documentTab.dropdownDefinitions) || {};
 }
 
 function notFound() {
@@ -299,15 +324,38 @@ function itemTitle(table, r) {
 
 // ── Finding meetings ─────────────────────────────────────────────────────────
 
-// The top-level table whose links carry this meeting ID, or null.
-function findMeeting(body, meetingId) {
-  for (let i = 0; i < body.getNumChildren(); i++) {
-    const el = body.getChild(i);
-    if (el.getType() === DocumentApp.ElementType.TABLE && meetingIdOf(el.asTable()) === meetingId) {
-      return el.asTable();
-    }
+// The meeting with this ID, in any tab: {table, tabId}, or null.
+function findMeeting(doc, meetingId) {
+  for (const tab of allTabs(doc)) {
+    const table = meetingTableIn(tab.asDocumentTab().getBody());
+    if (table && meetingIdOf(table) === meetingId) return {table, tabId: tab.getId()};
   }
   return null;
+}
+
+// The first meeting table (one with links, or with the column headings) in
+// a body, or null.
+function meetingTableIn(body) {
+  for (let i = 0; i < body.getNumChildren(); i++) {
+    const el = body.getChild(i);
+    if (el.getType() !== DocumentApp.ElementType.TABLE) continue;
+    const table = el.asTable();
+    if (meetingIdOf(table) || isMeetingTable(table)) return table;
+  }
+  return null;
+}
+
+function isMeetingTable(table) {
+  if (table.getNumRows() <= MEETING_HEADER_ROWS) return false;
+  const row = table.getRow(MEETING_HEADER_ROWS - 1);
+  return row.getNumCells() === MEETING_COLUMNS &&
+    row.getCell(COL.description).getText().trim() === MEETING_HEADINGS[COL.description];
+}
+
+// Every tab in a doc, child tabs included.
+function allTabs(doc) {
+  const flatten = tabs => tabs.flatMap(tab => [tab, ...flatten(tab.getChildTabs())]);
+  return flatten(doc.getTabs());
 }
 
 // The ID in a meeting table's links, or null if the table isn't a meeting.

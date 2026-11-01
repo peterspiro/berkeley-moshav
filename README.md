@@ -361,7 +361,8 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
     an agenda doc names an action, the doc, and a meeting, and the web app
     shows a page saying what it did.
   - **`circle_agendas/meetings.gs`** holds those actions: adding the
-    circle's next meeting from its calendar (with its Zoom room, its
+    circle's next meeting from its calendar, in a tab of its own (with its
+    Zoom room, its
     members as an attendance checklist, a link to the previous meeting,
     and the previous meeting's action items); updating a meeting's times
     (each item's start, the closing round's share of what's left, and the
