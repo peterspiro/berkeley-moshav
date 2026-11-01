@@ -20,6 +20,13 @@ function copyDoc(docId, name) {
   return DriveApp.getFileById(docId).makeCopy(name, DriveApp.getRootFolder());
 }
 
+// Logs a doc's link on a line of its own, after what it's for, so it can be
+// selected with a triple-click.
+function logLink(label, url) {
+  Logger.log(label);
+  Logger.log(url);
+}
+
 // ── Describing a doc ─────────────────────────────────────────────────────────
 
 // Lines describing the doc's first tab: each top-level element, each table

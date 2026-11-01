@@ -65,7 +65,7 @@ function runTabProbe() {
 function runSteps(name, steps) {
   const copy = copyDoc(PROBE_SOURCE_DOC_ID, name + ' ' + new Date().toISOString().slice(0, 16));
   const docId = copy.getId();
-  Logger.log('Working on a copy: ' + copy.getUrl());
+  logLink('Working on a copy:', copy.getUrl());
 
   const report = ['Copy of ' + PROBE_SOURCE_DOC_ID + ', made ' + new Date()];
   for (const step of steps) {
@@ -79,7 +79,7 @@ function runSteps(name, steps) {
 
   writeReport(docId, report);
   Logger.log(report.join('\n'));
-  Logger.log('Report written at the end of ' + copy.getUrl());
+  logLink('Report written at the end of the copy:', copy.getUrl());
 }
 
 // ── runProbe ─────────────────────────────────────────────────────────────────

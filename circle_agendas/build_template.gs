@@ -104,21 +104,22 @@ function previewTemplate() {
   const doc = DocumentApp.create('Template preview');
   props.setProperty('previewDocId', doc.getId());
   build(doc.getId());
-  Logger.log('Preview: ' + doc.getUrl());
+  logLink('Preview:', doc.getUrl());
 }
 
 function createTemplate() {
   const doc = DocumentApp.create('Circle Agenda Template');
   build(doc.getId());
-  Logger.log('Built ' + doc.getUrl() + '\nMove it to the Shared Drive, and set ' +
-    'TEMPLATE_DOC_ID in doc_helpers.gs to ' + doc.getId());
+  logLink('Built:', doc.getUrl());
+  Logger.log('Move it to the Shared Drive, and set TEMPLATE_DOC_ID in doc_helpers.gs to:');
+  Logger.log(doc.getId());
 }
 
 function buildTemplate() {
   if (!TEMPLATE_DOC_ID) throw new Error('TEMPLATE_DOC_ID is not set; run createTemplate first.');
   clearDoc(TEMPLATE_DOC_ID);
   build(TEMPLATE_DOC_ID);
-  Logger.log('Rebuilt ' + DocumentApp.openById(TEMPLATE_DOC_ID).getUrl());
+  logLink('Rebuilt:', DocumentApp.openById(TEMPLATE_DOC_ID).getUrl());
 }
 
 function describeTemplate() {
