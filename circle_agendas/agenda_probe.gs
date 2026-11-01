@@ -358,10 +358,6 @@ function findTab(doc, title) {
   return search(doc.getTabs());
 }
 
-function firstTabBody(doc) {
-  return doc.getTabs()[0].asDocumentTab().getBody();
-}
-
 // The first top-level table containing "Closing Round", or null.
 function firstMeetingTable(body) {
   for (let i = 0; i < body.getNumChildren(); i++) {

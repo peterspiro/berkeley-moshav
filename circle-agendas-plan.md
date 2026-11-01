@@ -4,9 +4,14 @@ A Google Doc for each circle holding its meetings' agendas, based loosely on
 Sociocracy For All's "Session Circle Agenda" template (a starting point
 only; the design is expected to diverge from it), with scripts doing the
 arithmetic and the setting up. So far there's the template, built from a
-blank doc by `circle_agendas/build_template.gs`, the time arithmetic in
-`circle_agendas/agenda_rules.gs`, and the tests in
+blank doc by `circle_agendas/build_template.gs`; the web app
+(`circle_agendas/web_app.gs`), whose links in each meeting add an agenda
+item and update the times (`circle_agendas/meetings.gs`); the time
+arithmetic in `circle_agendas/agenda_rules.gs`; and the tests in
 `circle_agendas/agenda_probe.gs`.
+
+Next: the "+ New meeting" link, which needs the circle's calendar, so it
+can only be tried on a doc in a circle's Drive folder.
 
 ## The template is built from code
 
@@ -55,6 +60,16 @@ members need not approve an "unverified app" screen for each doc, members
 with personal Gmail accounts can use it, and there's one copy of the code
 to fix. The doc's links call the web app with the doc's ID (and the
 meeting's, for a new item); each opens a tab that says when it's done.
+
+A meeting's ID is in its links' addresses (in its "Agenda" row), which is
+how the web app finds its table wherever it is in the doc.
+
+A link names its doc by ID, so a doc copied by hand from the template
+(File → Make a copy, or a `/copy` link) points at the template until its
+links are rewritten. Docs made by the scripts get theirs rewritten as
+they're made; for one made by hand, the web app could, when a link names
+the template, ask for the copy's address and rewrite its links then. Still
+to decide.
 
 The web app works out which circle a doc belongs to from the folder or
 shared drive it's in, by finding the Google Group whose footer links that

@@ -15,6 +15,10 @@
  *   - describeTemplate: logs the template's structure;
  *   - checkTemplateAccess: logs what the running account may do to it.
  *
+ * The template's sample meeting has the links that run the web app
+ * (web_app.gs), so building needs the web app's address, in the
+ * WEB_APP_URL script property.
+ *
  * Building has two passes. The first lays out the text and tables with
  * DocumentApp, writing a token like ⟦dropdown outcome decision⟧ wherever a
  * smart chip or list goes. The second, with the Docs API, which DocumentApp
@@ -149,7 +153,7 @@ function checkTemplateAccess() {
 
 function build(docId) {
   const doc = DocumentApp.openById(docId);
-  layOut(doc.getTabs()[0].asDocumentTab().getBody());
+  layOut(doc.getTabs()[0].asDocumentTab().getBody(), docId);
   doc.saveAndClose();
   finishWithApi(docId);
 }
@@ -182,7 +186,7 @@ const BOLD = {[A.BOLD]: true};
 const SMALL = {[A.FONT_SIZE]: 8, [A.FOREGROUND_COLOR]: COLOR.muted};
 const HINT = {[A.FOREGROUND_COLOR]: COLOR.hint};
 
-function layOut(body) {
+function layOut(body, docId) {
   const leftover = body.getChild(0);
 
   const title = body.appendParagraph('Circle Agenda');
@@ -209,7 +213,7 @@ function layOut(body) {
   body.appendHorizontalRule();
 
   section(body, 'MEETINGS');
-  meetingTable(body);
+  meetingTable(body, docId);
   body.appendParagraph('');
 
   leftover.removeFromParent();
@@ -315,10 +319,11 @@ function backlogTable(body) {
   table.setColumnWidth(5, 65);
 }
 
-// One meeting: date; time and place; "Agenda"; one row per item, each with
-// its start time and duration; the closing round, which gets the time
-// left; and the end time.
-function meetingTable(body) {
+// One meeting: date; time and place; "Agenda", with the links that add an
+// item and update the times (which also identify the meeting; see
+// meetings.gs); one row per item, each with its start time and duration;
+// the closing round, which gets the time left; and the end time.
+function meetingTable(body, docId) {
   const start = parseTime(SAMPLE_START);
   const total = parseHours(SAMPLE_HOURS);
   const times = scheduleTimes(start, SAMPLE_AGENDA.map(item => item.minutes), total);
@@ -336,7 +341,10 @@ function meetingTable(body) {
   writeCell(table.getCell(0, 0), [[[token('date', today + 'T12:00:00Z')]]]);
   table.getCell(0, 0).editAsText().setBold(true).setFontSize(13);
   writeCell(table.getCell(1, 0), [[['Time  ', BOLD], [SAMPLE_START], ['     Place  ', BOLD]]]);
-  writeCell(table.getCell(2, 0), [[['Agenda', BOLD]]]);
+  const meetingId = newMeetingId();
+  writeCell(table.getCell(2, 0), [[['Agenda', BOLD], ['      '],
+    ['+ Add item', {[A.LINK_URL]: actionUrl('item', docId, meetingId)}], ['      '],
+    ['↻ Update times', {[A.LINK_URL]: actionUrl('times', docId, meetingId)}]]]);
   for (let r = 0; r < MEETING_HEADER_ROWS; r++) {
     for (let c = 1; c < 4; c++) writeCell(table.getCell(r, c), [[]]);
   }
@@ -464,19 +472,11 @@ function finishWithApi(docId) {
     }},
   ]}, docId);
 
-  // Each token replaced, last first so the earlier ones' positions don't
-  // move.
-  let content = Docs.Documents.get(docId).body.content;
-  const requests = [];
-  for (const t of findTokens(content)) {
-    requests.push({deleteContentRange: {range: {startIndex: t.start, endIndex: t.end}}});
-    requests.push(tokenRequest(t));
-  }
-  Docs.Documents.batchUpdate({requests}, docId);
+  replaceTokens(docId);
 
   // The meeting table's top rows: pinned, so they repeat on each page, and
   // each merged into one cell.
-  content = Docs.Documents.get(docId).body.content;
+  let content = Docs.Documents.get(docId).body.content;
   const meeting = content.find(se => se.table && tableText(se.table).includes('Opening Round'));
   const tableStartLocation = {index: meeting.startIndex};
   const merges = [];
@@ -505,6 +505,17 @@ function finishWithApi(docId) {
     }
   }
   if (tidy.length) Docs.Documents.batchUpdate({requests: tidy}, docId);
+}
+
+// Replaces each token in the doc's first tab with its chip or list, last
+// first so the earlier ones' positions don't move.
+function replaceTokens(docId) {
+  const requests = [];
+  for (const t of findTokens(Docs.Documents.get(docId).body.content)) {
+    requests.push({deleteContentRange: {range: {startIndex: t.start, endIndex: t.end}}});
+    requests.push(tokenRequest(t));
+  }
+  if (requests.length) Docs.Documents.batchUpdate({requests}, docId);
 }
 
 // The request that puts a token's chip or list at its place.

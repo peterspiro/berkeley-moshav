@@ -1,18 +1,22 @@
 # Circle Agendas
 
-This folder will hold the web app behind the circle agenda docs (see
-`../circle-agendas-plan.md`). For now it holds the scripts used while
-designing them:
+The circle agenda docs (see `../circle-agendas-plan.md`): the template, and
+the web app that the links in an agenda doc run.
 
 - `build_template.gs` — builds the agenda template from a blank doc,
   entirely from code
+- `web_app.gs` — the web app: takes a link's action, doc, and meeting, and
+  shows a page saying what it did
+- `meetings.gs` — what the web app does to a meeting: update its times, and
+  add an agenda item
 - `agenda_rules.gs` — the agenda's time arithmetic, with no Apps Script
   calls, tested under Node by `tests/test_circle_agenda_rules.py`
 - `agenda_probe.gs` — tests, already run, of what Apps Script can do to an
   agenda doc
 - `doc_helpers.gs` — the template's ID (`TEMPLATE_DOC_ID`), and helpers the
   others share
-- `appsscript.json` — the Docs and Drive advanced services and OAuth scopes
+- `appsscript.json` — the Docs and Drive advanced services, OAuth scopes,
+  and web app settings
 
 All of them are one Apps Script project, so they share their functions and
 constants.
@@ -50,6 +54,46 @@ link in the error and run it again. The clasp project asks for them all at
 once, from `appsscript.json`. A pasted project can be deleted once the
 clasp one works.)
 
+## Deploying the web app
+
+The template's links run the web app, so it must be deployed, and its
+address recorded, before the template is built. Once, in the editor (as
+`admin@berkeleymoshav.org`):
+
+1. **Deploy → New deployment**, type **Web app**. `appsscript.json` already
+   sets it to run as you and to let anyone with a Google account use it;
+   check the dialog says so ("Execute as: Me", "Who has access: Anyone with
+   Google account"). Click **Deploy**, and allow access if asked.
+2. Copy the **Web app URL** (ending in `/exec`).
+3. **Project Settings → Script Properties → Add script property**: property
+   `WEB_APP_URL`, value that URL. Save.
+
+A deployment runs the code as it was when deployed. After `clasp push`ing
+a change to the web app's code, update the deployment so it runs the new
+code, keeping its URL: **Deploy → Manage deployments**, the pencil, then
+**Version: New version** and **Deploy**. (Or, from the terminal,
+`clasp deployments` to find its ID and `clasp deploy -i <ID>`.) Changes to
+`build_template.gs` alone need no new deployment.
+
+The links:
+
+- **+ Add item**, in each meeting's "Agenda" row, adds a Topic of 5 minutes
+  before Action Items Recap, and updates the times.
+- **↻ Update times** rewrites each item's start time, the closing round's
+  duration (the time left before the end), and the end time, from the
+  start time after "Time", the meeting's Duration (hours), and the other
+  items' durations. A duration it can't read turns red and counts as 0; a
+  closing round with no time left turns red. The page says why.
+
+Each opens a tab that says what it did; the doc shows the change at once.
+A link's address names the doc by its ID, so a doc copied by hand (File →
+Make a copy) still points at the doc it was copied from; the plan has how
+that's to be handled.
+
+To try the actions without the web app, run **`tryUpdateTimes`** or
+**`tryAddItem`** in the editor: each runs on the first meeting of the
+latest preview and logs what it returned.
+
 ## Building the template
 
 The template is built from a blank doc by `build_template.gs`, so it
@@ -59,6 +103,8 @@ out the text and tables, writing a token such as `⟦dropdown outcome
 decision⟧` wherever a smart chip or list goes, and then the Docs API creates
 the dropdowns' choices, replaces each token with its chip or list, sets the
 pageless format, and merges and pins the meeting table's top rows.
+
+Building needs `WEB_APP_URL` (see above), for the meeting's links.
 
 1. **`previewTemplate`** builds a new "Template preview" doc in your My
    Drive and logs its link. Each run moves the previous preview to the

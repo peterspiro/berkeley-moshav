@@ -74,3 +74,25 @@ class TestParsing:
         ("90 min", None), ("", None)])
     def test_parse_hours(self, text, minutes):
         assert js(f"parseHours({json.dumps(text)})") == minutes
+
+
+class TestHeaderTimeText:
+    @pytest.mark.parametrize("line, text", [
+        ("Time  19:30     Place  ", "19:30"),
+        ("Time 7:30 pm Place Zoom", "7:30 pm"),
+        ("Time 19:30", "19:30"),
+        ("Time  Place", ""),
+        ("When?", "")])
+    def test_reads_time(self, line, text):
+        assert js(f"headerTimeText({json.dumps(line)})") == text
+
+
+class TestMeetingIdFromUrl:
+    @pytest.mark.parametrize("url, meeting_id", [
+        ("https://script.google.com/macros/s/X/exec?action=times&doc=D&meeting=ab12cd34",
+         "ab12cd34"),
+        ("https://x/exec?meeting=a-b_c&action=item", "a-b_c"),
+        ("https://x/exec?action=times&doc=D", None),
+        ("", None)])
+    def test_reads_id(self, url, meeting_id):
+        assert js(f"meetingIdFromUrl({json.dumps(url)})") == meeting_id

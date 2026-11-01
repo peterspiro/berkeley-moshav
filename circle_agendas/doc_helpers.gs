@@ -27,6 +27,10 @@ function logLink(label, url) {
   Logger.log(url);
 }
 
+function firstTabBody(doc) {
+  return doc.getTabs()[0].asDocumentTab().getBody();
+}
+
 // ── Describing a doc ─────────────────────────────────────────────────────────
 
 // Lines describing the doc's first tab: each top-level element, each table

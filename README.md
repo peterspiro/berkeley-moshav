@@ -38,9 +38,9 @@ Python scripts:
   account's other calendars, including the shared community calendar.
 
 A fourth, **`circle_agendas`**, will run the circle agenda docs (see
-`circle-agendas-plan.md`); for now it builds the agenda template, from a
-blank doc, and holds the tests of what Apps Script can do to an agenda doc
-that shaped it.
+`circle-agendas-plan.md`): it builds the agenda template from a blank doc,
+and runs the web app that the links in an agenda doc open (so far, to add
+an agenda item and update a meeting's times).
 
 The repo also keeps, in `archive/`, the one-off scripts that were used to
 migrate the community into Gather (members, households, groups, photos) and
@@ -195,7 +195,7 @@ status line as "calendar (members can view, not edit)".
 | `groups_drive_sync/` | Apps Script project that syncs each Google Group's membership from its Drive item |
 | `calendar_notifications/` | Apps Script project that announces and gatekeeps events on the shared community calendar |
 | `group_meetings/` | Apps Script project that adds Zoom rooms and guests to group calendar events, and warns about overlapping meetings |
-| `circle_agendas/` | Apps Script project for the circle agenda docs (so far, building the template, and tests) |
+| `circle_agendas/` | Apps Script project for the circle agenda docs: building the template, and the web app its links run |
 | `util/` | Shared Python modules used by the scripts |
 | `tests/` | Unit tests (`pytest`) |
 | `archive/` | One-off scripts and plans that are no longer in use, kept for reference |
@@ -353,8 +353,17 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
   `group_meetings/README.md` for deployment, including the Zoom credentials
   it reads from Script Properties.
 
-- **`circle_agendas/`** is run by hand from the Apps Script editor while the
-  circle agenda docs are designed. See `circle_agendas/README.md`.
+- **`circle_agendas/`** builds the circle agenda template (run by hand from
+  the Apps Script editor), and is the web app behind the links in an agenda
+  doc. See `circle_agendas/README.md`.
+  - **`circle_agendas/web_app.gs`** is the web app, deployed to run as
+    `admin@berkeleymoshav.org` for anyone with a Google account: a link in
+    an agenda doc names an action, the doc, and a meeting, and the web app
+    shows a page saying what it did.
+  - **`circle_agendas/meetings.gs`** holds those actions: updating a
+    meeting's times (each item's start, the closing round's share of what's
+    left, and the end, flagging durations it can't read), and adding an
+    agenda item before Action Items Recap.
   - **`circle_agendas/build_template.gs`** builds the agenda template from
     a blank doc, entirely from code (so it depends on no other document):
     a preview in a new doc, or the template itself, rebuilt in place.

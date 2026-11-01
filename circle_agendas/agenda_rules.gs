@@ -54,3 +54,15 @@ function parseHours(text) {
   const m = /^\s*(\d+(?:\.\d+)?)\s*(?:h|hr|hrs|hours?)?\.?\s*$/i.exec(text || '');
   return m ? Math.round(Number(m[1]) * 60) : null;
 }
+
+// The time typed after "Time" in a meeting's "Time 19:30  Place …" line.
+function headerTimeText(line) {
+  const m = /Time\s*(.*?)\s*(?:Place\b|$)/i.exec(line || '');
+  return m ? m[1] : '';
+}
+
+// The meeting ID in one of a meeting's web app links, or null.
+function meetingIdFromUrl(url) {
+  const m = /[?&]meeting=([\w-]+)/.exec(url || '');
+  return m ? m[1] : null;
+}
