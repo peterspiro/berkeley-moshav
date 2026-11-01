@@ -38,8 +38,9 @@ Python scripts:
   account's other calendars, including the shared community calendar.
 
 A fourth, **`circle_agendas`**, will run the circle agenda docs (see
-`circle-agendas-plan.md`); for now it holds only a test of what Apps Script
-can do to them.
+`circle-agendas-plan.md`); for now it holds the scripts used while
+designing them: changes to the agenda template, and tests of what Apps
+Script can do to an agenda doc.
 
 The repo also keeps, in `archive/`, the one-off scripts that were used to
 migrate the community into Gather (members, households, groups, photos) and
@@ -194,7 +195,7 @@ status line as "calendar (members can view, not edit)".
 | `groups_drive_sync/` | Apps Script project that syncs each Google Group's membership from its Drive item |
 | `calendar_notifications/` | Apps Script project that announces and gatekeeps events on the shared community calendar |
 | `group_meetings/` | Apps Script project that adds Zoom rooms and guests to group calendar events, and warns about overlapping meetings |
-| `circle_agendas/` | Apps Script project for the circle agenda docs (so far, only a test) |
+| `circle_agendas/` | Apps Script project for the circle agenda docs (so far, template changes and tests) |
 | `util/` | Shared Python modules used by the scripts |
 | `tests/` | Unit tests (`pytest`) |
 | `archive/` | One-off scripts and plans that are no longer in use, kept for reference |
@@ -352,12 +353,19 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
   `group_meetings/README.md` for deployment, including the Zoom credentials
   it reads from Script Properties.
 
-- **`circle_agendas/agenda_probe.gs`** is a one-time test, run by hand,
-  of what Apps Script can do to a circle agenda doc: on a copy of the
-  template, it copies an agenda row and a whole meeting, adds an
-  attendance checklist, and tries inserting person and date chips, then
-  reports which smart chips and checklist ticks survived. See
-  `circle_agendas/README.md`.
+- **`circle_agendas/`** is run by hand from the Apps Script editor while the
+  circle agenda docs are designed. See `circle_agendas/README.md`.
+  - **`circle_agendas/template_edits.gs`** holds each change to the agenda
+    template as code: it applies the changes the template hasn't had yet
+    to a copy, for checking, or to the template itself, and records which
+    it has had.
+  - **`circle_agendas/agenda_probe.gs`** holds tests of what Apps Script can
+    do to an agenda doc, each run on a copy of the template: copying agenda
+    rows and whole meetings (from the same tab, another tab, or another
+    doc), adding an attendance checklist, and inserting person and date
+    chips. Each reports which smart chips and checklist ticks survived.
+  - **`circle_agendas/doc_helpers.gs`** holds the template's ID and the
+    helpers the other two share.
 
 ### `util/`: shared modules
 

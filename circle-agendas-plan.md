@@ -3,8 +3,9 @@
 A Google Doc for each circle holding its meetings' agendas, based loosely on
 Sociocracy For All's "Session Circle Agenda" template (a starting point
 only; the design is expected to diverge from it), with scripts doing the
-arithmetic and the setting up. Nothing is built yet except a test,
-`circle_agendas/agenda_probe.gs`.
+arithmetic and the setting up. Nothing is built yet except the tests in
+`circle_agendas/agenda_probe.gs`, and `circle_agendas/template_edits.gs`,
+which makes changes to the template as code (tried on a copy first).
 
 ## What a circle's doc does
 
@@ -85,10 +86,12 @@ Results (run 2026-10-31 on a copy of the SoFA-based doc):
   meeting's total duration is in the admin block's Duration row (in hours).
 
 So a new meeting will be a copy of a blank meeting, and a new item a copy
-of a blank topic row, both within the same doc. Still to test: whether
-dropdown chips survive a copy from another tab of the doc, and from
-another doc (a dropdown refers to a definition, which may belong to the
-doc).
+of a blank topic row. Still to test, with `runTabProbe`: whether dropdown
+chips survive a copy from another tab of the doc, and from another doc (a
+dropdown refers to a definition, which may belong to the doc). That decides
+where the blank meeting lives: a "Blank meeting" tab in each circle's doc
+(which would let a circle add its own standing items), or one central
+template doc.
 
 The SoFA template has a page header (its credit line). Pageless docs hide
 headers and show a notice saying so; deleting the header (switch to Pages
