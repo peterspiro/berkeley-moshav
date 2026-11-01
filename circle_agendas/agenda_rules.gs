@@ -49,8 +49,11 @@ function parseMinutes(text) {
   return m ? Number(m[1]) : null;
 }
 
-// Minutes from a number of hours, "1.5" or "1.5 h"; null otherwise.
+// Minutes from a number of hours, "1.5" or "1.5 h", or from hours and
+// minutes, "1:30"; null otherwise.
 function parseHours(text) {
+  const clock = /^\s*(\d+):([0-5]\d)\s*$/.exec(text || '');
+  if (clock) return Number(clock[1]) * 60 + Number(clock[2]);
   const m = /^\s*(\d+(?:\.\d+)?)\s*(?:h|hr|hrs|hours?)?\.?\s*$/i.exec(text || '');
   return m ? Math.round(Number(m[1]) * 60) : null;
 }

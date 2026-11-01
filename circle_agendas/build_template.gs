@@ -36,6 +36,7 @@ const COLOR = {
   hint: '#5b6f99',
   muted: '#777777',
   border: '#c8c8c8',
+  followUp: '#fff2cc', // Docs' "light yellow 3"
   aboutLabel: '#ffd580',
   aboutValue: '#fff3d1',
   rolesHeader: '#7cc896',
@@ -73,26 +74,35 @@ const DROPDOWNS = {
 const SAMPLE_START = '19:30';
 const SAMPLE_HOURS = '1.5';
 // Each meeting's items before the closing round, in the template and in
-// new meetings. kind: 'round' and 'report' items are shaded; body:
-// 'checkbox' or 'bullet' adds an empty list item under the title; type: a
-// plain label, or outcome, a dropdown chip.
+// new meetings. kind: 'round' and 'report' items are shaded; round items
+// get no presenter; actions: a checklist under the description, for action
+// items; notes: false for no bulleted Notes.
 const AGENDA = [
-  {title: 'Opening Round / Check-in', note: ' (no notes)', minutes: 10, kind: 'round'},
-  {admin: true, minutes: 3, kind: 'round'},
-  {title: 'Consent to Agenda', minutes: 2, type: 'Decision', kind: 'report'},
-  {title: 'Action Items Accountability', note: ' (noted from previous meeting)', minutes: 3,
-    type: 'Report', body: 'checkbox'},
-  {title: 'Topic', minutes: 20, outcome: 'decision', body: 'bullet'},
-  {title: 'Topic', minutes: 20, outcome: 'selection', body: 'bullet'},
-  {title: 'Topic', minutes: 20, outcome: 'decision', body: 'bullet'},
-  {title: 'Action Items Recap', minutes: 5, type: 'Report', body: 'checkbox', kind: 'report',
-    note: ' (to paste on next meeting\'s Action Items Accountability section)'},
+  {title: 'Opening Round / Check-in', note: ' (no notes)', minutes: 10, kind: 'round',
+    notes: false},
+  {admin: true, minutes: 3, kind: 'round', notes: false},
+  {title: 'Consent to Agenda', minutes: 2, kind: 'report'},
+  {title: 'Action Items Accountability', minutes: 3, actions: true,
+    note: ' (the action items from the previous meeting\'s recap; tick each one that\'s ' +
+      'done, and its line is struck through)'},
+  {title: 'Topic', minutes: 20},
+  {title: 'Topic', minutes: 20},
+  {title: 'Topic', minutes: 20},
+  {title: 'Action Items Recap', minutes: 5, kind: 'report', actions: true,
+    note: ' (one line for each action agreed in this meeting, with who\'ll do it and by ' +
+      'when; each is copied to the next meeting\'s Action Items Accountability, where ' +
+      'its box is ticked once it\'s done)'},
 ];
 const CLOSING_ROUND = {title: 'Closing Round / Check-out',
-  note: ' (feedback on content, interpersonal, processes)', body: 'bullet', kind: 'round'};
-// The rows above the agenda items (date, time and place, "Agenda"), each
-// merged across the table.
+  note: ' (feedback on content, interpersonal, processes)', kind: 'round'};
+// A meeting table's columns.
+const COL = {time: 0, duration: 1, presenter: 2, description: 3, notes: 4, followUp: 5};
+const MEETING_COLUMNS = 6;
+const MEETING_HEADINGS = ['Time', 'Duration', 'Presenter', 'Description', 'Notes', 'Follow-up'];
+// The rows above the agenda items (date, time and place, and the column
+// headings); the first two are each merged across the table.
 const MEETING_HEADER_ROWS = 3;
+const MEETING_MERGED_ROWS = 2;
 // Of those, the date and the time and place stay in view while scrolling
 // through the meeting. (Docs shows pinned rows, while they stick, as a copy
 // that can't be clicked into, so links there often can't be followed.)
@@ -245,9 +255,12 @@ function layOut(body, docId) {
   section(body, 'MEETINGS');
   writeRuns(body.appendParagraph(''),
     [['+ New meeting', {[A.LINK_URL]: actionUrl('meeting', docId)}]]);
-  const today = Utilities.formatDate(new Date(), TIME_ZONE, 'yyyy-MM-dd');
+  // Dated yesterday, so it's already past and doesn't stop "+ New meeting"
+  // adding the next one.
+  const yesterday = Utilities.formatDate(new Date(Date.now() - 24 * 3600 * 1000), TIME_ZONE,
+    'yyyy-MM-dd');
   const meetingId = meetingTable(body, undefined, docId, {
-    date: today, start: SAMPLE_START, hours: SAMPLE_HOURS, attendees: [],
+    date: yesterday, start: SAMPLE_START, hours: SAMPLE_HOURS, attendees: [],
   });
   body.appendParagraph('');
 
@@ -356,17 +369,18 @@ function backlogTable(body) {
 }
 
 // Inserts a meeting at a position in the body (or, if at is undefined,
-// appends it), and returns its ID. The
-// meeting: its date; time and place; "Agenda"; one row per item, each with
-// its start time and duration; just above Action Items Recap (where new
-// items go), a row of links that add an item and update the times (which
-// also identify the meeting; see meetings.gs); the closing round, which
-// gets the time left; and the end time.
+// appends it), and returns its ID. The meeting: its date; time and place;
+// the column headings; one row per item, each with its start time and
+// duration; just above Action Items Recap (where new items go), a row of
+// links that add an item and update the times (which also identify the
+// meeting; see meetings.gs); the closing round, which gets the time left;
+// and the end time.
 //
 // details: date ('yyyy-MM-dd'), start ('19:30'), hours ('1.5'), and
-// optionally place (the Zoom link), attendees (names), minutes (runs, for
-// the Minutes row), next (text, for Next meeting), and carryOver (list
-// items to copy into Action Items Accountability).
+// optionally place (the Zoom link), attendees (names, which also make the
+// Presenter dropdown's choices), minutes (runs, for the Minutes row), next
+// (text, for Next meeting), and carryOver (list items to copy into Action
+// Items Accountability).
 function meetingTable(body, at, docId, details) {
   const start = parseTime(details.start);
   const total = parseHours(details.hours);
@@ -379,7 +393,9 @@ function meetingTable(body, at, docId, details) {
   items.splice(recap < 0 ? items.length - 1 : recap, 0, {links: true});
 
   const rowCount = MEETING_HEADER_ROWS + items.length + 1;
-  const table = newTable(body, rowCount, 4, at);
+  const table = newTable(body, rowCount, MEETING_COLUMNS, at);
+  const meetingId = newMeetingId();
+  const presenters = (details.attendees || []).length ? presenterDropdownId(meetingId) : null;
 
   // A date chip without a time is shown in UTC, so it's given noon UTC on
   // the local date, which is that date everywhere.
@@ -387,72 +403,84 @@ function meetingTable(body, at, docId, details) {
   table.getCell(0, 0).editAsText().setBold(true);
   writeCell(table.getCell(1, 0), [[['Time  ', BOLD], [details.start], ['     Place  ', BOLD],
     ...(details.place ? [['Zoom room', {[A.LINK_URL]: details.place}]] : [])]]);
-  writeCell(table.getCell(2, 0), [[['Agenda', BOLD]]]);
-  for (let r = 0; r < MEETING_HEADER_ROWS; r++) {
-    for (let c = 1; c < 4; c++) writeCell(table.getCell(r, c), [[]]);
+  for (let r = 0; r < MEETING_MERGED_ROWS; r++) {
+    for (let c = 1; c < MEETING_COLUMNS; c++) writeCell(table.getCell(r, c), [[]]);
   }
+  MEETING_HEADINGS.forEach((h, c) => writeCell(table.getCell(2, c), [[[h, BOLD]]]));
 
-  const meetingId = newMeetingId();
   items.forEach((item, i) => {
     const r = MEETING_HEADER_ROWS + i;
+    const cell = c => table.getCell(r, c);
     if (item.links) {
       linksRow(table.getRow(r), docId, meetingId);
+      cell(COL.followUp).setBackgroundColor(COLOR.followUp);
       return;
     }
-    writeCell(table.getCell(r, 0), [[[formatTime(item.start), MUTED]]]);
-    writeCell(table.getCell(r, 1), [[[String(item.minutes),
+    writeCell(cell(COL.time), [[[formatTime(item.start), MUTED]]]);
+    writeCell(cell(COL.duration), [[[String(item.minutes),
       item.computed ? {...MUTED, [A.ITALIC]: true} : MUTED]]]);
-    const content = table.getCell(r, 2);
-    const carryOver = item.title === 'Action Items Accountability' ? details.carryOver || [] : [];
+    writeCell(cell(COL.presenter),
+      [presenters && item.kind !== 'round' ? [[token('presenter', presenters)]] : []]);
+    const description = cell(COL.description);
     if (item.admin) {
-      adminBlock(content, details);
+      adminBlock(description, details);
     } else {
-      const lines = [[[item.title, BOLD], ...(item.note ? [[item.note]] : [])]];
-      if (item.body && !carryOver.length) lines.push([[token(item.body)]]);
-      writeCell(content, lines);
+      const carryOver = item.title === 'Action Items Accountability' ? details.carryOver || [] : [];
+      const lines = [[[item.title, BOLD], ...(item.note ? [[item.note, MUTED]] : [])]];
+      if (item.actions && !carryOver.length) lines.push([[token('checkbox')]]);
+      writeCell(description, lines);
       for (const el of carryOver) {
-        if (el.getType() === DocumentApp.ElementType.LIST_ITEM) content.appendListItem(el.copy());
-        else content.appendParagraph(el.copy());
+        if (el.getType() === DocumentApp.ElementType.LIST_ITEM) description.appendListItem(el.copy());
+        else description.appendParagraph(el.copy());
       }
     }
-    const type = table.getCell(r, 3);
-    if (item.outcome) writeCell(type, [[[token('dropdown', 'outcome', item.outcome)]]]);
-    else writeCell(type, [item.type ? [[item.type, {...MUTED, [A.BOLD]: true}]] : []]);
-    alignCell(type, DocumentApp.HorizontalAlignment.RIGHT);
+    writeCell(cell(COL.notes), [item.notes === false ? [] : [[token('bullet')]]]);
+    writeCell(cell(COL.followUp), [[]]);
     shadeRow(table, r, item.kind);
+    cell(COL.followUp).setBackgroundColor(COLOR.followUp);
   });
 
   const last = rowCount - 1;
-  writeCell(table.getCell(last, 0), [[[formatTime(times.end), MUTED]]]);
-  writeCell(table.getCell(last, 1), [[['end', {...MUTED, [A.ITALIC]: true}]]]);
-  writeCell(table.getCell(last, 2), [[]]);
-  writeCell(table.getCell(last, 3), [[]]);
+  for (let c = 0; c < MEETING_COLUMNS; c++) writeCell(table.getCell(last, c), [[]]);
+  writeCell(table.getCell(last, COL.time), [[[formatTime(times.end), MUTED]]]);
+  writeCell(table.getCell(last, COL.duration), [[['end', {...MUTED, [A.ITALIC]: true}]]]);
   shadeRow(table, last, 'round');
+  table.getCell(last, COL.followUp).setBackgroundColor(COLOR.followUp);
 
-  table.setColumnWidth(0, 45);
-  table.setColumnWidth(1, 35);
-  table.setColumnWidth(3, 85);
+  table.setColumnWidth(COL.time, 45);
+  table.setColumnWidth(COL.duration, 55);
+  table.setColumnWidth(COL.presenter, 90);
   return meetingId;
+}
+
+// The ID of a meeting's Presenter dropdown's list of choices (see
+// presenterDropdownRequest).
+function presenterDropdownId(meetingId) {
+  return 'kix.p' + meetingId;
 }
 
 // The row of links that add an item and update the times.
 function linksRow(row, docId, meetingId) {
-  writeCell(row.getCell(0), [[]]);
-  writeCell(row.getCell(1), [[]]);
-  writeCell(row.getCell(2), [[
+  for (let c = 0; c < MEETING_COLUMNS; c++) writeCell(row.getCell(c), [[]]);
+  writeCell(row.getCell(COL.description), [[
     ['+ Add item', {[A.LINK_URL]: actionUrl('item', docId, meetingId)}], ['        '],
     ['↻ Update times', {[A.LINK_URL]: actionUrl('times', docId, meetingId)}]]]);
-  writeCell(row.getCell(3), [[]]);
 }
 
 // The meeting's admin details, as a table inside its agenda row. Each row's
-// value is a list of paragraphs, each a list of runs.
+// value is a list of paragraphs, each a list of runs. Attendance is the
+// attendees as a checklist, and a bulleted list for guests, closely spaced.
 function adminBlock(cell, details) {
   const attendees = details.attendees || [];
   const rows = [
-    ['Attendance', attendees.length
-      ? attendees.map(name => [[token('checkbox')], [name]])
-      : [[[token('checkbox')]]]],
+    ['Attendance', [
+      [['Tick the box next to anyone who isn\'t here.', MUTED]],
+      ...(attendees.length
+        ? attendees.map(name => [[token('checkbox')], [name]])
+        : [[[token('checkbox')]]]),
+      [['Guests:', BOLD]],
+      [[token('bullet')]],
+    ]],
     ['Duration (hours)', [[[details.hours]]]],
     ['Minutes', [details.minutes || [['No previous minutes']]]],
     ['Information', [[['(announcements)', HINT]]]],
@@ -464,6 +492,13 @@ function adminBlock(cell, details) {
     writeCell(table.getCell(r, 0), [[[label, BOLD]]]);
     writeCell(table.getCell(r, 1), value);
   });
+  const attendance = table.getCell(0, 1);
+  for (let i = 0; i < attendance.getNumChildren(); i++) {
+    const child = attendance.getChild(i);
+    if (child.getType() === DocumentApp.ElementType.PARAGRAPH) {
+      child.asParagraph().setSpacingBefore(0).setSpacingAfter(0).setLineSpacing(1);
+    }
+  }
   table.setBorderWidth(0);
   table.setColumnWidth(0, 120);
   // The empty paragraph a cell starts with, now above the table.
@@ -553,10 +588,10 @@ function finishMeeting(docId, meetingId) {
   const meeting = content.find(se => se.table && apiMeetingId(se) === meetingId);
   const tableStartLocation = {index: meeting.startIndex};
   const merges = [];
-  for (let r = MEETING_HEADER_ROWS - 1; r >= 0; r--) {
+  for (let r = MEETING_MERGED_ROWS - 1; r >= 0; r--) {
     merges.push({mergeTableCells: {tableRange: {
       tableCellLocation: {tableStartLocation, rowIndex: r, columnIndex: 0},
-      rowSpan: 1, columnSpan: 4,
+      rowSpan: 1, columnSpan: MEETING_COLUMNS,
     }}});
   }
   Docs.Documents.batchUpdate({requests: [
@@ -568,7 +603,7 @@ function finishMeeting(docId, meetingId) {
   content = Docs.Documents.get(docId).body.content;
   const merged = content.find(se => se.table && se.startIndex === meeting.startIndex).table;
   const tidy = [];
-  for (let r = MEETING_HEADER_ROWS - 1; r >= 0; r--) {
+  for (let r = MEETING_MERGED_ROWS - 1; r >= 0; r--) {
     const paras = merged.tableRows[r].tableCells[0].content;
     const extra = paras.slice(1);
     if (extra.length && extra.every(se => se.paragraph && !paraText(se.paragraph).trim())) {
@@ -599,6 +634,9 @@ function tokenRequest(t) {
     const def = DROPDOWNS[args[0]];
     if (!def || !def.options.some(o => o.key === args[1])) throw new Error('Unknown dropdown ' + t.text);
     return {insertDropdown: {location, dropdownDefinitionId: def.id, selectedOptionId: optionId(args[1])}};
+  }
+  if (kind === 'presenter') {
+    return {insertDropdown: {location, dropdownDefinitionId: args[0], selectedOptionId: optionId('none')}};
   }
   if (kind === 'date') {
     return {insertDate: {location, dateElementProperties: {
@@ -648,6 +686,18 @@ function apiMeetingId(se) {
     }
   });
   return id;
+}
+
+// The request that creates a meeting's Presenter dropdown's choices: none
+// ("—"), then each attendee (up to Docs' limit of 50 choices).
+function presenterDropdownRequest(meetingId, attendees) {
+  return {createDropdownDefinition: {dropdownDefinition: {
+    dropdownDefinitionId: presenterDropdownId(meetingId),
+    dropdownDefinitionProperties: {title: 'Presenter', options: [
+      {optionId: optionId('none'), displayValue: '—'},
+      ...attendees.slice(0, 49).map((name, i) => ({optionId: optionId('p' + i), displayValue: name})),
+    ]},
+  }}};
 }
 
 function optionId(key) {

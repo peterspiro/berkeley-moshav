@@ -73,7 +73,8 @@ class TestParsing:
 
     @pytest.mark.parametrize("text, minutes", [
         ("1.5", 90), ("2 h", 120), ("0.75 hours", 45), ("1 hour", 60),
-        ("90 min", None), ("", None)])
+        ("1:30", 90), (" 0:45 ", 45), ("2:00", 120),
+        ("1:75", None), ("1:3", None), ("90 min", None), ("", None)])
     def test_parse_hours(self, text, minutes):
         assert js(f"parseHours({json.dumps(text)})") == minutes
 

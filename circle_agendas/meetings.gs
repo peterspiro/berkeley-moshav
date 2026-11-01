@@ -4,10 +4,11 @@
  * What the web app (web_app.gs) does to an agenda doc: add the circle's
  * next meeting, and, to a meeting, update its times or add an agenda item.
  * A meeting is one table (see meetingTable in build_template.gs):
- * MEETING_HEADER_ROWS rows of date, time and place, and "Agenda"; then one
- * row per item, with its start time, its duration in minutes, its content,
- * and its type, and among them (just above Action Items Recap) the row of
- * the meeting's links; then the closing round; then the end time.
+ * MEETING_HEADER_ROWS rows of date, time and place, and column headings;
+ * then one row per item, in the columns COL names (start time, duration in
+ * minutes, presenter, description, notes, follow-up), and among them (just
+ * above Action Items Recap) the row of the meeting's links; then the
+ * closing round; then the end time.
  *
  * A meeting is found by its ID, which is in its links' addresses, so the
  * links keep working wherever the meeting moves in the doc.
@@ -40,16 +41,19 @@ function addItem(docId, meetingId) {
   const closing = table.getNumRows() - 2;
   let at = linksRowIndex(table);
   for (let r = MEETING_HEADER_ROWS; r < closing && at < 0; r++) {
-    if (table.getCell(r, 2).getText().trim().startsWith('Action Items Recap')) at = r;
+    if (table.getCell(r, COL.description).getText().trim().startsWith('Action Items Recap')) at = r;
   }
   if (at < 0) at = closing;
+  const presenters = presenterDropdownId(meetingId);
+  const hasPresenters = presenters in (dropdownDefinitions(docId));
   const row = table.insertTableRow(at);
-  for (let c = 0; c < 4; c++) row.appendTableCell();
-  writeCell(row.getCell(0), [[]]);
-  writeCell(row.getCell(1), [[[String(NEW_ITEM_MINUTES), MUTED]]]);
-  writeCell(row.getCell(2), [[['Topic', BOLD]], [[token('bullet')]]]);
-  writeCell(row.getCell(3), [[[token('dropdown', 'outcome', 'decision')]]]);
-  alignCell(row.getCell(3), DocumentApp.HorizontalAlignment.RIGHT);
+  for (let c = 0; c < MEETING_COLUMNS; c++) row.appendTableCell();
+  for (let c = 0; c < MEETING_COLUMNS; c++) writeCell(row.getCell(c), [[]]);
+  writeCell(row.getCell(COL.duration), [[[String(NEW_ITEM_MINUTES), MUTED]]]);
+  if (hasPresenters) writeCell(row.getCell(COL.presenter), [[[token('presenter', presenters)]]]);
+  writeCell(row.getCell(COL.description), [[['Topic', BOLD]]]);
+  writeCell(row.getCell(COL.notes), [[[token('bullet')]]]);
+  row.getCell(COL.followUp).setBackgroundColor(COLOR.followUp);
 
   const messages = recalculate(table);
   doc.saveAndClose();
@@ -59,11 +63,14 @@ function addItem(docId, meetingId) {
 
 // Adds the circle's next meeting at the top of MEETINGS: the first timed
 // event on the circle's calendar after the day of the newest meeting in the
-// doc (or after now, if there's none). Its date, start, and length come
-// from the event; its Place is the circle's Zoom room; its attendance list
-// is the circle's members; its Minutes link to the previous meeting; its
-// Next meeting is the event after; and the previous meeting's Action Items
-// Recap is copied to its Action Items Accountability.
+// doc (or after now, if there's none). Refuses while the newest meeting
+// hasn't started yet. The new meeting's date, start, and length come from
+// the event; its Place is the circle's Zoom room; its attendance list, and
+// its Presenter dropdowns' choices, are the circle's members; its Minutes
+// link to the previous meeting; its Next meeting is the event after; and
+// the previous meeting's Action Items Recap is copied to its Action Items
+// Accountability. The links that change a meeting are removed from the
+// meetings before it, which are then no longer to be changed.
 function addMeeting(docId) {
   const circle = circleForDoc(docId);
   if (!circle) {
@@ -79,6 +86,16 @@ function addMeeting(docId) {
   const content = Docs.Documents.get(docId).body.content;
   const newest = content.find(se => se.table && apiMeetingId(se));
   const newestDate = newest ? apiMeetingDate(newest) : null;
+  if (newestDate) {
+    const startText = headerTimeText(apiCellText(newest.table.tableRows[1].tableCells[0]));
+    const startsAt = Utilities.parseDate(newestDate, TIME_ZONE, 'yyyy-MM-dd').getTime() +
+      (parseTime(startText) || 0) * 60000;
+    if (startsAt > Date.now()) {
+      return {done: false, title: 'Next meeting not started yet', messages: [
+        'The newest meeting in the agenda, on ' + newestDate + (startText ? ' at ' + startText : '') +
+        ', hasn\'t started yet. The one after it can be added once it has.']};
+    }
+  }
   const after = newestDate
     ? new Date(Utilities.parseDate(newestDate, TIME_ZONE, 'yyyy-MM-dd').getTime() + 24 * 3600 * 1000)
     : new Date();
@@ -112,7 +129,17 @@ function addMeeting(docId) {
   const at = newMeetingPosition(body);
   const meetingId = meetingTable(body, at, docId, details);
   body.insertParagraph(at + 1, '');
+  for (let i = 0; i < body.getNumChildren(); i++) {
+    const el = body.getChild(i);
+    if (el.getType() !== DocumentApp.ElementType.TABLE) continue;
+    const links = linksRowIndex(el.asTable());
+    if (links >= 0 && meetingIdOf(el.asTable()) !== meetingId) el.asTable().removeRow(links);
+  }
   doc.saveAndClose();
+  if (details.attendees.length) {
+    Docs.Documents.batchUpdate({requests: [presenterDropdownRequest(meetingId, details.attendees)]},
+      docId);
+  }
   replaceTokens(docId);
   finishMeeting(docId, meetingId);
   return {done: true, title: 'Meeting added',
@@ -142,7 +169,7 @@ function newMeetingPosition(body) {
 // The non-empty items under a meeting's Action Items Recap.
 function recapItems(table) {
   for (let r = MEETING_HEADER_ROWS; r < table.getNumRows(); r++) {
-    const cell = table.getCell(r, 2);
+    const cell = table.getCell(r, COL.description);
     if (!cell.getText().trim().startsWith('Action Items Recap')) continue;
     const items = [];
     for (let i = 1; i < cell.getNumChildren(); i++) {
@@ -171,6 +198,17 @@ function apiMeetingDate(se) {
   return null;
 }
 
+// The text of a Docs API table cell.
+function apiCellText(cell) {
+  return cell.content.filter(se => se.paragraph).map(se => paraText(se.paragraph)).join('');
+}
+
+// The doc's first tab's dropdowns' lists of choices, by ID.
+function dropdownDefinitions(docId) {
+  return Docs.Documents.get(docId, {includeTabsContent: true}).tabs[0].documentTab
+    .dropdownDefinitions || {};
+}
+
 function notFound() {
   return {done: false, title: 'Meeting not found', messages: [
     'This meeting isn\'t in the doc any more, or the row holding its links was changed.']};
@@ -195,7 +233,7 @@ function recalculate(table) {
   const total = parseHours(lengthText);
   if (total === null) {
     return ['Couldn\'t read the meeting\'s Duration (hours) "' + lengthText + '"; ' +
-      'nothing was changed. Write it like 1.5.'];
+      'nothing was changed. Write it like 1.5 or 1:30.'];
   }
 
   const last = table.getNumRows() - 1;
@@ -205,7 +243,7 @@ function recalculate(table) {
   for (let r = MEETING_HEADER_ROWS; r < closing; r++) if (r !== links) itemRows.push(r);
   const durations = [];
   for (const r of itemRows) {
-    const cell = table.getCell(r, 1);
+    const cell = table.getCell(r, COL.duration);
     const text = cell.getText().trim();
     const minutes = parseMinutes(text);
     if (minutes === null) {
@@ -217,12 +255,12 @@ function recalculate(table) {
   }
 
   const times = scheduleTimes(start, durations, total);
-  times.starts.forEach((t, i) => writeMuted(table.getCell(itemRows[i], 0), formatTime(t)));
-  writeMuted(table.getCell(closing, 0), formatTime(times.closingStart));
+  times.starts.forEach((t, i) => writeMuted(table.getCell(itemRows[i], COL.time), formatTime(t)));
+  writeMuted(table.getCell(closing, COL.time), formatTime(times.closingStart));
   const overrun = times.closingMinutes < 0;
-  writeMuted(table.getCell(closing, 1), String(times.closingMinutes),
+  writeMuted(table.getCell(closing, COL.duration), String(times.closingMinutes),
     {[A.ITALIC]: true, [A.FOREGROUND_COLOR]: overrun ? PROBLEM_COLOR : COLOR.muted});
-  writeMuted(table.getCell(last, 0), formatTime(times.end));
+  writeMuted(table.getCell(last, COL.time), formatTime(times.end));
   if (overrun) {
     messages.push('The items before the closing round run ' + -times.closingMinutes +
       ' minutes past the end of the meeting, so its duration is negative.');
@@ -238,7 +276,8 @@ function writeMuted(cell, text, extra) {
 // details (a table inside one of the item rows), or null.
 function durationCell(table) {
   for (let r = MEETING_HEADER_ROWS; r < table.getNumRows(); r++) {
-    const cell = table.getCell(r, 2);
+    if (table.getRow(r).getNumCells() <= COL.description) continue;
+    const cell = table.getCell(r, COL.description);
     for (let i = 0; i < cell.getNumChildren(); i++) {
       const child = cell.getChild(i);
       if (child.getType() !== DocumentApp.ElementType.TABLE) continue;
@@ -255,7 +294,7 @@ function durationCell(table) {
 }
 
 function itemTitle(table, r) {
-  return snippet(table.getCell(r, 2).getText().split('\n')[0], 40);
+  return snippet(table.getCell(r, COL.description).getText().split('\n')[0], 40);
 }
 
 // ── Finding meetings ─────────────────────────────────────────────────────────
@@ -274,13 +313,16 @@ function findMeeting(body, meetingId) {
 // The ID in a meeting table's links, or null if the table isn't a meeting.
 function meetingIdOf(table) {
   const r = linksRowIndex(table);
-  return r < 0 ? null : linkedMeetingId(table.getCell(r, 2));
+  return r < 0 ? null : linkedMeetingId(table.getCell(r, COL.description));
 }
 
 // The index of the row holding a meeting's links, or -1.
 function linksRowIndex(table) {
   for (let r = MEETING_HEADER_ROWS; r < table.getNumRows(); r++) {
-    if (table.getRow(r).getNumCells() > 2 && linkedMeetingId(table.getCell(r, 2))) return r;
+    if (table.getRow(r).getNumCells() > COL.description &&
+        linkedMeetingId(table.getCell(r, COL.description))) {
+      return r;
+    }
   }
   return -1;
 }

@@ -13,8 +13,9 @@ finding the circle); the time arithmetic in
 `circle_agendas/agenda_probe.gs`.
 
 A new meeting is the first event on the circle's calendar after the day of
-the newest meeting in the doc (or after now, if there's none), so adding
-twice adds the next two meetings, and none twice.
+the newest meeting in the doc (or after now, if there's none), and can't be
+added until the newest meeting has started, so no meeting is added twice
+and only one upcoming meeting is in the doc at a time.
 
 Next: making circle docs (by `add_new_group.py`, a backfill for existing
 circles, and handling copies made by hand), filling in About this circle;
@@ -40,9 +41,15 @@ they need will take their own scripts.
   the previous meeting, and its Next meeting the following calendar event.
   The previous meeting's Action Items Recap is copied to its Action Items
   Accountability (all of it: a script can't tell ticked items from
-  unticked).
+  unticked). It can't be added until the newest meeting has started, and
+  adding it removes the links from the meetings before it, which are then
+  past and not to be changed.
+- **Columns**: Time, Duration, Presenter (a dropdown of the meeting's
+  attendees, made when the meeting is), Description, Notes, and Follow-up
+  (light yellow).
 - **New agenda item**: a link in each meeting adds a topic after its last
   topic (before Action Items Recap), with a duration of 5 minutes.
+- **Meeting length**: its Duration (hours) row, as 1.5 or 1:30.
 - **Times**: every item's duration can be edited except the closing
   round's, which is the meeting's end minus the time the closing round
   starts. Each item's time, and the final "end" row, are calculated from the
@@ -51,9 +58,17 @@ they need will take their own scripts.
   recalculated (when someone clicks a link, and possibly on a timer).
   A duration that can't be read as a number is flagged, not guessed.
 - **Attendance**: a checklist of the circle's members, from its Google
-  Group, with names from the Drive item's permissions. Names start
-  unticked; ticking one marks that member absent, and Docs strikes the name
-  through.
+  Group, with names from the Drive item's permissions, closely spaced.
+  Names start unticked; ticking one marks that member absent, and Docs
+  strikes the name through (an instruction above the names says so; Docs
+  strikes through only ticked checklist items, or text formatted by hand).
+  Below it, a bulleted list for guests' names. Guests aren't among the
+  Presenter dropdown's choices.
+- **Tabs**: each meeting could have a tab of its own. Not done yet: Apps
+  Script can't make a tab (only the Docs API can), and in the probe it
+  didn't see one the API had just made, so building a meeting in a new tab
+  may mean doing it all through the Docs API. Docs' Find also searches only
+  the tab you're in.
 - **About this circle** is filled in when the doc is created: its email
   address and Drive folder from the group's footer, and its parent and
   sub-circles from the Circle Structure page. The Members and roles table
