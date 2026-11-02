@@ -211,6 +211,26 @@ class TestAgendaLink:
         desc = patch(event, self.CTX)["patch"]["description"]
         assert desc == f"In person [no zoom]\n\n{self.LINE}"
 
+    OLD = "https://docs.google.com/document/d/OLD_doc-0/edit"
+
+    def test_old_doc_relinked_not_added_twice(self):
+        old_ctx = {**CTX_FAQ, "agendaUrl": self.OLD}
+        event = done_with({"description": "Notes"}, old_ctx)
+        desc = patch(event, self.CTX)["patch"]["description"]
+        assert desc.count("Agenda and minutes:") == 1
+        assert self.LINE in desc and "OLD_doc" not in desc
+
+    def test_old_doc_relinked_in_html_link(self):
+        old = f'Notes<br><br>Agenda and minutes: <a href="{self.OLD}">{self.OLD}</a><br>More'
+        desc = patch({"description": old + " [no zoom]"}, self.CTX)["patch"]["description"]
+        assert desc == (f'Notes<br><br>Agenda and minutes: <a href="{self.AGENDA}">'
+                        f'{self.AGENDA}</a><br>More [no zoom]')
+
+    def test_other_doc_links_kept(self):
+        event = {"description": f"Minutes: {self.OLD}\nAgenda and minutes: {self.OLD} [no zoom]"}
+        desc = patch(event, self.CTX)["patch"]["description"]
+        assert desc == f"Minutes: {self.OLD}\nAgenda and minutes: {self.AGENDA} [no zoom]"
+
     def test_no_agenda_doc_changes_nothing_new(self):
         assert "Agenda and minutes" not in patch({}, CTX_FAQ)["patch"]["description"]
 

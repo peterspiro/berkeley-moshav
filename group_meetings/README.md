@@ -20,7 +20,8 @@ Apps Script that looks after every group's Google calendar (the calendars
   - and, if the group has a circle agenda doc (see `../circle_agendas/`),
     an "Agenda and minutes:" line linking it, just above the FAQ line (or
     at the end, for an event without Zoom details), unless the description
-    already links the doc. The doc is found by the label the Python scripts
+    already links the doc; if the group's doc is replaced, the line is
+    relinked to the new one rather than repeated. The doc is found by the label the Python scripts
     give it in Drive, which names one of the group's addresses; the groups
     are reread hourly, so a group's new doc reaches its upcoming events
     within the hour.
