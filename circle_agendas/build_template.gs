@@ -323,10 +323,13 @@ function meetingTable(body, docId, details) {
   writeRuns(body.appendParagraph(''), [['Time  ', BOLD], [details.start],
     ['     Duration (hours)  ', BOLD], [details.hours], ['     Place  ', BOLD],
     ...(details.place ? [['Zoom room', {[A.LINK_URL]: details.place}]] : [])]);
-  attendance(body, details);
+  const spacer = attendance(body, details);
 
   const rowCount = MEETING_HEADER_ROWS + items.length + 1;
   const table = newTable(body, rowCount, MEETING_COLUMNS);
+  // Only once the table after it exists: a table appended after a paragraph
+  // takes on its text style.
+  shrinkSpacer(spacer);
   MEETING_HEADINGS.forEach((h, c) => writeCell(table.getCell(0, c), [[[h, BOLD]]]));
 
   items.forEach((item, i) => {
@@ -416,10 +419,9 @@ function attendance(body, details) {
     }
     if (c < columns.length - 1) table.setColumnWidth(c, 130);
   });
-  // Docs needs a paragraph between two tables; finishMeeting makes it as
-  // small as it can be, once the table after it is built. (Made small here,
-  // the table appended after it takes on its tiny font.)
-  body.appendParagraph('').setSpacingBefore(0).setSpacingAfter(0).setLineSpacing(1);
+  // Docs needs a paragraph between two tables (Apps Script can't delete it,
+  // though a person can); meetingTable makes it as small as it can be.
+  return body.appendParagraph('').setSpacingBefore(0).setSpacingAfter(0);
 }
 
 // A topic's description: its title, a Presenter dropdown (if presenters,
@@ -608,18 +610,13 @@ function finishMeeting(docId, meetingId, tabId) {
   }}];
   Docs.Documents.batchUpdate({requests}, docId);
 
-  // The empty paragraph between the attendance and agenda tables (which
-  // DocumentApp needed, to append the second table) is deleted; if Docs
-  // won't have that, it's made as small as it can be.
-  const gap = content[at - 1];
-  if (!gap || !gap.paragraph || paraText(gap.paragraph).trim() || !(content[at - 2] || {}).table) return;
-  const range = {startIndex: gap.startIndex, endIndex: gap.endIndex, tabId};
-  try {
-    Docs.Documents.batchUpdate({requests: [{deleteContentRange: {range}}]}, docId);
-  } catch (e) {
-    Docs.Documents.batchUpdate({requests: [{updateTextStyle: {range,
-      textStyle: {fontSize: {magnitude: 1, unit: 'PT'}}, fields: 'fontSize'}}]}, docId);
-  }
+}
+
+// The empty paragraph Docs needs between the attendance and agenda tables,
+// made as small as it can be: a 1-point font, at half line spacing.
+function shrinkSpacer(paragraph) {
+  paragraph.setAttributes({[A.FONT_SIZE]: 1});
+  paragraph.setLineSpacing(0.5).setSpacingBefore(0).setSpacingAfter(0);
 }
 
 // Replaces each token in a tab (by default, the first) with its chip or
