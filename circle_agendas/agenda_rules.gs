@@ -58,9 +58,16 @@ function parseHours(text) {
   return m ? Math.round(Number(m[1]) * 60) : null;
 }
 
-// The time typed after "Time" in a meeting's "Time 19:30  Place …" line.
+// The time typed after "Time" in a meeting's
+// "Time 19:30   Duration (hours) 1.5   Place …" line.
 function headerTimeText(line) {
-  const m = /Time\s*(.*?)\s*(?:Place\b|$)/i.exec(line || '');
+  const m = /Time\s*(.*?)\s*(?:Duration\b|Place\b|$)/i.exec(line || '');
+  return m ? m[1] : '';
+}
+
+// The meeting's length typed after "Duration (hours)" in the same line.
+function headerHoursText(line) {
+  const m = /Duration\s*(?:\(hours\))?\s*(.*?)\s*(?:Place\b|$)/i.exec(line || '');
   return m ? m[1] : '';
 }
 
@@ -70,8 +77,8 @@ function meetingIdFromUrl(url) {
   return m ? m[1] : null;
 }
 
-// "1.5" from 90 minutes, "2" from 120: a meeting's length as written in
-// its Duration (hours) row.
+// "1.5" from 90 minutes, "2" from 120: a meeting's length as written after
+// its "Duration (hours)".
 function formatHours(minutes) {
   return String(Math.round(minutes / 60 * 100) / 100);
 }

@@ -74,26 +74,24 @@ const DROPDOWNS = {
 // The first tab's title; each meeting has a tab of its own, titled with its
 // date, after it.
 const MAIN_TAB_TITLE = 'Circle';
+const BACKLOG_TAB_TITLE = 'Backlog';
 const MEETING_TAB_TITLE_RE = /^\d{4}-\d{2}-\d{2}$/;
 // Each meeting's items before the closing round, in the template and in
 // new meetings. kind: 'round' and 'report' items are shaded; round items
-// get no presenter; actions: a checklist under the description, for action
-// items; notes: false for no bulleted Notes.
+// get no presenter; actions: 'checkbox' or 'bullet', a list under the
+// description, for action items; notes: false for no bulleted Notes.
 const AGENDA = [
   {title: 'Opening Round / Check-in', note: ' (no notes)', minutes: 10, kind: 'round',
     notes: false},
   {admin: true, minutes: 3, kind: 'round', notes: false},
   {title: 'Consent to Agenda', minutes: 2, kind: 'report'},
-  {title: 'Action Items Accountability', minutes: 3, actions: true,
+  {title: 'Action Items Accountability', minutes: 3, actions: 'checkbox',
     note: ' (the action items from the previous meeting\'s recap; check each one that\'s ' +
       'done, and its line is struck through)'},
   {title: 'Topic', minutes: 20},
   {title: 'Topic', minutes: 20},
   {title: 'Topic', minutes: 20},
-  {title: 'Action Items Recap', minutes: 5, kind: 'report', actions: true,
-    note: ' (one line for each action agreed in this meeting, with who\'ll do it and by ' +
-      'when; each is copied to the next meeting\'s Action Items Accountability, where ' +
-      'its box is checked once it\'s done)'},
+  {title: 'Action Items Recap', minutes: 5, kind: 'report', actions: 'bullet'},
 ];
 const CLOSING_ROUND = {title: 'Closing Round / Check-out',
   note: ' (feedback on content, interpersonal, processes)', kind: 'round'};
@@ -222,13 +220,16 @@ const A = DocumentApp.Attribute;
 const BOLD = {[A.BOLD]: true};
 // Table text is all Docs' default size; secondary text is grey.
 const MUTED = {[A.FOREGROUND_COLOR]: COLOR.muted};
-const SMALL = {...MUTED, [A.FONT_SIZE]: 8};
 const HINT = {[A.FOREGROUND_COLOR]: COLOR.hint};
 
 // Lays out the template's first tab. It has no meetings: each gets a tab of
 // its own, added by "+ New meeting".
 function layOut(body, docId) {
   const leftover = body.getChild(0);
+
+  writeRuns(body.appendParagraph(''), [
+    ['+ New meeting', {[A.LINK_URL]: actionUrl('meeting', docId)}],
+    ['   (each meeting gets a tab of its own, listed at the left, titled with its date)', MUTED]]);
 
   const title = body.appendParagraph('Circle Agenda');
   title.setHeading(DocumentApp.ParagraphHeading.TITLE)
@@ -246,19 +247,6 @@ function layOut(body, docId) {
   section(body, 'Other policies');
   policiesTable(body);
   body.appendHorizontalRule();
-
-  section(body, 'Backlog');
-  backlogTable(body);
-  body.appendParagraph('You can sort this table by due date with Format → Table → Sort ascending.')
-    .editAsText().setAttributes(SMALL);
-  body.appendHorizontalRule();
-
-  section(body, 'MEETINGS');
-  body.appendParagraph('Each meeting has a tab of its own, titled with its date; the tabs ' +
-    'are listed at the left (under ☰ on a phone), newest first.').editAsText().setAttributes(MUTED);
-  writeRuns(body.appendParagraph(''),
-    [['+ New meeting', {[A.LINK_URL]: actionUrl('meeting', docId)}]]);
-  body.appendParagraph('');
 
   leftover.removeFromParent();
 }
@@ -335,36 +323,8 @@ function policiesTable(body) {
   table.setColumnWidth(3, 80);
 }
 
-function backlogTable(body) {
-  const headers = ['Due Date', 'Priority', 'Description', 'Duration', 'Desired Outcome',
-    'Prepared?', 'Holder'];
-  const samples = [
-    ['urgent', 'report', 'yes'], ['high', 'exploration', 'yes'],
-    ['someday', 'decision', 'no'], ['normal', 'selection', 'yes'],
-  ];
-  const table = newTable(body, samples.length + 1, headers.length);
-  headers.forEach((h, c) => {
-    const cell = table.getCell(0, c);
-    writeCell(cell, [[[h, BOLD]]]);
-    cell.setBackgroundColor(COLOR.backlogHeader);
-  });
-  samples.forEach(([priority, outcome, prepared], i) => {
-    const values = ['', token('dropdown', 'priority', priority), '', '',
-      token('dropdown', 'outcome', outcome), token('dropdown', 'prepared', prepared), ''];
-    values.forEach((v, c) => {
-      const cell = table.getCell(i + 1, c);
-      writeCell(cell, [v ? [[v]] : []]);
-      cell.setBackgroundColor(COLOR.backlogBody);
-    });
-  });
-  table.setColumnWidth(0, 70);
-  table.setColumnWidth(1, 55);
-  table.setColumnWidth(3, 55);
-  table.setColumnWidth(5, 65);
-}
-
 // Appends a meeting to a tab's body, and returns its ID. Above its table:
-// its date; its time and place; and its attendance. In its table: the
+// its date; its time, length, and place; and its attendance. In its table: the
 // column headings; one row per item, each with its start time and
 // duration; just above Action Items Recap (where new items go), a row of
 // links that add an item and update the times (which also identify the
@@ -374,8 +334,9 @@ function backlogTable(body) {
 // details: date ('yyyy-MM-dd'), start ('19:30'), hours ('1.5'), and
 // optionally place (the Zoom link), attendees (names, which also make the
 // Presenter dropdown's choices), minutes (runs, for the Minutes row), next
-// (text, for Next meeting), and carryOver (list items to copy into Action
-// Items Accountability).
+// (text, for Next meeting), and carryOver (the text of the previous
+// meeting's Action Items Recap's items, for Action Items Accountability's
+// checklist).
 function meetingTable(body, docId, details) {
   const start = parseTime(details.start);
   const total = parseHours(details.hours);
@@ -394,7 +355,8 @@ function meetingTable(body, docId, details) {
   // the local date, which is that date everywhere.
   body.appendParagraph(token('date', details.date + 'T12:00:00Z'))
     .setHeading(DocumentApp.ParagraphHeading.HEADING2);
-  writeRuns(body.appendParagraph(''), [['Time  ', BOLD], [details.start], ['     Place  ', BOLD],
+  writeRuns(body.appendParagraph(''), [['Time  ', BOLD], [details.start],
+    ['     Duration (hours)  ', BOLD], [details.hours], ['     Place  ', BOLD],
     ...(details.place ? [['Zoom room', {[A.LINK_URL]: details.place}]] : [])]);
   attendance(body, details.attendees || []);
 
@@ -421,12 +383,9 @@ function meetingTable(body, docId, details) {
     } else {
       const carryOver = item.title === 'Action Items Accountability' ? details.carryOver || [] : [];
       const lines = [[[item.title, BOLD], ...(item.note ? [[item.note, MUTED]] : [])]];
-      if (item.actions && !carryOver.length) lines.push([[token('checkbox')]]);
+      if (carryOver.length) lines.push(...carryOver.map(text => [[token(item.actions)], [text]]));
+      else if (item.actions) lines.push([[token(item.actions)]]);
       writeCell(description, lines);
-      for (const el of carryOver) {
-        if (el.getType() === DocumentApp.ElementType.LIST_ITEM) description.appendListItem(el.copy());
-        else description.appendParagraph(el.copy());
-      }
     }
     writeCell(cell(COL.notes), [item.notes === false ? [] : [[token('bullet')]]]);
     writeCell(cell(COL.followUp), [[]]);
@@ -442,8 +401,10 @@ function meetingTable(body, docId, details) {
   table.getCell(last, COL.followUp).setBackgroundColor(COLOR.followUp);
 
   table.setColumnWidth(COL.time, 45);
-  table.setColumnWidth(COL.duration, 55);
+  table.setColumnWidth(COL.duration, 45);
   table.setColumnWidth(COL.presenter, 90);
+  table.setColumnWidth(COL.description, 260);
+  table.setColumnWidth(COL.followUp, 110);
   return meetingId;
 }
 
@@ -483,7 +444,6 @@ function linksRow(row, docId, meetingId) {
 // value is a list of paragraphs, each a list of runs.
 function adminBlock(cell, details) {
   const rows = [
-    ['Duration (hours)', [[[details.hours]]]],
     ['Minutes', [details.minutes || [['No previous minutes']]]],
     ['Information', [[['(announcements)', HINT]]]],
     ['Next meeting', [[[details.next || 'TBD']]]],
@@ -555,9 +515,57 @@ function token(kind, ...args) {
 // ── Pass 2: the Docs API ─────────────────────────────────────────────────────
 
 function finishWithApi(docId) {
-  // The dropdowns' lists of choices, and the pageless format.
+  const firstTabId = Docs.Documents.get(docId, {includeTabsContent: true}).tabs[0].tabProperties.tabId;
   Docs.Documents.batchUpdate({requests: [
-    ...Object.values(DROPDOWNS).map(def => ({createDropdownDefinition: {dropdownDefinition: {
+    {updateDocumentStyle: {
+      documentStyle: {documentFormat: {documentMode: 'PAGELESS'}},
+      fields: 'documentFormat.documentMode',
+    }},
+    {updateDocumentTabProperties: {
+      tabProperties: {tabId: firstTabId, title: MAIN_TAB_TITLE}, fields: 'title',
+    }},
+  ]}, docId);
+  replaceTokens(docId);
+  backlogTab(docId);
+}
+
+// ── The Backlog tab, with the Docs API ───────────────────────────────────────
+
+// The Backlog tab, after the first: a heading, a note, and the backlog
+// table. DocumentApp can't see a tab added in the same run, so all of it is
+// built with the Docs API.
+function backlogTab(docId) {
+  const headers = ['Due Date', 'Priority', 'Description', 'Duration', 'Desired Outcome',
+    'Prepared?', 'Holder'];
+  const samples = [
+    ['urgent', 'report', 'yes'], ['high', 'exploration', 'yes'],
+    ['someday', 'decision', 'no'], ['normal', 'selection', 'yes'],
+  ];
+  const rows = [headers, ...samples.map(([priority, outcome, prepared]) => [
+    '', token('dropdown', 'priority', priority), '', '',
+    token('dropdown', 'outcome', outcome), token('dropdown', 'prepared', prepared), ''])];
+  const widths = {0: 70, 1: 55, 3: 55, 5: 65};
+
+  const reply = Docs.Documents.batchUpdate({requests: [{addDocumentTab: {
+    tabProperties: {title: BACKLOG_TAB_TITLE, index: 1},
+  }}]}, docId);
+  const tabId = reply.replies[0].addDocumentTab.tabProperties.tabId;
+
+  // The heading and note, then the table after them, and the dropdowns'
+  // lists of choices (each tab has its own).
+  const heading = 'Backlog\n';
+  const note = 'You can sort this table by due date with Format → Table → Sort ascending.\n';
+  Docs.Documents.batchUpdate({requests: [
+    {insertText: {location: {index: 1, tabId}, text: heading + note}},
+    {updateParagraphStyle: {range: {startIndex: 1, endIndex: 1 + heading.length, tabId},
+      paragraphStyle: {namedStyleType: 'HEADING_2'}, fields: 'namedStyleType'}},
+    {updateTextStyle: {
+      range: {startIndex: 1 + heading.length, endIndex: heading.length + note.length, tabId},
+      textStyle: {fontSize: {magnitude: 8, unit: 'PT'},
+        foregroundColor: apiColor(COLOR.muted)},
+      fields: 'fontSize,foregroundColor'}},
+    {insertTable: {rows: rows.length, columns: headers.length, endOfSegmentLocation: {tabId}}},
+    ...Object.values(DROPDOWNS).map(def => ({createDropdownDefinition: {tabId, dropdownDefinition: {
       dropdownDefinitionId: def.id,
       dropdownDefinitionProperties: {title: def.title, options: def.options.map(o => ({
         optionId: optionId(o.key),
@@ -565,17 +573,39 @@ function finishWithApi(docId) {
         textStyle: {backgroundColor: apiColor(o.colors[0]), foregroundColor: apiColor(o.colors[1])},
       }))},
     }}})),
-    {updateDocumentStyle: {
-      documentStyle: {documentFormat: {documentMode: 'PAGELESS'}},
-      fields: 'documentFormat.documentMode',
-    }},
   ]}, docId);
-  const firstTabId = Docs.Documents.get(docId, {includeTabsContent: true}).tabs[0].tabProperties.tabId;
-  Docs.Documents.batchUpdate({requests: [{updateDocumentTabProperties: {
-    tabProperties: {tabId: firstTabId, title: MAIN_TAB_TITLE}, fields: 'title',
-  }}]}, docId);
 
-  replaceTokens(docId);
+  // Each cell's text, last cell first so the earlier ones' positions don't
+  // move.
+  let table = apiTab(docId, tabId).content.find(se => se.table);
+  const fills = [];
+  table.table.tableRows.forEach((row, r) => row.tableCells.forEach((cell, c) => {
+    if (rows[r][c]) fills.push({index: cell.content[0].startIndex, text: rows[r][c]});
+  }));
+  fills.sort((a, b) => b.index - a.index);
+  Docs.Documents.batchUpdate({requests: fills.map(f =>
+    ({insertText: {location: {index: f.index, tabId}, text: f.text}}))}, docId);
+
+  // The header row bold and shaded, the rest shaded, and the column widths.
+  table = apiTab(docId, tabId).content.find(se => se.table);
+  const tableStartLocation = {index: table.startIndex, tabId};
+  const shade = (rowIndex, rowSpan, color) => ({updateTableCellStyle: {
+    tableRange: {tableCellLocation: {tableStartLocation, rowIndex, columnIndex: 0},
+      rowSpan, columnSpan: headers.length},
+    tableCellStyle: {backgroundColor: apiColor(color)}, fields: 'backgroundColor'}});
+  const headerRow = table.table.tableRows[0];
+  Docs.Documents.batchUpdate({requests: [
+    shade(0, 1, COLOR.backlogHeader),
+    shade(1, rows.length - 1, COLOR.backlogBody),
+    {updateTextStyle: {range: {startIndex: headerRow.startIndex,
+      endIndex: headerRow.endIndex, tabId}, textStyle: {bold: true}, fields: 'bold'}},
+    ...Object.keys(widths).map(c => ({updateTableColumnProperties: {
+      tableStartLocation, columnIndices: [Number(c)],
+      tableColumnProperties: {widthType: 'FIXED_WIDTH', width: {magnitude: widths[c], unit: 'PT'}},
+      fields: 'widthType,width'}})),
+  ]}, docId);
+
+  replaceTokens(docId, tabId);
 }
 
 // A tab's Docs API content, and its ID for requests (undefined for the

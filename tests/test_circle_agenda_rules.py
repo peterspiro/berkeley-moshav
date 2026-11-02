@@ -84,10 +84,19 @@ class TestHeaderTimeText:
         ("Time  19:30     Place  ", "19:30"),
         ("Time 7:30 pm Place Zoom", "7:30 pm"),
         ("Time 19:30", "19:30"),
+        ("Time  19:30     Duration (hours)  1.5     Place  Zoom room", "19:30"),
         ("Time  Place", ""),
         ("When?", "")])
     def test_reads_time(self, line, text):
         assert js(f"headerTimeText({json.dumps(line)})") == text
+
+    @pytest.mark.parametrize("line, text", [
+        ("Time  19:30     Duration (hours)  1.5     Place  Zoom room", "1.5"),
+        ("Time 19:30 Duration 1:30", "1:30"),
+        ("Time 19:30 Place Zoom", ""),
+        ("Time  19:30     Duration (hours)     Place", "")])
+    def test_reads_hours(self, line, text):
+        assert js(f"headerHoursText({json.dumps(line)})") == text
 
 
 class TestMeetingIdFromUrl:

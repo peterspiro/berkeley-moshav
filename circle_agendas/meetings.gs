@@ -73,8 +73,8 @@ function addItem(docId, meetingId) {
 
 // The first of the two runs that add the circle's next meeting: the first
 // timed event on the circle's calendar after the day of the newest meeting
-// in the doc (or after now, if there's none). Refuses while the newest
-// meeting hasn't started yet. Adds the meeting's tab, and keeps what the
+// in the doc (or after now, if there's none), so clicking again adds the
+// one after. Adds the meeting's tab, and keeps what the
 // second run needs for PENDING_MEETING_SECONDS; returns {pending: key} for
 // finishNewMeeting, or a result saying why it didn't.
 //
@@ -100,21 +100,9 @@ function startNewMeeting(docId) {
   const meetingTabs = api.tabs.filter(t => MEETING_TAB_TITLE_RE.test(t.tabProperties.title))
     .sort((a, b) => b.tabProperties.title.localeCompare(a.tabProperties.title));
   const newest = meetingTabs[0];
-  let newestDate = null;
-  if (newest) {
-    newestDate = newest.tabProperties.title;
-    const content = newest.documentTab.body.content;
-    const table = content.find(se => se.table);
-    const timeLine = content.find(se => se.paragraph && /^\s*Time\b/.test(paraText(se.paragraph)));
-    const startText = timeLine ? headerTimeText(paraText(timeLine.paragraph)) : '';
-    const startsAt = Utilities.parseDate(newestDate, TIME_ZONE, 'yyyy-MM-dd').getTime() +
-      (parseTime(startText) || 0) * 60000;
-    if (!table || startsAt > Date.now()) {
-      return {done: false, title: 'Next meeting not started yet', messages: [
-        'The newest meeting in the agenda, on ' + newestDate + (startText ? ' at ' + startText : '') +
-        ', hasn\'t started yet. The one after it can be added once it has.']};
-    }
-  }
+  const newestDate = newest ? newest.tabProperties.title : null;
+  // Meeting tabs go after the others (Circle, Backlog), newest first.
+  const firstMeetingIndex = api.tabs.length - meetingTabs.length;
 
   const after = newestDate
     ? new Date(Utilities.parseDate(newestDate, TIME_ZONE, 'yyyy-MM-dd').getTime() + 24 * 3600 * 1000)
@@ -143,7 +131,7 @@ function startNewMeeting(docId) {
   }
 
   const reply = Docs.Documents.batchUpdate({requests: [{addDocumentTab: {
-    tabProperties: {title: details.date, index: 1},
+    tabProperties: {title: details.date, index: firstMeetingIndex},
   }}]}, docId);
   details.tabId = reply.replies[0].addDocumentTab.tabProperties.tabId;
   details.docId = docId;
@@ -205,7 +193,8 @@ function tabUrl(docId, tabId) {
   return 'https://docs.google.com/document/d/' + docId + '/edit?tab=' + tabId;
 }
 
-// The non-empty items under a meeting's Action Items Recap.
+// The text of each non-empty item under a meeting's Action Items Recap.
+// (Only the text: Accountability makes each a checklist item.)
 function recapItems(table) {
   for (let r = MEETING_HEADER_ROWS; r < table.getNumRows(); r++) {
     const cell = table.getCell(r, COL.description);
@@ -214,9 +203,9 @@ function recapItems(table) {
     for (let i = 1; i < cell.getNumChildren(); i++) {
       const el = cell.getChild(i);
       const type = el.getType();
-      if ((type === DocumentApp.ElementType.LIST_ITEM || type === DocumentApp.ElementType.PARAGRAPH) &&
-          el.getText().trim()) {
-        items.push(el);
+      if (type === DocumentApp.ElementType.LIST_ITEM || type === DocumentApp.ElementType.PARAGRAPH) {
+        const text = el.getText().trim();
+        if (text) items.push(text);
       }
     }
     return items;
@@ -244,14 +233,14 @@ function notFound() {
 // 0. Returns what the reader should know.
 function recalculate(table) {
   const messages = [];
-  const startText = headerTimeText(timeLineText(table.getParent()));
+  const timeLine = timeLineText(table.getParent());
+  const startText = headerTimeText(timeLine);
   const start = parseTime(startText);
   if (start === null) {
     return ['Couldn\'t read the start time "' + startText + '" after "Time"; ' +
       'nothing was changed. Write it like 19:30 or 7:30 pm.'];
   }
-  const lengthCell = durationCell(table);
-  const lengthText = lengthCell ? lengthCell.getText().trim() : '';
+  const lengthText = headerHoursText(timeLine);
   const total = parseHours(lengthText);
   if (total === null) {
     return ['Couldn\'t read the meeting\'s Duration (hours) "' + lengthText + '"; ' +
@@ -290,8 +279,8 @@ function recalculate(table) {
   return messages;
 }
 
-// The text of the "Time … Place …" line above a meeting's table, in the
-// body (its tab's) that holds it, or ''.
+// The text of the "Time … Duration (hours) … Place …" line above a
+// meeting's table, in the body (its tab's) that holds it, or ''.
 function timeLineText(body) {
   for (let i = 0; i < body.getNumChildren(); i++) {
     const el = body.getChild(i);
@@ -304,27 +293,6 @@ function timeLineText(body) {
 
 function writeMuted(cell, text, extra) {
   writeCell(cell, [[[text, {...MUTED, ...extra}]]]);
-}
-
-// The cell holding the meeting's length, beside "Duration" in the admin
-// details (a table inside one of the item rows), or null.
-function durationCell(table) {
-  for (let r = MEETING_HEADER_ROWS; r < table.getNumRows(); r++) {
-    if (table.getRow(r).getNumCells() <= COL.description) continue;
-    const cell = table.getCell(r, COL.description);
-    for (let i = 0; i < cell.getNumChildren(); i++) {
-      const child = cell.getChild(i);
-      if (child.getType() !== DocumentApp.ElementType.TABLE) continue;
-      const inner = child.asTable();
-      for (let ir = 0; ir < inner.getNumRows(); ir++) {
-        const row = inner.getRow(ir);
-        if (row.getNumCells() > 1 && row.getCell(0).getText().trim().startsWith('Duration')) {
-          return row.getCell(1);
-        }
-      }
-    }
-  }
-  return null;
 }
 
 function itemTitle(table, r) {

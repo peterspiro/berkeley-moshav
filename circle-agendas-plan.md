@@ -13,9 +13,8 @@ finding the circle); the time arithmetic in
 `circle_agendas/agenda_probe.gs`.
 
 A new meeting is the first event on the circle's calendar after the day of
-the newest meeting in the doc (or after now, if there's none), and can't be
-added until the newest meeting has started, so no meeting is added twice
-and only one upcoming meeting is in the doc at a time.
+the newest meeting in the doc (or after now, if there's none), so no
+meeting is added twice, and clicking again adds the one after.
 
 Next: making circle docs (by `add_new_group.py`, a backfill for existing
 circles, and handling copies made by hand), filling in About this circle;
@@ -33,26 +32,29 @@ they need will take their own scripts.
 
 ## What a circle's doc does
 
-- **New meeting**: a link under MEETINGS, in the first tab ("Circle"), adds
-  a meeting in a tab of its own, titled with its date, just after the
-  first tab (so the newest is first). The template has no meetings. Its date, start time, and total duration come from
+- **Tabs**: "Circle" (About this circle, Members and roles, Other
+  policies, with "+ New meeting" at the top); "Backlog" (built with the
+  Docs API alone, since DocumentApp can't see a tab added in the same run);
+  then one tab per meeting, newest first. The template has no meetings.
+- **New meeting**: "+ New meeting" adds a meeting in a tab of its own,
+  titled with its date, after the Circle and Backlog tabs. Its date, start time, and total duration come from
   the next event on the circle's calendar that isn't in the doc yet, and can
   then be edited. Its Place is the circle's Zoom room, its Minutes a link to
   the previous meeting's tab, and its Next meeting the following calendar
   event.
-  The previous meeting's Action Items Recap is copied to its Action Items
-  Accountability (all of it: a script can't tell checked items from
-  unchecked). It can't be added until the newest meeting has started, and
-  adding it removes the links from the meetings before it, which are then
-  past and not to be changed.
-- **Layout**: each meeting's tab has its date, its time and place, and its
-  attendance, then the agenda table.
+  The previous meeting's Action Items Recap, a bulleted list, becomes its
+  Action Items Accountability's checklist (each item's text only). Adding
+  it removes the links from the meetings before it, which are then past
+  and not to be changed.
+- **Layout**: each meeting's tab has its date; a line with its start time,
+  length, and place; and its attendance; then the agenda table.
 - **Columns**: Time, Duration, Presenter (a dropdown of the meeting's
   attendees, made when the meeting is), Description, Notes, and Follow-up
   (light yellow).
 - **New agenda item**: a link in each meeting adds a topic after its last
   topic (before Action Items Recap), with a duration of 5 minutes.
-- **Meeting length**: its Duration (hours) row, as 1.5 or 1:30.
+- **Meeting length**: after "Duration (hours)" in the line above the
+  table, as 1.5 or 1:30.
 - **Times**: every item's duration can be edited except the closing
   round's, which is the meeting's end minus the time the closing round
   starts. Each item's time, and the final "end" row, are calculated from the

@@ -87,18 +87,18 @@ version predates `web_app.gs`: deploy a new version as above.
 
 The links:
 
-- **+ New meeting**, under the MEETINGS heading in the first tab, adds the
-  circle's next meeting in a tab of its own, titled with its date, just
-  after the first tab (so the newest is first): the first timed event on
-  the circle's calendar
-  after the day of the newest meeting in the doc (or after now, if there's
-  none). It refuses while the newest meeting hasn't started yet. Its date,
-  start time, and length come from the event; Place links the circle's
-  Zoom room; Attendance lists the circle's members, unchecked, with space
-  for guests below; each item's Presenter is a dropdown of the members;
-  Minutes links the previous meeting's tab; Next meeting is the event after; and
-  the previous meeting's Action Items Recap is copied into its Action Items
-  Accountability. The meetings before it lose their links, so they're no
+- **+ New meeting**, at the top of the first tab ("Circle"), adds the
+  circle's next meeting in a tab of its own, titled with its date, after
+  the Circle and Backlog tabs (newest first): the first timed event on the
+  circle's calendar after the day of the newest meeting in the doc (or
+  after now, if there's none), so clicking again adds the one after. Its
+  date, start time, and length come from the event, in the line above its
+  table; Place links the circle's Zoom room; Attendance lists the circle's
+  members, unchecked, with space for guests below; each item's Presenter
+  is a dropdown of the members; Minutes links the previous meeting's tab;
+  Next meeting is the event after; and the items of the previous meeting's
+  Action Items Recap (a bulleted list) become the checklist of its Action
+  Items Accountability (their text only). The meetings before it lose their links, so they're no
   longer changed. The circle is the Google Group whose footer links the
   Drive folder (or shared drive) the doc is in, so this works only for a
   doc in a circle's folder; elsewhere the page says so.
@@ -116,7 +116,8 @@ so they stay just below where new items go.
   updates the times.
 - **↻ Update times** rewrites each item's start time, the closing round's
   duration (the time left before the end), and the end time, from the
-  start time after "Time", the meeting's Duration (hours) (as 1.5 or 1:30), and the other
+  start time and Duration (hours) (as 1.5 or 1:30) in the line above the
+  table, and the other
   items' durations. A duration it can't read turns red and counts as 0; a
   closing round with no time left turns red. The page says why.
 
