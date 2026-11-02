@@ -58,9 +58,9 @@ excluding hidden groups:
       in the signed-in account's My Drive, for the circle agenda docs'
       attendance lists and Presenter choices (see util/member_names.py and
       circle_agendas/circles.gs). In a -g run too.
-  0g. Gives every circle and working group (not everybody groups) with a
-      Drive item and an email list an agenda doc, created empty in its
-      Drive item and labelled for the circle_agendas Apps Script to build
+  0g. With --agenda-docs, gives every circle and working group (not
+      everybody groups) with a Drive item and an email list an agenda doc,
+      created empty in its Drive item and labelled for the circle_agendas Apps Script to build
       (see util/circle_agenda_docs.py). A group that has one keeps it.
   1.  If it's already in the hierarchy but has been renamed, updates the
       hierarchy line to the current name (matched by Gather group ID, embedded
@@ -1448,7 +1448,7 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
          credentials_path: str, drive_id: str, group_prefix: str | None = None,
          move_events: bool = False, announce_calendars: bool = False,
          share_all_events: bool = False, full_calendar_names: bool = False,
-         draft_email: bool = False):
+         draft_email: bool = False, agenda_docs: bool = False):
     base_url = base_url.rstrip("/")
     init_log()
     log("INFO", "start", f"base_url={base_url} dry_run={dry_run} group={group_prefix!r}")
@@ -1629,8 +1629,9 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
                     excluded_ids, deactivated_ids, dry_run, only_group_id=target_id,
                 )
                 add_missing_groups(root, group_info, documents_url_by_group_id, dry_run)
-                ensure_agenda_docs(drive_service, group_info, email_by_group_id,
-                                   google_file_id_by_group_id, root, dry_run)
+                if agenda_docs:
+                    ensure_agenda_docs(drive_service, group_info, email_by_group_id,
+                                       google_file_id_by_group_id, root, dry_run)
             except QuitScript:
                 quit_requested = True
                 print("\nQuit requested — saving progress made so far.")
@@ -1708,6 +1709,11 @@ def cli():
              "(\"Technology Circle\", \"Garden Working Group\"), creating or renaming it "
              "so; later runs leave that name as it is",
     )
+    parser.add_argument(
+        "--agenda-docs", action="store_true",
+        help="Give each circle and working group without one an agenda doc, for the "
+             "circle_agendas Apps Script to build (with -g, just that group)",
+    )
     args = parser.parse_args()
 
     if args.full_calendar_name and not args.group:
@@ -1730,7 +1736,7 @@ def cli():
     email, password = load_credentials()
     main(args.base_url, email, password, args.dry_run, args.credentials, args.drive_id,
          args.group, args.move_events, args.announce_calendar, args.share_all_events,
-         args.full_calendar_name, args.email_draft)
+         args.full_calendar_name, args.email_draft, args.agenda_docs)
 
 
 if __name__ == "__main__":

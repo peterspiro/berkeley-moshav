@@ -127,8 +127,9 @@ Each circle and working group (not clubs or everybody groups) gets an
 agenda doc, built from code like the template rather than copied from it
 (a copy's links would still point at the template):
 
-- `update_groups_in_google_and_hierarchy.py` (each run) and
-  `add_new_group.py` (for the group it makes) create "<Group> Agenda",
+- `update_groups_in_google_and_hierarchy.py --agenda-docs` and
+  `add_new_group.py --agenda-doc` (opt-in until the layout is settled)
+  create "<Group> Agenda",
   empty, in the group's Drive item, labelled with Drive appProperties
   (hidden from users): the group's address, its parent's name in the
   Circle Structure (the Gather wiki page listing every circle, under its

@@ -31,6 +31,9 @@ Steps:
      util/google_group_footer.py) — this is what groups_drive_sync.gs reads
      to sync membership, so no Apps Script redeploy is needed for a new
      group to start syncing.
+  7b. With --agenda-doc, for a circle or working group, create its agenda
+     doc, empty and labelled for the circle_agendas Apps Script to build
+     (see util/circle_agenda_docs.py).
   8. Add the manager to the Google Group directly, so the list reaches
      them right away rather than after groups_drive_sync.gs's next run.
   9. Unless --no-email, open a welcome message to the new list as a draft
@@ -263,6 +266,7 @@ def main(
     short_address: bool = False,
     idempotent: bool = False,
     send_email: bool = True,
+    agenda_doc: bool = False,
 ) -> None:
     base_url = base_url.rstrip("/")
     init_log()
@@ -598,8 +602,8 @@ def main(
                 log("ERROR", "hierarchy", "Failed to write hierarchy wiki page — see log")
                 print("ERROR: failed to update the Circle Hierarchy wiki page — see log.")
 
-        # ── Give it an agenda doc, for the circle_agendas Apps Script to build ─
-        if kind in AGENDA_KINDS:
+        # ── With --agenda-doc, give it an agenda doc, for the Apps Script to build ─
+        if agenda_doc and kind in AGENDA_KINDS:
             try:
                 ensure_agenda_doc(drive_service, gemail, gdisplay, folder_id,
                                   parent_node.name if parent_node is not None else None,
@@ -717,6 +721,11 @@ def cli():
         "-d", "--drive-id", default=DEFAULT_DRIVE_ID,
         help="Shared Drive ID to create the new folder in",
     )
+    parser.add_argument(
+        "--agenda-doc", action="store_true",
+        help="For a circle or working group, also create its agenda doc, for the "
+             "circle_agendas Apps Script to build",
+    )
     args = parser.parse_args()
 
     name = " ".join(args.name)
@@ -749,6 +758,7 @@ def cli():
         group_type, name, args.parent_circle, args.manager, args.base_url, email,
         password, args.dry_run, args.credentials, args.drive_id, alias=args.alias,
         short_address=args.short_address, idempotent=args.idempotent, send_email=not args.no_email,
+        agenda_doc=args.agenda_doc,
     )
 
 

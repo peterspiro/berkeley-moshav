@@ -182,8 +182,9 @@ Rebuilding a doc deletes its meeting tabs.
 ## Circles' docs
 
 Each circle and working group gets an agenda doc, "<Group> Agenda", in its
-Drive folder. `update_groups_in_google_and_hierarchy.py` (each run) and
-`add_new_group.py` create it empty and label it in Drive with the group's
+Drive folder. `update_groups_in_google_and_hierarchy.py --agenda-docs`
+(with `-g`, for one group) and `add_new_group.py --agenda-doc` create it
+empty and label it in Drive with the group's
 address, its parent, and "new" (`util/circle_agenda_docs.py`).
 **`buildNewCircleDocs`** builds every doc so labelled, as
 `previewTemplate` builds the preview, puts the group's name, email
@@ -197,7 +198,10 @@ log links each doc it built.
 
 A group's doc is found by its label, so a group never gets a second one;
 if its doc is deleted (and emptied from the trash), the next run of
-`update_groups_in_google_and_hierarchy.py` makes a new one.
+`update_groups_in_google_and_hierarchy.py --agenda-docs` makes a new one.
+The flags keep docs from being made for every group before their layout
+is settled: changes to the Circle and Backlog tabs don't reach docs
+already made (see the plan).
 
 ## The probes (done)
 

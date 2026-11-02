@@ -211,9 +211,9 @@ status line as "calendar (members can view, not edit)".
 - **`add_new_group.py`** creates a complete new group in one step: the Drive
   folder, the Google Group (optionally with a shorter address), the Gather
   group with its manager, and the group's calendar and Zoom room; links them
-  all together; adds the group to the Circle Structure page; for a circle
-  or working group, creates its agenda doc, for the `circle_agendas` Apps
-  Script to build; and opens a welcome email to the new list as a draft in
+  all together; adds the group to the Circle Structure page; with
+  `--agenda-doc`, for a circle or working group, creates its agenda doc,
+  for the `circle_agendas` Apps Script to build; and opens a welcome email to the new list as a draft in
   your mail program.
 - **`update_groups_in_google_and_hierarchy.py`** brings every group (or one,
   with `-g`) into line: offers to find or create a missing Drive folder or
@@ -244,11 +244,12 @@ status line as "calendar (members can view, not edit)".
   and has a button that does nothing for members; members add a calendar
   from the link in the group's footer.
 
-  Each run (with `-g` too) also gives every circle and working group (not
-  everybody groups) that has a Drive item and an email list an agenda doc,
+  With `--agenda-docs` (with `-g`, for that group alone), it also gives
+  every circle and working group (not everybody groups) that has a Drive item and an email list an agenda doc,
   "<Group> Agenda", created empty in its Drive item and labelled for the
   `circle_agendas` Apps Script to build within minutes; a group that has
-  one keeps it. And it writes every Gather member's short name
+  one keeps it. Each run (with `-g` too) writes every Gather member's
+  short name
   (first name, with the last initial if another member shares it), by
   their Gather email and their Google Email, to "Circle agenda member
   names.json" in `admin@`'s My Drive, so the circle agenda docs list
