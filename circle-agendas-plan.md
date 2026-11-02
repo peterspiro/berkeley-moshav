@@ -209,7 +209,8 @@ agenda doc, built from code rather than copied from a template doc
   can tell which docs need it. Every doc built so far is version 1,
   whatever its layout: the layout changed many times before rollout, and
   docs built before then are best deleted and rebuilt rather than
-  updated.
+  updated. Version 2 reordered About this circle
+  (`reorderAboutInCircleDocs` changes version 1 docs over).
 - A guide for facilitators and secretaries: adding a meeting, adding
   items, updating times, taking notes and follow-ups, and the roles
   table. It should say that anyone who can open the doc can use its
@@ -217,7 +218,8 @@ agenda doc, built from code rather than copied from a template doc
   links change the original, not the copy).
 
 **Update scripts** (see "Updating once circles have docs"; none written
-yet, and `fillAboutForCircleDocs` is the only one-off of the kind so far)
+yet; `fillAboutForCircleDocs`, `rewriteStructureRowsInCircleDocs`, and
+`reorderAboutInCircleDocs` are the one-offs of the kind so far)
 - Write each when a change to the Circle Info or Backlog tabs needs one,
   rather than a general one that brings any doc up to date.
 - Keep the web app working with meetings made by older layouts, as it

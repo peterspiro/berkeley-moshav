@@ -35,7 +35,11 @@ const AGENDA_STATE_BUILT = 'built';
 const AGENDA_STATE_NOT_EMPTY = 'not empty';
 // Bump when the layout of what build() makes changes, so scripts updating
 // existing docs can tell which they're looking at.
-const LAYOUT_VERSION = 1;
+// 2: About this circle's rows reordered (ABOUT_LABELS), and its Drive
+// folder row renamed Google Drive Folder and linked by the circle's name.
+const LAYOUT_VERSION = 2;
+// The first layout version with About this circle in ABOUT_LABELS' order.
+const ABOUT_ORDER_LAYOUT = 2;
 const BUILD_EVERY_MINUTES = 10;
 
 // Run once, in the editor: builds new circle docs every BUILD_EVERY_MINUTES.
@@ -131,9 +135,9 @@ function subNamesOf(props) {
 }
 
 // The doc's title becomes the group's name, and About this circle gets its
-// Zoom room, email address, Drive item, and parent and sub-circles (each
-// named, and linked to its Drive folder when it's a group with one; the
-// sub-circles as a bulleted list).
+// Zoom room, email address, Drive item (linked by the circle's name), and
+// parent and sub-circles (each named, and linked to its Drive folder when
+// it's a group with one; the sub-circles as a bulleted list).
 // With onlyEmpty, only rows that are empty are filled in; with onlyRows,
 // only those rows are written, and emptied when there's nothing to say;
 // without a name, the title is left as it is.
@@ -158,19 +162,18 @@ function fillAbout(docId, name, email, circle, parentName, subNames, onlyEmpty, 
   const values = {
     'Zoom room': circle && circle.zoomUrl ? [[['Zoom room', {[A.LINK_URL]: circle.zoomUrl}]]] : [],
     'Circle email address': email ? [[[email, {[A.LINK_URL]: 'mailto:' + email}]]] : [],
-    'Circle Google Drive Folder': circle && circle.driveItemId
-      ? [[['Google Drive folder', folderLink(circle.driveItemId)]]] : [],
+    'Google Drive Folder': circle && circle.driveItemId
+      ? [[[name || circle.name || 'Google Drive folder', folderLink(circle.driveItemId)]]] : [],
     'Parent Circle': parentName ? [[linkedName(parentName)]] : [],
     'Sub-Circles': (subNames || []).map(sub => [[token('bullet')], linkedName(sub)]),
   };
-  // Docs built before the row was renamed.
-  values['Circle Drive Folder'] = values['Circle Google Drive Folder'];
   const found = findRow(body, text => text === 'Circle email address');
   let bullets = false;
   if (found) {
     const table = found.table;
     for (let r = 0; r < table.getNumRows(); r++) {
-      const label = table.getCell(r, 0).getText().split('\n')[0].trim();
+      // aboutLabel: docs built before the Drive folder row was renamed.
+      const label = aboutLabel(table.getCell(r, 0).getText());
       const cell = table.getCell(r, 1);
       const write = onlyRows ? onlyRows.includes(label)
         : values[label] && values[label].length && !(onlyEmpty && cell.getText().trim());
@@ -239,6 +242,100 @@ function rewriteStructureRowsInCircleDocs() {
     logLink('Rewrote the parent and sub-circles of ' + file.name + ':',
       'https://docs.google.com/document/d/' + file.id + '/edit');
   }
+}
+
+// Run from the editor: puts About this circle's rows in their new order
+// (ABOUT_LABELS) in every built doc with an older layout, renames its
+// Circle Google Drive Folder row Google Drive Folder, and rewrites that row
+// (linked by the circle's name) and the Parent Circle and Sub-Circles rows
+// from its labels; then labels it with ABOUT_ORDER_LAYOUT. Only the rows
+// the scripts fill in move; the rows filled in by hand (ABOUT_HAND_FILLED)
+// stay where they are, so their smart chips are kept. A doc it can't
+// reorder (its rows aren't the expected ones, say) is left as it is, and
+// the log says why. Try it first with tryReorderAboutOnCopy.
+function reorderAboutInCircleDocs() {
+  for (const file of builtCircleDocs()) {
+    const props = file.properties || {};
+    if (Number(props[AGENDA_KEYS.layout] || 1) >= ABOUT_ORDER_LAYOUT) continue;
+    try {
+      reorderAboutAndFill(file.id, props);
+      Drive.Files.update({properties: {[AGENDA_KEYS.layout]: String(ABOUT_ORDER_LAYOUT)}},
+        file.id, null, {supportsAllDrives: true});
+      logLink('Reordered About this circle in ' + file.name + ':',
+        'https://docs.google.com/document/d/' + file.id + '/edit');
+    } catch (e) {
+      console.error('Couldn\'t reorder About this circle in ' + file.name + ': ' + e.message);
+    }
+  }
+}
+
+// Run from the editor: copies the first built doc that reorderAboutInCircleDocs
+// would change into your My Drive, unlabelled (so no script acts on it),
+// reorders the copy's About this circle as that would, and logs its link,
+// to look at before running reorderAboutInCircleDocs. Delete the copy after.
+function tryReorderAboutOnCopy() {
+  const file = builtCircleDocs().find(f =>
+    Number((f.properties || {})[AGENDA_KEYS.layout] || 1) < ABOUT_ORDER_LAYOUT);
+  if (!file) return Logger.log('No built doc needs reordering.');
+  const copy = DriveApp.getFileById(file.id).makeCopy('Reorder test: ' + file.name,
+    DriveApp.getRootFolder());
+  const unlabel = {};
+  for (const key of Object.keys(file.properties || {})) unlabel[key] = null;
+  Drive.Files.update({properties: unlabel}, copy.getId(), null, {supportsAllDrives: true});
+  reorderAboutAndFill(copy.getId(), file.properties || {});
+  logLink('Reordered a copy of ' + file.name + ':',
+    'https://docs.google.com/document/d/' + copy.getId() + '/edit');
+}
+
+// Reorders a doc's About this circle, and rewrites its Google Drive Folder
+// (if its circle has one), Parent Circle, and Sub-Circles rows from labels
+// props (the doc's own, or the doc it was copied from).
+function reorderAboutAndFill(docId, props) {
+  reorderAbout(docId);
+  const email = props[AGENDA_KEYS.group];
+  const circle = circleOfDoc(docId, email);
+  const rows = (circle && circle.driveItemId ? ['Google Drive Folder'] : []).concat(STRUCTURE_ROWS);
+  fillAbout(docId, null, email, circle, props[AGENDA_KEYS.parent], subNamesOf(props), false, rows);
+}
+
+// Puts a doc's About this circle rows in ABOUT_LABELS' order (moving only
+// the ones aboutReorder says to, by copying them), and renames an old Drive
+// folder row. Throws, changing nothing, if aboutReorder says it can't, or if
+// a moved row that isn't rewritten afterwards (Zoom room, Circle email
+// address) holds a chip, which copying could lose.
+function reorderAbout(docId) {
+  const doc = DocumentApp.openById(docId);
+  const found = findRow(firstTabBody(doc), text => text === 'Circle email address');
+  if (!found) throw new Error('it has no About this circle table');
+  const table = found.table;
+  const labelOf = r => aboutLabel(table.getCell(r, 0).getText());
+  const labels = [];
+  for (let r = 0; r < table.getNumRows(); r++) labels.push(labelOf(r));
+  const plan = aboutReorder(labels);
+  if (plan.error) throw new Error(plan.error);
+  for (const label of ['Zoom room', 'Circle email address']) {
+    const row = table.getRow(labels.indexOf(label));
+    const leaves = {};
+    addLeafCounts(row, leaves);
+    if (Object.keys(leaves).length) {
+      throw new Error('its ' + label + ' row holds ' + formatCounts(leaves) + ', which moving could lose');
+    }
+  }
+  const copies = {};
+  for (let r = labels.length - 1; r >= 0; r--) {
+    if (!plan.move.includes(labels[r])) continue;
+    copies[labels[r]] = table.getRow(r).copy();
+    table.removeRow(r);
+  }
+  ABOUT_LABELS.forEach((label, i) => {
+    if (copies[label]) table.insertTableRow(i, copies[label]);
+  });
+  const driveLabel = table.getCell(ABOUT_LABELS.indexOf('Google Drive Folder'), 0);
+  if (driveLabel.getText().trim() !== 'Google Drive Folder') {
+    writeCell(driveLabel, [[['Google Drive Folder', BOLD]]]);
+    alignCell(driveLabel, DocumentApp.HorizontalAlignment.RIGHT);
+  }
+  doc.saveAndClose();
 }
 
 // Every built circle doc ({id, name, properties}).

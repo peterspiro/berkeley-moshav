@@ -134,3 +134,42 @@ function base64ToString(text) {
   }
   return out;
 }
+
+// ── About this circle ────────────────────────────────────────────────────────
+
+// About this circle's rows, in order (aboutTable, build_template.gs, makes
+// them).
+const ABOUT_LABELS = ['Aims & Domain', 'Policies folder', 'Zoom room', 'Circle email address',
+  'Other Key Links', 'Google Drive Folder', 'Parent Circle', 'Sub-Circles'];
+// What the Google Drive Folder row was called in docs built before.
+const OLD_DRIVE_LABELS = ['Circle Google Drive Folder', 'Circle Drive Folder'];
+// The rows people fill in by hand, which reordering never moves (they may
+// hold smart chips, which Apps Script can't copy).
+const ABOUT_HAND_FILLED = ['Aims & Domain', 'Policies folder', 'Other Key Links'];
+
+// A row's label (its label cell's first line), with old names of the Drive
+// folder row given their new one.
+function aboutLabel(text) {
+  const label = text.split('\n')[0].trim();
+  return OLD_DRIVE_LABELS.includes(label) ? 'Google Drive Folder' : label;
+}
+
+// How to put About this circle's rows, labelled labels (in their order,
+// from aboutLabel), in ABOUT_LABELS' order: {move}, the labels of the rows
+// to take out and put back in their places (none if they're in order
+// already), or {error}, why it can't be done.
+function aboutReorder(labels) {
+  const missing = ABOUT_LABELS.filter(l => !labels.includes(l));
+  const extra = labels.filter(l => !ABOUT_LABELS.includes(l));
+  if (missing.length || extra.length || labels.length !== ABOUT_LABELS.length) {
+    return {error: 'its rows aren\'t the expected ones' +
+      (missing.length ? '; missing: ' + missing.join(', ') : '') +
+      (extra.length ? '; unexpected: ' + extra.join(', ') : '')};
+  }
+  if (labels.join('|') === ABOUT_LABELS.join('|')) return {move: []};
+  const kept = labels.filter(l => ABOUT_HAND_FILLED.includes(l));
+  if (kept.join('|') !== ABOUT_HAND_FILLED.join('|')) {
+    return {error: 'its ' + ABOUT_HAND_FILLED.join(', ') + ' rows are in another order'};
+  }
+  return {move: labels.filter(l => !ABOUT_HAND_FILLED.includes(l))};
+}
