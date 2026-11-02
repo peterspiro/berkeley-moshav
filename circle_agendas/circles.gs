@@ -15,7 +15,7 @@ const DOMAIN = 'berkeleymoshav.org';
 // admin@'s My Drive by update_groups_in_google_and_hierarchy.py (see
 // util/member_names.py, whose MEMBER_NAMES_FILE this must match).
 const MEMBER_NAMES_FILE = 'Circle agenda member names.json';
-const MEMBER_NAMES_CACHE_SECONDS = 60 * 60;
+const MEMBER_NAMES_CACHE_SECONDS = 10 * 60;
 const CIRCLES_CACHE_KEY = 'circles';
 const CIRCLES_CACHE_SECONDS = 6 * 60 * 60;
 

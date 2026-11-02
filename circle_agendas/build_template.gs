@@ -75,7 +75,7 @@ const CLOSING_ROUND = {title: 'Closing Round / Check-out', kind: 'round', perAtt
 const COL = {time: 0, duration: 1, description: 2, notes: 3};
 const MEETING_COLUMNS = 4;
 const MEETING_HEADINGS = ['Time', 'Min.', 'Description', 'Notes'];
-const COLUMN_WIDTHS = {[COL.time]: 36, [COL.duration]: 30, [COL.description]: 230};
+const COLUMN_WIDTHS = {[COL.time]: 33, [COL.duration]: 27, [COL.description]: 210};
 const CELL_PADDING = 3;
 const PROBLEM_COLOR = '#cc0000';
 // The rows above the agenda items: the column headings, which stay in view
@@ -398,10 +398,14 @@ function attendance(body, details) {
   writeRuns(body.appendParagraph(''), [['Attendance', BOLD],
     ['   Check the box next to anyone who isn\'t here.', MUTED]]);
 
+  // As few columns as hold everyone, as evenly filled as can be (5 names
+  // make columns of 3 and 2, not 4 and 1).
   const columns = [];
-  for (let i = 0; i < Math.max(attendees.length, 1); i += ATTENDEES_PER_COLUMN) {
+  const count = Math.ceil(Math.max(attendees.length, 1) / ATTENDEES_PER_COLUMN);
+  const perColumn = Math.ceil(attendees.length / count);
+  for (let c = 0; c < count; c++) {
     columns.push(attendees.length
-      ? attendees.slice(i, i + ATTENDEES_PER_COLUMN).map(name => [[token('checkbox')], [name]])
+      ? attendees.slice(c * perColumn, (c + 1) * perColumn).map(name => [[token('checkbox')], [name]])
       : [[[token('checkbox')]]]);
   }
   columns.push([
@@ -419,7 +423,8 @@ function attendance(body, details) {
     }
     if (c < columns.length - 1) table.setColumnWidth(c, 130);
   });
-  body.appendParagraph('').setSpacingBefore(0).setSpacingAfter(0);
+  // Docs needs a paragraph between two tables; finishMeeting makes it tiny.
+  body.appendParagraph('').setSpacingBefore(0).setSpacingAfter(0).setLineSpacing(1);
 }
 
 // The row of links that add an item and update the times.
@@ -580,13 +585,21 @@ function apiTab(docId, tabId) {
 }
 
 // The Docs API's part of making a meeting table, in its tab: its column
-// headings pinned, so they stay in view.
+// headings pinned, so they stay in view, and the empty paragraph between it
+// and the attendance table above it made a point high, to leave no gap.
 function finishMeeting(docId, meetingId, tabId) {
   const content = apiTab(docId, tabId).content;
-  const meeting = content.find(se => se.table && apiMeetingId(se) === meetingId);
-  Docs.Documents.batchUpdate({requests: [{pinTableHeaderRows: {
+  const at = content.findIndex(se => se.table && apiMeetingId(se) === meetingId);
+  const meeting = content[at];
+  const requests = [{pinTableHeaderRows: {
     tableStartLocation: {index: meeting.startIndex, tabId}, pinnedHeaderRowsCount: MEETING_PINNED_ROWS,
-  }}]}, docId);
+  }}];
+  const gap = content[at - 1];
+  if (gap && gap.paragraph && !paraText(gap.paragraph).trim() && content[at - 2] && content[at - 2].table) {
+    requests.push({updateTextStyle: {range: {startIndex: gap.startIndex, endIndex: gap.endIndex, tabId},
+      textStyle: {fontSize: {magnitude: 1, unit: 'PT'}}, fields: 'fontSize'}});
+  }
+  Docs.Documents.batchUpdate({requests}, docId);
 }
 
 // Replaces each token in a tab (by default, the first) with its chip or
