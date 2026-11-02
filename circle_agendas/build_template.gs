@@ -254,7 +254,7 @@ function aboutTable(body) {
     [['Sub-Circles'], []],
     [['Zoom room'], []],
     [['Circle email address'], []],
-    [['Circle Drive Folder'], []],
+    [['Circle Google Drive Folder'], []],
     [['Policies folder'], [['Paste a link to the circle\'s policies folder', HINT]]],
     [['Other Key Links'], []],
   ];

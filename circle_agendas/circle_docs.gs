@@ -120,11 +120,13 @@ function fillAbout(docId, name, email, circle, parentName, subNames, onlyEmpty) 
   const values = {
     'Zoom room': circle && circle.zoomUrl ? [['Zoom room', {[A.LINK_URL]: circle.zoomUrl}]] : [],
     'Circle email address': email ? [[email, {[A.LINK_URL]: 'mailto:' + email}]] : [],
-    'Circle Drive Folder': circle && circle.driveItemId
+    'Circle Google Drive Folder': circle && circle.driveItemId
       ? [['Google Drive folder', folderLink(circle.driveItemId)]] : [],
     'Parent Circle': parentName ? [linkedName(parentName)] : [],
     'Sub-Circles': subRuns,
   };
+  // Docs built before the row was renamed.
+  values['Circle Drive Folder'] = values['Circle Google Drive Folder'];
   const found = findRow(body, text => text === 'Circle email address');
   if (found) {
     const table = found.table;
