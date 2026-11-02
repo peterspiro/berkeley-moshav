@@ -33,7 +33,8 @@ they need will take their own scripts.
 ## What a circle's doc does
 
 - **Tabs**: "Circle" (About this circle, Members and roles, Other
-  policies, with "+ New meeting" at the top); "Backlog" (built with the
+  policies, with "+ New meeting" in a "Create a new meeting" section under
+  the title); "Backlog" (built with the
   Docs API alone, since DocumentApp can't see a tab added in the same run);
   then one tab per meeting, newest first. The template has no meetings.
 - **New meeting**: "+ New meeting" adds a meeting in a tab of its own,
@@ -53,9 +54,10 @@ they need will take their own scripts.
   sharing the rest of the page.
 - **Agenda**: Opening Round; Administrative matters (Announcements, Brief
   Reports, Next meeting date & time, Minutes of last meeting, and
-  modifications and consent to the agenda, as a bulleted list); Consent to
-  Agenda; Action Items Accountability; one 5-minute Topic; Action Items
-  Recap; Closing Round, whose duration is red when there's no time left.
+  modifications and consent to the agenda, as a bulleted list; 5 minutes);
+  Action Items Accountability; one 5-minute Topic; Action Items Recap;
+  Closing Round, whose duration is red when there's no time left. Notes
+  start empty.
 - **New agenda item**: a link in each meeting adds a topic after its last
   topic (before Action Items Recap), with a duration of 5 minutes.
 - **Meeting length**: after "Duration (hours)" in the line above the

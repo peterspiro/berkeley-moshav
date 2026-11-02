@@ -78,13 +78,11 @@ const MEETING_TAB_TITLE_RE = /^\d{4}-\d{2}-\d{2}$/;
 // Each meeting's items before the closing round, in the template and in
 // new meetings. kind: 'round' and 'report' items are shaded; admin: the
 // Administrative matters item (see adminLines); actions: 'checkbox' or
-// 'bullet', a list under the description, for action items; notes: false
-// for no bulleted Notes.
+// 'bullet', a list under the description, for action items. The Notes
+// column starts empty.
 const AGENDA = [
-  {title: 'Opening Round / Check-in', note: ' (no notes)', minutes: 10, kind: 'round',
-    notes: false},
-  {admin: true, minutes: 3, kind: 'round', notes: false},
-  {title: 'Consent to Agenda', minutes: 2, kind: 'report'},
+  {title: 'Opening Round / Check-in', note: ' (no notes)', minutes: 10, kind: 'round'},
+  {admin: true, minutes: 5, kind: 'round'},
   {title: 'Action Items Accountability', minutes: 3, actions: 'checkbox',
     note: ' (the action items from the previous meeting\'s recap; check each one that\'s ' +
       'done, and its line is struck through)'},
@@ -229,14 +227,16 @@ const HINT = {[A.FOREGROUND_COLOR]: COLOR.hint};
 function layOut(body, docId) {
   const leftover = body.getChild(0);
 
-  writeRuns(body.appendParagraph(''), [
-    ['+ New meeting', {[A.LINK_URL]: actionUrl('meeting', docId)}],
-    ['   (each meeting gets a tab of its own, listed at the left, titled with its date)', MUTED]]);
-
   const title = body.appendParagraph('Circle Agenda');
   title.setHeading(DocumentApp.ParagraphHeading.TITLE)
     .setAlignment(DocumentApp.HorizontalAlignment.CENTER);
   title.editAsText().setForegroundColor(COLOR.title).setBold(true);
+
+  section(body, 'Create a new meeting');
+  writeRuns(body.appendParagraph(''), [
+    ['+ New meeting', {[A.LINK_URL]: actionUrl('meeting', docId)}],
+    ['   (each meeting gets a tab of its own, listed at the left, titled with its date)', MUTED]]);
+  body.appendHorizontalRule();
 
   section(body, 'About this circle');
   aboutTable(body);
@@ -386,7 +386,7 @@ function meetingTable(body, docId, details) {
       else if (item.actions) lines.push([[token(item.actions)]]);
       writeCell(description, lines);
     }
-    writeCell(cell(COL.notes), [item.notes === false ? [] : [[token('bullet')]]]);
+    writeCell(cell(COL.notes), [[]]);
     shadeRow(table, r, item.kind);
   });
 
@@ -401,7 +401,8 @@ function meetingTable(body, docId, details) {
 }
 
 // The meeting's attendance, above its table, closely spaced: the attendees
-// as a checklist, then "Guests:", to be followed by their names.
+// as a checklist, then "Guests:", to be followed by their names, with a
+// little space below it, before the table.
 function attendance(body, attendees) {
   const paragraphs = [
     [['Attendance', BOLD], ['   Check the box next to anyone who isn\'t here.', MUTED]],
@@ -410,11 +411,11 @@ function attendance(body, attendees) {
       : [[[token('checkbox')]]]),
     [['Guests: ', BOLD]],
   ];
-  for (const runs of paragraphs) {
+  paragraphs.forEach((runs, i) => {
     const p = body.appendParagraph('');
     writeRuns(p, runs);
-    p.setSpacingBefore(0).setSpacingAfter(0).setLineSpacing(1);
-  }
+    p.setSpacingBefore(0).setSpacingAfter(i === paragraphs.length - 1 ? 8 : 0).setLineSpacing(1);
+  });
 }
 
 // The row of links that add an item and update the times.

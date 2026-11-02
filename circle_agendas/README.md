@@ -87,7 +87,8 @@ version predates `web_app.gs`: deploy a new version as above.
 
 The links:
 
-- **+ New meeting**, at the top of the first tab ("Circle"), adds the
+- **+ New meeting**, under "Create a new meeting" at the top of the first
+  tab ("Circle"), adds the
   circle's next meeting in a tab of its own, titled with its date, after
   the Circle and Backlog tabs (newest first): the first timed event on the
   circle's calendar after the day of the newest meeting in the doc (or

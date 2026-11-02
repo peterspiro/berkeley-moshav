@@ -55,7 +55,6 @@ function addItem(docId, meetingId) {
   for (let c = 0; c < MEETING_COLUMNS; c++) writeCell(row.getCell(c), [[]]);
   writeCell(row.getCell(COL.duration), [[[String(NEW_ITEM_MINUTES), MUTED]]]);
   writeCell(row.getCell(COL.description), [[['Topic', BOLD]]]);
-  writeCell(row.getCell(COL.notes), [[[token('bullet')]]]);
 
   const messages = recalculate(table);
   doc.saveAndClose();
