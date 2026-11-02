@@ -140,7 +140,19 @@ function base64ToString(text) {
 // About this circle's rows, in order (aboutTable, build_template.gs, makes
 // them).
 const ABOUT_LABELS = ['Aims & Domain', 'Policies folder', 'Zoom room', 'Circle email address',
-  'Other Key Links', 'Google Drive Folder', 'Parent Circle', 'Sub-Circles'];
+  'Other Key Links', 'Google Drive Folder', 'Parent Circle', 'Sub-Circles', 'Meeting reminders'];
+// Rows added at the end since docs were first built, which older docs may
+// lack (addReminderRowToCircleDocs, circle_docs.gs, adds them).
+const ABOUT_ADDED_LATER = ['Meeting reminders'];
+// The Meeting reminders row, which group_meetings/group_meetings.gs reads
+// (its first line) to know when to email the circle a reminder of each
+// meeting (see parseReminderLeads in group_meetings/event_rules.gs).
+const REMINDER_ROW_LABEL = 'Meeting reminders';
+const REMINDER_DEFAULT_TEXT = '24 hours before';
+const REMINDER_HINT = 'When the circle\'s email list gets a reminder of each meeting: a ' +
+  'length of time, such as "24 hours", "2 days", or "90 minutes", or several separated by ' +
+  'commas ("2 days, 1 hour"). Write "none" for no reminders. For a single meeting, put ' +
+  '[remind 2 hours] or [no reminder] in its calendar event\'s description.';
 // What the Google Drive Folder row was called in docs built before.
 const OLD_DRIVE_LABELS = ['Circle Google Drive Folder', 'Circle Drive Folder'];
 // The rows people fill in by hand, which reordering never moves (they may
@@ -155,18 +167,20 @@ function aboutLabel(text) {
 }
 
 // How to put About this circle's rows, labelled labels (in their order,
-// from aboutLabel), in ABOUT_LABELS' order: {move}, the labels of the rows
+// from aboutLabel), in ABOUT_LABELS' order (a doc may lack the rows
+// ABOUT_ADDED_LATER, which come last): {move}, the labels of the rows
 // to take out and put back in their places (none if they're in order
 // already), or {error}, why it can't be done.
 function aboutReorder(labels) {
-  const missing = ABOUT_LABELS.filter(l => !labels.includes(l));
-  const extra = labels.filter(l => !ABOUT_LABELS.includes(l));
-  if (missing.length || extra.length || labels.length !== ABOUT_LABELS.length) {
+  const target = ABOUT_LABELS.filter(l => labels.includes(l) || !ABOUT_ADDED_LATER.includes(l));
+  const missing = target.filter(l => !labels.includes(l));
+  const extra = labels.filter(l => !target.includes(l));
+  if (missing.length || extra.length || labels.length !== target.length) {
     return {error: 'its rows aren\'t the expected ones' +
       (missing.length ? '; missing: ' + missing.join(', ') : '') +
       (extra.length ? '; unexpected: ' + extra.join(', ') : '')};
   }
-  if (labels.join('|') === ABOUT_LABELS.join('|')) return {move: []};
+  if (labels.join('|') === target.join('|')) return {move: []};
   const kept = labels.filter(l => ABOUT_HAND_FILLED.includes(l));
   if (kept.join('|') !== ABOUT_HAND_FILLED.join('|')) {
     return {error: 'its ' + ABOUT_HAND_FILLED.join(', ') + ' rows are in another order'};

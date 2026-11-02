@@ -591,3 +591,159 @@ def test_zoom_user_numbers_cover_room_users():
     numbers = script.split("const ZOOM_USER_NUMBERS = {", 1)[1].split("};", 1)[0]
     for user in ROOM_USERS:
         assert f"'{user}':" in numbers
+
+
+MIN = 60 * 1000
+HOUR = 60 * MIN
+DAY = 24 * HOUR
+
+
+class TestParseReminderLeads:
+    @pytest.mark.parametrize("text, leads", [
+        ("24 hours before", [DAY]),
+        ("24h", [DAY]),
+        ("1 day", [DAY]),
+        ("2 days, 1 hour", [2 * DAY, HOUR]),
+        ("1 hour and 2 days", [2 * DAY, HOUR]),
+        ("1 hour 30 minutes", [90 * MIN]),
+        ("1h30m", [90 * MIN]),
+        ("1.5 hours", [90 * MIN]),
+        ("an hour", [HOUR]),
+        ("half an hour", [30 * MIN]),
+        ("90 minutes before each meeting", [90 * MIN]),
+        ("Two days.", [2 * DAY]),
+    ])
+    def test_lengths_of_time(self, text, leads):
+        assert js("parseReminderLeads(t)", t=text) == {"leads": leads}
+
+    @pytest.mark.parametrize("text", ["none", "None.", "no", "off", "No reminders", "never"])
+    def test_none(self, text):
+        assert js("parseReminderLeads(t)", t=text) == {"leads": []}
+
+    @pytest.mark.parametrize("text", ["soon", "24", "2 months", "", "the day before at noon"])
+    def test_unreadable(self, text):
+        assert "error" in js("parseReminderLeads(t)", t=text)
+
+    def test_more_than_two_weeks(self):
+        assert "two weeks" in js("parseReminderLeads('3 weeks')")["error"]
+
+
+def test_format_lead():
+    assert js("[DAY, 2 * DAY, 90 * MIN, 15 * MIN, HOUR].map(formatLead)",
+              DAY=DAY, MIN=MIN, HOUR=HOUR) == [
+        "24 hours", "2 days", "1 hour 30 minutes", "15 minutes", "1 hour"]
+
+
+def docs_api_doc(rows):
+    """A Docs API document with one two-column table of rows (label, value)."""
+    def cell(text):
+        return {"content": [{"paragraph": {"elements": [{"textRun": {"content": line + "\n"}}]}}
+                            for line in text.split("\n")]}
+    return {"body": {"content": [
+        {"paragraph": {"elements": [{"textRun": {"content": "About this circle\n"}}]}},
+        {"table": {"tableRows": [{"tableCells": [cell(a), cell(b)]} for a, b in rows]}},
+    ]}}
+
+
+class TestDocRowValue:
+    def test_first_line_of_the_value(self):
+        doc = docs_api_doc([("Zoom room", "x"),
+                            ("Meeting reminders", "\n2 hours\nWhen the circle's email list...")])
+        assert js("docRowValue(d, 'Meeting reminders')", d=doc) == "2 hours"
+
+    def test_empty_and_missing(self):
+        doc = docs_api_doc([("Meeting reminders", "")])
+        assert js("docRowValue(d, 'Meeting reminders')", d=doc) == ""
+        assert js("docRowValue(d, 'Nope')", d=doc) is None
+        assert js("docRowValue({}, 'Nope')") is None
+
+
+class TestReminderLeads:
+    def test_default(self):
+        assert js("reminderLeads({}, null)") == {"leads": [DAY], "source": "default"}
+
+    def test_group_setting(self):
+        assert js("reminderLeads({}, '2 hours')") == {"leads": [2 * HOUR], "source": "group"}
+        assert js("reminderLeads({}, 'none')") == {"leads": [], "source": "group"}
+
+    def test_event_tag_wins(self):
+        event = {"summary": "Meeting", "description": "Bring snacks [remind 1 hour, 1 day]"}
+        assert js("reminderLeads(e, 'none')", e=event) == {
+            "leads": [DAY, HOUR], "source": "event"}
+        assert js("reminderLeads(e, '2 hours')", e={"summary": "X [No Reminder]"}) == {
+            "leads": [], "source": "event"}
+        assert js("reminderLeads(e, null)", e={"description": "<p>[reminder: none]</p>"}) == {
+            "leads": [], "source": "event"}
+
+    def test_unreadable_setting_falls_back_and_says_so(self):
+        result = js("reminderLeads({}, 'whenever')")
+        assert result["leads"] == [DAY] and result["source"] == "default"
+        assert "Meeting reminders row" in result["error"] and "whenever" in result["error"]
+
+    def test_unreadable_tag_falls_back_to_the_group(self):
+        result = js("reminderLeads(e, '2 hours')", e={"description": "[remind soonish]"})
+        assert result["leads"] == [2 * HOUR] and result["source"] == "group"
+        assert "[remind soonish]" in result["error"]
+
+
+class TestDueReminderLeads:
+    START = 100 * DAY
+
+    def due(self, now, leads=(DAY,), created=0, grace=HOUR):
+        return js("dueReminderLeads(s, c, l, n, g)", s=self.START, c=created, l=list(leads),
+                  n=now, g=grace)
+
+    def test_due_from_its_time_for_the_grace_period(self):
+        assert self.due(self.START - DAY - MIN) == []
+        assert self.due(self.START - DAY) == [DAY]
+        assert self.due(self.START - DAY + 59 * MIN) == [DAY]
+        assert self.due(self.START - DAY + HOUR) == []
+
+    def test_not_for_a_meeting_created_after_it_was_due(self):
+        assert self.due(self.START - DAY + MIN, created=self.START - DAY + MIN) == []
+        assert self.due(self.START - DAY + MIN, created=None) == [DAY]
+
+    def test_not_once_the_meeting_started(self):
+        assert self.due(self.START, leads=[0]) == []
+
+    def test_shortest_first_when_several_are_due(self):
+        assert self.due(self.START - HOUR, leads=[HOUR, HOUR + 30 * MIN, DAY]) == [
+            HOUR, HOUR + 30 * MIN]
+
+
+class TestReminderMessage:
+    OPTS = {"groupEmail": GROUP, "groupName": "Tech Circle", "when": "Tue Nov 3, 7:00 PM–8:00 PM",
+            "lead": DAY, "agendaUrl": "https://docs.google.com/document/d/DOC/edit",
+            "zoomUrl": URL, "passcode": "123456", "source": "group"}
+
+    def test_meeting_details_and_how_to_change(self):
+        event = {"summary": "Meeting", "location": URL, "htmlLink": "https://cal/e",
+                 "description": "Agenda and minutes: https://docs.google.com/document/d/DOC/edit"}
+        m = js("reminderMessage(e, o)", e=event, o=self.OPTS)
+        assert m["to"] == GROUP
+        assert m["subject"] == 'Reminder: "Meeting", Tue Nov 3, 7:00 PM–8:00 PM'
+        body = m["body"]
+        assert f"  Join: {URL}\n  Meeting ID 812 3456 7890, passcode 123456\n" in body
+        assert "  Agenda and minutes: https://docs.google.com/document/d/DOC/edit\n" in body
+        assert "  Calendar event: https://cal/e\n" in body
+        assert "24 hours before the meeting" in body
+        assert '"Meeting reminders" under About this circle' in body
+        assert "[no reminder]" in body and "Couldn't read" not in body
+
+    def test_no_agenda_doc_or_zoom(self):
+        opts = {**self.OPTS, "agendaUrl": None}
+        m = js("reminderMessage(e, o)", e={"summary": "Walk", "location": "The park"}, o=opts)
+        assert "  Where: The park\n" in m["body"] and "About this circle" not in m["body"]
+        assert "Agenda and minutes" not in m["body"]
+
+    def test_says_what_it_couldnt_read(self):
+        opts = {**self.OPTS, "source": "default",
+                "error": "the agenda doc's Meeting reminders row: \"x\" isn't a length of time"}
+        body = js("reminderMessage({}, o)", o=opts)["body"]
+        assert "(Couldn't read the agenda doc's Meeting reminders row" in body
+
+
+def test_reminder_row_label_matches_the_agenda_doc():
+    agenda_rules = (RULES.parent.parent / "circle_agendas" / "agenda_rules.gs").read_text()
+    assert "const REMINDER_ROW_LABEL = 'Meeting reminders';" in agenda_rules
+    assert js("REMINDER_ROW_LABEL") == "Meeting reminders"

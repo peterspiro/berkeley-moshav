@@ -14,6 +14,8 @@
  * existing docs. It also rewrites the Parent Circle and Sub-Circles rows of
  * each built doc that change_parent_circle.py or add_new_group.py has
  * relabelled with a new parent or sub-circles (and labelled AGENDA_REFRESH_STRUCTURE).
+ * addReminderRowToCircleDocs, run by hand, gives docs built before the
+ * Meeting reminders row was added that row.
  */
 
 // Must match util/circle_agenda_docs.py.
@@ -37,9 +39,12 @@ const AGENDA_STATE_NOT_EMPTY = 'not empty';
 // existing docs can tell which they're looking at.
 // 2: About this circle's rows reordered (ABOUT_LABELS), and its Drive
 // folder row renamed Google Drive Folder and linked by the circle's name.
-const LAYOUT_VERSION = 2;
+// 3: About this circle's Meeting reminders row added, at the end.
+const LAYOUT_VERSION = 3;
 // The first layout version with About this circle in ABOUT_LABELS' order.
 const ABOUT_ORDER_LAYOUT = 2;
+// The first layout version with the Meeting reminders row.
+const REMINDER_ROW_LAYOUT = 3;
 const BUILD_EVERY_MINUTES = 10;
 
 // Run once, in the editor: builds new circle docs every BUILD_EVERY_MINUTES.
@@ -336,6 +341,50 @@ function reorderAbout(docId) {
     alignCell(driveLabel, DocumentApp.HorizontalAlignment.RIGHT);
   }
   doc.saveAndClose();
+}
+
+// Run from the editor: adds the Meeting reminders row (saying 24 hours
+// before, the default, and how to change it) at the end of About this
+// circle in every built doc that lacks it, and labels each doc in
+// ABOUT_LABELS' order that has it with REMINDER_ROW_LAYOUT. A doc with an
+// older layout gets the row but keeps its label, so
+// reorderAboutInCircleDocs still reorders it; run this again after that to
+// relabel it. Safe to run again: docs that have the row aren't changed.
+function addReminderRowToCircleDocs() {
+  for (const file of builtCircleDocs()) {
+    const layout = Number((file.properties || {})[AGENDA_KEYS.layout] || 1);
+    if (layout >= REMINDER_ROW_LAYOUT) continue;
+    try {
+      if (addReminderRow(file.id)) {
+        logLink('Added the Meeting reminders row to ' + file.name + ':',
+          'https://docs.google.com/document/d/' + file.id + '/edit');
+      }
+      if (layout >= ABOUT_ORDER_LAYOUT) {
+        Drive.Files.update({properties: {[AGENDA_KEYS.layout]: String(REMINDER_ROW_LAYOUT)}},
+          file.id, null, {supportsAllDrives: true});
+      }
+    } catch (e) {
+      console.error('Couldn\'t add the Meeting reminders row to ' + file.name + ': ' + e.message);
+    }
+  }
+}
+
+// Adds the Meeting reminders row at the end of a doc's About this circle,
+// as aboutTable makes it, unless it has one. Returns whether it added it.
+function addReminderRow(docId) {
+  const doc = DocumentApp.openById(docId);
+  const found = findRow(firstTabBody(doc), text => text === 'Circle email address');
+  if (!found) throw new Error('it has no About this circle table');
+  const table = found.table;
+  for (let r = 0; r < table.getNumRows(); r++) {
+    if (aboutLabel(table.getCell(r, 0).getText()) === REMINDER_ROW_LABEL) return false;
+  }
+  const row = table.appendTableRow();
+  row.appendTableCell('');
+  row.appendTableCell('');
+  writeAboutRow(row, [REMINDER_ROW_LABEL], [[[REMINDER_DEFAULT_TEXT]], [[REMINDER_HINT, HINT]]]);
+  doc.saveAndClose();
+  return true;
 }
 
 // Every built circle doc ({id, name, properties}).

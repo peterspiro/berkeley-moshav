@@ -159,7 +159,8 @@ class TestAboutReorder:
     def test_moving_them_gives_the_new_order(self):
         plan = js(f"aboutReorder({json.dumps(self.OLD)})")
         kept = [label for label in self.OLD if label not in plan["move"]]
-        target = js("ABOUT_LABELS")
+        # A doc as old as OLD lacks the rows added later.
+        target = [label for label in js("ABOUT_LABELS") if label not in js("ABOUT_ADDED_LATER")]
         assert [label for label in target if label not in plan["move"]] == kept
 
     def test_already_in_order(self):
@@ -169,6 +170,34 @@ class TestAboutReorder:
         labels = self.OLD[:-1] + ["Notes"]
         error = js(f"aboutReorder({json.dumps(labels)})")["error"]
         assert "missing: Other Key Links" in error and "unexpected: Notes" in error
+
+    def test_rows_added_later_may_be_missing(self):
+        assert js("aboutReorder(ABOUT_LABELS.filter(l => !ABOUT_ADDED_LATER.includes(l)))") == {
+            "move": []}
+        plan = js(f"aboutReorder({json.dumps(self.OLD)})")
+        assert "error" not in plan and "Meeting reminders" not in plan["move"]
+
+    def test_reminder_row_comes_last(self):
+        assert js("ABOUT_LABELS[ABOUT_LABELS.length - 1]") == "Meeting reminders"
+        assert js("ABOUT_ADDED_LATER") == ["Meeting reminders"]
+
+    def test_reminder_default_and_hint_parse_as_meant(self):
+        # The default reads as 24 hours; the hint (the row's second line)
+        # mentions "none", but isn't itself read as a setting.
+        group_rules = RULES.parent.parent / "group_meetings" / "event_rules.gs"
+        program = f"""
+const vm = require('vm'), fs = require('fs');
+const ctx = vm.createContext({{}});
+vm.runInContext(fs.readFileSync({json.dumps(str(group_rules))}, 'utf8'), ctx);
+process.stdout.write(JSON.stringify([
+  vm.runInContext('parseReminderLeads(' + JSON.stringify({json.dumps(js("REMINDER_DEFAULT_TEXT"))}) + ')', ctx),
+  vm.runInContext('parseReminderLeads(' + JSON.stringify({json.dumps(js("REMINDER_HINT"))}) + ')', ctx)]));
+"""
+        out = json.loads(subprocess.run(["node", "-e", program], capture_output=True, text=True,
+                                        check=True).stdout)
+        assert out[0] == {"leads": [24 * 60 * 60 * 1000]}
+        assert "error" in out[1]
+        assert '"none"' in js("REMINDER_HINT") and "[no reminder]" in js("REMINDER_HINT")
 
     def test_hand_filled_rows_out_of_order(self):
         labels = ["Policies folder"] + [l for l in self.OLD if l != "Policies folder"]

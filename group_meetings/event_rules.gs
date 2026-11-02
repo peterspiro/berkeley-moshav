@@ -6,7 +6,10 @@
  *   - deciding what to change on a group-calendar event (Zoom details,
  *     invitations);
  *   - recognizing invitation-only copies;
- *   - finding overlapping meetings in rooms owned by the same Zoom user.
+ *   - finding overlapping meetings in rooms owned by the same Zoom user;
+ *   - meeting reminders: reading how long before a meeting they go out
+ *     (from the group's agenda doc, or a tag in the event), deciding when
+ *     one is due, and writing the email.
  */
 
 // ── Footer ───────────────────────────────────────────────────────────────────
@@ -473,4 +476,191 @@ function conflictId(c) {
 
 function conflictFingerprint(c) {
   return [c.a.start, c.a.end, c.b.start, c.b.end].join(',');
+}
+
+// ── Reminders ────────────────────────────────────────────────────────────────
+
+// The About this circle row in a group's agenda doc that says when the
+// group's meetings get reminders (see circle_agendas/agenda_rules.gs).
+const REMINDER_ROW_LABEL = 'Meeting reminders';
+const DEFAULT_REMINDER_LEADS = [24 * 60 * 60 * 1000];
+// Longer lead times aren't read: reminders are looked for this far ahead.
+const MAX_REMINDER_LEAD_MS = 14 * 24 * 60 * 60 * 1000;
+// "[remind 2 hours]", "[reminders: 2 days, 1 hour]", "[no reminder]" in an
+// event's title or description.
+const REMINDER_TAG_RE = /\[\s*(no\s+reminders?|remind(?:ers?)?\b\s*:?([^\]]*))\]/i;
+
+const NUMBER_WORDS = {
+  a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7,
+  eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12,
+};
+const UNIT_MS = { minute: 60 * 1000, hour: 60 * 60 * 1000, day: 24 * 60 * 60 * 1000,
+                  week: 7 * 24 * 60 * 60 * 1000 };
+const DURATION_PART_RE = new RegExp(
+  String.raw`\s*(\d+(?:\.\d+)?|half an?|${Object.keys(NUMBER_WORDS).join('|')})\s*` +
+  String.raw`(minutes?|mins?|m|hours?|hrs?|h|days?|d|weeks?|wks?|w)(?![a-z])\s*`, 'y');
+
+function unitMs(unit) {
+  const u = unit[0];
+  return u === 'm' ? UNIT_MS.minute : u === 'h' ? UNIT_MS.hour
+    : u === 'd' ? UNIT_MS.day : UNIT_MS.week;
+}
+
+/**
+ * How long before a meeting its reminders go out, as people write it:
+ * "24 hours", "2 days before", "1h30m", "an hour", or several separated by
+ * commas, semicolons, or "and" ("2 days, 1 hour"); "none" (or "no", "off",
+ * "never", "no reminders") for none. Returns { leads } (milliseconds,
+ * longest first, [] for none) or { error } if it can't be read, or a lead
+ * time is longer than MAX_REMINDER_LEAD_MS.
+ */
+function parseReminderLeads(text) {
+  const raw = (text || '').trim();
+  const s = lower(raw).replace(/[.!]+$/, '')
+    .replace(/\b(?:before(?:\s+(?:each|the|every)\s+meetings?)?|ahead|in advance|beforehand|prior)\b/g, ' ')
+    .replace(/\s+/g, ' ').trim();
+  if (/^(?:none|no|off|never|no reminders?|no emails?|-)$/.test(s)) return { leads: [] };
+  if (!s) return { error: 'it\'s empty' };
+  const leads = [];
+  for (const part of s.split(/\s*(?:,|;|&|\band\b)\s*/).filter(Boolean)) {
+    let ms = 0, pos = 0, m;
+    DURATION_PART_RE.lastIndex = 0;
+    while (pos < part.length && (m = DURATION_PART_RE.exec(part)) !== null) {
+      const n = /^half/.test(m[1]) ? 0.5 : NUMBER_WORDS[m[1]] || Number(m[1]);
+      ms += n * unitMs(m[2]);
+      pos = DURATION_PART_RE.lastIndex;
+    }
+    if (pos < part.length || ms <= 0) return { error: `"${raw}" isn't a length of time` };
+    if (ms > MAX_REMINDER_LEAD_MS) return { error: `"${raw}" is more than two weeks` };
+    leads.push(Math.round(ms));
+  }
+  return { leads: [...new Set(leads)].sort((x, y) => y - x) };
+}
+
+/** "24 hours", "2 days", "1 hour 30 minutes", "15 minutes". */
+function formatLead(ms) {
+  const plural = (n, unit) => `${n} ${unit}${n === 1 ? '' : 's'}`;
+  if (ms >= 2 * UNIT_MS.day && ms % UNIT_MS.day === 0) return plural(ms / UNIT_MS.day, 'day');
+  const hours = Math.floor(ms / UNIT_MS.hour);
+  const minutes = Math.round((ms % UNIT_MS.hour) / UNIT_MS.minute);
+  return [hours ? plural(hours, 'hour') : '', minutes ? plural(minutes, 'minute') : '']
+    .filter(Boolean).join(' ') || plural(0, 'minute');
+}
+
+/**
+ * The text of the row labelled label (its first line, ignoring case) in
+ * the first table holding one, in a Docs API document (Docs.Documents.get),
+ * as the first non-empty line of its second cell; '' if that cell is
+ * empty, null if there's no such row.
+ */
+function docRowValue(doc, label) {
+  const cellText = cell => (cell.content || []).map(se => se.paragraph
+    ? (se.paragraph.elements || []).map(pe => (pe.textRun ? pe.textRun.content : '')).join('')
+    : '').join('');
+  for (const se of ((doc || {}).body || {}).content || []) {
+    for (const row of (se.table || {}).tableRows || []) {
+      const cells = row.tableCells || [];
+      if (cells.length < 2) continue;
+      if (lower(cellText(cells[0]).split('\n')[0].trim()) !== lower(label)) continue;
+      return cellText(cells[1]).split('\n').map(l => l.trim()).find(Boolean) || '';
+    }
+  }
+  return null;
+}
+
+/**
+ * When an event's reminders go out: { leads, source, error }. A tag in the
+ * event ("[remind 2 hours]", "[no reminder]") wins; then the group's
+ * setting (the text of its agenda doc's Meeting reminders row, null if it
+ * has none); then DEFAULT_REMINDER_LEADS. source is 'event', 'group', or
+ * 'default'; error says why a tag or setting that couldn't be read was
+ * passed over, naming which.
+ */
+function reminderLeads(event, groupSetting) {
+  const errors = [];
+  const tag = `${event.summary || ''} ${event.description || ''}`.match(REMINDER_TAG_RE);
+  if (tag) {
+    const parsed = /^no/i.test(tag[1]) ? { leads: [] } : parseReminderLeads(tag[2]);
+    if (parsed.leads) return { leads: parsed.leads, source: 'event' };
+    errors.push(`the event's ${tag[0]} tag: ${parsed.error}`);
+  }
+  if (groupSetting !== null && groupSetting !== undefined) {
+    const parsed = parseReminderLeads(groupSetting);
+    if (parsed.leads) {
+      return Object.assign({ leads: parsed.leads, source: 'group' },
+                           errors.length ? { error: errors.join('; ') } : {});
+    }
+    errors.push(`the agenda doc's ${REMINDER_ROW_LABEL} row: ${parsed.error}`);
+  }
+  return Object.assign({ leads: DEFAULT_REMINDER_LEADS, source: 'default' },
+                       errors.length ? { error: errors.join('; ') } : {});
+}
+
+/**
+ * The lead times (of leads) whose reminder for a meeting starting at
+ * startMs is due now: its time (startMs - lead) has come, at most graceMs
+ * ago (so a reminder missed for long, or one due before the event was
+ * created, when its invitation went out, isn't sent late), and the meeting
+ * hasn't started. createdMs is when the event was created (null if not
+ * known). Shortest first: the first is the one to send, the rest are
+ * marked sent with it.
+ */
+function dueReminderLeads(startMs, createdMs, leads, nowMs, graceMs) {
+  if (nowMs >= startMs) return [];
+  return leads.filter(lead => {
+    const due = startMs - lead;
+    return due <= nowMs && nowMs < due + graceMs && (createdMs === null || createdMs < due);
+  }).sort((x, y) => x - y);
+}
+
+/**
+ * A reminder email to a group about one of its meetings: { to, subject,
+ * body }. opts: { groupEmail, groupName, when (the meeting's time, as
+ * text), lead (ms), agendaUrl, zoomUrl, passcode (the group's room),
+ * source (from reminderLeads), error }.
+ */
+function reminderMessage(event, opts) {
+  const title = event.summary || '(untitled)';
+  const lines = [`  "${title}"`, `  ${opts.when}`];
+  const location = (event.location || '').trim();
+  if (location) {
+    lines.push(/^https?:\/\//.test(location) ? `  Join: ${location}` : `  Where: ${location}`);
+    const id = meetingIdFromUrl(location);
+    if (id && opts.zoomUrl && id === meetingIdFromUrl(opts.zoomUrl) && opts.passcode) {
+      lines.push(`  Meeting ID ${formatMeetingId(id)}, passcode ${opts.passcode}`);
+    }
+  } else if (event.hangoutLink) {
+    lines.push(`  Join: ${event.hangoutLink}`);
+  }
+  if (opts.agendaUrl && linksDocument(event.description || '', opts.agendaUrl)) {
+    lines.push(`  ${AGENDA_TEXT} ${opts.agendaUrl}`);
+  }
+  if (event.htmlLink) lines.push(`  Calendar event: ${event.htmlLink}`);
+
+  const how = opts.agendaUrl
+    ? `To change when ${opts.groupName} meetings get reminders, or to turn them off, ` +
+      `edit "${REMINDER_ROW_LABEL}" under About this circle in the agenda doc ` +
+      `(${opts.agendaUrl}). For one meeting, put [remind 2 hours] or [no reminder] in ` +
+      `its calendar event's description.`
+    : `For a different reminder time for one meeting, or none, put [remind 2 hours] or ` +
+      `[no reminder] in its calendar event's description.`;
+  const problem = opts.error
+    ? `\n\n(Couldn't read ${opts.error}, so this reminder went out ` +
+      `${opts.source === 'group' ? 'at the group\'s usual time' : 'at the usual time'}.)`
+    : '';
+  return {
+    to: opts.groupEmail,
+    subject: `Reminder: "${title}", ${opts.when}`,
+    body:
+      `Hi ${opts.groupName},\n\n` +
+      `A reminder of your meeting:\n\n${lines.join('\n')}\n\n` +
+      `This reminder was sent automatically, ${formatLead(opts.lead)} before the ` +
+      `meeting. ${how}${problem}\n`,
+  };
+}
+
+/** Stable key for one reminder of one meeting (an instance of a recurring
+ * event has its own ID); a meeting moved to another time gets new ones. */
+function reminderKey(calendarId, event, startMs, lead) {
+  return [calendarId, event.id, startMs, lead].join('|');
 }
