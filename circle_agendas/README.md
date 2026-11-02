@@ -200,6 +200,24 @@ rewrites the Parent Circle and Sub-Circles rows of every doc so labelled
 (**`refreshCircleDocStructures`**), emptying a row with nothing left in it,
 and removes the label.
 
+About this circle's rows are, in order: Aims & Domain, Policies folder,
+Zoom room, Circle email address, Other Key Links, Google Drive Folder
+(linked by the circle's name, like the parent and sub-circles), Parent
+Circle, and Sub-Circles. Docs built before that order (layout version 1,
+with a "Circle Google Drive Folder" row linked as "Google Drive folder")
+can be changed over with **`reorderAboutInCircleDocs`**, run in the
+editor: in every such doc, it moves the rows the scripts fill in (Zoom
+room, email address, Drive folder, parent, sub-circles) into place,
+leaving the rows filled in by hand (Aims & Domain, Policies folder, Other
+Key Links) where they are, so whatever's in them, smart chips included,
+is kept; renames the Drive folder row; rewrites it and the Parent Circle
+and Sub-Circles rows from the doc's labels; and labels the doc layout
+version 2. A doc whose rows aren't the expected ones, or whose Zoom room
+or email address row holds a chip (which moving could lose), is left as
+it is, and the log says why. To see what it does first, run
+**`tryReorderAboutOnCopy`**: it reorders an unlabelled copy of one such
+doc, in your My Drive, and logs its link (delete the copy after).
+
 The sub-circles are a bulleted list, one per line. Docs built when they
 were a comma-separated line can be changed over with
 **`rewriteStructureRowsInCircleDocs`**, run in the editor: it rewrites the

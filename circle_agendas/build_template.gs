@@ -213,14 +213,18 @@ function section(body, text) {
 function aboutTable(body) {
   const rows = [
     [['Aims & Domain'], [['Paste a link to circle\'s aims and domain document', HINT]]],
-    [['Parent Circle'], []],
-    [['Sub-Circles'], []],
+    [['Policies folder'], [['Paste a link to the circle\'s policies folder', HINT]]],
     [['Zoom room'], []],
     [['Circle email address'], []],
-    [['Circle Google Drive Folder'], []],
-    [['Policies folder'], [['Paste a link to the circle\'s policies folder', HINT]]],
     [['Other Key Links'], []],
+    [['Google Drive Folder'], []],
+    [['Parent Circle'], []],
+    [['Sub-Circles'], []],
   ];
+  // Must match ABOUT_LABELS (agenda_rules.gs).
+  if (rows.map(row => row[0][0]).join('|') !== ABOUT_LABELS.join('|')) {
+    throw new Error('aboutTable\'s rows don\'t match ABOUT_LABELS');
+  }
   const table = newTable(body, rows.length, 2);
   rows.forEach(([label, value], r) => {
     const labelCell = table.getCell(r, 0);

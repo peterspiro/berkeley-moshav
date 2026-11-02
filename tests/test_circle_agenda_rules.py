@@ -139,3 +139,37 @@ class TestParseCircleFooter:
     def test_no_managed_block(self):
         assert js("parseCircleFooter('Just notes')") == {
             "name": None, "driveItemId": None, "calendarId": None, "zoomUrl": None}
+
+
+class TestAboutReorder:
+    OLD = ["Aims & Domain", "Parent Circle", "Sub-Circles", "Zoom room",
+           "Circle email address", "Google Drive Folder", "Policies folder",
+           "Other Key Links"]
+
+    def test_old_drive_folder_labels_get_the_new_name(self):
+        assert js("aboutLabel('Circle Google Drive Folder')") == "Google Drive Folder"
+        assert js("aboutLabel('Circle Drive Folder\\nmore')") == "Google Drive Folder"
+        assert js("aboutLabel(' Zoom room ')") == "Zoom room"
+
+    def test_moves_only_the_rows_the_scripts_fill_in(self):
+        assert js(f"aboutReorder({json.dumps(self.OLD)})") == {"move": [
+            "Parent Circle", "Sub-Circles", "Zoom room", "Circle email address",
+            "Google Drive Folder"]}
+
+    def test_moving_them_gives_the_new_order(self):
+        plan = js(f"aboutReorder({json.dumps(self.OLD)})")
+        kept = [label for label in self.OLD if label not in plan["move"]]
+        target = js("ABOUT_LABELS")
+        assert [label for label in target if label not in plan["move"]] == kept
+
+    def test_already_in_order(self):
+        assert js("aboutReorder(ABOUT_LABELS)") == {"move": []}
+
+    def test_unexpected_rows(self):
+        labels = self.OLD[:-1] + ["Notes"]
+        error = js(f"aboutReorder({json.dumps(labels)})")["error"]
+        assert "missing: Other Key Links" in error and "unexpected: Notes" in error
+
+    def test_hand_filled_rows_out_of_order(self):
+        labels = ["Policies folder"] + [l for l in self.OLD if l != "Policies folder"]
+        assert "another order" in js(f"aboutReorder({json.dumps(labels)})")["error"]
