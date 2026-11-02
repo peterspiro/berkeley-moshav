@@ -208,7 +208,8 @@ agenda doc, built from code rather than copied from a template doc
   with every change to the Circle Info or Backlog tabs, so update scripts
   can tell which docs need it. Every doc built so far is version 1,
   whatever its layout: the layout changed many times before rollout, and
-  the docs built then were deleted and rebuilt.
+  docs built before then are best deleted and rebuilt rather than
+  updated.
 - A guide for facilitators and secretaries: adding a meeting, adding
   items, updating times, taking notes and follow-ups, and the roles
   table. It should say that anyone who can open the doc can use its
