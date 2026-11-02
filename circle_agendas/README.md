@@ -188,6 +188,26 @@ built doc, and leaves rows that already say something alone. A doc's
 circle is the group whose Drive folder holds it, or else the one with its
 labelled address.
 
+When `change_parent_circle.py` moves a circle to another parent, it
+relabels the docs of the circle and of its old and new parents with their
+new parent and sub-circles; `add_new_group.py` relabels the new group's
+parent's doc with its sub-circles; and
+`update_groups_in_google_and_hierarchy.py --agenda-docs` relabels every
+existing doc whose parent or sub-circles differ from the Circle Structure
+page (after an entry was moved there by hand, say). Each labels a built doc
+`circleAgendaRefresh: structure`. Each run of `buildNewCircleDocs` then
+rewrites the Parent Circle and Sub-Circles rows of every doc so labelled
+(**`refreshCircleDocStructures`**), emptying a row with nothing left in it,
+and removes the label.
+
+The sub-circles are a bulleted list, one per line. Docs built when they
+were a comma-separated line can be changed over with
+**`rewriteStructureRowsInCircleDocs`**, run in the editor: it rewrites the
+Parent Circle and Sub-Circles rows of every built doc from its labels,
+replacing anything typed into those two rows by hand. A doc whose row is
+empty because the group has no sub-circles needs nothing: the list
+appears when a sub-circle is added.
+
 Once, in the editor, run **`installTriggers`**, which runs
 `buildNewCircleDocs` every 10 minutes (and asks to allow managing
 triggers). It can also be run by hand, to build waiting docs at once; the

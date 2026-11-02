@@ -11,14 +11,19 @@
  * the editor), builds each doc so labelled, the same way previewTemplate
  * builds the preview, fills in About this circle, and relabels it "built",
  * with the layout version it was built with, for scripts that later update
- * existing docs.
+ * existing docs. It also rewrites the Parent Circle and Sub-Circles rows of
+ * each built doc that change_parent_circle.py or add_new_group.py has
+ * relabelled with a new parent or sub-circles (and labelled AGENDA_REFRESH_STRUCTURE).
  */
 
 // Must match util/circle_agenda_docs.py.
 const AGENDA_KEYS = {
   group: 'circleAgendaGroup', parent: 'circleAgendaParent', state: 'circleAgendaState',
-  layout: 'circleAgendaLayout', sub: 'circleAgendaSub',
+  layout: 'circleAgendaLayout', sub: 'circleAgendaSub', refresh: 'circleAgendaRefresh',
 };
+// The refresh label's value for a doc whose parent or sub-circles changed.
+const AGENDA_REFRESH_STRUCTURE = 'structure';
+const STRUCTURE_ROWS = ['Parent Circle', 'Sub-Circles'];
 const AGENDA_STATE_NEW = 'new';
 // Set before building, so a build that fails partway is never retried on
 // top of itself; such a doc is left for a person to look at.
@@ -62,6 +67,7 @@ function buildNewCircleDocs() {
         console.error('Couldn\'t build ' + file.name + ': ' + e.message);
       }
     }
+    refreshCircleDocStructures();
   } finally {
     lock.releaseLock();
   }
@@ -81,8 +87,7 @@ function buildCircleDoc(file) {
   setAgendaState(file.id, AGENDA_STATE_BUILDING);
   build(file.id);
   const circle = circleOfDoc(file.id, email);
-  const subNames = [];
-  for (let i = 1; props[AGENDA_KEYS.sub + i]; i++) subNames.push(props[AGENDA_KEYS.sub + i]);
+  const subNames = subNamesOf(props);
   fillAbout(file.id, file.name.replace(/ Agenda$/, ''), email, circle, props[AGENDA_KEYS.parent],
     subNames);
   Drive.Files.update({properties: {
@@ -90,12 +95,49 @@ function buildCircleDoc(file) {
   }}, file.id, null, {supportsAllDrives: true});
 }
 
+// Rewrites the Parent Circle and Sub-Circles rows of each built doc
+// labelled AGENDA_REFRESH_STRUCTURE, from its labels, and removes that
+// label. Run by buildNewCircleDocs.
+function refreshCircleDocStructures() {
+  const resp = Drive.Files.list({
+    q: 'properties has { key=\'' + AGENDA_KEYS.refresh + '\' and value=\'' +
+      AGENDA_REFRESH_STRUCTURE + '\' } and trashed = false',
+    corpora: 'allDrives', includeItemsFromAllDrives: true, supportsAllDrives: true,
+    fields: 'files(id,name,properties)',
+  });
+  for (const file of resp.files || []) {
+    const props = file.properties || {};
+    if (props[AGENDA_KEYS.state] !== AGENDA_STATE_BUILT) continue;
+    try {
+      const email = props[AGENDA_KEYS.group];
+      fillAbout(file.id, null, email, circleOfDoc(file.id, email), props[AGENDA_KEYS.parent],
+        subNamesOf(props), false, STRUCTURE_ROWS);
+      Drive.Files.update({properties: {[AGENDA_KEYS.refresh]: null}}, file.id, null,
+        {supportsAllDrives: true});
+      console.log('Updated the parent and sub-circles of ' + file.name);
+      logLink('Updated the parent and sub-circles of ' + file.name + ':',
+        'https://docs.google.com/document/d/' + file.id + '/edit');
+    } catch (e) {
+      console.error('Couldn\'t update ' + file.name + ': ' + e.message);
+    }
+  }
+}
+
+// A doc's sub-circles' names, from its labels.
+function subNamesOf(props) {
+  const subNames = [];
+  for (let i = 1; props[AGENDA_KEYS.sub + i]; i++) subNames.push(props[AGENDA_KEYS.sub + i]);
+  return subNames;
+}
+
 // The doc's title becomes the group's name, and About this circle gets its
 // Zoom room, email address, Drive item, and parent and sub-circles (each
-// named, and linked to its Drive folder when it's a group with one).
-// With onlyEmpty, only rows that are empty are filled in; without a name,
-// the title is left as it is.
-function fillAbout(docId, name, email, circle, parentName, subNames, onlyEmpty) {
+// named, and linked to its Drive folder when it's a group with one; the
+// sub-circles as a bulleted list).
+// With onlyEmpty, only rows that are empty are filled in; with onlyRows,
+// only those rows are written, and emptied when there's nothing to say;
+// without a name, the title is left as it is.
+function fillAbout(docId, name, email, circle, parentName, subNames, onlyEmpty, onlyRows) {
   const doc = DocumentApp.openById(docId);
   const body = firstTabBody(doc);
   for (let i = 0; i < body.getNumChildren() && name; i++) {
@@ -112,33 +154,43 @@ function fillAbout(docId, name, email, circle, parentName, subNames, onlyEmpty) 
     const group = circleNamed(circles, groupName);
     return [groupName, group ? folderLink(group.driveItemId) : null];
   };
-  const subRuns = [];
-  (subNames || []).forEach((sub, i) => {
-    if (i) subRuns.push([', ']);
-    subRuns.push(linkedName(sub));
-  });
+  // Each row's paragraphs, each a list of runs.
   const values = {
-    'Zoom room': circle && circle.zoomUrl ? [['Zoom room', {[A.LINK_URL]: circle.zoomUrl}]] : [],
-    'Circle email address': email ? [[email, {[A.LINK_URL]: 'mailto:' + email}]] : [],
+    'Zoom room': circle && circle.zoomUrl ? [[['Zoom room', {[A.LINK_URL]: circle.zoomUrl}]]] : [],
+    'Circle email address': email ? [[[email, {[A.LINK_URL]: 'mailto:' + email}]]] : [],
     'Circle Google Drive Folder': circle && circle.driveItemId
-      ? [['Google Drive folder', folderLink(circle.driveItemId)]] : [],
-    'Parent Circle': parentName ? [linkedName(parentName)] : [],
-    'Sub-Circles': subRuns,
+      ? [[['Google Drive folder', folderLink(circle.driveItemId)]]] : [],
+    'Parent Circle': parentName ? [[linkedName(parentName)]] : [],
+    'Sub-Circles': (subNames || []).map(sub => [[token('bullet')], linkedName(sub)]),
   };
   // Docs built before the row was renamed.
   values['Circle Drive Folder'] = values['Circle Google Drive Folder'];
   const found = findRow(body, text => text === 'Circle email address');
+  let bullets = false;
   if (found) {
     const table = found.table;
     for (let r = 0; r < table.getNumRows(); r++) {
       const label = table.getCell(r, 0).getText().split('\n')[0].trim();
       const cell = table.getCell(r, 1);
-      if (values[label] && values[label].length && !(onlyEmpty && cell.getText().trim())) {
-        writeCell(cell, [values[label]]);
-      }
+      const write = onlyRows ? onlyRows.includes(label)
+        : values[label] && values[label].length && !(onlyEmpty && cell.getText().trim());
+      if (!write) continue;
+      const paragraphs = values[label] || [];
+      resetCell(cell);
+      writeCell(cell, paragraphs.length ? paragraphs : [[]]);
+      if (label === 'Sub-Circles' && paragraphs.length) bullets = true;
     }
   }
   doc.saveAndClose();
+  // The ⟦bullet⟧ tokens become the sub-circles' bullets.
+  if (bullets) replaceTokens(docId);
+}
+
+// Leaves a cell holding one plain, empty paragraph, for writeCell: what was
+// there may be a bulleted list, which writeCell can't write over.
+function resetCell(cell) {
+  cell.insertParagraph(0, '');
+  while (cell.getNumChildren() > 1) cell.getChild(1).removeFromParent();
 }
 
 // The group of circles (from their footers) with this name, or null: the
@@ -164,21 +216,40 @@ function circleOfDoc(docId, email) {
 // circle doc, for docs built before those rows were filled in. Rows that
 // already say something are left alone.
 function fillAboutForCircleDocs() {
+  for (const file of builtCircleDocs()) {
+    const props = file.properties || {};
+    const email = props[AGENDA_KEYS.group];
+    const subNames = subNamesOf(props);
+    fillAbout(file.id, null, email, circleOfDoc(file.id, email), props[AGENDA_KEYS.parent],
+      subNames, true);
+    logLink('Filled in ' + file.name + ':', 'https://docs.google.com/document/d/' + file.id + '/edit');
+  }
+}
+
+// Run from the editor: rewrites the Parent Circle and Sub-Circles rows of
+// every built circle doc from its labels, the sub-circles as a bulleted
+// list (for docs built when they were a comma-separated line). Anything
+// typed into those rows by hand is replaced.
+function rewriteStructureRowsInCircleDocs() {
+  for (const file of builtCircleDocs()) {
+    const props = file.properties || {};
+    const email = props[AGENDA_KEYS.group];
+    fillAbout(file.id, null, email, circleOfDoc(file.id, email), props[AGENDA_KEYS.parent],
+      subNamesOf(props), false, STRUCTURE_ROWS);
+    logLink('Rewrote the parent and sub-circles of ' + file.name + ':',
+      'https://docs.google.com/document/d/' + file.id + '/edit');
+  }
+}
+
+// Every built circle doc ({id, name, properties}).
+function builtCircleDocs() {
   const resp = Drive.Files.list({
     q: 'properties has { key=\'' + AGENDA_KEYS.state + '\' and value=\'' + AGENDA_STATE_BUILT +
       '\' } and trashed = false',
     corpora: 'allDrives', includeItemsFromAllDrives: true, supportsAllDrives: true,
     fields: 'files(id,name,properties)',
   });
-  for (const file of resp.files || []) {
-    const props = file.properties || {};
-    const email = props[AGENDA_KEYS.group];
-    const subNames = [];
-    for (let i = 1; props[AGENDA_KEYS.sub + i]; i++) subNames.push(props[AGENDA_KEYS.sub + i]);
-    fillAbout(file.id, null, email, circleOfDoc(file.id, email), props[AGENDA_KEYS.parent],
-      subNames, true);
-    logLink('Filled in ' + file.name + ':', 'https://docs.google.com/document/d/' + file.id + '/edit');
-  }
+  return resp.files || [];
 }
 
 // Whether a doc has a single tab holding nothing but empty paragraphs.

@@ -319,3 +319,25 @@ def remove_node(node: HierarchyNode) -> None:
         child.parent = parent
         parent.children.append(child)
     node.children = []
+
+
+def is_descendant(node: HierarchyNode, ancestor: HierarchyNode) -> bool:
+    """Whether node is ancestor itself or somewhere beneath it."""
+    while node is not None:
+        if node is ancestor:
+            return True
+        node = node.parent
+    return False
+
+
+def move_node(node: HierarchyNode, new_parent: HierarchyNode) -> None:
+    """Move node, with everything beneath it, to be a child of new_parent.
+    Raises ValueError for the root, or a new parent that is node itself or
+    beneath it (which would cut the subtree off from the tree)."""
+    if node.parent is None:
+        raise ValueError("Cannot move the hierarchy root")
+    if is_descendant(new_parent, node):
+        raise ValueError(f"{new_parent.name!r} is {node.name!r} or beneath it")
+    node.parent.children.remove(node)
+    new_parent.children.append(node)
+    node.parent = new_parent
