@@ -17,7 +17,7 @@
 // Must match util/circle_agenda_docs.py.
 const AGENDA_KEYS = {
   group: 'circleAgendaGroup', parent: 'circleAgendaParent', state: 'circleAgendaState',
-  layout: 'circleAgendaLayout',
+  layout: 'circleAgendaLayout', sub: 'circleAgendaSub',
 };
 const AGENDA_STATE_NEW = 'new';
 // Set before building, so a build that fails partway is never retried on
@@ -82,15 +82,19 @@ function buildCircleDoc(file) {
   const circle = loadCircles().find(c => c.email === email) ||
     refreshCircles().find(c => c.email === email);
   build(file.id);
-  fillAbout(file.id, file.name.replace(/ Agenda$/, ''), email, circle, props[AGENDA_KEYS.parent]);
+  const subNames = [];
+  for (let i = 1; props[AGENDA_KEYS.sub + i]; i++) subNames.push(props[AGENDA_KEYS.sub + i]);
+  fillAbout(file.id, file.name.replace(/ Agenda$/, ''), email, circle, props[AGENDA_KEYS.parent],
+    subNames);
   Drive.Files.update({properties: {
     [AGENDA_KEYS.state]: AGENDA_STATE_BUILT, [AGENDA_KEYS.layout]: String(LAYOUT_VERSION),
   }}, file.id, null, {supportsAllDrives: true});
 }
 
 // The doc's title becomes the group's name, and About this circle gets its
-// email address, Drive item, and parent.
-function fillAbout(docId, name, email, circle, parentName) {
+// Zoom room, email address, Drive item, and parent and sub-circles (each
+// named, and linked to its Drive folder when it's a group with one).
+function fillAbout(docId, name, email, circle, parentName, subNames) {
   const doc = DocumentApp.openById(docId);
   const body = firstTabBody(doc);
   for (let i = 0; i < body.getNumChildren(); i++) {
@@ -101,13 +105,24 @@ function fillAbout(docId, name, email, circle, parentName) {
       break;
     }
   }
+  const circles = loadCircles();
+  const folderLink = id => ({[A.LINK_URL]: 'https://drive.google.com/drive/folders/' + id});
+  const linkedName = groupName => {
+    const group = circleNamed(circles, groupName);
+    return [groupName, group ? folderLink(group.driveItemId) : null];
+  };
+  const subRuns = [];
+  (subNames || []).forEach((sub, i) => {
+    if (i) subRuns.push([', ']);
+    subRuns.push(linkedName(sub));
+  });
   const values = {
     'Zoom room': circle && circle.zoomUrl ? [['Zoom room', {[A.LINK_URL]: circle.zoomUrl}]] : [],
-    'Circle email address': [[email, {[A.LINK_URL]: 'mailto:' + email}]],
+    'Circle email address': email ? [[email, {[A.LINK_URL]: 'mailto:' + email}]] : [],
     'Circle Drive Folder': circle && circle.driveItemId
-      ? [['Drive folder', {[A.LINK_URL]: 'https://drive.google.com/drive/folders/' + circle.driveItemId}]]
-      : [],
-    'Parent Circle': parentName ? [[parentName]] : [],
+      ? [['Drive folder', folderLink(circle.driveItemId)]] : [],
+    'Parent Circle': parentName ? [linkedName(parentName)] : [],
+    'Sub-Circles': subRuns,
   };
   const found = findRow(body, text => text === 'Circle email address');
   if (found) {
@@ -118,6 +133,17 @@ function fillAbout(docId, name, email, circle, parentName) {
     }
   }
   doc.saveAndClose();
+}
+
+// The group of circles (from their footers) with this name, or null: the
+// same name, ignoring case, or else one whose name starts the other's (so
+// "Full Community (Circle of Everyone / …)" in the Circle Structure finds
+// the "Full Community" group).
+function circleNamed(circles, name) {
+  const n = name.toLowerCase();
+  return circles.find(c => (c.name || '').toLowerCase() === n) ||
+    circles.find(c => c.name && (n.startsWith(c.name.toLowerCase()) ||
+      c.name.toLowerCase().startsWith(n))) || null;
 }
 
 // Whether a doc has a single tab holding nothing but empty paragraphs.

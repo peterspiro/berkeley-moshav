@@ -3,7 +3,7 @@ Tests for util/circle_agenda_docs.py. All names and addresses are fictional.
 """
 
 from util.circle_agenda_docs import (
-    GROUP_KEY, PARENT_KEY, STATE_KEY, STATE_NEW, ensure_agenda_doc, find_agenda_doc,
+    GROUP_KEY, PARENT_KEY, STATE_KEY, STATE_NEW, SUB_KEY, ensure_agenda_doc, find_agenda_doc,
 )
 
 
@@ -90,3 +90,10 @@ def test_relabels_doc_labelled_by_an_earlier_version():
     assert ensure_agenda_doc(drive, "tech@example.org", "Tech Circle", "F", None, False) == "d1"
     assert drive.files().updated == [("d1", {"properties": old})]
     assert drive.files().created == []
+
+
+def test_labels_sub_circles():
+    drive = FakeDrive()
+    ensure_agenda_doc(drive, "a@example.org", "A", "F", None, False, ["Sub One", "Sub Two"])
+    props = drive.files().created[0]["properties"]
+    assert props[f"{SUB_KEY}1"] == "Sub One" and props[f"{SUB_KEY}2"] == "Sub Two"

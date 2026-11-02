@@ -80,7 +80,7 @@ const COL = {time: 0, duration: 1, description: 2, notes: 3};
 const MEETING_COLUMNS = 4;
 const MEETING_HEADINGS = ['Time', 'Min', 'Description', 'Notes'];
 const COLUMN_WIDTHS = {[COL.time]: 33, [COL.duration]: 27, [COL.description]: 210,
-  [COL.notes]: 400};
+  [COL.notes]: 300};
 const CELL_PADDING = 3;
 const PROBLEM_COLOR = '#cc0000';
 // The rows above the agenda items: the column headings, which stay in view
@@ -109,6 +109,11 @@ function previewTemplate() {
     props.setProperty('previewDocId', docId);
   }
   build(docId);
+  // In a circle's folder, the preview gets that circle's details, as a
+  // circle's own doc does (without its parent or sub-circles, which come
+  // from the Circle Structure).
+  const circle = circleForDoc(docId);
+  if (circle) fillAbout(docId, 'Circle Agenda', circle.email, circle, null, []);
   logLink('Preview:', DocumentApp.openById(docId).getUrl());
 }
 
@@ -220,15 +225,12 @@ function layOut(body, docId) {
   writeRuns(body.appendParagraph(''), [
     ['+ New meeting', {[A.LINK_URL]: actionUrl('meeting', docId)}],
     ['   (each meeting gets a tab of its own, listed at the left, titled with its date)', MUTED]]);
-  body.appendHorizontalRule();
 
   section(body, 'About this circle');
   aboutTable(body);
-  body.appendHorizontalRule();
 
   section(body, 'Roles');
   rolesTable(body);
-  body.appendHorizontalRule();
 
   leftover.removeFromParent();
 }
@@ -240,10 +242,9 @@ function section(body, text) {
 
 function aboutTable(body) {
   const rows = [
-    [['Aims & Domain'], [['Paste a link to the document that sets out the circle\'s aims ' +
-      'and domain', HINT]]],
-    [['Parent Circle', '& link to circle document'], []],
-    [['Sub-Circles', '& link to circle documents'], []],
+    [['Aims & Domain'], [['Paste a link to circle\'s aims and domain document', HINT]]],
+    [['Parent Circle'], []],
+    [['Sub-Circles'], []],
     [['Zoom room'], []],
     [['Circle email address'], []],
     [['Circle Drive Folder'], []],
@@ -414,8 +415,10 @@ function attendance(body, details) {
     }
     if (c < columns.length - 1) table.setColumnWidth(c, 130);
   });
-  // Docs needs a paragraph between two tables; finishMeeting makes it tiny.
-  body.appendParagraph('').setSpacingBefore(0).setSpacingAfter(0).setLineSpacing(1);
+  // Docs needs a paragraph between two tables; it's made as small as it
+  // can be, here and in finishMeeting.
+  body.appendParagraph('').setSpacingBefore(0).setSpacingAfter(0).setLineSpacing(1)
+    .setAttributes({[A.FONT_SIZE]: 1});
 }
 
 // A topic's description: its title, a Presenter dropdown (if presenters,
@@ -576,6 +579,7 @@ function backlogTab(docId) {
     if (p.list) {
       requests.push({createParagraphBullets: {range, bulletPreset: p.list === 'numbered'
         ? 'NUMBERED_DECIMAL_ALPHA_ROMAN' : 'BULLET_DISC_CIRCLE_SQUARE'}});
+      requests.push(listIndentRequest(range));
     }
     at = range.endIndex;
   }
@@ -616,6 +620,9 @@ function replaceTokens(docId, tabId) {
   for (const t of findTokens(apiTab(docId, tabId).content)) {
     requests.push({deleteContentRange: {range: {startIndex: t.start, endIndex: t.end, tabId}}});
     requests.push(tokenRequest(t, tabId));
+    if (t.parts[0] === 'bullet') {
+      requests.push(listIndentRequest({startIndex: t.start, endIndex: t.start + 1, tabId}));
+    }
   }
   if (requests.length) Docs.Documents.batchUpdate({requests}, docId);
 }
@@ -690,6 +697,19 @@ function presenterDropdownRequest(meetingId, attendees, tabId) {
         ({optionId: 'dropdownItem.p' + i, displayValue: name})),
     ]},
   }}};
+}
+
+// Bulleted and numbered lists' indents: the bullet 0.08" from the margin,
+// and the text a 0.19" hanging indent beyond it (Format → Bullets &
+// numbering → Indentation options: left 0.08", hanging 0.19").
+const LIST_INDENT_PT = 0.08 * 72;
+const LIST_HANGING_PT = 0.19 * 72;
+
+function listIndentRequest(range) {
+  return {updateParagraphStyle: {range, paragraphStyle: {
+    indentFirstLine: {magnitude: LIST_INDENT_PT, unit: 'PT'},
+    indentStart: {magnitude: LIST_INDENT_PT + LIST_HANGING_PT, unit: 'PT'},
+  }, fields: 'indentFirstLine,indentStart'}};
 }
 
 function apiColor(hex) {

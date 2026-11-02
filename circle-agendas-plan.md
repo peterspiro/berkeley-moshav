@@ -34,8 +34,11 @@ they need will take their own scripts.
 
 - **Tabs**: "Circle" ("+ New meeting" in a "Create a new meeting" section
   under the title; About this circle: a link to its aims and domain
-  document, parent and sub-circles, Zoom room, email address, Drive
-  folder, policies folder, and other key links; and Roles: Leader,
+  document, parent and sub-circles (each linked to its Drive folder), Zoom
+  room, email address, Drive folder, policies folder, and other key links,
+  filled in when the doc is built (and, for a preview in a circle's
+  folder, by `previewTemplate`, without parent and sub-circles); no lines
+  between sections; and Roles: Leader,
   Feedback Link, Facilitator, and Secretary, with names and when each term
   ends); "Backlog" (built with the
   Docs API alone, since DocumentApp can't see a tab added in the same run:
@@ -58,8 +61,10 @@ they need will take their own scripts.
   length, and place; and its attendance; then the agenda table.
 - **Columns**: Time (12-hour, without AM/PM, for room), Min (the
   duration), Description, and Notes, each a fixed width; Notes is wide
-  (400 points), and in a pageless doc a table wider than the window
+  (300 points), and in a pageless doc a table wider than the window
   scrolls sideways.
+- **Lists**: bulleted and numbered lists have a 0.08" left indent and a
+  0.19" hanging indent.
 - **Agenda**: Opening Round; Administrative matters (Announcements, Brief
   Reports, Next meeting date & time, Minutes of last meeting, and
   modifications and consent to the agenda, as a bulleted list; 5 minutes);

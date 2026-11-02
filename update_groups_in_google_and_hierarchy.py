@@ -1231,6 +1231,8 @@ def ensure_agenda_docs(drive_service, group_info: dict[str, dict],
     circle_agendas Apps Script to build (see util/circle_agenda_docs.py)."""
     parent_by_group_id = {n.group_id: n.parent.name for n in iter_nodes(root)
                           if n.group_id and n.parent is not None}
+    subs_by_group_id = {n.group_id: [c.name for c in n.children] for n in iter_nodes(root)
+                        if n.group_id}
     for group_id, info in group_info.items():
         email = email_by_group_id.get(group_id)
         item_id = google_file_id_by_group_id.get(group_id)
@@ -1238,7 +1240,8 @@ def ensure_agenda_docs(drive_service, group_info: dict[str, dict],
             continue
         try:
             ensure_agenda_doc(drive_service, email, info["name"], item_id,
-                              parent_by_group_id.get(group_id), dry_run)
+                              parent_by_group_id.get(group_id), dry_run,
+                              subs_by_group_id.get(group_id, []))
         except Exception as e:
             log("ERROR", "agenda_doc", f"{info['name']}: {e}")
 
