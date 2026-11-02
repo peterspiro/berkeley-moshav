@@ -17,7 +17,7 @@ the newest meeting in the doc (or after now, if there's none), so no
 meeting is added twice, and clicking again adds the one after.
 
 Next: rolling out a doc for every circle and working group, and a guide
-for facilitators and secretaries.
+for facilitators and secretaries; see "Future work" for the rest.
 
 ## Docs are built from code
 
@@ -196,6 +196,58 @@ agenda doc, built from code rather than copied from a template doc
   which it has had; tried on a copy first, then run on all. Each change
   there means changing both the build code and writing an update, so the
   Circle Info and Backlog tabs are best settled before circles use their docs.
+
+## Future work
+
+**Rollout**
+- Run `update_groups_in_google_and_hierarchy.py -a` (first with `-n`) to
+  give every circle and working group its doc. Once the layout is
+  settled, consider making docs the default in both scripts rather than
+  opt-in (`-a` / `--agenda-doc`).
+- From then on, bump `LAYOUT_VERSION` (`circle_agendas/circle_docs.gs`)
+  with every change to the Circle Info or Backlog tabs, so update scripts
+  can tell which docs need it. Every doc built so far is version 1,
+  whatever its layout: the layout changed many times before rollout, and
+  the docs built then were deleted and rebuilt.
+- A guide for facilitators and secretaries: adding a meeting, adding
+  items, updating times, taking notes and follow-ups, and the roles
+  table. It should say that anyone who can open the doc can use its
+  links, and that a doc copied by hand still points at the original (its
+  links change the original, not the copy).
+
+**Update scripts** (see "Updating once circles have docs"; none written
+yet, and `fillAboutForCircleDocs` is the only one-off of the kind so far)
+- Write each when a change to the Circle Info or Backlog tabs needs one,
+  rather than a general one that brings any doc up to date.
+- Keep the web app working with meetings made by older layouts, as it
+  does now with four-column meetings (before Follow-up was restored).
+
+**Things a doc doesn't yet follow after it's built**
+- Its label's parent and sub-circle names are set only when the doc is
+  created, so a change to the Circle Structure doesn't reach the label or
+  About this circle; nor does renaming the group reach the doc's title.
+  `ensure_agenda_doc` could refresh the label each run, and an update
+  script the About rows.
+- A group that's retired or deactivated keeps its doc, still labelled
+  built (and so still acted on by the web app).
+- Members' names come from "Circle agenda member names.json", rewritten
+  only when `update_groups_in_google_and_hierarchy.py` runs, so a new
+  member appears in attendance lists only after the next run.
+- At most `MAX_SUB_CIRCLES` (12) sub-circles are labelled.
+
+**Possible improvements**
+- In `group_meetings`, look up the agenda docs in the 5-minute `syncAll`
+  rather than `hourly` (it's a single Drive search), so a new doc reaches
+  its circle's events within about 15 minutes rather than an hour.
+- If viewers clicking the links becomes a problem: limit who can view
+  the docs, or have the result page sign the person in with Google and
+  check them against the doc's editors (see "How it works" for why the
+  web app can't tell who's clicking).
+- `buildNewCircleDocs` and `fillAboutForCircleDocs` read only the first
+  page (100) of Drive's results; fine for the number of circles now, but
+  they should page if there are ever more.
+- Where a circle's own standing agenda items would live is still to
+  decide (see below).
 
 ## The probes
 
