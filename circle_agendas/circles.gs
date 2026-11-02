@@ -88,8 +88,9 @@ function refreshCircles() {
   return circles;
 }
 
-// The circle's members' names, sorted: each member of its Google Group, by
-// their name in the Gather directory (MEMBER_NAMES_FILE), or else the name
+// The circle's members' short names, sorted: each member of its Google
+// Group, by their first name (with their last initial if need be) from the
+// Gather directory (MEMBER_NAMES_FILE), or else the first word of the name
 // Drive gives them on the circle's Drive item (whose sharing
 // groups_drive_sync keeps in step with the group), or else their email
 // address.
@@ -118,7 +119,8 @@ function circleMemberNames(circle) {
   } while (pageToken);
 
   const gatherNames = memberNames();
-  return emails.map(e => gatherNames[e] || names[e] || e).sort((a, b) => a.localeCompare(b));
+  return emails.map(e => gatherNames[e] || (names[e] || e).split(/\s+/)[0])
+    .sort((a, b) => a.localeCompare(b));
 }
 
 // MEMBER_NAMES_FILE's names by (lowercase) email address, or {} if there's

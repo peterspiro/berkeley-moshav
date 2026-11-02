@@ -242,8 +242,9 @@ status line as "calendar (members can view, not edit)".
   and has a button that does nothing for members; members add a calendar
   from the link in the group's footer.
 
-  Each run (with `-g` too) also writes every Gather member's name, by their
-  Gather email and their Google Email, to "Circle agenda member
+  Each run (with `-g` too) also writes every Gather member's short name
+  (first name, with the last initial if another member shares it), by
+  their Gather email and their Google Email, to "Circle agenda member
   names.json" in `admin@`'s My Drive, so the circle agenda docs list
   members by name (see `circle_agendas/README.md`).
 
@@ -417,7 +418,7 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
   calendars, and copying them to its calendar or deleting them
 - **`zoom_utils.py`**: the Zoom API, and the standard room settings
 - **`credentials.py`**: reading `~/.gather` and `zoom_credentials`
-- **`member_names.py`**: members' names by email address, from the Gather
+- **`member_names.py`**: members' short names by email address, from the Gather
   directory, written to `admin@`'s Drive for the circle agenda docs
 
 ### `archive/`: no longer in use

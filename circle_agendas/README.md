@@ -103,8 +103,10 @@ The links:
   and links "Minutes of last meeting" to the previous meeting's tab; and
   the items of the previous meeting's
   Action Items Recap (a bulleted list) become the checklist of its Action
-  Items Accountability (their text only). The meetings before it lose their links, so they're no
-  longer changed. The circle is the Google Group whose footer links the
+  Items Accountability (their text only). The meetings that are over
+  lose their links, so they're no longer changed. Members are named by
+  first name, with their last initial if another community member shares
+  it; the closing round has a line for each attendee's feedback. The circle is the Google Group whose footer links the
   Drive folder (or shared drive) the doc is in, so this works only for a
   doc in a circle's folder; elsewhere the page says so.
 

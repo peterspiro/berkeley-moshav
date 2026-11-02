@@ -41,8 +41,6 @@ const COLOR = {
   aboutValue: '#fff3d1',
   rolesHeader: '#7cc896',
   rolesBody: '#e9f6ee',
-  policiesHeader: '#9cb8e6',
-  policiesBody: '#eef3fb',
   backlogHeader: '#ffd580',
   backlogBody: '#fff3d1',
   roundRow: '#dce6f6',
@@ -89,15 +87,19 @@ const AGENDA = [
   {title: 'Topic', minutes: 5},
   {title: 'Action Items Recap', minutes: 5, kind: 'report', actions: 'bullet'},
 ];
-const CLOSING_ROUND = {title: 'Closing Round / Check-out',
-  note: ' (feedback on content, interpersonal, processes)', kind: 'round'};
+// The closing round's description ends with a bulleted line for each
+// attendee: their name and a colon.
+const CLOSING_ROUND = {title: 'Closing Round / Check-out', kind: 'round', perAttendee: true,
+  note: ' What went well? What can we improve? (Evaluate meeting, facilitation, group ' +
+    'effectiveness.)'};
 // A meeting table's columns.
-// Time and Duration have fixed widths (in points); Description and Notes
-// share the rest of the page.
+// All but Notes have fixed widths (in points), with narrow padding; Notes
+// takes the rest of the page.
 const COL = {time: 0, duration: 1, description: 2, notes: 3};
 const MEETING_COLUMNS = 4;
 const MEETING_HEADINGS = ['Time', 'Min.', 'Description', 'Notes'];
-const COLUMN_WIDTHS = {[COL.time]: 42, [COL.duration]: 36};
+const COLUMN_WIDTHS = {[COL.time]: 36, [COL.duration]: 30, [COL.description]: 230};
+const CELL_PADDING = 3;
 const PROBLEM_COLOR = '#cc0000';
 // The rows above the agenda items: the column headings, which stay in view
 // while scrolling through the meeting. (Docs shows pinned rows, while they
@@ -246,8 +248,8 @@ function layOut(body, docId) {
   rolesTable(body);
   body.appendHorizontalRule();
 
-  section(body, 'Other policies');
-  policiesTable(body);
+  section(body, 'Policies');
+  policiesLink(body);
   body.appendHorizontalRule();
 
   leftover.removeFromParent();
@@ -266,7 +268,6 @@ function aboutTable(body) {
     [['Sub-Circles', '& link to circle documents'], []],
     [['Circle email address'], []],
     [['Circle Drive Folder'], []],
-    [['Objectives & Key Results', 'with review term'], []],
     [['Other Key Links'], []],
   ];
   const table = newTable(body, rows.length, 2);
@@ -282,13 +283,13 @@ function aboutTable(body) {
 }
 
 function rolesTable(body) {
-  const header = label => [[[label, BOLD]], [['Name, surname, email address', BOLD]],
-    [['Term', BOLD], ['\nyyyy-mm-dd', MUTED]]];
+  const header = label => [[[label, BOLD]], [['Name', BOLD]],
+    [['Term ends', BOLD], ['\nyyyy-mm-dd', MUTED]]];
   const role = (name, what) => [[[name, BOLD], [' (' + what + ')', MUTED]], [], []];
   const rows = [
     header('Circle Roles'),
     role('Leader', 'supports circle operations'),
-    role('Delegate', 'second voice in parent circle'),
+    role('Feedback Link', 'second voice in parent circle'),
     role('Facilitator', 'facilitates meetings'),
     role('Secretary', 'minutes and circle docs'),
     header('Operational Roles'),
@@ -307,22 +308,10 @@ function rolesTable(body) {
   table.setColumnWidth(2, 90);
 }
 
-function policiesTable(body) {
-  const headers = [
-    [['Policy Title', BOLD], ['\nwith link to policy', MUTED]],
-    [['Brief Description', BOLD]],
-    [['Holder', BOLD], ['\ncircle or role', MUTED]],
-    [['Term', BOLD], ['\nmm/yyyy', MUTED]],
-  ];
-  const table = newTable(body, 3, headers.length);
-  for (let r = 0; r < 3; r++) {
-    for (let c = 0; c < headers.length; c++) {
-      const cell = table.getCell(r, c);
-      writeCell(cell, [r === 0 ? headers[c] : []]);
-      cell.setBackgroundColor(r === 0 ? COLOR.policiesHeader : COLOR.policiesBody);
-    }
-  }
-  table.setColumnWidth(3, 80);
+// A place for a link to the circle's policies folder.
+function policiesLink(body) {
+  writeRuns(body.appendParagraph(''), [['Policies folder:  ', BOLD],
+    ['paste a link to the circle\'s policies folder here', HINT]]);
 }
 
 // Appends a meeting to a tab's body, and returns its ID. Above its table:
@@ -384,6 +373,9 @@ function meetingTable(body, docId, details) {
       const lines = [[[item.title, BOLD], ...(item.note ? [[item.note, MUTED]] : [])]];
       if (carryOver.length) lines.push(...carryOver.map(text => [[token(item.actions)], [text]]));
       else if (item.actions) lines.push([[token(item.actions)]]);
+      if (item.perAttendee) {
+        lines.push(...(details.attendees || []).map(name => [[token('bullet')], [name + ': ']]));
+      }
       writeCell(description, lines);
     }
     writeCell(cell(COL.notes), [[]]);
@@ -397,7 +389,16 @@ function meetingTable(body, docId, details) {
   shadeRow(table, last, 'round');
 
   for (const c of Object.keys(COLUMN_WIDTHS)) table.setColumnWidth(Number(c), COLUMN_WIDTHS[c]);
+  for (let r = 0; r < rowCount; r++) padRow(table.getRow(r));
   return meetingId;
+}
+
+// Narrow left and right padding in a meeting table's row, so its narrow
+// columns hold their text.
+function padRow(row) {
+  for (let c = 0; c < row.getNumCells(); c++) {
+    row.getCell(c).setPaddingLeft(CELL_PADDING).setPaddingRight(CELL_PADDING);
+  }
 }
 
 // The meeting's attendance, above its table, closely spaced: the attendees

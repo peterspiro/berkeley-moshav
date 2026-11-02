@@ -12,7 +12,7 @@
  * meeting's links; then the closing round; then the end time.
  *
  * A meeting is found by its ID, which is in its links' addresses. Adding a
- * meeting removes the links from the meetings before it, which are past.
+ * meeting removes the links from the meetings that are over.
  *
  * Adding a meeting takes two runs, startNewMeeting and finishNewMeeting:
  * the first adds its tab with the Docs API, and DocumentApp, which builds
@@ -54,6 +54,7 @@ function addItem(docId, meetingId) {
   for (let c = 0; c < MEETING_COLUMNS; c++) row.appendTableCell();
   for (let c = 0; c < MEETING_COLUMNS; c++) writeCell(row.getCell(c), [[]]);
   writeCell(row.getCell(COL.duration), [[[String(NEW_ITEM_MINUTES), MUTED]]]);
+  padRow(row);
   writeCell(row.getCell(COL.description), [[['Topic', BOLD]]]);
 
   const messages = recalculate(table);
@@ -133,7 +134,7 @@ function startNewMeeting(docId) {
 }
 
 // The second run: builds the meeting in the tab startNewMeeting added, and
-// removes the links from the meetings before it.
+// removes the links from the meetings that are over.
 function finishNewMeeting(key) {
   const cached = CacheService.getScriptCache().get(key);
   if (!cached) {
@@ -161,11 +162,14 @@ function finishNewMeeting(key) {
   body.appendParagraph('');
   leftover.removeFromParent();
 
+  // The meetings that are over lose their links.
   for (const other of allTabs(doc)) {
     if (other.getId() === details.tabId) continue;
-    const table = meetingTableIn(other.asDocumentTab().getBody());
+    const otherBody = other.asDocumentTab().getBody();
+    const table = meetingTableIn(otherBody);
     const links = table ? linksRowIndex(table) : -1;
-    if (links >= 0) table.removeRow(links);
+    const end = meetingEnd(other.getTitle(), otherBody);
+    if (links >= 0 && end !== null && end < Date.now()) table.removeRow(links);
   }
   doc.saveAndClose();
 
@@ -175,6 +179,18 @@ function finishNewMeeting(key) {
   return {done: true, title: 'Meeting added', messages: [
     'Added the meeting on ' + details.date + ' at ' + details.start + ', in a tab of its own ' +
     'at the left, titled with its date.']};
+}
+
+// When a meeting ends (milliseconds since 1970), from its tab's title (its
+// date) and its "Time … Duration (hours) …" line; null if they can't be
+// read.
+function meetingEnd(title, body) {
+  if (!MEETING_TAB_TITLE_RE.test(title)) return null;
+  const line = timeLineText(body);
+  const start = parseTime(headerTimeText(line));
+  const length = parseHours(headerHoursText(line));
+  if (start === null || length === null) return null;
+  return Utilities.parseDate(title, TIME_ZONE, 'yyyy-MM-dd').getTime() + (start + length) * 60000;
 }
 
 function tabUrl(docId, tabId) {

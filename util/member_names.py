@@ -2,17 +2,22 @@
 Members' names, from the Gather directory, for the circle agenda docs.
 
 The circle_agendas Apps Script lists a circle's members (its Google Group's
-addresses) in each new meeting's attendance and Presenter choices. Google
+addresses) in each new meeting's attendance and closing round. Google
 gives it names only for accounts that share them, and often just the part
 of the address before the @, so it looks names up in MEMBER_NAMES_FILE, a
-JSON object of email address -> name in the signed-in account's
+JSON object of email address -> short name in the signed-in account's
 (admin@'s) My Drive, which update_groups_in_google_and_hierarchy.py writes
 on each run. Both a member's Gather email and their Google Email (the
 address Gather shares Drive items with) are listed.
+
+A short name is the first name alone, or, if another member of the
+community has the same first name, with the last name's initial ("Ada L."),
+or, if that's shared too, the full name.
 """
 
 import io
 import json
+from collections import Counter
 
 from googleapiclient.http import MediaIoBaseUpload
 
@@ -22,16 +27,38 @@ from util.gather_utils import GatherUser, log
 MEMBER_NAMES_FILE = "Circle agenda member names.json"
 
 
+def short_names(users: list[GatherUser]) -> dict[str, str]:
+    """User ID -> short name (see the module docstring), for every user with
+    a name. Every named user, children included, counts as someone a name
+    must be told apart from."""
+    named = [u for u in users if u.full_name]
+    first = {u.user_id: (u.first_name or u.full_name.split()[0]) for u in named}
+    with_initial = {u.user_id: (f"{first[u.user_id]} {u.last_name[0]}."
+                                if u.last_name else first[u.user_id]) for u in named}
+    first_counts = Counter(f.casefold() for f in first.values())
+    initial_counts = Counter(n.casefold() for n in with_initial.values())
+    result = {}
+    for u in named:
+        if first_counts[first[u.user_id].casefold()] == 1:
+            result[u.user_id] = first[u.user_id]
+        elif initial_counts[with_initial[u.user_id].casefold()] == 1:
+            result[u.user_id] = with_initial[u.user_id]
+        else:
+            result[u.user_id] = u.full_name
+    return result
+
+
 def build_member_names(users: list[GatherUser]) -> dict[str, str]:
-    """Email address (lowercase) -> full name, for every user with a name,
+    """Email address (lowercase) -> short name, for every user with a name,
     under both their Gather email and their Google Email."""
+    short = short_names(users)
     names: dict[str, str] = {}
     for user in users:
-        if not user.full_name:
+        if user.user_id not in short:
             continue
         for address in (user.email, user.google_email):
             if address:
-                names[address.strip().lower()] = user.full_name
+                names[address.strip().lower()] = short[user.user_id]
     return dict(sorted(names.items()))
 
 

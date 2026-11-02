@@ -32,8 +32,9 @@ they need will take their own scripts.
 
 ## What a circle's doc does
 
-- **Tabs**: "Circle" (About this circle, Members and roles, Other
-  policies, with "+ New meeting" in a "Create a new meeting" section under
+- **Tabs**: "Circle" (About this circle; Members and roles, with a
+  Feedback Link role, names, and when each term ends; and Policies, a
+  link to the circle's policies folder; with "+ New meeting" in a "Create a new meeting" section under
   the title); "Backlog" (built with the
   Docs API alone, since DocumentApp can't see a tab added in the same run);
   then one tab per meeting, newest first. The template has no meetings.
@@ -45,8 +46,8 @@ they need will take their own scripts.
   event.
   The previous meeting's Action Items Recap, a bulleted list, becomes its
   Action Items Accountability's checklist (each item's text only). Adding
-  it removes the links from the meetings before it, which are then past
-  and not to be changed.
+  it removes the links from the meetings that are over, which are not to
+  be changed.
 - **Layout**: each meeting's tab has its date; a line with its start time,
   length, and place; and its attendance; then the agenda table.
 - **Columns**: Time (12-hour, without AM/PM, for room), Min. (the
@@ -70,10 +71,12 @@ they need will take their own scripts.
   recalculated (when someone clicks a link, and possibly on a timer).
   A duration that can't be read as a number is flagged, not guessed.
 - **Attendance**: a checklist of the circle's members, from its Google
-  Group, named as in the Gather directory (a file that
-  `update_groups_in_google_and_hierarchy.py` writes to `admin@`'s Drive;
-  Google often gives only the start of the address), or else as Drive gives
-  them, closely spaced.
+  Group, by first name (with their last initial if another member of the
+  community has the same first name), from the Gather directory (a file
+  that `update_groups_in_google_and_hierarchy.py` writes to `admin@`'s
+  Drive; Google often gives only the start of the address), closely
+  spaced. The closing round has a bulleted line for each of them, their
+  name and a colon, for their feedback.
   Names start unchecked; checking one marks that member absent, and Docs
   strikes the name through (an instruction above the names says so; Docs
   strikes through only checked checklist items, or text formatted by hand).
