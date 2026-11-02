@@ -20,10 +20,15 @@ class FakeFiles:
         self.existing = existing or []
         self.queries = []
         self.created = []
+        self.updated = []
 
     def list(self, **kwargs):
         self.queries.append(kwargs)
         return FakeRequest({"files": self.existing})
+
+    def update(self, fileId, body, supportsAllDrives):
+        self.updated.append((fileId, body))
+        return FakeRequest({})
 
     def create(self, body, supportsAllDrives, fields):
         assert supportsAllDrives
@@ -43,7 +48,7 @@ def test_finds_doc_by_group_label():
     drive = FakeDrive([{"id": "d1", "name": "Tech Circle Agenda"}])
     assert find_agenda_doc(drive, "Tech@Example.org") == {"id": "d1", "name": "Tech Circle Agenda"}
     query = drive.files().queries[0]
-    assert f"key='{GROUP_KEY}' and value='tech@example.org'" in query["q"]
+    assert f"properties has {{ key='{GROUP_KEY}' and value='tech@example.org' }}" in query["q"]
     assert query["corpora"] == "allDrives" and query["includeItemsFromAllDrives"]
 
 
@@ -56,7 +61,7 @@ def test_creates_labelled_doc_in_drive_item():
     assert body["name"] == "Tech Circle Agenda"
     assert body["mimeType"] == "application/vnd.google-apps.document"
     assert body["parents"] == ["FOLDER"]
-    assert body["appProperties"] == {GROUP_KEY: "tech@example.org", STATE_KEY: STATE_NEW,
+    assert body["properties"] == {GROUP_KEY: "tech@example.org", STATE_KEY: STATE_NEW,
                                      PARENT_KEY: "Full Community"}
 
 
@@ -75,5 +80,13 @@ def test_dry_run_creates_nothing():
 def test_long_parent_name_fits_drive_limit():
     drive = FakeDrive()
     ensure_agenda_doc(drive, "a@example.org", "A", "F", "Ü" * 100, dry_run=False)
-    parent = drive.files().created[0]["appProperties"][PARENT_KEY]
+    parent = drive.files().created[0]["properties"][PARENT_KEY]
     assert len(PARENT_KEY.encode()) + len(parent.encode()) <= 124
+
+
+def test_relabels_doc_labelled_by_an_earlier_version():
+    old = {GROUP_KEY: "tech@example.org", STATE_KEY: STATE_NEW}
+    drive = FakeDrive([{"id": "d1", "name": "Tech Circle Agenda", "appProperties": old}])
+    assert ensure_agenda_doc(drive, "tech@example.org", "Tech Circle", "F", None, False) == "d1"
+    assert drive.files().updated == [("d1", {"properties": old})]
+    assert drive.files().created == []

@@ -4,7 +4,8 @@
  * Builds each circle's and working group's agenda doc. The Python scripts
  * (util/circle_agenda_docs.py, run by update_groups_in_google_and_hierarchy.py
  * and add_new_group.py) create the doc empty, in the group's Drive item,
- * labelled (Drive appProperties) with the group's address, its parent's
+ * labelled (Drive file properties, public ones: the Python scripts are a
+ * different app, and can't share appProperties) with the group's address, its parent's
  * name, and the state "new". buildNewCircleDocs, run every
  * BUILD_EVERY_MINUTES by the trigger installTriggers makes (or by hand in
  * the editor), builds each doc so labelled, the same way previewTemplate
@@ -39,11 +40,12 @@ function buildNewCircleDocs() {
   if (!lock.tryLock(1000)) return;
   try {
     const resp = Drive.Files.list({
-      q: 'appProperties has { key=\'' + AGENDA_KEYS.state + '\' and value=\'' +
+      q: 'properties has { key=\'' + AGENDA_KEYS.state + '\' and value=\'' +
         AGENDA_STATE_NEW + '\' } and trashed = false',
       corpora: 'allDrives', includeItemsFromAllDrives: true, supportsAllDrives: true,
-      fields: 'files(id,name,appProperties)',
+      fields: 'files(id,name,properties)',
     });
+    if (!(resp.files || []).length) console.log('No circle docs waiting to be built.');
     for (const file of resp.files || []) {
       try {
         buildCircleDoc(file);
@@ -60,13 +62,13 @@ function buildNewCircleDocs() {
 
 // Builds one labelled doc, fills in About this circle, and relabels it.
 function buildCircleDoc(file) {
-  const props = file.appProperties || {};
+  const props = file.properties || {};
   const email = props[AGENDA_KEYS.group];
   const circle = loadCircles().find(c => c.email === email) ||
     refreshCircles().find(c => c.email === email);
   build(file.id);
   fillAbout(file.id, file.name.replace(/ Agenda$/, ''), email, circle, props[AGENDA_KEYS.parent]);
-  Drive.Files.update({appProperties: {
+  Drive.Files.update({properties: {
     [AGENDA_KEYS.state]: AGENDA_STATE_BUILT, [AGENDA_KEYS.layout]: String(LAYOUT_VERSION),
   }}, file.id, null, {supportsAllDrives: true});
 }

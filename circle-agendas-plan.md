@@ -136,7 +136,7 @@ agenda doc, built from code like the template rather than copied from it
 - `update_groups_in_google_and_hierarchy.py --agenda-docs` and
   `add_new_group.py --agenda-doc` (opt-in until the layout is settled)
   create "<Group> Agenda",
-  empty, in the group's Drive item, labelled with Drive appProperties
+  empty, in the group's Drive item, labelled with Drive file properties
   (hidden from users): the group's address, its parent's name in the
   Circle Structure (the Gather wiki page listing every circle, under its
   parent), and the state "new" (`util/circle_agenda_docs.py`). The label

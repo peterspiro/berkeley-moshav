@@ -154,3 +154,18 @@ function nextEvents(circle, after, count) {
     .filter(e => e.status !== 'cancelled' && e.start && e.start.dateTime)
     .slice(0, count);
 }
+
+// Run from the editor: forgets the cached names and circles, so the next
+// meeting reads them afresh, and logs what MEMBER_NAMES_FILE holds (how many
+// names, how many are more than a first name, and a few of them), to check
+// that update_groups_in_google_and_hierarchy.py has written short names.
+function checkMemberNames() {
+  CacheService.getScriptCache().removeAll([MEMBER_NAMES_FILE, CIRCLES_CACHE_KEY]);
+  const files = DriveApp.getRootFolder().getFilesByName(MEMBER_NAMES_FILE);
+  if (!files.hasNext()) return Logger.log('No ' + MEMBER_NAMES_FILE + ' in My Drive.');
+  const file = files.next();
+  const names = Object.values(JSON.parse(file.getBlob().getDataAsString('UTF-8')));
+  Logger.log(MEMBER_NAMES_FILE + ', last changed ' + file.getLastUpdated() + ': ' +
+    names.length + ' entries, ' + names.filter(n => /\s/.test(n)).length +
+    ' with more than a first name. For example: ' + names.slice(0, 8).join(', '));
+}

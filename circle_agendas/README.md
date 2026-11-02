@@ -182,6 +182,10 @@ Rebuilding a doc deletes its meeting tabs.
    Run it if a build fails with "Action not allowed", which is all
    DocumentApp says when a change is refused.
 
+To check the names new meetings use, run **`checkMemberNames`** in the
+editor: it logs what "Circle agenda member names.json" holds, and makes the
+web app read it (and the groups' footers) afresh.
+
 ## Circles' docs
 
 Each circle and working group gets an agenda doc, "<Group> Agenda", in its
