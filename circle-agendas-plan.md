@@ -164,10 +164,9 @@ agenda doc, built from code like the template rather than copied from it
   an existing doc's contents but the web app's links and update scripts.
 - So no "Create doc" link is needed; making a copy of the template by
   hand isn't supported (its links point at the template).
-- Still to do: each group calendar event links its group's agenda doc
-  (the `group_meetings` Apps Script would add the link, finding the doc by
-  its label), rather than the group's footer; and Sub-Circles in About
-  this circle.
+- Each group calendar event links its group's agenda doc ("Agenda and
+  minutes:", added by the `group_meetings` Apps Script, which finds the
+  doc by its label), rather than the group's footer.
 
 ## Updating once circles have docs
 

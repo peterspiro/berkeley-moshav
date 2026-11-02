@@ -189,6 +189,32 @@ class TestMeetingsFaq:
             assert change is None or "description" not in change["patch"]
 
 
+class TestAgendaLink:
+    AGENDA = "https://docs.google.com/document/d/AGENDA_doc-1/edit"
+    LINE = f"Agenda and minutes: {AGENDA}"
+    CTX = {**CTX_FAQ, "agendaUrl": AGENDA}
+
+    def test_added_above_faq_line(self):
+        desc = patch({"description": "Notes"}, self.CTX)["patch"]["description"]
+        assert desc.startswith(f"Notes\n\n{self.LINE}\n\n{FAQ_LINE}\n\nJoin Zoom meeting: ")
+
+    def test_added_once(self):
+        assert patch(done_with({"description": "Notes"}, self.CTX), self.CTX) is None
+
+    def test_not_added_when_doc_already_linked(self):
+        event = {"description": "Our doc: https://docs.google.com/document/d/AGENDA_doc-1/edit?tab=t.0"}
+        desc = patch(event, self.CTX)["patch"]["description"]
+        assert "Agenda and minutes:" not in desc
+
+    def test_added_at_end_without_zoom(self):
+        event = {"description": "In person [no zoom]"}
+        desc = patch(event, self.CTX)["patch"]["description"]
+        assert desc == f"In person [no zoom]\n\n{self.LINE}"
+
+    def test_no_agenda_doc_changes_nothing_new(self):
+        assert "Agenda and minutes" not in patch({}, CTX_FAQ)["patch"]["description"]
+
+
 class TestZoomLinkToFollow:
     def desc(self, description):
         return patch({"description": description})["patch"]["description"]

@@ -348,6 +348,7 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
   the room) with a link to the "BM Meetings FAQ", in place of
   any "Zoom link to follow" line, and the group and the all-events calendar as guests, unless it's marked `[no zoom]`
   or has another meeting link typed in (then it gets only the guests).
+  An event of a group with a circle agenda doc also gets a link to the doc.
   An event that's only a copy of someone's invitation gets its organizer an
   email asking them to create it on the group calendar instead. It also
   checks the next 8 weeks for meetings in rooms of the same Zoom user that

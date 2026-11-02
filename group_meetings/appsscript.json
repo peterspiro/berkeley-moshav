@@ -16,6 +16,11 @@
         "userSymbol": "GroupsSettings",
         "serviceId": "groupssettings",
         "version": "v1"
+      },
+      {
+        "userSymbol": "Drive",
+        "serviceId": "drive",
+        "version": "v3"
       }
     ]
   },
@@ -26,7 +31,8 @@
     "https://www.googleapis.com/auth/apps.groups.settings",
     "https://www.googleapis.com/auth/script.external_request",
     "https://www.googleapis.com/auth/script.scriptapp",
-    "https://www.googleapis.com/auth/script.send_mail"
+    "https://www.googleapis.com/auth/script.send_mail",
+    "https://www.googleapis.com/auth/drive.readonly"
   ],
   "exceptionLogging": "STACKDRIVER",
   "runtimeVersion": "V8"

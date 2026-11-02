@@ -82,6 +82,7 @@ const STAMP_KEY = 'groupZoomUrl';
 const ZOOM_USER_NOTE = "(meetings with the same Zoom user can't overlap)";
 const ZOOM_USER_RE = /Zoom user: (.+?) \(meetings with the same Zoom user/;
 const FAQ_TEXT = 'Questions about joining? See the BM Meetings FAQ:';
+const AGENDA_TEXT = 'Agenda and minutes:';
 const GOOGLE_DOC_ID_RE = /\/document\/d\/([\w-]+)/;
 // A line saying the Zoom link is still to come ("Zoom link to follow",
 // "(Zoom details will follow.)"), removed once the block is added. The
@@ -118,7 +119,7 @@ function zoomBlock(room, br) {
 /**
  * What to change on an event organized by a group's own calendar, or null
  * if nothing. ctx: { zoomUrl, passcode, zoomUser, groupEmail,
- * allEventsCalendarId, faqUrl }, where zoomUser names the Zoom user that
+ * allEventsCalendarId, faqUrl, agendaUrl }, where zoomUser names the Zoom user that
  * owns the room (null if none is known, undefined to keep the one the
  * description already names).
  *
@@ -134,6 +135,9 @@ function zoomBlock(room, br) {
  *     (ctx.faqUrl), just above the block, unless the description already
  *     links that document anywhere, and loses any "Zoom link to follow"
  *     line.
+ *   - Agenda: a line linking the group's agenda doc (ctx.agendaUrl), just
+ *     above the FAQ line (or, without Zoom details, at the end), unless the
+ *     description already links that doc anywhere.
  *   - Guests: the all-events calendar and the group's Google Group.
  * sendUpdates is 'all' when the group is newly invited (so members get the
  * invitation), else 'none'.
@@ -153,6 +157,10 @@ function computeEventPatch(event, ctx) {
 
     const br = /<[a-z][^>]*>/i.test(description) ? '<br>' : '\n';
     let text = removeToFollowLines(description.replace(ZOOM_BLOCK_RE, '')).replace(/\s+$/, '');
+    if (ctx.agendaUrl && !linksDocument(text, ctx.agendaUrl)) {
+      const agenda = `${AGENDA_TEXT} ${ctx.agendaUrl}`;
+      text = text ? `${text}${br}${br}${agenda}` : agenda;
+    }
     if (ctx.faqUrl && !linksDocument(text, ctx.faqUrl)) {
       const faq = `${FAQ_TEXT} ${ctx.faqUrl}`;
       text = text ? `${text}${br}${br}${faq}` : faq;
@@ -169,6 +177,11 @@ function computeEventPatch(event, ctx) {
     if (stamped !== ctx.zoomUrl) {
       patch.extendedProperties = { private: { [STAMP_KEY]: ctx.zoomUrl } };
     }
+  } else if (ctx.agendaUrl && !linksDocument(description, ctx.agendaUrl)) {
+    const br = /<[a-z][^>]*>/i.test(description) ? '<br>' : '\n';
+    const agenda = `${AGENDA_TEXT} ${ctx.agendaUrl}`;
+    const text = description.replace(/\s+$/, '');
+    patch.description = text ? `${text}${br}${br}${agenda}` : agenda;
   }
 
   const attendees = event.attendees || [];
