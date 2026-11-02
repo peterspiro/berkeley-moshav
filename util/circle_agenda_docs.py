@@ -89,6 +89,7 @@ def ensure_agenda_doc(drive_service, group_email: str, group_name: str, drive_it
               "parents": [drive_item_id], "properties": properties},
         supportsAllDrives=True, fields="id").execute()
     log("INFO", "agenda_doc",
-        f"Created '{name}' for {group_email} (id={created['id']}); the circle_agendas "
-        "Apps Script will build it within minutes")
+        f"Created '{name}' for {group_email}: "
+        f"https://docs.google.com/document/d/{created['id']}/edit (the circle_agendas "
+        "Apps Script will build it within minutes)")
     return created["id"]

@@ -33,7 +33,8 @@ they need will take their own scripts.
 ## What a circle's doc does
 
 - **Tabs**: "Circle" ("+ New meeting" in a "Create a new meeting" section
-  under the title; About this circle: a link to its aims and domain
+  under the title; a "Previous agendas" section, for a link to the
+  circle's previous agenda doc; About this circle: a link to its aims and domain
   document, parent and sub-circles (each linked to its Drive folder), Zoom
   room, email address, Drive folder, policies folder, and other key links,
   filled in when the doc is built (and, for a preview in a circle's

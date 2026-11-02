@@ -226,6 +226,10 @@ function layOut(body, docId) {
     ['+ New meeting', {[A.LINK_URL]: actionUrl('meeting', docId)}],
     ['   (each meeting gets a tab of its own, listed at the left, titled with its date)', MUTED]]);
 
+  section(body, 'Previous agendas');
+  writeRuns(body.appendParagraph(''), [
+    ['Paste a link to the circle\'s previous agenda doc, if it had one', HINT]]);
+
   section(body, 'About this circle');
   aboutTable(body);
 
