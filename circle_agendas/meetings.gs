@@ -88,6 +88,7 @@ function addItem(docId, meetingId) {
   padRow(row);
   writeCell(row.getCell(COL.description), topicLines(hasPresenters ? presenters : null));
   writeCell(row.getCell(COL.notes), [[[token('bullet')]]]);
+  if (columns > COL.followUp) writeCell(row.getCell(COL.followUp), [[[token('bullet')]]]);
   shadeFollowUp(table, at);
 
   const messages = recalculate(table);

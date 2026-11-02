@@ -58,14 +58,16 @@ const MEETING_TAB_TITLE_RE = /^\d{4}-\d{2}-\d{2}$/;
 // column starts empty.
 // Every item has a bulleted list in Notes, but those with notes: false.
 // topic: a Presenter dropdown and a bulleted list under the title.
+// Items with followUp start their Follow-up cell with a bullet (as do
+// topics added later).
 const AGENDA = [
   {title: 'Opening Round / Check-in', note: ' (no notes)', minutes: 10, kind: 'round',
     notes: false},
-  {admin: true, minutes: 5, kind: 'round'},
-  {title: 'Action Items Accountability', minutes: 3, actions: 'checkbox',
+  {admin: true, minutes: 5, kind: 'round', followUp: true},
+  {title: 'Action Items Accountability', minutes: 3, actions: 'checkbox', followUp: true,
     note: ' (the action items from the previous meeting\'s recap; check each one that\'s ' +
       'done, and its line is struck through)'},
-  {title: 'Topic', minutes: 5, topic: true},
+  {title: 'Topic', minutes: 5, topic: true, followUp: true},
   {title: 'Action Items Recap', minutes: 5, kind: 'report', actions: 'bullet'},
 ];
 // The closing round's Notes are a bulleted line for each attendee: their
@@ -367,6 +369,7 @@ function meetingTable(body, docId, details) {
       : item.perAttendee && attendees.length
         ? attendees.map(name => [[token('bullet')], [name + ': ']])
         : [[[token('bullet')]]]);
+    if (item.followUp) writeCell(cell(COL.followUp), [[[token('bullet')]]]);
     shadeRow(table, r, item.kind);
     shadeFollowUp(table, r);
   });
