@@ -612,11 +612,14 @@ class TestParseReminderLeads:
         ("half an hour", [30 * MIN]),
         ("90 minutes before each meeting", [90 * MIN]),
         ("Two days.", [2 * DAY]),
+        ("“2 days, 1 hour”", [2 * DAY, HOUR]),
+        ('"90 minutes"', [90 * MIN]),
     ])
     def test_lengths_of_time(self, text, leads):
         assert js("parseReminderLeads(t)", t=text) == {"leads": leads}
 
-    @pytest.mark.parametrize("text", ["none", "None.", "no", "off", "No reminders", "never"])
+    @pytest.mark.parametrize("text", ["none", "None.", "“none”", "no", "off", "No reminders",
+                                      "never"])
     def test_none(self, text):
         assert js("parseReminderLeads(t)", t=text) == {"leads": []}
 

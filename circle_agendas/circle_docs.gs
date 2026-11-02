@@ -14,8 +14,8 @@
  * existing docs. It also rewrites the Parent Circle and Sub-Circles rows of
  * each built doc that change_parent_circle.py or add_new_group.py has
  * relabelled with a new parent or sub-circles (and labelled AGENDA_REFRESH_STRUCTURE).
- * addReminderRowToCircleDocs, run by hand, gives docs built before the
- * Meeting reminders row was added that row.
+ * addNewAboutRowsToCircleDocs, run by hand, gives docs built before the
+ * Circle calendar and Meeting reminders rows were added those rows.
  */
 
 // Must match util/circle_agenda_docs.py.
@@ -39,12 +39,13 @@ const AGENDA_STATE_NOT_EMPTY = 'not empty';
 // existing docs can tell which they're looking at.
 // 2: About this circle's rows reordered (ABOUT_LABELS), and its Drive
 // folder row renamed Google Drive Folder and linked by the circle's name.
-// 3: About this circle's Meeting reminders row added, at the end.
+// 3: About this circle's Circle calendar and Meeting reminders rows added,
+// below Zoom room.
 const LAYOUT_VERSION = 3;
 // The first layout version with About this circle in ABOUT_LABELS' order.
 const ABOUT_ORDER_LAYOUT = 2;
-// The first layout version with the Meeting reminders row.
-const REMINDER_ROW_LAYOUT = 3;
+// The first layout version with the Circle calendar and Meeting reminders rows.
+const NEW_ROWS_LAYOUT = 3;
 const BUILD_EVERY_MINUTES = 10;
 
 // Run once, in the editor: builds new circle docs every BUILD_EVERY_MINUTES.
@@ -140,7 +141,7 @@ function subNamesOf(props) {
 }
 
 // The doc's title becomes the group's name, and About this circle gets its
-// Zoom room, email address, Drive item (linked by the circle's name), and
+// Zoom room, calendar, email address, Drive item (linked by the circle's name), and
 // parent and sub-circles (each named, and linked to its Drive folder when
 // it's a group with one; the sub-circles as a bulleted list).
 // With onlyEmpty, only rows that are empty are filled in; with onlyRows,
@@ -166,6 +167,8 @@ function fillAbout(docId, name, email, circle, parentName, subNames, onlyEmpty, 
   // Each row's paragraphs, each a list of runs.
   const values = {
     'Zoom room': circle && circle.zoomUrl ? [[['Zoom room', {[A.LINK_URL]: circle.zoomUrl}]]] : [],
+    [CALENDAR_ROW_LABEL]: circle && circle.calendarId
+      ? [[['Circle calendar', {[A.LINK_URL]: calendarUrl(circle.calendarId)}]]] : [],
     'Circle email address': email ? [[[email, {[A.LINK_URL]: 'mailto:' + email}]]] : [],
     'Google Drive Folder': circle && circle.driveItemId
       ? [[[name || circle.name || 'Google Drive folder', folderLink(circle.driveItemId)]]] : [],
@@ -220,7 +223,7 @@ function circleOfDoc(docId, email) {
 }
 
 // Run from the editor: fills in the empty rows of About this circle (Zoom
-// room, email address, Drive folder, parent, sub-circles) in every built
+// room, calendar, email address, Drive folder, parent, sub-circles) in every built
 // circle doc, for docs built before those rows were filled in. Rows that
 // already say something are left alone.
 function fillAboutForCircleDocs() {
@@ -332,10 +335,10 @@ function reorderAbout(docId) {
     copies[labels[r]] = table.getRow(r).copy();
     table.removeRow(r);
   }
-  ABOUT_LABELS.forEach((label, i) => {
+  plan.order.forEach((label, i) => {
     if (copies[label]) table.insertTableRow(i, copies[label]);
   });
-  const driveLabel = table.getCell(ABOUT_LABELS.indexOf('Google Drive Folder'), 0);
+  const driveLabel = table.getCell(plan.order.indexOf('Google Drive Folder'), 0);
   if (driveLabel.getText().trim() !== 'Google Drive Folder') {
     writeCell(driveLabel, [[['Google Drive Folder', BOLD]]]);
     alignCell(driveLabel, DocumentApp.HorizontalAlignment.RIGHT);
@@ -343,48 +346,59 @@ function reorderAbout(docId) {
   doc.saveAndClose();
 }
 
-// Run from the editor: adds the Meeting reminders row (saying 24 hours
-// before, the default, and how to change it) at the end of About this
-// circle in every built doc that lacks it, and labels each doc in
-// ABOUT_LABELS' order that has it with REMINDER_ROW_LAYOUT. A doc with an
-// older layout gets the row but keeps its label, so
-// reorderAboutInCircleDocs still reorders it; run this again after that to
-// relabel it. Safe to run again: docs that have the row aren't changed.
-function addReminderRowToCircleDocs() {
+// Run from the editor: adds the rows added to About this circle since
+// layout version 2 (ABOUT_ADDED_LATER: Circle calendar, linking the
+// circle's calendar, and Meeting reminders, saying 24 hours before, the
+// default, with examples of what else it can say), each in its place, to
+// every built doc of layout version 2 that lacks them, and labels it
+// NEW_ROWS_LAYOUT. A doc of layout version 1 is skipped (the log says so):
+// run reorderAboutInCircleDocs first. Safe to run again.
+function addNewAboutRowsToCircleDocs() {
   for (const file of builtCircleDocs()) {
-    const layout = Number((file.properties || {})[AGENDA_KEYS.layout] || 1);
-    if (layout >= REMINDER_ROW_LAYOUT) continue;
+    const props = file.properties || {};
+    const layout = Number(props[AGENDA_KEYS.layout] || 1);
+    if (layout >= NEW_ROWS_LAYOUT) continue;
+    if (layout < ABOUT_ORDER_LAYOUT) {
+      console.warn('Skipped ' + file.name + ': run reorderAboutInCircleDocs first.');
+      continue;
+    }
     try {
-      if (addReminderRow(file.id)) {
-        logLink('Added the Meeting reminders row to ' + file.name + ':',
-          'https://docs.google.com/document/d/' + file.id + '/edit');
-      }
-      if (layout >= ABOUT_ORDER_LAYOUT) {
-        Drive.Files.update({properties: {[AGENDA_KEYS.layout]: String(REMINDER_ROW_LAYOUT)}},
-          file.id, null, {supportsAllDrives: true});
-      }
+      const added = addNewAboutRows(file.id);
+      const email = props[AGENDA_KEYS.group];
+      fillAbout(file.id, null, email, circleOfDoc(file.id, email), props[AGENDA_KEYS.parent],
+        subNamesOf(props), false, [CALENDAR_ROW_LABEL]);
+      Drive.Files.update({properties: {[AGENDA_KEYS.layout]: String(NEW_ROWS_LAYOUT)}},
+        file.id, null, {supportsAllDrives: true});
+      logLink((added.length ? 'Added ' + added.join(' and ') + ' to ' : 'Relabelled ') +
+        file.name + ':', 'https://docs.google.com/document/d/' + file.id + '/edit');
     } catch (e) {
-      console.error('Couldn\'t add the Meeting reminders row to ' + file.name + ': ' + e.message);
+      console.error('Couldn\'t add rows to ' + file.name + ': ' + e.message);
     }
   }
 }
 
-// Adds the Meeting reminders row at the end of a doc's About this circle,
-// as aboutTable makes it, unless it has one. Returns whether it added it.
-function addReminderRow(docId) {
+// Adds the rows ABOUT_ADDED_LATER that a doc's About this circle lacks,
+// each just below the row it follows (see aboutRowsToAdd), as aboutTable
+// makes them, empty but for Meeting reminders' default and examples.
+// Returns the labels of the rows added.
+function addNewAboutRows(docId) {
   const doc = DocumentApp.openById(docId);
   const found = findRow(firstTabBody(doc), text => text === 'Circle email address');
   if (!found) throw new Error('it has no About this circle table');
   const table = found.table;
-  for (let r = 0; r < table.getNumRows(); r++) {
-    if (aboutLabel(table.getCell(r, 0).getText()) === REMINDER_ROW_LABEL) return false;
+  const labels = [];
+  for (let r = 0; r < table.getNumRows(); r++) labels.push(aboutLabel(table.getCell(r, 0).getText()));
+  const adds = aboutRowsToAdd(labels);
+  if (adds.error) throw new Error(adds.error);
+  for (const {label, index} of adds) {
+    const row = table.insertTableRow(index);
+    row.appendTableCell('');
+    row.appendTableCell('');
+    writeAboutRow(row, [label], label === REMINDER_ROW_LABEL
+      ? [[[REMINDER_DEFAULT_TEXT]], [[REMINDER_HINT, HINT]]] : []);
   }
-  const row = table.appendTableRow();
-  row.appendTableCell('');
-  row.appendTableCell('');
-  writeAboutRow(row, [REMINDER_ROW_LABEL], [[[REMINDER_DEFAULT_TEXT]], [[REMINDER_HINT, HINT]]]);
   doc.saveAndClose();
-  return true;
+  return adds.map(a => a.label);
 }
 
 // Every built circle doc ({id, name, properties}).

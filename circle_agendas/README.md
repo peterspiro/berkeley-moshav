@@ -201,9 +201,11 @@ rewrites the Parent Circle and Sub-Circles rows of every doc so labelled
 and removes the label.
 
 About this circle's rows are, in order: Aims & Domain, Policies folder,
-Zoom room, Circle email address, Other Key Links, Google Drive Folder
-(linked by the circle's name, like the parent and sub-circles), Parent
-Circle, Sub-Circles, and Meeting reminders. Docs built before that order (layout version 1,
+Zoom room, Circle calendar (a link to the circle's Google calendar, which
+offers to add it to the clicker's own), Meeting reminders, Circle email
+address, Other Key Links, Google Drive Folder (linked by the circle's name,
+like the parent and sub-circles), Parent Circle, and Sub-Circles. Docs built
+before that order (layout version 1,
 with a "Circle Google Drive Folder" row linked as "Google Drive folder")
 can be changed over with **`reorderAboutInCircleDocs`**, run in the
 editor: in every such doc, it moves the rows the scripts fill in (Zoom
@@ -221,16 +223,18 @@ doc, in your My Drive, and logs its link (delete the copy after).
 The Meeting reminders row says when the circle's email list gets an email
 reminder of each meeting (`group_meetings/` sends them, and reads the row's
 first line hourly): "24 hours before" to start with, followed by a grey
-line saying how to change it: another length of time ("2 days", "90
-minutes"), several separated by commas ("2 days, 1 hour"), or "none" for
-no reminders, and `[remind 2 hours]` or `[no reminder]` in one meeting's
-description for just that meeting. Docs built before the row (layout
-version 2 or earlier) get it, at the end, with
-**`addReminderRowToCircleDocs`**, run in the editor; it labels each doc
-layout version 3. A doc still on layout version 1 gets the row but keeps
-its label, so `reorderAboutInCircleDocs` still reorders it; run
-`addReminderRowToCircleDocs` again after that to relabel it. Docs without
-the row get reminders 24 hours before.
+line of examples: "Examples: “24 hours”; “2 days”; “90 minutes”; “2 days,
+1 hour”. Write “none” for no reminders." (A meeting's own
+`[remind 2 hours]` or `[no reminder]`, in its description, wins; each
+reminder email says so.)
+
+Docs built before the Circle calendar and Meeting reminders rows (layout
+version 2) get them, below Zoom room, with
+**`addNewAboutRowsToCircleDocs`**, run in the editor: it adds whichever
+of the two a doc lacks, links the calendar, and labels the doc layout
+version 3. It skips docs still on layout version 1 (the log says which):
+run `reorderAboutInCircleDocs` first, then this. Docs without the
+Meeting reminders row get reminders 24 hours before.
 
 The sub-circles are a bulleted list, one per line. Docs built when they
 were a comma-separated line can be changed over with

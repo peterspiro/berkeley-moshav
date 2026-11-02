@@ -509,14 +509,14 @@ function unitMs(unit) {
 /**
  * How long before a meeting its reminders go out, as people write it:
  * "24 hours", "2 days before", "1h30m", "an hour", or several separated by
- * commas, semicolons, or "and" ("2 days, 1 hour"); "none" (or "no", "off",
- * "never", "no reminders") for none. Returns { leads } (milliseconds,
+ * commas, semicolons, or "and" ("2 days, 1 hour"), quoted or not; "none"
+ * (or "no", "off", "never", "no reminders") for none. Returns { leads } (milliseconds,
  * longest first, [] for none) or { error } if it can't be read, or a lead
  * time is longer than MAX_REMINDER_LEAD_MS.
  */
 function parseReminderLeads(text) {
   const raw = (text || '').trim();
-  const s = lower(raw).replace(/[.!]+$/, '')
+  const s = lower(raw).replace(/["“”'‘’]/g, ' ').replace(/[.!]+\s*$/, '')
     .replace(/\b(?:before(?:\s+(?:each|the|every)\s+meetings?)?|ahead|in advance|beforehand|prior)\b/g, ' ')
     .replace(/\s+/g, ' ').trim();
   if (/^(?:none|no|off|never|no reminders?|no emails?|-)$/.test(s)) return { leads: [] };

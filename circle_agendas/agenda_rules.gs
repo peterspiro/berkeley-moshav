@@ -139,20 +139,55 @@ function base64ToString(text) {
 
 // About this circle's rows, in order (aboutTable, build_template.gs, makes
 // them).
-const ABOUT_LABELS = ['Aims & Domain', 'Policies folder', 'Zoom room', 'Circle email address',
-  'Other Key Links', 'Google Drive Folder', 'Parent Circle', 'Sub-Circles', 'Meeting reminders'];
-// Rows added at the end since docs were first built, which older docs may
-// lack (addReminderRowToCircleDocs, circle_docs.gs, adds them).
-const ABOUT_ADDED_LATER = ['Meeting reminders'];
+const CALENDAR_ROW_LABEL = 'Circle calendar';
 // The Meeting reminders row, which group_meetings/group_meetings.gs reads
 // (its first line) to know when to email the circle a reminder of each
 // meeting (see parseReminderLeads in group_meetings/event_rules.gs).
 const REMINDER_ROW_LABEL = 'Meeting reminders';
 const REMINDER_DEFAULT_TEXT = '24 hours before';
-const REMINDER_HINT = 'When the circle\'s email list gets a reminder of each meeting: a ' +
-  'length of time, such as "24 hours", "2 days", or "90 minutes", or several separated by ' +
-  'commas ("2 days, 1 hour"). Write "none" for no reminders. For a single meeting, put ' +
-  '[remind 2 hours] or [no reminder] in its calendar event\'s description.';
+const REMINDER_HINT = 'Examples: “24 hours”; “2 days”; “90 minutes”; “2 days, 1 hour”. ' +
+  'Write “none” for no reminders.';
+const ABOUT_LABELS = ['Aims & Domain', 'Policies folder', 'Zoom room', CALENDAR_ROW_LABEL,
+  REMINDER_ROW_LABEL, 'Circle email address', 'Other Key Links', 'Google Drive Folder',
+  'Parent Circle', 'Sub-Circles'];
+// Rows added since docs were first built, which older docs may lack
+// (addNewAboutRowsToCircleDocs, circle_docs.gs, adds them).
+const ABOUT_ADDED_LATER = [CALENDAR_ROW_LABEL, REMINDER_ROW_LABEL];
+// The label of the row each of ABOUT_ADDED_LATER goes just below.
+const ABOUT_ADDED_AFTER = {[CALENDAR_ROW_LABEL]: 'Zoom room', [REMINDER_ROW_LABEL]: CALENDAR_ROW_LABEL};
+
+// The link in a group's footer to its Google calendar, which offers to add
+// the calendar to the clicker's own (as calendar_url, in
+// util/google_group_footer.py, writes it): the ID, base64-encoded without
+// padding, percent-encoded.
+function calendarUrl(calendarId) {
+  const bytes = unescape(encodeURIComponent(calendarId));
+  let out = '';
+  for (let i = 0; i < bytes.length; i += 3) {
+    const n = (bytes.charCodeAt(i) << 16) | ((bytes.charCodeAt(i + 1) || 0) << 8) |
+      (bytes.charCodeAt(i + 2) || 0);
+    const chars = Math.min(4, Math.ceil((bytes.length - i) * 4 / 3));
+    for (let k = 0; k < chars; k++) out += BASE64_ALPHABET[(n >> (18 - 6 * k)) & 63];
+  }
+  return 'https://calendar.google.com/calendar/u/0?cid=' + encodeURIComponent(out);
+}
+
+// Where to insert the rows ABOUT_ADDED_LATER that a doc's About this circle
+// (labels, in order, from aboutLabel) lacks: [{label, index}], in the order
+// to insert them, each just below the row it follows; or {error} if a row
+// it follows is missing.
+function aboutRowsToAdd(labels) {
+  const now = labels.slice();
+  const adds = [];
+  for (const label of ABOUT_ADDED_LATER) {
+    if (now.includes(label)) continue;
+    const after = now.indexOf(ABOUT_ADDED_AFTER[label]);
+    if (after < 0) return {error: 'it has no ' + ABOUT_ADDED_AFTER[label] + ' row'};
+    now.splice(after + 1, 0, label);
+    adds.push({label, index: after + 1});
+  }
+  return adds;
+}
 // What the Google Drive Folder row was called in docs built before.
 const OLD_DRIVE_LABELS = ['Circle Google Drive Folder', 'Circle Drive Folder'];
 // The rows people fill in by hand, which reordering never moves (they may
@@ -167,9 +202,9 @@ function aboutLabel(text) {
 }
 
 // How to put About this circle's rows, labelled labels (in their order,
-// from aboutLabel), in ABOUT_LABELS' order (a doc may lack the rows
-// ABOUT_ADDED_LATER, which come last): {move}, the labels of the rows
-// to take out and put back in their places (none if they're in order
+// from aboutLabel), in ABOUT_LABELS' order (leaving out any rows
+// ABOUT_ADDED_LATER it lacks): {move, order}, the labels of the rows to
+// take out and put back in their places in order (none if they're in order
 // already), or {error}, why it can't be done.
 function aboutReorder(labels) {
   const target = ABOUT_LABELS.filter(l => labels.includes(l) || !ABOUT_ADDED_LATER.includes(l));
@@ -180,10 +215,10 @@ function aboutReorder(labels) {
       (missing.length ? '; missing: ' + missing.join(', ') : '') +
       (extra.length ? '; unexpected: ' + extra.join(', ') : '')};
   }
-  if (labels.join('|') === target.join('|')) return {move: []};
+  if (labels.join('|') === target.join('|')) return {move: [], order: target};
   const kept = labels.filter(l => ABOUT_HAND_FILLED.includes(l));
   if (kept.join('|') !== ABOUT_HAND_FILLED.join('|')) {
     return {error: 'its ' + ABOUT_HAND_FILLED.join(', ') + ' rows are in another order'};
   }
-  return {move: labels.filter(l => !ABOUT_HAND_FILLED.includes(l))};
+  return {move: labels.filter(l => !ABOUT_HAND_FILLED.includes(l)), order: target};
 }

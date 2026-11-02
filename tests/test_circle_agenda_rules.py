@@ -152,9 +152,9 @@ class TestAboutReorder:
         assert js("aboutLabel(' Zoom room ')") == "Zoom room"
 
     def test_moves_only_the_rows_the_scripts_fill_in(self):
-        assert js(f"aboutReorder({json.dumps(self.OLD)})") == {"move": [
+        assert js(f"aboutReorder({json.dumps(self.OLD)})")["move"] == [
             "Parent Circle", "Sub-Circles", "Zoom room", "Circle email address",
-            "Google Drive Folder"]}
+            "Google Drive Folder"]
 
     def test_moving_them_gives_the_new_order(self):
         plan = js(f"aboutReorder({json.dumps(self.OLD)})")
@@ -164,7 +164,7 @@ class TestAboutReorder:
         assert [label for label in target if label not in plan["move"]] == kept
 
     def test_already_in_order(self):
-        assert js("aboutReorder(ABOUT_LABELS)") == {"move": []}
+        assert js("aboutReorder(ABOUT_LABELS)") == {"move": [], "order": js("ABOUT_LABELS")}
 
     def test_unexpected_rows(self):
         labels = self.OLD[:-1] + ["Notes"]
@@ -172,14 +172,39 @@ class TestAboutReorder:
         assert "missing: Other Key Links" in error and "unexpected: Notes" in error
 
     def test_rows_added_later_may_be_missing(self):
-        assert js("aboutReorder(ABOUT_LABELS.filter(l => !ABOUT_ADDED_LATER.includes(l)))") == {
-            "move": []}
+        assert js("aboutReorder(ABOUT_LABELS.filter(l => !ABOUT_ADDED_LATER.includes(l)))")[
+            "move"] == []
         plan = js(f"aboutReorder({json.dumps(self.OLD)})")
-        assert "error" not in plan and "Meeting reminders" not in plan["move"]
+        assert "error" not in plan
+        assert not set(plan["move"]) & {"Circle calendar", "Meeting reminders"}
+        assert "Circle calendar" not in plan["order"]
 
-    def test_reminder_row_comes_last(self):
-        assert js("ABOUT_LABELS[ABOUT_LABELS.length - 1]") == "Meeting reminders"
-        assert js("ABOUT_ADDED_LATER") == ["Meeting reminders"]
+    def test_new_rows_come_below_zoom_room(self):
+        labels = js("ABOUT_LABELS")
+        i = labels.index("Zoom room")
+        assert labels[i + 1:i + 3] == ["Circle calendar", "Meeting reminders"]
+
+    def test_where_to_add_the_new_rows(self):
+        layout2 = js("ABOUT_LABELS.filter(l => !ABOUT_ADDED_LATER.includes(l))")
+        adds = js(f"aboutRowsToAdd({json.dumps(layout2)})")
+        assert adds == [{"label": "Circle calendar", "index": 3},
+                        {"label": "Meeting reminders", "index": 4}]
+        labels = list(layout2)
+        for add in adds:
+            labels.insert(add["index"], add["label"])
+        assert labels == js("ABOUT_LABELS")
+        assert js("aboutRowsToAdd(ABOUT_LABELS)") == []
+        with_calendar = [l for l in js("ABOUT_LABELS") if l != "Meeting reminders"]
+        assert js(f"aboutRowsToAdd({json.dumps(with_calendar)})") == [
+            {"label": "Meeting reminders", "index": 4}]
+        assert "Zoom room" in js(
+            f"aboutRowsToAdd({json.dumps([l for l in layout2 if l != 'Zoom room'])})")["error"]
+
+    def test_calendar_url_matches_the_footer(self):
+        from util.google_group_footer import calendar_url
+        for cal in ["c_abc123@group.calendar.google.com", "a?>", "ab", "abc", "abcd",
+                    "share@berkeleymoshav.org"]:
+            assert js(f"calendarUrl({json.dumps(cal)})") == calendar_url(cal)
 
     def test_reminder_default_and_hint_parse_as_meant(self):
         # The default reads as 24 hours; the hint (the row's second line)
@@ -197,7 +222,18 @@ process.stdout.write(JSON.stringify([
                                         check=True).stdout)
         assert out[0] == {"leads": [24 * 60 * 60 * 1000]}
         assert "error" in out[1]
-        assert '"none"' in js("REMINDER_HINT") and "[no reminder]" in js("REMINDER_HINT")
+        assert "“none”" in js("REMINDER_HINT")
+        # Each example in the hint reads as a length of time.
+        examples = js("REMINDER_HINT").split("Examples: ")[1].split(". Write")[0].split("; ")
+        for example in examples:
+            out = subprocess.run(["node", "-e", f"""
+const vm = require('vm'), fs = require('fs');
+const ctx = vm.createContext({{}});
+vm.runInContext(fs.readFileSync({json.dumps(str(group_rules))}, 'utf8'), ctx);
+process.stdout.write(JSON.stringify(vm.runInContext('parseReminderLeads(' +
+  JSON.stringify({json.dumps(example)}) + ')', ctx)));
+"""], capture_output=True, text=True, check=True).stdout
+            assert "leads" in json.loads(out), example
 
     def test_hand_filled_rows_out_of_order(self):
         labels = ["Policies folder"] + [l for l in self.OLD if l != "Policies folder"]

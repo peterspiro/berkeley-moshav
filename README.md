@@ -409,14 +409,15 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
   - **`circle_agendas/circle_docs.gs`** builds each circle's and working
     group's agenda doc, every 10 minutes: each doc the Python scripts
     created empty and labelled "new" is built, gets its group's name,
-    email address, Drive folder, parent, and sub-circles (as a bulleted
+    calendar, email address, Drive folder, parent, and sub-circles (as a bulleted
     list) in About this circle, and is
     relabelled "built", with its layout version. On the same timer, it
     rewrites the Parent Circle and Sub-Circles rows of each built doc that
-    `change_parent_circle.py` or `add_new_group.py` has relabelled. The
-    last row of About this circle, Meeting reminders, says when the
-    circle's meetings get reminders (`group_meetings` reads it); run by
-    hand, it adds that row to docs built before it.
+    `change_parent_circle.py` or `add_new_group.py` has relabelled. Below
+    About this circle's Zoom room row come a link to the circle's
+    calendar and the Meeting reminders row, which says when the circle's
+    meetings get reminders (`group_meetings` reads it); run by hand, it
+    adds those rows to docs built before them.
   - **`circle_agendas/build_template.gs`** builds an agenda doc from a
     blank doc, entirely from code (so it depends on no other document):
     each circle's doc, and a preview, rebuilt in place, for trying changes.

@@ -215,12 +215,13 @@ function aboutTable(body) {
     [['Aims & Domain'], [['Paste a link to circle\'s aims and domain document', HINT]]],
     [['Policies folder'], [['Paste a link to the circle\'s policies folder', HINT]]],
     [['Zoom room'], []],
+    [[CALENDAR_ROW_LABEL], []],
+    [[REMINDER_ROW_LABEL], [[REMINDER_DEFAULT_TEXT]], [[REMINDER_HINT, HINT]]],
     [['Circle email address'], []],
     [['Other Key Links'], []],
     [['Google Drive Folder'], []],
     [['Parent Circle'], []],
     [['Sub-Circles'], []],
-    [[REMINDER_ROW_LABEL], [[REMINDER_DEFAULT_TEXT]], [[REMINDER_HINT, HINT]]],
   ];
   // Must match ABOUT_LABELS (agenda_rules.gs).
   if (rows.map(row => row[0][0]).join('|') !== ABOUT_LABELS.join('|')) {
