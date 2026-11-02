@@ -145,7 +145,11 @@ agenda doc, built from code like the template rather than copied from it
   every 10 minutes, builds each doc labelled "new", fills in About this
   circle (the group's name as the title, its email address, its Drive
   folder, and its parent), and relabels it "built", with the layout
-  version it was built with (`circle_agendas/circle_docs.gs`).
+  version it was built with (`circle_agendas/circle_docs.gs`). It builds
+  only a doc that's still empty (one someone has written in is labelled
+  "not empty" and left alone), and labels it "building" first, so a build
+  that fails partway isn't repeated on top of itself. Nothing ever changes
+  an existing doc's contents but the web app's links and update scripts.
 - So no "Create doc" link is needed; making a copy of the template by
   hand isn't supported (its links point at the template).
 - Still to do: each group calendar event links its group's agenda doc

@@ -203,6 +203,14 @@ Once, in the editor, run **`installTriggers`**, which runs
 triggers). It can also be run by hand, to build waiting docs at once; the
 log links each doc it built.
 
+Building only ever adds to a doc, so it's done only to one that's still
+empty: if someone has written in a doc before it's built, it's labelled
+"not empty" and left as it is, and the log says so. A doc is labelled
+"building" while it's built, so one whose build fails partway isn't built
+again on top of itself; it's left for a person to look at (delete it, and
+the next `--agenda-docs` run makes a new one). The Python scripts never
+change a doc's contents, only create an empty one when a group has none.
+
 A group's doc is found by its label, so a group never gets a second one;
 if its doc is deleted (and emptied from the trash), the next run of
 `update_groups_in_google_and_hierarchy.py --agenda-docs` makes a new one.

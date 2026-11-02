@@ -20,7 +20,14 @@ const AGENDA_KEYS = {
   layout: 'circleAgendaLayout',
 };
 const AGENDA_STATE_NEW = 'new';
+// Set before building, so a build that fails partway is never retried on
+// top of itself; such a doc is left for a person to look at.
+const AGENDA_STATE_BUILDING = 'building';
 const AGENDA_STATE_BUILT = 'built';
+// Set instead of building, when a doc labelled new turns out not to be
+// empty (someone wrote in it first): it's left as it is, for a person to
+// look at.
+const AGENDA_STATE_NOT_EMPTY = 'not empty';
 // Bump when the layout of what build() makes changes, so scripts updating
 // existing docs can tell which they're looking at.
 const LAYOUT_VERSION = 1;
@@ -61,9 +68,17 @@ function buildNewCircleDocs() {
 }
 
 // Builds one labelled doc, fills in About this circle, and relabels it.
+// Building only ever adds to a doc, so it's done only to one that's still
+// empty: one that isn't is relabelled AGENDA_STATE_NOT_EMPTY and left alone.
 function buildCircleDoc(file) {
   const props = file.properties || {};
   const email = props[AGENDA_KEYS.group];
+  if (!isEmptyDoc(file.id)) {
+    setAgendaState(file.id, AGENDA_STATE_NOT_EMPTY);
+    throw new Error('it isn\'t empty, so it was left as it is (labelled "' +
+      AGENDA_STATE_NOT_EMPTY + '")');
+  }
+  setAgendaState(file.id, AGENDA_STATE_BUILDING);
   const circle = loadCircles().find(c => c.email === email) ||
     refreshCircles().find(c => c.email === email);
   build(file.id);
@@ -102,4 +117,24 @@ function fillAbout(docId, name, email, circle, parentName) {
     }
   }
   doc.saveAndClose();
+}
+
+// Whether a doc has a single tab holding nothing but empty paragraphs.
+function isEmptyDoc(docId) {
+  const doc = DocumentApp.openById(docId);
+  if (allTabs(doc).length > 1) return false;
+  const body = firstTabBody(doc);
+  for (let i = 0; i < body.getNumChildren(); i++) {
+    const el = body.getChild(i);
+    if (el.getType() !== DocumentApp.ElementType.PARAGRAPH || el.asParagraph().getNumChildren() > 1 ||
+        el.asParagraph().getText().trim()) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function setAgendaState(docId, state) {
+  Drive.Files.update({properties: {[AGENDA_KEYS.state]: state}}, docId, null,
+    {supportsAllDrives: true});
 }
