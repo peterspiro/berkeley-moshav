@@ -21,11 +21,10 @@
  * meetings.gs), built by meetingTable here.
  *
  * Building has two passes. The first lays out the text and tables with
- * DocumentApp, writing a token like ⟦dropdown outcome decision⟧ wherever a
- * smart chip or list goes. The second, with the Docs API, which DocumentApp
- * can't do, creates the dropdowns' lists of choices, replaces each token
- * with its chip or list, sets the pageless format, and names the first
- * tab.
+ * DocumentApp, writing a token like ⟦checkbox⟧ wherever a smart chip or
+ * list goes. The second, with the Docs API, which DocumentApp can't do,
+ * replaces each token with its chip or list, sets the pageless format,
+ * names the first tab, and adds the Backlog tab.
  *
  * Setup: see README.md in this folder.
  */
@@ -41,32 +40,10 @@ const COLOR = {
   aboutValue: '#fff3d1',
   rolesHeader: '#7cc896',
   rolesBody: '#e9f6ee',
-  backlogHeader: '#ffd580',
-  backlogBody: '#fff3d1',
   roundRow: '#dce6f6',
   reportRow: '#f2f2f2',
 };
 
-// The dropdown chips' lists of choices. Each option's key names it in
-// tokens and makes its ID; colors are [background, text].
-const DROPDOWNS = {
-  outcome: {id: 'kix.outcome', title: 'Desired outcome', options: [
-    {key: 'report', label: 'Report', colors: ['#c9daf8', '#1c4587']},
-    {key: 'exploration', label: 'Exploration', colors: ['#b7e1cd', '#0b5d36']},
-    {key: 'decision', label: 'Decision', colors: ['#fce8b2', '#7f6000']},
-    {key: 'selection', label: 'Selection', colors: ['#f4c7c3', '#a61c00']},
-  ]},
-  priority: {id: 'kix.priority', title: 'Priority', options: [
-    {key: 'urgent', label: '!!!', colors: ['#a61c00', '#ffffff']},
-    {key: 'high', label: '!!', colors: ['#f4c7c3', '#a61c00']},
-    {key: 'normal', label: '!', colors: ['#b7e1cd', '#0b5d36']},
-    {key: 'someday', label: '💤', colors: ['#c9daf8', '#1c4587']},
-  ]},
-  prepared: {id: 'kix.prepared', title: 'Prepared?', options: [
-    {key: 'yes', label: 'Yes', colors: ['#b7e1cd', '#0b5d36']},
-    {key: 'no', label: 'No', colors: ['#f4c7c3', '#a61c00']},
-  ]},
-};
 
 // The first tab's title; each meeting has a tab of its own, titled with its
 // date, after it.
@@ -515,81 +492,56 @@ function finishWithApi(docId) {
 
 // ── The Backlog tab, with the Docs API ───────────────────────────────────────
 
-// The Backlog tab, after the first: a heading, a note, and the backlog
-// table. DocumentApp can't see a tab added in the same run, so all of it is
-// built with the Docs API.
-function backlogTab(docId) {
-  const headers = ['Due Date', 'Priority', 'Description', 'Duration', 'Desired Outcome',
-    'Prepared?', 'Holder'];
-  const samples = [
-    ['urgent', 'report', 'yes'], ['high', 'exploration', 'yes'],
-    ['someday', 'decision', 'no'], ['normal', 'selection', 'yes'],
-  ];
-  const rows = [headers, ...samples.map(([priority, outcome, prepared]) => [
-    '', token('dropdown', 'priority', priority), '', '',
-    token('dropdown', 'outcome', outcome), token('dropdown', 'prepared', prepared), ''])];
-  const widths = {0: 70, 1: 55, 3: 55, 5: 65};
+// The Backlog tab's paragraphs: headings, notes, and a list under each list
+// heading, starting with one empty item. style: a named paragraph style;
+// list: 'bullet' or 'numbered'.
+const BACKLOG = [
+  {text: 'Backlog', style: 'HEADING_1'},
+  {text: 'Requested for prioritization (any member can add)', style: 'HEADING_2'},
+  {text: 'Please include your name and the date.', muted: true},
+  {text: 'Policy item requests', style: 'HEADING_3'},
+  {text: '', list: 'bullet'},
+  {text: 'Task requests', style: 'HEADING_3'},
+  {text: '', list: 'bullet'},
+  {text: 'Prioritized backlog (lists managed by secretary / op. lead)', style: 'HEADING_2'},
+  {text: 'Discussion underway', style: 'HEADING_3'},
+  {text: '', list: 'bullet'},
+  {text: 'Prioritized for initial discussion', style: 'HEADING_3'},
+  {text: '', list: 'numbered'},
+  {text: 'Assigned tasks', style: 'HEADING_3'},
+  {text: '', list: 'bullet'},
+  {text: 'Tasks to assign', style: 'HEADING_3'},
+  {text: '', list: 'bullet'},
+];
 
+// The Backlog tab, after the first. DocumentApp can't see a tab added in the
+// same run, so it's built with the Docs API.
+function backlogTab(docId) {
   const reply = Docs.Documents.batchUpdate({requests: [{addDocumentTab: {
     tabProperties: {title: BACKLOG_TAB_TITLE, index: 1},
   }}]}, docId);
   const tabId = reply.replies[0].addDocumentTab.tabProperties.tabId;
 
-  // The heading and note, then the table after them, and the dropdowns'
-  // lists of choices (each tab has its own).
-  const heading = 'Backlog\n';
-  const note = 'You can sort this table by due date with Format → Table → Sort ascending.\n';
-  Docs.Documents.batchUpdate({requests: [
-    {insertText: {location: {index: 1, tabId}, text: heading + note}},
-    {updateParagraphStyle: {range: {startIndex: 1, endIndex: 1 + heading.length, tabId},
-      paragraphStyle: {namedStyleType: 'HEADING_2'}, fields: 'namedStyleType'}},
-    {updateTextStyle: {
-      range: {startIndex: 1 + heading.length, endIndex: heading.length + note.length, tabId},
-      textStyle: {fontSize: {magnitude: 8, unit: 'PT'},
-        foregroundColor: apiColor(COLOR.muted)},
-      fields: 'fontSize,foregroundColor'}},
-    {insertTable: {rows: rows.length, columns: headers.length, endOfSegmentLocation: {tabId}}},
-    ...Object.values(DROPDOWNS).map(def => ({createDropdownDefinition: {tabId, dropdownDefinition: {
-      dropdownDefinitionId: def.id,
-      dropdownDefinitionProperties: {title: def.title, options: def.options.map(o => ({
-        optionId: optionId(o.key),
-        displayValue: o.label,
-        textStyle: {backgroundColor: apiColor(o.colors[0]), foregroundColor: apiColor(o.colors[1])},
-      }))},
-    }}})),
-  ]}, docId);
-
-  // Each cell's text, last cell first so the earlier ones' positions don't
-  // move.
-  let table = apiTab(docId, tabId).content.find(se => se.table);
-  const fills = [];
-  table.table.tableRows.forEach((row, r) => row.tableCells.forEach((cell, c) => {
-    if (rows[r][c]) fills.push({index: cell.content[0].startIndex, text: rows[r][c]});
-  }));
-  fills.sort((a, b) => b.index - a.index);
-  Docs.Documents.batchUpdate({requests: fills.map(f =>
-    ({insertText: {location: {index: f.index, tabId}, text: f.text}}))}, docId);
-
-  // The header row bold and shaded, the rest shaded, and the column widths.
-  table = apiTab(docId, tabId).content.find(se => se.table);
-  const tableStartLocation = {index: table.startIndex, tabId};
-  const shade = (rowIndex, rowSpan, color) => ({updateTableCellStyle: {
-    tableRange: {tableCellLocation: {tableStartLocation, rowIndex, columnIndex: 0},
-      rowSpan, columnSpan: headers.length},
-    tableCellStyle: {backgroundColor: apiColor(color)}, fields: 'backgroundColor'}});
-  const headerRow = table.table.tableRows[0];
-  Docs.Documents.batchUpdate({requests: [
-    shade(0, 1, COLOR.backlogHeader),
-    shade(1, rows.length - 1, COLOR.backlogBody),
-    {updateTextStyle: {range: {startIndex: headerRow.startIndex,
-      endIndex: headerRow.endIndex, tabId}, textStyle: {bold: true}, fields: 'bold'}},
-    ...Object.keys(widths).map(c => ({updateTableColumnProperties: {
-      tableStartLocation, columnIndices: [Number(c)],
-      tableColumnProperties: {widthType: 'FIXED_WIDTH', width: {magnitude: widths[c], unit: 'PT'}},
-      fields: 'widthType,width'}})),
-  ]}, docId);
-
-  replaceTokens(docId, tabId);
+  // All the text at once, then each paragraph's style or list, by its
+  // position in that text.
+  const text = BACKLOG.map(p => p.text + '\n').join('');
+  const requests = [{insertText: {location: {index: 1, tabId}, text}}];
+  let at = 1;
+  for (const p of BACKLOG) {
+    const range = {startIndex: at, endIndex: at + p.text.length + 1, tabId};
+    requests.push({updateParagraphStyle: {range,
+      paragraphStyle: {namedStyleType: p.style || 'NORMAL_TEXT'}, fields: 'namedStyleType'}});
+    if (p.muted) {
+      requests.push({updateTextStyle: {range: {...range, endIndex: range.endIndex - 1},
+        textStyle: {foregroundColor: apiColor(COLOR.muted)}, fields: 'foregroundColor'}});
+    }
+    if (p.list) {
+      requests.push({createParagraphBullets: {range, bulletPreset: p.list === 'numbered'
+        ? 'NUMBERED_DECIMAL_ALPHA_ROMAN' : 'BULLET_DISC_CIRCLE_SQUARE'}});
+    }
+    at = range.endIndex;
+  }
+  Docs.Documents.batchUpdate({requests}, docId);
 }
 
 // A tab's Docs API content, and its ID for requests (undefined for the
@@ -626,11 +578,6 @@ function replaceTokens(docId, tabId) {
 function tokenRequest(t, tabId) {
   const location = {index: t.start, tabId};
   const [kind, ...args] = t.parts;
-  if (kind === 'dropdown') {
-    const def = DROPDOWNS[args[0]];
-    if (!def || !def.options.some(o => o.key === args[1])) throw new Error('Unknown dropdown ' + t.text);
-    return {insertDropdown: {location, dropdownDefinitionId: def.id, selectedOptionId: optionId(args[1])}};
-  }
   if (kind === 'date') {
     return {insertDate: {location, dateElementProperties: {
       timestamp: args[0],
@@ -679,10 +626,6 @@ function apiMeetingId(se) {
     }
   });
   return id;
-}
-
-function optionId(key) {
-  return 'dropdownItem.' + key;
 }
 
 function apiColor(hex) {

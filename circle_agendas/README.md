@@ -150,10 +150,12 @@ the preview must be in a circle's folder.
 The template is built from a blank doc by `build_template.gs`, so it
 depends on no other document and can be rebuilt at any time; every change
 to it is a change to that file. Building has two passes: DocumentApp lays
-out the text and tables, writing a token such as `⟦dropdown outcome
-decision⟧` wherever a smart chip or list goes, and then the Docs API creates
-the dropdowns' choices, replaces each token with its chip or list, sets the
-pageless format, and names the first tab "Circle". The template has no
+out the text and tables, writing a token such as `⟦checkbox⟧` wherever a
+smart chip or list goes, and then the Docs API replaces each token with its
+chip or list, sets the pageless format, names the first tab "Circle", and
+adds the Backlog tab: headings for requests (policy items, tasks) and for
+the prioritized backlog (discussion underway, prioritized for initial
+discussion, assigned tasks, tasks to assign), each with a list. The template has no
 meetings; each is added, in a tab of its own, by "+ New meeting".
 
 Building needs `WEB_APP_URL` (see above), for the "+ New meeting" link.

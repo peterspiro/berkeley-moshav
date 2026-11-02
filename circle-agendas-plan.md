@@ -36,7 +36,11 @@ they need will take their own scripts.
   Feedback Link role, names, and when each term ends; and Policies, a
   link to the circle's policies folder; with "+ New meeting" in a "Create a new meeting" section under
   the title); "Backlog" (built with the
-  Docs API alone, since DocumentApp can't see a tab added in the same run);
+  Docs API alone, since DocumentApp can't see a tab added in the same run:
+  "Requested for prioritization", with Policy item requests and Task
+  requests, and "Prioritized backlog", with Discussion underway,
+  Prioritized for initial discussion, Assigned tasks, and Tasks to assign,
+  each a list, as in the Technology Circle's own agenda doc);
   then one tab per meeting, newest first. The template has no meetings.
 - **New meeting**: "+ New meeting" adds a meeting in a tab of its own,
   titled with its date, after the Circle and Backlog tabs. Its date, start time, and total duration come from
