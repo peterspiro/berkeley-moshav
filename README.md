@@ -401,7 +401,8 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
   - **`circle_agendas/circle_docs.gs`** builds each circle's and working
     group's agenda doc, every 10 minutes: each doc the Python scripts
     created empty and labelled "new" is built, gets its group's name,
-    email address, Drive folder, and parent in About this circle, and is
+    email address, Drive folder, parent, and sub-circles (as a bulleted
+    list) in About this circle, and is
     relabelled "built", with its layout version. On the same timer, it
     rewrites the Parent Circle and Sub-Circles rows of each built doc that
     `change_parent_circle.py` or `add_new_group.py` has relabelled.

@@ -197,6 +197,14 @@ rewrites the Parent Circle and Sub-Circles rows of every doc so labelled
 (**`refreshCircleDocStructures`**), emptying a row with nothing left in it,
 and removes the label.
 
+The sub-circles are a bulleted list, one per line. Docs built when they
+were a comma-separated line can be changed over with
+**`rewriteStructureRowsInCircleDocs`**, run in the editor: it rewrites the
+Parent Circle and Sub-Circles rows of every built doc from its labels,
+replacing anything typed into those two rows by hand. A doc whose row is
+empty because the group has no sub-circles needs nothing: the list
+appears when a sub-circle is added.
+
 Once, in the editor, run **`installTriggers`**, which runs
 `buildNewCircleDocs` every 10 minutes (and asks to allow managing
 triggers). It can also be run by hand, to build waiting docs at once; the
