@@ -19,6 +19,11 @@ earlier version are relabelled when found.
 Must match AGENDA_KEYS in circle_agendas/circle_docs.gs, which links each
 parent and sub-circle named to its folder, found by name among the groups'
 footers.
+
+When a circle moves to another parent (change_parent_circle.py),
+relabel_agenda_doc_structure relabels the docs of the circle and of its
+old and new parents with their new parent and sub-circles, and labels
+each built one to have those rows of About this circle rewritten.
 """
 
 from util.gather_utils import log
@@ -30,6 +35,11 @@ STATE_KEY = "circleAgendaState"
 SUB_KEY = "circleAgendaSub"
 MAX_SUB_CIRCLES = 12
 STATE_NEW = "new"
+STATE_BUILT = "built"
+# Set on a built doc whose parent or sub-circles have changed, so the Apps
+# Script rewrites those rows of About this circle (and then removes it).
+REFRESH_KEY = "circleAgendaRefresh"
+REFRESH_STRUCTURE = "structure"
 
 # The Gather group kinds that get an agenda doc ("committee" is a working
 # group).
@@ -96,3 +106,48 @@ def ensure_agenda_doc(drive_service, group_email: str, group_name: str, drive_it
         f"https://docs.google.com/document/d/{created['id']}/edit (the circle_agendas "
         "Apps Script will build it within minutes)")
     return created["id"]
+
+
+def structure_properties(parent_name: str | None, sub_names: list[str]) -> dict:
+    """The parent and sub-circle labels for a doc, with None (which Drive
+    takes as "remove") for each label it no longer has."""
+    properties = {PARENT_KEY: _fit(PARENT_KEY, parent_name) if parent_name else None}
+    for i in range(1, MAX_SUB_CIRCLES + 1):
+        key = f"{SUB_KEY}{i}"
+        properties[key] = _fit(key, sub_names[i - 1]) if i <= len(sub_names) else None
+    return properties
+
+
+def relabel_agenda_doc_structure(drive_service, group_email: str, parent_name: str | None,
+                                 sub_names: list[str], dry_run: bool) -> str:
+    """Label the group's agenda doc with its parent's and sub-circles'
+    names, and, if it's built, label it to have the Apps Script rewrite
+    the Parent Circle and Sub-Circles rows of About this circle. Returns
+    "no doc", "unchanged", or "relabelled" (in a dry run, what it would
+    do)."""
+    doc = find_agenda_doc(drive_service, group_email)
+    if doc is None:
+        log("INFO", "agenda_doc", f"{group_email} has no agenda doc; nothing to relabel")
+        return "no doc"
+    current = doc.get("properties") or {}
+    label = current if GROUP_KEY in current else {**(doc.get("appProperties") or {}), **current}
+    wanted = structure_properties(parent_name, list(sub_names))
+    changed = {k: v for k, v in wanted.items() if label.get(k) != v}
+    if not changed and GROUP_KEY in current:
+        log("INFO", "agenda_doc", f"'{doc['name']}' already names its parent and sub-circles")
+        return "unchanged"
+    body = {**label, **changed} if GROUP_KEY not in current else dict(changed)
+    state = label.get(STATE_KEY)
+    if state == STATE_BUILT:
+        body[REFRESH_KEY] = REFRESH_STRUCTURE
+    elif state != STATE_NEW:
+        log("WARN", "agenda_doc",
+            f"'{doc['name']}' is labelled {state!r}, not built, so its About this circle "
+            "won't be rewritten; check it by hand")
+    if dry_run:
+        log("INFO", "agenda_doc", f"[DRY RUN] Would relabel '{doc['name']}': {changed}")
+        return "relabelled"
+    drive_service.files().update(fileId=doc["id"], body={"properties": body},
+                                 supportsAllDrives=True).execute()
+    log("INFO", "agenda_doc", f"Relabelled '{doc['name']}': {changed}")
+    return "relabelled"

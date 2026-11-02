@@ -3,7 +3,9 @@ Tests for util/circle_agenda_docs.py. All names and addresses are fictional.
 """
 
 from util.circle_agenda_docs import (
-    GROUP_KEY, PARENT_KEY, STATE_KEY, STATE_NEW, SUB_KEY, ensure_agenda_doc, find_agenda_doc,
+    GROUP_KEY, MAX_SUB_CIRCLES, PARENT_KEY, REFRESH_KEY, REFRESH_STRUCTURE, STATE_BUILT, STATE_KEY,
+    STATE_NEW, SUB_KEY, ensure_agenda_doc, find_agenda_doc, relabel_agenda_doc_structure,
+    structure_properties,
 )
 
 
@@ -98,3 +100,50 @@ def test_labels_sub_circles():
     ensure_agenda_doc(drive, "a@example.org", "A", "F", None, False, ["Sub One", "Sub Two"])
     props = drive.files().created[0]["properties"]
     assert props[f"{SUB_KEY}1"] == "Sub One" and props[f"{SUB_KEY}2"] == "Sub Two"
+
+
+# ── relabel_agenda_doc_structure ─────────────────────────────────────────────
+
+def _doc(**props):
+    return {"id": "d1", "name": "Tech Circle Agenda",
+            "properties": {GROUP_KEY: "tech@example.org", **props}}
+
+
+def test_relabels_built_doc_and_asks_for_refresh():
+    drive = FakeDrive([_doc(**{STATE_KEY: STATE_BUILT, PARENT_KEY: "Old Parent",
+                               f"{SUB_KEY}1": "Sub One", f"{SUB_KEY}2": "Sub Two"})])
+    result = relabel_agenda_doc_structure(drive, "tech@example.org", "New Parent", ["Sub One"],
+                                          dry_run=False)
+    assert result == "relabelled"
+    [(doc_id, body)] = drive.files().updated
+    assert doc_id == "d1"
+    assert body["properties"] == {PARENT_KEY: "New Parent", f"{SUB_KEY}2": None,
+                                  REFRESH_KEY: REFRESH_STRUCTURE}
+
+
+def test_relabels_new_doc_without_refresh():
+    drive = FakeDrive([_doc(**{STATE_KEY: STATE_NEW, PARENT_KEY: "Old Parent"})])
+    relabel_agenda_doc_structure(drive, "tech@example.org", None, [], dry_run=False)
+    assert drive.files().updated == [("d1", {"properties": {PARENT_KEY: None}})]
+
+
+def test_leaves_doc_already_labelled_so():
+    drive = FakeDrive([_doc(**{STATE_KEY: STATE_BUILT, PARENT_KEY: "P", f"{SUB_KEY}1": "S"})])
+    assert relabel_agenda_doc_structure(drive, "tech@example.org", "P", ["S"], False) == "unchanged"
+    assert drive.files().updated == []
+
+
+def test_relabel_dry_run_changes_nothing():
+    drive = FakeDrive([_doc(**{STATE_KEY: STATE_BUILT})])
+    assert relabel_agenda_doc_structure(drive, "tech@example.org", "P", [], True) == "relabelled"
+    assert drive.files().updated == []
+
+
+def test_relabel_with_no_doc():
+    assert relabel_agenda_doc_structure(FakeDrive(), "tech@example.org", "P", [], False) == "no doc"
+
+
+def test_structure_properties_clears_every_unused_sub_label():
+    props = structure_properties("P", ["A"])
+    assert props[f"{SUB_KEY}1"] == "A"
+    assert all(props[f"{SUB_KEY}{i}"] is None for i in range(2, MAX_SUB_CIRCLES + 1))

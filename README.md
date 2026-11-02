@@ -321,6 +321,14 @@ status line as "calendar (members can view, not edit)".
   plus setup problems and anyone else with access to its Drive item.
 - **`add_group_wiki_page.py`** creates a wiki page for one group and adds a
   `[Wiki]` link to its row on the Circle Structure page.
+- **`change_parent_circle.py`** moves a circle or working group, with its
+  sub-circles, under a different parent circle on the Circle Structure page
+  (both found by a prefix of their names). It then relabels the agenda docs
+  of the group and of its old and new parents with their new parent and
+  sub-circles, and the `circle_agendas` Apps Script rewrites the Parent Circle
+  and Sub-Circles rows of their About this circle within 10 minutes. A group's
+  parent is recorded only on that page, so this is the way to change one:
+  moving an entry by hand leaves the agenda docs naming the old structure.
 - **`change_group_email_alias.py`** gives a group's Google Group a new, usually
   shorter, address and moves the Gather group's email list over to it.
 - **`setup.sh`** installs and starts a local Gather development instance, for
@@ -393,7 +401,9 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
     group's agenda doc, every 10 minutes: each doc the Python scripts
     created empty and labelled "new" is built, gets its group's name,
     email address, Drive folder, and parent in About this circle, and is
-    relabelled "built", with its layout version.
+    relabelled "built", with its layout version. On the same timer, it
+    rewrites the Parent Circle and Sub-Circles rows of each built doc that
+    `change_parent_circle.py` has relabelled.
   - **`circle_agendas/build_template.gs`** builds an agenda doc from a
     blank doc, entirely from code (so it depends on no other document):
     each circle's doc, and a preview, rebuilt in place, for trying changes.
@@ -413,8 +423,8 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
   and Directory and Groups Settings API helpers
 - **`google_group_footer.py`**: reading and writing the auto-managed footer
   links
-- **`hierarchy_wiki.py`**: parsing, editing, and saving the Circle Structure
-  page
+- **`hierarchy_wiki.py`**: parsing, editing (including moving an entry to
+  another parent), and saving the Circle Structure page
 - **`wiki_utils.py`**: per-group wiki pages
 - **`folder_matching.py`**: fuzzy matching of group names to folder and
   Google Group names (and, including acronyms, to calendars, Zoom meetings,
@@ -431,7 +441,8 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
 - **`member_names.py`**: members' short names by email address, from the Gather
   directory, written to `admin@`'s Drive for the circle agenda docs
 - **`circle_agenda_docs.py`**: creating a circle's or working group's agenda
-  doc, empty and labelled for the `circle_agendas` Apps Script to build
+  doc, empty and labelled for the `circle_agendas` Apps Script to build, and
+  relabelling it when its parent or sub-circles change
 
 ### `archive/`: no longer in use
 
