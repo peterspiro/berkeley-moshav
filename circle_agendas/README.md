@@ -97,7 +97,8 @@ The links:
   after now, if there's none), so clicking again adds the one after. Its
   date, start time, and length come from the event, in the line above its
   table; Place links the circle's Zoom room; Attendance lists the circle's
-  members, unchecked, then "Guests:" (named as in the Gather directory,
+  members, unchecked, in columns of up to four, beside Facilitator and
+  Secretary (from the Circle tab's Members and roles) and Guests (named as in the Gather directory,
   from "Circle agenda member names.json" in `admin@`'s My Drive, which
   `update_groups_in_google_and_hierarchy.py` writes on each run, or else
   as Google names them); its agenda has one 5-minute topic; its

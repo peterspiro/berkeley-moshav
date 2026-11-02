@@ -156,6 +156,8 @@ function finishNewMeeting(key) {
     const previous = previousTab && meetingTableIn(previousTab.asDocumentTab().getBody());
     if (previous) details.carryOver = recapItems(previous);
   }
+  details.facilitator = roleHolder(doc, 'Facilitator');
+  details.secretary = roleHolder(doc, 'Secretary');
   const body = tab.asDocumentTab().getBody();
   const leftover = body.getChild(0);
   const meetingId = meetingTable(body, docId, details);
@@ -191,6 +193,12 @@ function meetingEnd(title, body) {
   const length = parseHours(headerHoursText(line));
   if (start === null || length === null) return null;
   return Utilities.parseDate(title, TIME_ZONE, 'yyyy-MM-dd').getTime() + (start + length) * 60000;
+}
+
+// Who holds a role, from the Circle tab's Members and roles table, or ''.
+function roleHolder(doc, role) {
+  const found = findRow(firstTabBody(doc), text => text.startsWith(role + ' ('));
+  return found && found.row.getNumCells() > 1 ? found.row.getCell(1).getText().trim() : '';
 }
 
 function tabUrl(docId, tabId) {

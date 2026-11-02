@@ -217,6 +217,12 @@ function layOut(body, docId) {
     ['   (each meeting gets a tab of its own, listed at the left, titled with its date)', MUTED]]);
   body.appendHorizontalRule();
 
+  section(body, 'Relevant Documents');
+  body.appendParagraph('Links to the circle\'s key documents, such as its decision log.')
+    .editAsText().setAttributes(HINT);
+  body.appendParagraph(token('bullet'));
+  body.appendHorizontalRule();
+
   section(body, 'About this circle');
   aboutTable(body);
   body.appendHorizontalRule();
@@ -300,7 +306,8 @@ function policiesLink(body) {
 // and the end time.
 //
 // details: date ('yyyy-MM-dd'), start ('19:30'), hours ('1.5'), and
-// optionally place (the Zoom link), attendees (names), previousUrl (a link
+// optionally place (the Zoom link), attendees (names), facilitator and
+// secretary (names, from the Circle tab's roles), previousUrl (a link
 // to the previous meeting's tab), next (text, the next meeting's date and
 // time), and carryOver (the text of the previous
 // meeting's Action Items Recap's items, for Action Items Accountability's
@@ -325,7 +332,7 @@ function meetingTable(body, docId, details) {
   writeRuns(body.appendParagraph(''), [['Time  ', BOLD], [details.start],
     ['     Duration (hours)  ', BOLD], [details.hours], ['     Place  ', BOLD],
     ...(details.place ? [['Zoom room', {[A.LINK_URL]: details.place}]] : [])]);
-  attendance(body, details.attendees || []);
+  attendance(body, details);
 
   const rowCount = MEETING_HEADER_ROWS + items.length + 1;
   const table = newTable(body, rowCount, MEETING_COLUMNS);
@@ -378,22 +385,41 @@ function padRow(row) {
   }
 }
 
-// The meeting's attendance, above its table, closely spaced: the attendees
-// as a checklist, then "Guests:", to be followed by their names, with a
-// little space below it, before the table.
-function attendance(body, attendees) {
-  const paragraphs = [
-    [['Attendance', BOLD], ['   Check the box next to anyone who isn\'t here.', MUTED]],
-    ...(attendees.length
-      ? attendees.map(name => [[token('checkbox')], [name]])
-      : [[[token('checkbox')]]]),
+// The most attendees in one column of the attendance checklist.
+const ATTENDEES_PER_COLUMN = 4;
+
+// The meeting's attendance, above its table: a line saying to check anyone
+// who isn't there, then, side by side and closely spaced, the attendees as
+// a checklist in columns of up to ATTENDEES_PER_COLUMN, and the meeting's
+// Facilitator, Secretary (from details, or left to fill in), and Guests;
+// then a little space before the agenda table.
+function attendance(body, details) {
+  const attendees = details.attendees || [];
+  writeRuns(body.appendParagraph(''), [['Attendance', BOLD],
+    ['   Check the box next to anyone who isn\'t here.', MUTED]]);
+
+  const columns = [];
+  for (let i = 0; i < Math.max(attendees.length, 1); i += ATTENDEES_PER_COLUMN) {
+    columns.push(attendees.length
+      ? attendees.slice(i, i + ATTENDEES_PER_COLUMN).map(name => [[token('checkbox')], [name]])
+      : [[[token('checkbox')]]]);
+  }
+  columns.push([
+    [['Facilitator: ', BOLD], ...(details.facilitator ? [[details.facilitator]] : [])],
+    [['Secretary: ', BOLD], ...(details.secretary ? [[details.secretary]] : [])],
     [['Guests: ', BOLD]],
-  ];
-  paragraphs.forEach((runs, i) => {
-    const p = body.appendParagraph('');
-    writeRuns(p, runs);
-    p.setSpacingBefore(0).setSpacingAfter(i === paragraphs.length - 1 ? 8 : 0).setLineSpacing(1);
+  ]);
+  const table = body.appendTable([columns.map(() => '')]);
+  table.setBorderWidth(0);
+  columns.forEach((paragraphs, c) => {
+    const cell = table.getCell(0, c);
+    writeCell(cell, paragraphs);
+    for (let i = 0; i < cell.getNumChildren(); i++) {
+      cell.getChild(i).asParagraph().setSpacingBefore(0).setSpacingAfter(0).setLineSpacing(1);
+    }
+    if (c < columns.length - 1) table.setColumnWidth(c, 130);
   });
+  body.appendParagraph('').setSpacingBefore(0).setSpacingAfter(0);
 }
 
 // The row of links that add an item and update the times.

@@ -32,7 +32,7 @@ they need will take their own scripts.
 
 ## What a circle's doc does
 
-- **Tabs**: "Circle" (About this circle; Members and roles, with a
+- **Tabs**: "Circle" (Relevant Documents, a list of links; About this circle; Members and roles, with a
   Feedback Link role, names, and when each term ends; and Policies, a
   link to the circle's policies folder; with "+ New meeting" in a "Create a new meeting" section under
   the title); "Backlog" (built with the
@@ -79,7 +79,9 @@ they need will take their own scripts.
   community has the same first name), from the Gather directory (a file
   that `update_groups_in_google_and_hierarchy.py` writes to `admin@`'s
   Drive; Google often gives only the start of the address), closely
-  spaced. The closing round has a bulleted line for each of them, their
+  spaced, in columns of up to four, beside the meeting's Facilitator and
+  Secretary (filled in from the Circle tab's roles, if they're there) and
+  Guests. The closing round has a bulleted line for each of them, their
   name and a colon, for their feedback.
   Names start unchecked; checking one marks that member absent, and Docs
   strikes the name through (an instruction above the names says so; Docs
