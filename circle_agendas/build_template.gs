@@ -415,10 +415,10 @@ function attendance(body, details) {
     }
     if (c < columns.length - 1) table.setColumnWidth(c, 130);
   });
-  // Docs needs a paragraph between two tables; it's made as small as it
-  // can be, here and in finishMeeting.
-  body.appendParagraph('').setSpacingBefore(0).setSpacingAfter(0).setLineSpacing(1)
-    .setAttributes({[A.FONT_SIZE]: 1});
+  // Docs needs a paragraph between two tables; finishMeeting makes it as
+  // small as it can be, once the table after it is built. (Made small here,
+  // the table appended after it takes on its tiny font.)
+  body.appendParagraph('').setSpacingBefore(0).setSpacingAfter(0).setLineSpacing(1);
 }
 
 // A topic's description: its title, a Presenter dropdown (if presenters,
