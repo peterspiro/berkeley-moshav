@@ -58,6 +58,10 @@ excluding hidden groups:
       in the signed-in account's My Drive, for the circle agenda docs'
       attendance lists and Presenter choices (see util/member_names.py and
       circle_agendas/circles.gs). In a -g run too.
+  0g. Gives every circle and working group (not everybody groups) with a
+      Drive item and an email list an agenda doc, created empty in its
+      Drive item and labelled for the circle_agendas Apps Script to build
+      (see util/circle_agenda_docs.py). A group that has one keeps it.
   1.  If it's already in the hierarchy but has been renamed, updates the
       hierarchy line to the current name (matched by Gather group ID, embedded
       in the [Members] link, so renames don't break the association).
@@ -192,6 +196,7 @@ from util.google_group_utils import (
     list_group_members,
     set_member_role,
 )
+from util.circle_agenda_docs import AGENDA_KINDS, ensure_agenda_doc
 from util.member_names import build_member_names, publish_member_names
 from util.meeting_rooms import (
     LinkedResources,
@@ -1217,6 +1222,27 @@ ROOT_NODE_NAME = "Full Community (Circle of Everyone / Top Circle / HOA)"
 ROOT_DOCUMENTS_URL = "/gdrive"
 
 
+def ensure_agenda_docs(drive_service, group_info: dict[str, dict],
+                       email_by_group_id: dict[str, str],
+                       google_file_id_by_group_id: dict[str, str], root,
+                       dry_run: bool) -> None:
+    """Give every circle and working group (not everybody groups) that has a
+    Drive item and an email list an agenda doc, labelled for the
+    circle_agendas Apps Script to build (see util/circle_agenda_docs.py)."""
+    parent_by_group_id = {n.group_id: n.parent.name for n in iter_nodes(root)
+                          if n.group_id and n.parent is not None}
+    for group_id, info in group_info.items():
+        email = email_by_group_id.get(group_id)
+        item_id = google_file_id_by_group_id.get(group_id)
+        if info["kind"] not in AGENDA_KINDS or _is_everybody(info) or not email or not item_id:
+            continue
+        try:
+            ensure_agenda_doc(drive_service, email, info["name"], item_id,
+                              parent_by_group_id.get(group_id), dry_run)
+        except Exception as e:
+            log("ERROR", "agenda_doc", f"{info['name']}: {e}")
+
+
 def ensure_root_node(root, group_info: dict[str, dict], dry_run: bool) -> None:
     """Force the hierarchy root's name/links to always be the "everyone"
     group: [Members] -> the "Full Community" Gather group, [Documents] ->
@@ -1603,6 +1629,8 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
                     excluded_ids, deactivated_ids, dry_run, only_group_id=target_id,
                 )
                 add_missing_groups(root, group_info, documents_url_by_group_id, dry_run)
+                ensure_agenda_docs(drive_service, group_info, email_by_group_id,
+                                   google_file_id_by_group_id, root, dry_run)
             except QuitScript:
                 quit_requested = True
                 print("\nQuit requested — saving progress made so far.")

@@ -123,12 +123,47 @@ Script calls, tested under Node like `group_meetings/event_rules.gs`.
 
 ## Creating a circle's doc
 
-- `add_new_group.py` copies the template into the new group's Drive item,
-  and `update_groups_in_google_and_hierarchy.py` can do the same for
-  existing groups.
-- From Drive: a link to the template ending in `/copy` (or File → Make a
-  copy) asks where to put the copy; put it in the circle's folder. The first
-  use of one of its links fills in About this circle.
+Each circle and working group (not clubs or everybody groups) gets an
+agenda doc, built from code like the template rather than copied from it
+(a copy's links would still point at the template):
+
+- `update_groups_in_google_and_hierarchy.py` (each run) and
+  `add_new_group.py` (for the group it makes) create "<Group> Agenda",
+  empty, in the group's Drive item, labelled with Drive appProperties
+  (hidden from users): the group's address, its parent's name in the
+  Circle Structure (the Gather wiki page listing every circle, under its
+  parent), and the state "new" (`util/circle_agenda_docs.py`). The label
+  is also how a group's doc is found again, so none gets a second.
+- The `circle_agendas` Apps Script's `buildNewCircleDocs`, on a timer
+  every 10 minutes, builds each doc labelled "new", fills in About this
+  circle (the group's name as the title, its email address, its Drive
+  folder, and its parent), and relabels it "built", with the layout
+  version it was built with (`circle_agendas/circle_docs.gs`).
+- So no "Create doc" link is needed; making a copy of the template by
+  hand isn't supported (its links point at the template).
+- Still to do: each group calendar event links its group's agenda doc
+  (the `group_meetings` Apps Script would add the link, finding the doc by
+  its label), rather than the group's footer; and Sub-Circles in About
+  this circle.
+
+## Updating once circles have docs
+
+- **The web app's behaviour** (times, new items, new meetings) changes for
+  every doc at once when a new version is deployed: always update the
+  existing deployment, never make a new one, whose new address would break
+  every link. The code must keep working with docs built by older
+  layouts, at least for their newest meetings (the ones with links); each
+  doc's layout version is in its label.
+- **What a new meeting looks like** applies from each doc's next new
+  meeting, since the web app builds meetings. Past meetings keep their
+  layout, as a record.
+- **The rest of a doc** (the Circle and Backlog tabs) changes in existing
+  docs only by an update script: numbered changes, each a small function
+  that edits a doc in place (keeping the circle's own content), applied to
+  every built doc that hasn't had it (found by their labels), recording
+  which it has had; tried on a copy first, then run on all. Each change
+  there means changing both the build code and writing an update, so the
+  Circle and Backlog tabs are best settled before circles use their docs.
 
 ## The probes
 

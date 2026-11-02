@@ -211,8 +211,10 @@ status line as "calendar (members can view, not edit)".
 - **`add_new_group.py`** creates a complete new group in one step: the Drive
   folder, the Google Group (optionally with a shorter address), the Gather
   group with its manager, and the group's calendar and Zoom room; links them
-  all together; adds the group to the Circle Structure page; and opens a
-  welcome email to the new list as a draft in your mail program.
+  all together; adds the group to the Circle Structure page; for a circle
+  or working group, creates its agenda doc, for the `circle_agendas` Apps
+  Script to build; and opens a welcome email to the new list as a draft in
+  your mail program.
 - **`update_groups_in_google_and_hierarchy.py`** brings every group (or one,
   with `-g`) into line: offers to find or create a missing Drive folder or
   email list, enforces the Google Group settings, gives each group a calendar
@@ -242,7 +244,11 @@ status line as "calendar (members can view, not edit)".
   and has a button that does nothing for members; members add a calendar
   from the link in the group's footer.
 
-  Each run (with `-g` too) also writes every Gather member's short name
+  Each run (with `-g` too) also gives every circle and working group (not
+  everybody groups) that has a Drive item and an email list an agenda doc,
+  "<Group> Agenda", created empty in its Drive item and labelled for the
+  `circle_agendas` Apps Script to build within minutes; a group that has
+  one keeps it. And it writes every Gather member's short name
   (first name, with the last initial if another member shares it), by
   their Gather email and their Google Email, to "Circle agenda member
   names.json" in `admin@`'s My Drive, so the circle agenda docs list
@@ -377,7 +383,13 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
   - **`circle_agendas/circles.gs`** finds the circle a doc belongs to: the
     Google Group whose footer links the Drive folder (or shared drive) the
     doc is in. It reads the circle's calendar events, and its members'
-    names (from its Drive item's sharing).
+    names (from the Gather directory's, which the Python scripts write to
+    Drive, or else its Drive item's sharing).
+  - **`circle_agendas/circle_docs.gs`** builds each circle's and working
+    group's agenda doc, every 10 minutes: each doc the Python scripts
+    created empty and labelled "new" is built, gets its group's name,
+    email address, Drive folder, and parent in About this circle, and is
+    relabelled "built", with its layout version.
   - **`circle_agendas/build_template.gs`** builds the agenda template from
     a blank doc, entirely from code (so it depends on no other document):
     a preview in a new doc, or the template itself, rebuilt in place.
@@ -420,6 +432,8 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
 - **`credentials.py`**: reading `~/.gather` and `zoom_credentials`
 - **`member_names.py`**: members' short names by email address, from the Gather
   directory, written to `admin@`'s Drive for the circle agenda docs
+- **`circle_agenda_docs.py`**: creating a circle's or working group's agenda
+  doc, empty and labelled for the `circle_agendas` Apps Script to build
 
 ### `archive/`: no longer in use
 

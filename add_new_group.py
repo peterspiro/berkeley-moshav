@@ -91,6 +91,7 @@ from playwright.sync_api import sync_playwright
 
 from util.calendar_announcement import GROUP_CALENDAR_HOWTO_URL
 from util.calendar_event_moves import EventMover
+from util.circle_agenda_docs import AGENDA_KINDS, agenda_doc_name, ensure_agenda_doc
 from util.credentials import load_credentials, load_zoom_credentials
 from util.gather_utils import (
     close_log,
@@ -596,6 +597,17 @@ def main(
             else:
                 log("ERROR", "hierarchy", "Failed to write hierarchy wiki page — see log")
                 print("ERROR: failed to update the Circle Hierarchy wiki page — see log.")
+
+        # ── Give it an agenda doc, for the circle_agendas Apps Script to build ─
+        if kind in AGENDA_KINDS:
+            try:
+                ensure_agenda_doc(drive_service, gemail, gdisplay, folder_id,
+                                  parent_node.name if parent_node is not None else None,
+                                  dry_run=False)
+                print(f"Created '{agenda_doc_name(gdisplay)}', to be built within minutes.")
+            except Exception as e:
+                log("ERROR", "agenda_doc", str(e))
+                print(f"ERROR: failed to create the agenda doc: {e}")
 
         # ── Add the manager to the Google Group ──────────────────────────────
         # groups_drive_sync.gs would add them on its next hourly run (they're

@@ -9,6 +9,8 @@ the web app that the links in an agenda doc run.
   shows a page saying what it did
 - `meetings.gs` — what the web app does: add the circle's next meeting,
   and, to a meeting, update its times or add an agenda item
+- `circle_docs.gs` — builds each circle's and working group's agenda doc,
+  which the Python scripts create empty and label
 - `circles.gs` — which circle a doc belongs to (from the Google Groups'
   footers), and its calendar's events and its members' names
 - `agenda_rules.gs` — the agenda's time arithmetic, with no Apps Script
@@ -176,6 +178,26 @@ Rebuilding a doc deletes its meeting tabs.
    whether it can edit the template (and whether the template is locked).
    Run it if a build fails with "Action not allowed", which is all
    DocumentApp says when a change is refused.
+
+## Circles' docs
+
+Each circle and working group gets an agenda doc, "<Group> Agenda", in its
+Drive folder. `update_groups_in_google_and_hierarchy.py` (each run) and
+`add_new_group.py` create it empty and label it in Drive with the group's
+address, its parent, and "new" (`util/circle_agenda_docs.py`).
+**`buildNewCircleDocs`** builds every doc so labelled, as
+`previewTemplate` builds the preview, puts the group's name, email
+address, Drive folder, and parent in About this circle, and relabels it
+"built", with the layout version (`LAYOUT_VERSION`).
+
+Once, in the editor, run **`installTriggers`**, which runs
+`buildNewCircleDocs` every 10 minutes (and asks to allow managing
+triggers). It can also be run by hand, to build waiting docs at once; the
+log links each doc it built.
+
+A group's doc is found by its label, so a group never gets a second one;
+if its doc is deleted (and emptied from the trash), the next run of
+`update_groups_in_google_and_hierarchy.py` makes a new one.
 
 ## The probes (done)
 
