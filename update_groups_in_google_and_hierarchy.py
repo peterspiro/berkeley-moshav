@@ -58,7 +58,7 @@ excluding hidden groups:
       in the signed-in account's My Drive, for the circle agenda docs'
       attendance lists and Presenter choices (see util/member_names.py and
       circle_agendas/circles.gs). In a -g run too.
-  0g. With --agenda-docs, gives every circle and working group (not
+  0g. With -a/--agenda-docs, gives every circle and working group (not
       everybody groups) with a Drive item and an email list an agenda doc,
       created empty in its Drive item and labelled for the circle_agendas Apps Script to build
       (see util/circle_agenda_docs.py). A group that has one keeps it.
@@ -1713,7 +1713,7 @@ def cli():
              "so; later runs leave that name as it is",
     )
     parser.add_argument(
-        "--agenda-docs", action="store_true",
+        "-a", "--agenda-docs", action="store_true",
         help="Give each circle and working group without one an agenda doc, for the "
              "circle_agendas Apps Script to build (with -g, just that group)",
     )

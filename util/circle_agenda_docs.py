@@ -74,6 +74,9 @@ def ensure_agenda_doc(drive_service, group_email: str, group_name: str, drive_it
                 fileId=existing["id"], body={"properties": old_label},
                 supportsAllDrives=True).execute()
             log("INFO", "agenda_doc", f"Relabelled '{existing['name']}' so the Apps Script sees it")
+        log("INFO", "agenda_doc",
+            f"{group_email} already has '{existing['name']}' "
+            f"(https://docs.google.com/document/d/{existing['id']}/edit); leaving it as it is")
         return existing["id"]
     name = agenda_doc_name(group_name)
     if dry_run:

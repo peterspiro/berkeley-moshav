@@ -244,7 +244,7 @@ status line as "calendar (members can view, not edit)".
   and has a button that does nothing for members; members add a calendar
   from the link in the group's footer.
 
-  With `--agenda-docs` (with `-g`, for that group alone), it also gives
+  With `-a`/`--agenda-docs` (with `-g`, for that group alone), it also gives
   every circle and working group (not everybody groups) that has a Drive item and an email list an agenda doc,
   "<Group> Agenda", created empty in its Drive item and labelled for the
   `circle_agendas` Apps Script to build within minutes; a group that has

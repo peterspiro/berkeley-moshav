@@ -69,6 +69,7 @@ def test_keeps_existing_doc():
     drive = FakeDrive([{"id": "d1", "name": "Tech Circle Agenda"}])
     assert ensure_agenda_doc(drive, "tech@example.org", "Tech Circle", "F", None, False) == "d1"
     assert drive.files().created == []
+    assert drive.files().updated == []
 
 
 def test_dry_run_creates_nothing():
