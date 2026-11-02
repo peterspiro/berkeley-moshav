@@ -61,7 +61,8 @@ they need will take their own scripts.
 - **Layout**: each meeting's tab has its date; a line with its start time,
   length, and place; and its attendance; then the agenda table.
 - **Columns**: Time (12-hour, without AM/PM, for room), Min (the
-  duration), Description, Notes, and Follow-up (shaded light yellow; starting with a bullet from
+  duration), Description, Notes, and Follow-up (shaded light yellow 2, blended with the row's
+  shade in the light cyan and grey rows; starting with a bullet from
   Administrative matters through the topics),
   each a fixed width; Description is 262 points, Notes 375, and Follow-up
   210, and in a pageless doc a table wider than the window scrolls

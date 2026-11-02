@@ -40,9 +40,12 @@ const COLOR = {
   aboutValue: '#fff3d1',
   rolesHeader: '#7cc896',
   rolesBody: '#e9f6ee',
-  roundRow: '#dce6f6',
+  roundRow: '#d0e0e3', // Docs' "light cyan 3"
   reportRow: '#f2f2f2',
-  followUp: '#fff2cc', // Docs' "light yellow 3"
+  followUp: '#ffe599', // Docs' "light yellow 2"
+  // Follow-up cells in shaded rows: halfway between the two colors.
+  followUpRoundRow: '#e8e3be',
+  followUpReportRow: '#f9ecc6',
 };
 
 
@@ -371,7 +374,7 @@ function meetingTable(body, docId, details) {
         : [[[token('bullet')]]]);
     if (item.followUp) writeCell(cell(COL.followUp), [[[token('bullet')]]]);
     shadeRow(table, r, item.kind);
-    shadeFollowUp(table, r);
+    shadeFollowUp(table, r, item.kind);
   });
 
   const last = rowCount - 1;
@@ -379,7 +382,7 @@ function meetingTable(body, docId, details) {
   writeCell(table.getCell(last, COL.time), [[[formatTime(times.end), MUTED]]]);
   writeCell(table.getCell(last, COL.duration), [[['end', {...MUTED, [A.ITALIC]: true}]]]);
   shadeRow(table, last, 'round');
-  shadeFollowUp(table, last);
+  shadeFollowUp(table, last, 'round');
 
   for (const c of Object.keys(COLUMN_WIDTHS)) table.setColumnWidth(Number(c), COLUMN_WIDTHS[c]);
   for (let r = 0; r < rowCount; r++) padRow(table.getRow(r));
@@ -525,11 +528,13 @@ function shadeRow(table, r, kind) {
   for (let c = 0; c < table.getRow(r).getNumCells(); c++) table.getCell(r, c).setBackgroundColor(color);
 }
 
-// Shades a meeting table row's Follow-up cell, if the table has that column.
-function shadeFollowUp(table, r) {
-  if (table.getRow(r).getNumCells() > COL.followUp) {
-    table.getCell(r, COL.followUp).setBackgroundColor(COLOR.followUp);
-  }
+// Shades a meeting table row's Follow-up cell, if the table has that
+// column, blending it with the row's own shade (kind, as for shadeRow).
+function shadeFollowUp(table, r, kind) {
+  if (table.getRow(r).getNumCells() <= COL.followUp) return;
+  const color = kind === 'round' ? COLOR.followUpRoundRow
+    : kind === 'report' ? COLOR.followUpReportRow : COLOR.followUp;
+  table.getCell(r, COL.followUp).setBackgroundColor(color);
 }
 
 // A placeholder for something only the Docs API can add; see finishWithApi.
