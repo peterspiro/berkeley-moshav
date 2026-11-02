@@ -94,7 +94,7 @@ function pageHtml(result) {
     '<h2>' + (result.done ? '✓ ' : '') + esc(result.title) + '</h2>' +
     (result.done ? close : '') +
     result.messages.map(m => '<p>' + esc(m) + '</p>').join('') +
-    (result.done ? '<p>The agenda already shows the change.</p>' : close) + '</div>';
+    (result.done ? '<p>The agenda now shows the change.</p>' : close) + '</div>';
   return html;
 }
 

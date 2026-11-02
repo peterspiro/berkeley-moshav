@@ -203,6 +203,13 @@ address, its parent, and "new" (`util/circle_agenda_docs.py`).
 address, Drive folder, and parent in About this circle, and relabels it
 "built", with the layout version (`LAYOUT_VERSION`).
 
+Docs built before About this circle's Zoom room, Drive folder, parent, and
+sub-circles were filled in can get them with **`fillAboutForCircleDocs`**,
+run in the editor: it fills in those rows where they're empty, in every
+built doc, and leaves rows that already say something alone. A doc's
+circle is the group whose Drive folder holds it, or else the one with its
+labelled address.
+
 Once, in the editor, run **`installTriggers`**, which runs
 `buildNewCircleDocs` every 10 minutes (and asks to allow managing
 triggers). It can also be run by hand, to build waiting docs at once; the

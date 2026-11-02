@@ -71,8 +71,7 @@ they need will take their own scripts.
   Action Items Accountability; one 5-minute Topic (a Presenter dropdown,
   defaulting to "Presenter", of the attendees, then a bulleted list);
   Action Items Recap; Closing Round, whose duration is red when there's no
-  time left. Notes start with a bulleted list, but for the opening round
-  and Administrative matters.
+  time left. Notes start with a bulleted list, but for the opening round.
 - **Tab titles**: a meeting's tab is titled with its date. Docs can't run
   a script when someone edits a date chip, so "↻ Update times" also
   retitles the tab when its date chip has been changed.
@@ -94,8 +93,8 @@ they need will take their own scripts.
   Drive; Google often gives only the start of the address), closely
   spaced, in columns of up to four, beside the meeting's Facilitator and
   Secretary (filled in from the Circle tab's roles, if they're there) and
-  Guests. The closing round has a bulleted line for each of them, their
-  name and a colon, for their feedback.
+  Guests. The closing round's Notes have a bulleted line for each of them,
+  their name and a colon, for their feedback.
   Names start unchecked; checking one marks that member absent, and Docs
   strikes the name through (an instruction above the names says so; Docs
   strikes through only checked checklist items, or text formatted by hand).

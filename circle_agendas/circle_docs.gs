@@ -79,9 +79,8 @@ function buildCircleDoc(file) {
       AGENDA_STATE_NOT_EMPTY + '")');
   }
   setAgendaState(file.id, AGENDA_STATE_BUILDING);
-  const circle = loadCircles().find(c => c.email === email) ||
-    refreshCircles().find(c => c.email === email);
   build(file.id);
+  const circle = circleOfDoc(file.id, email);
   const subNames = [];
   for (let i = 1; props[AGENDA_KEYS.sub + i]; i++) subNames.push(props[AGENDA_KEYS.sub + i]);
   fillAbout(file.id, file.name.replace(/ Agenda$/, ''), email, circle, props[AGENDA_KEYS.parent],
@@ -94,10 +93,12 @@ function buildCircleDoc(file) {
 // The doc's title becomes the group's name, and About this circle gets its
 // Zoom room, email address, Drive item, and parent and sub-circles (each
 // named, and linked to its Drive folder when it's a group with one).
-function fillAbout(docId, name, email, circle, parentName, subNames) {
+// With onlyEmpty, only rows that are empty are filled in; without a name,
+// the title is left as it is.
+function fillAbout(docId, name, email, circle, parentName, subNames, onlyEmpty) {
   const doc = DocumentApp.openById(docId);
   const body = firstTabBody(doc);
-  for (let i = 0; i < body.getNumChildren(); i++) {
+  for (let i = 0; i < body.getNumChildren() && name; i++) {
     const el = body.getChild(i);
     if (el.getType() === DocumentApp.ElementType.PARAGRAPH &&
         el.asParagraph().getHeading() === DocumentApp.ParagraphHeading.TITLE) {
@@ -129,7 +130,10 @@ function fillAbout(docId, name, email, circle, parentName, subNames) {
     const table = found.table;
     for (let r = 0; r < table.getNumRows(); r++) {
       const label = table.getCell(r, 0).getText().split('\n')[0].trim();
-      if (values[label] && values[label].length) writeCell(table.getCell(r, 1), [values[label]]);
+      const cell = table.getCell(r, 1);
+      if (values[label] && values[label].length && !(onlyEmpty && cell.getText().trim())) {
+        writeCell(cell, [values[label]]);
+      }
     }
   }
   doc.saveAndClose();
@@ -144,6 +148,35 @@ function circleNamed(circles, name) {
   return circles.find(c => (c.name || '').toLowerCase() === n) ||
     circles.find(c => c.name && (n.startsWith(c.name.toLowerCase()) ||
       c.name.toLowerCase().startsWith(n))) || null;
+}
+
+// A circle doc's circle: the one whose Drive item holds it, or else the one
+// with its labelled address (which can be an alias of the group's own).
+function circleOfDoc(docId, email) {
+  return circleForDoc(docId) || loadCircles().find(c => c.email === email) ||
+    refreshCircles().find(c => c.email === email) || null;
+}
+
+// Run from the editor: fills in the empty rows of About this circle (Zoom
+// room, email address, Drive folder, parent, sub-circles) in every built
+// circle doc, for docs built before those rows were filled in. Rows that
+// already say something are left alone.
+function fillAboutForCircleDocs() {
+  const resp = Drive.Files.list({
+    q: 'properties has { key=\'' + AGENDA_KEYS.state + '\' and value=\'' + AGENDA_STATE_BUILT +
+      '\' } and trashed = false',
+    corpora: 'allDrives', includeItemsFromAllDrives: true, supportsAllDrives: true,
+    fields: 'files(id,name,properties)',
+  });
+  for (const file of resp.files || []) {
+    const props = file.properties || {};
+    const email = props[AGENDA_KEYS.group];
+    const subNames = [];
+    for (let i = 1; props[AGENDA_KEYS.sub + i]; i++) subNames.push(props[AGENDA_KEYS.sub + i]);
+    fillAbout(file.id, null, email, circleOfDoc(file.id, email), props[AGENDA_KEYS.parent],
+      subNames, true);
+    logLink('Filled in ' + file.name + ':', 'https://docs.google.com/document/d/' + file.id + '/edit');
+  }
 }
 
 // Whether a doc has a single tab holding nothing but empty paragraphs.

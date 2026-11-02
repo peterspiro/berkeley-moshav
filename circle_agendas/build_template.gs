@@ -60,15 +60,15 @@ const MEETING_TAB_TITLE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const AGENDA = [
   {title: 'Opening Round / Check-in', note: ' (no notes)', minutes: 10, kind: 'round',
     notes: false},
-  {admin: true, minutes: 5, kind: 'round', notes: false},
+  {admin: true, minutes: 5, kind: 'round'},
   {title: 'Action Items Accountability', minutes: 3, actions: 'checkbox',
     note: ' (the action items from the previous meeting\'s recap; check each one that\'s ' +
       'done, and its line is struck through)'},
   {title: 'Topic', minutes: 5, topic: true},
   {title: 'Action Items Recap', minutes: 5, kind: 'report', actions: 'bullet'},
 ];
-// The closing round's description ends with a bulleted line for each
-// attendee: their name and a colon.
+// The closing round's Notes are a bulleted line for each attendee: their
+// name and a colon.
 const CLOSING_ROUND = {title: 'Closing Round / Check-out', kind: 'round', perAttendee: true,
   note: ' What went well? What can we improve? (Evaluate meeting, facilitation, group ' +
     'effectiveness.)'};
@@ -349,12 +349,13 @@ function meetingTable(body, docId, details) {
       if (carryOver.length) lines.push(...carryOver.map(text => [[token(item.actions)], [text]]));
       else if (item.actions) lines.push([[token(item.actions)]]);
       if (item.topic) lines.push(...topicLines(presenters).slice(1));
-      if (item.perAttendee) {
-        lines.push(...(details.attendees || []).map(name => [[token('bullet')], [name + ': ']]));
-      }
       writeCell(description, lines);
     }
-    writeCell(cell(COL.notes), [item.notes === false ? [] : [[token('bullet')]]]);
+    const attendees = details.attendees || [];
+    writeCell(cell(COL.notes), item.notes === false ? [[]]
+      : item.perAttendee && attendees.length
+        ? attendees.map(name => [[token('bullet')], [name + ': ']])
+        : [[[token('bullet')]]]);
     shadeRow(table, r, item.kind);
   });
 
@@ -605,12 +606,20 @@ function finishMeeting(docId, meetingId, tabId) {
   const requests = [{pinTableHeaderRows: {
     tableStartLocation: {index: meeting.startIndex, tabId}, pinnedHeaderRowsCount: MEETING_PINNED_ROWS,
   }}];
-  const gap = content[at - 1];
-  if (gap && gap.paragraph && !paraText(gap.paragraph).trim() && content[at - 2] && content[at - 2].table) {
-    requests.push({updateTextStyle: {range: {startIndex: gap.startIndex, endIndex: gap.endIndex, tabId},
-      textStyle: {fontSize: {magnitude: 1, unit: 'PT'}}, fields: 'fontSize'}});
-  }
   Docs.Documents.batchUpdate({requests}, docId);
+
+  // The empty paragraph between the attendance and agenda tables (which
+  // DocumentApp needed, to append the second table) is deleted; if Docs
+  // won't have that, it's made as small as it can be.
+  const gap = content[at - 1];
+  if (!gap || !gap.paragraph || paraText(gap.paragraph).trim() || !(content[at - 2] || {}).table) return;
+  const range = {startIndex: gap.startIndex, endIndex: gap.endIndex, tabId};
+  try {
+    Docs.Documents.batchUpdate({requests: [{deleteContentRange: {range}}]}, docId);
+  } catch (e) {
+    Docs.Documents.batchUpdate({requests: [{updateTextStyle: {range,
+      textStyle: {fontSize: {magnitude: 1, unit: 'PT'}}, fields: 'fontSize'}}]}, docId);
+  }
 }
 
 // Replaces each token in a tab (by default, the first) with its chip or
