@@ -21,7 +21,9 @@ parent and sub-circle named to its folder, found by name among the groups'
 footers.
 
 When the Circle Structure changes under a doc (change_parent_circle.py
-moves a circle; add_new_group.py adds a sub-circle to a parent),
+moves a circle; add_new_group.py adds a sub-circle to a parent; or it was
+edited by hand, which update_groups_in_google_and_hierarchy.py
+--agenda-docs catches),
 update_agenda_doc_structure relabels the doc with its group's parent and
 sub-circles as the page now has them, and labels a built doc to have
 those rows of About this circle rewritten.
@@ -74,11 +76,16 @@ def _fit(key: str, value: str) -> str:
 
 def ensure_agenda_doc(drive_service, group_email: str, group_name: str, drive_item_id: str,
                       parent_name: str | None, dry_run: bool,
-                      sub_names: list[str] = ()) -> str | None:
+                      sub_names: list[str] = (), sync_existing: bool = False) -> str | None:
     """Create the group's agenda doc, empty and labelled to be built, in its
-    Drive item, unless it has one. Returns the doc's ID (None in a dry run
-    that would have created one)."""
+    Drive item, unless it has one. With sync_existing, a doc it already has
+    is relabelled with this parent and these sub-circles if they've changed
+    (see relabel_agenda_doc_structure). Returns the doc's ID (None in a dry
+    run that would have created one)."""
     existing = find_agenda_doc(drive_service, group_email)
+    if existing and sync_existing:
+        _relabel_structure(drive_service, existing, parent_name, sub_names, dry_run)
+        return existing["id"]
     if existing:
         old_label = existing.get("appProperties") or {}
         if GROUP_KEY not in (existing.get("properties") or {}) and old_label and not dry_run:
@@ -131,6 +138,12 @@ def relabel_agenda_doc_structure(drive_service, group_email: str, parent_name: s
     if doc is None:
         log("INFO", "agenda_doc", f"{group_email} has no agenda doc; nothing to relabel")
         return "no doc"
+    return _relabel_structure(drive_service, doc, parent_name, sub_names, dry_run)
+
+
+def _relabel_structure(drive_service, doc: dict, parent_name: str | None,
+                       sub_names: list[str], dry_run: bool) -> str:
+    """relabel_agenda_doc_structure, for a doc already found."""
     current = doc.get("properties") or {}
     label = current if GROUP_KEY in current else {**(doc.get("appProperties") or {}), **current}
     wanted = structure_properties(parent_name, list(sub_names))

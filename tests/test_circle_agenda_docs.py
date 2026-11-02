@@ -166,3 +166,20 @@ def test_update_agenda_doc_structure_uses_the_page(monkeypatch, capsys):
     assert body["properties"][f"{SUB_KEY}2"] == "Web Working Group"
     docs.update_agenda_doc_structure(drive, None, "", root, dry_run=False)
     assert "has no email list" in capsys.readouterr().out
+
+
+def test_existing_doc_synced_with_sync_existing():
+    drive = FakeDrive([_doc(**{STATE_KEY: STATE_BUILT, PARENT_KEY: "Old"})])
+    assert ensure_agenda_doc(drive, "tech@example.org", "Tech Circle", "F", "New", False,
+                             ["Sub"], sync_existing=True) == "d1"
+    [(_, body)] = drive.files().updated
+    assert body["properties"] == {PARENT_KEY: "New", f"{SUB_KEY}1": "Sub",
+                                  REFRESH_KEY: REFRESH_STRUCTURE}
+    assert drive.files().created == []
+
+
+def test_existing_doc_already_in_sync_is_left_alone():
+    drive = FakeDrive([_doc(**{STATE_KEY: STATE_BUILT, PARENT_KEY: "P"})])
+    ensure_agenda_doc(drive, "tech@example.org", "Tech Circle", "F", "P", False, [],
+                      sync_existing=True)
+    assert drive.files().updated == []

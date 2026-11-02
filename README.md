@@ -250,7 +250,10 @@ status line as "calendar (members can view, not edit)".
   every circle and working group (not everybody groups) that has a Drive item and an email list an agenda doc,
   "<Group> Agenda", created empty in its Drive item and labelled for the
   `circle_agendas` Apps Script to build within minutes; a group that has
-  one keeps it. Each run (with `-g` too) writes every Gather member's
+  one keeps it, and if its parent or sub-circles on the Circle Structure page
+  differ from the doc's, the doc is relabelled and the Apps Script rewrites
+  those rows of its About this circle (so moving an entry by hand is caught
+  here). Each run (with `-g` too) writes every Gather member's
   short name
   (first name, with the last initial if another member shares it), by
   their Gather email and their Google Email, to "Circle agenda member
@@ -328,8 +331,9 @@ status line as "calendar (members can view, not edit)".
   of the group and of its old and new parents with their new parent and
   sub-circles, and the `circle_agendas` Apps Script rewrites the Parent Circle
   and Sub-Circles rows of their About this circle within 10 minutes. A group's
-  parent is recorded only on that page, so this is the way to change one:
-  moving an entry by hand leaves the agenda docs naming the old structure.
+  parent is recorded only on that page. Moving an entry there by hand works
+  too, but the agenda docs aren't updated until the next
+  `update_groups_in_google_and_hierarchy.py --agenda-docs` run.
 - **`change_group_email_alias.py`** gives a group's Google Group a new, usually
   shorter, address and moves the Gather group's email list over to it.
 - **`setup.sh`** installs and starts a local Gather development instance, for

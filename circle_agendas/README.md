@@ -191,7 +191,10 @@ labelled address.
 When `change_parent_circle.py` moves a circle to another parent, it
 relabels the docs of the circle and of its old and new parents with their
 new parent and sub-circles; `add_new_group.py` relabels the new group's
-parent's doc with its sub-circles. Each labels a built doc
+parent's doc with its sub-circles; and
+`update_groups_in_google_and_hierarchy.py --agenda-docs` relabels every
+existing doc whose parent or sub-circles differ from the Circle Structure
+page (after an entry was moved there by hand, say). Each labels a built doc
 `circleAgendaRefresh: structure`. Each run of `buildNewCircleDocs` then
 rewrites the Parent Circle and Sub-Circles rows of every doc so labelled
 (**`refreshCircleDocStructures`**), emptying a row with nothing left in it,

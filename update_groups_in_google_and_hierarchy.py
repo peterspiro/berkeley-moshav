@@ -61,7 +61,10 @@ excluding hidden groups:
   0g. With -a/--agenda-docs, gives every circle and working group (not
       everybody groups) with a Drive item and an email list an agenda doc,
       created empty in its Drive item and labelled for the circle_agendas Apps Script to build
-      (see util/circle_agenda_docs.py). A group that has one keeps it.
+      (see util/circle_agenda_docs.py). A group that has one keeps it,
+      relabelled with its parent and sub-circles if they've changed on the
+      Circle Structure page, for the Apps Script to rewrite those rows of
+      its About this circle.
   1.  If it's already in the hierarchy but has been renamed, updates the
       hierarchy line to the current name (matched by Gather group ID, embedded
       in the [Members] link, so renames don't break the association).
@@ -1228,11 +1231,14 @@ def ensure_agenda_docs(drive_service, group_info: dict[str, dict],
                        dry_run: bool) -> None:
     """Give every circle and working group (not everybody groups) that has a
     Drive item and an email list an agenda doc, labelled for the
-    circle_agendas Apps Script to build (see util/circle_agenda_docs.py)."""
+    circle_agendas Apps Script to build (see util/circle_agenda_docs.py),
+    and relabel each one it already has whose parent or sub-circles on the
+    Circle Structure page have changed, for the Apps Script to rewrite
+    those rows of About this circle."""
     parent_by_group_id = {n.group_id: n.parent.name for n in iter_nodes(root)
                           if n.group_id and n.parent is not None}
-    subs_by_group_id = {n.group_id: [c.name for c in n.children] for n in iter_nodes(root)
-                        if n.group_id}
+    subs_by_group_id = {n.group_id: sorted((c.name for c in n.children), key=str.casefold)
+                        for n in iter_nodes(root) if n.group_id}
     for group_id, info in group_info.items():
         email = email_by_group_id.get(group_id)
         item_id = google_file_id_by_group_id.get(group_id)
@@ -1241,7 +1247,7 @@ def ensure_agenda_docs(drive_service, group_info: dict[str, dict],
         try:
             ensure_agenda_doc(drive_service, email, info["name"], item_id,
                               parent_by_group_id.get(group_id), dry_run,
-                              subs_by_group_id.get(group_id, []))
+                              subs_by_group_id.get(group_id, []), sync_existing=True)
         except Exception as e:
             log("ERROR", "agenda_doc", f"{info['name']}: {e}")
 
@@ -1715,7 +1721,8 @@ def cli():
     parser.add_argument(
         "-a", "--agenda-docs", action="store_true",
         help="Give each circle and working group without one an agenda doc, for the "
-             "circle_agendas Apps Script to build (with -g, just that group)",
+             "circle_agendas Apps Script to build, and update existing docs' parent and "
+             "sub-circles from the Circle Structure page (with -g, just that group)",
     )
     args = parser.parse_args()
 
