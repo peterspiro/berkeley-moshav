@@ -32,7 +32,7 @@ they need will take their own scripts.
 
 ## What a circle's doc does
 
-- **Tabs**: "Circle" ("+ New meeting" in a "Create a new meeting" section
+- **Tabs**: "Circle Info" ("+ New meeting" in a "Create a new meeting" section
   under the title; a "Previous agendas" section, for a link to the
   circle's previous agenda doc; About this circle: a link to its aims and domain
   document, parent and sub-circles (each linked to its Drive folder), Zoom
@@ -49,7 +49,7 @@ they need will take their own scripts.
   each a list, as in the Technology Circle's own agenda doc);
   then one tab per meeting, newest first. The template has no meetings.
 - **New meeting**: "+ New meeting" adds a meeting in a tab of its own,
-  titled with its date, after the Circle and Backlog tabs. Its date, start time, and total duration come from
+  titled with its date, after the Circle Info and Backlog tabs. Its date, start time, and total duration come from
   the next event on the circle's calendar that isn't in the doc yet, and can
   then be edited. Its Place is the circle's Zoom room, its Minutes a link to
   the previous meeting's tab, and its Next meeting the following calendar
@@ -97,7 +97,7 @@ they need will take their own scripts.
   that `update_groups_in_google_and_hierarchy.py` writes to `admin@`'s
   Drive; Google often gives only the start of the address), closely
   spaced, in columns of up to four, beside the meeting's Facilitator and
-  Secretary (filled in from the Circle tab's roles, if they're there) and
+  Secretary (filled in from the Circle Info tab's roles, if they're there) and
   Guests. The closing round's Notes have a bulleted line for each of them,
   their name and a colon, for their feedback.
   Names start unchecked; checking one marks that member absent, and Docs
@@ -192,13 +192,13 @@ agenda doc, built from code like the template rather than copied from it
 - **What a new meeting looks like** applies from each doc's next new
   meeting, since the web app builds meetings. Past meetings keep their
   layout, as a record.
-- **The rest of a doc** (the Circle and Backlog tabs) changes in existing
+- **The rest of a doc** (the Circle Info and Backlog tabs) changes in existing
   docs only by an update script: numbered changes, each a small function
   that edits a doc in place (keeping the circle's own content), applied to
   every built doc that hasn't had it (found by their labels), recording
   which it has had; tried on a copy first, then run on all. Each change
   there means changing both the build code and writing an update, so the
-  Circle and Backlog tabs are best settled before circles use their docs.
+  Circle Info and Backlog tabs are best settled before circles use their docs.
 
 ## The probes
 

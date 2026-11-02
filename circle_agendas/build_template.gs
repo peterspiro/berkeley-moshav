@@ -51,7 +51,7 @@ const COLOR = {
 
 // The first tab's title; each meeting has a tab of its own, titled with its
 // date, after it.
-const MAIN_TAB_TITLE = 'Circle';
+const MAIN_TAB_TITLE = 'Circle Info';
 const BACKLOG_TAB_TITLE = 'Backlog';
 const MEETING_TAB_TITLE_RE = /^\d{4}-\d{2}-\d{2}$/;
 // Each meeting's items before the closing round, in the template and in
@@ -309,7 +309,7 @@ function rolesTable(body) {
 //
 // details: date ('yyyy-MM-dd'), start ('19:30'), hours ('1.5'), and
 // optionally place (the Zoom link), attendees (names), facilitator and
-// secretary (names, from the Circle tab's roles), previousUrl (a link
+// secretary (names, from the Circle Info tab's roles), previousUrl (a link
 // to the previous meeting's tab), next (text, the next meeting's date and
 // time), and carryOver (the text of the previous
 // meeting's Action Items Recap's items, for Action Items Accountability's

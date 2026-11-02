@@ -233,7 +233,7 @@ function meetingEnd(title, body) {
   return Utilities.parseDate(title, TIME_ZONE, 'yyyy-MM-dd').getTime() + (start + length) * 60000;
 }
 
-// Who holds a role, from the Circle tab's Members and roles table, or ''.
+// Who holds a role, from the Circle Info tab's Roles table, or ''.
 function roleHolder(doc, role) {
   const found = findRow(firstTabBody(doc), text => text.startsWith(role + ' ('));
   return found && found.row.getNumCells() > 1 ? found.row.getCell(1).getText().trim() : '';

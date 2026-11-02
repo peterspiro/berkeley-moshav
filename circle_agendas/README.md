@@ -90,15 +90,15 @@ version predates `web_app.gs`: deploy a new version as above.
 The links:
 
 - **+ New meeting**, under "Create a new meeting" at the top of the first
-  tab ("Circle"), adds the
+  tab ("Circle Info"), adds the
   circle's next meeting in a tab of its own, titled with its date, after
-  the Circle and Backlog tabs (newest first): the first timed event on the
+  the Circle Info and Backlog tabs (newest first): the first timed event on the
   circle's calendar after the day of the newest meeting in the doc (or
   after now, if there's none), so clicking again adds the one after. Its
   date, start time, and length come from the event, in the line above its
   table; Place links the circle's Zoom room; Attendance lists the circle's
   members, unchecked, in columns of up to four, beside Facilitator and
-  Secretary (from the Circle tab's Roles) and Guests (named as in the Gather directory,
+  Secretary (from the Circle Info tab's Roles) and Guests (named as in the Gather directory,
   from "Circle agenda member names.json" in `admin@`'s My Drive, which
   `update_groups_in_google_and_hierarchy.py` writes on each run, or else
   as Google names them); its agenda has one 5-minute topic; its
@@ -158,7 +158,7 @@ depends on no other document and can be rebuilt at any time; every change
 to it is a change to that file. Building has two passes: DocumentApp lays
 out the text and tables, writing a token such as `⟦checkbox⟧` wherever a
 smart chip or list goes, and then the Docs API replaces each token with its
-chip or list, sets the pageless format, names the first tab "Circle", and
+chip or list, sets the pageless format, names the first tab "Circle Info", and
 adds the Backlog tab: headings for requests (policy items, tasks) and for
 the prioritized backlog (discussion underway, prioritized for initial
 discussion, assigned tasks, tasks to assign), each with a list. The template has no
@@ -227,7 +227,7 @@ A group's doc is found by its label, so a group never gets a second one;
 if its doc is deleted (and emptied from the trash), the next run of
 `update_groups_in_google_and_hierarchy.py --agenda-docs` makes a new one.
 The flags keep docs from being made for every group before their layout
-is settled: changes to the Circle and Backlog tabs don't reach docs
+is settled: changes to the Circle Info and Backlog tabs don't reach docs
 already made (see the plan).
 
 ## The probes (done)
