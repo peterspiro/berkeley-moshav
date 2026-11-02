@@ -32,10 +32,12 @@ they need will take their own scripts.
 
 ## What a circle's doc does
 
-- **Tabs**: "Circle" (Relevant Documents, a list of links; About this circle; Members and roles, with a
-  Feedback Link role, names, and when each term ends; and Policies, a
-  link to the circle's policies folder; with "+ New meeting" in a "Create a new meeting" section under
-  the title); "Backlog" (built with the
+- **Tabs**: "Circle" ("+ New meeting" in a "Create a new meeting" section
+  under the title; About this circle: a link to its aims and domain
+  document, parent and sub-circles, Zoom room, email address, Drive
+  folder, policies folder, and other key links; and Roles: Leader,
+  Feedback Link, Facilitator, and Secretary, with names and when each term
+  ends); "Backlog" (built with the
   Docs API alone, since DocumentApp can't see a tab added in the same run:
   "Requested for prioritization", with Policy item requests and Task
   requests, and "Prioritized backlog", with Discussion underway,
@@ -54,15 +56,21 @@ they need will take their own scripts.
   be changed.
 - **Layout**: each meeting's tab has its date; a line with its start time,
   length, and place; and its attendance; then the agenda table.
-- **Columns**: Time (12-hour, without AM/PM, for room), Min. (the
-  duration), Description, and Notes; the first two narrow, the others
-  sharing the rest of the page.
+- **Columns**: Time (12-hour, without AM/PM, for room), Min (the
+  duration), Description, and Notes, each a fixed width; Notes is wide
+  (400 points), and in a pageless doc a table wider than the window
+  scrolls sideways.
 - **Agenda**: Opening Round; Administrative matters (Announcements, Brief
   Reports, Next meeting date & time, Minutes of last meeting, and
   modifications and consent to the agenda, as a bulleted list; 5 minutes);
-  Action Items Accountability; one 5-minute Topic; Action Items Recap;
-  Closing Round, whose duration is red when there's no time left. Notes
-  start empty.
+  Action Items Accountability; one 5-minute Topic (a Presenter dropdown,
+  defaulting to "Presenter", of the attendees, then a bulleted list);
+  Action Items Recap; Closing Round, whose duration is red when there's no
+  time left. Notes start with a bulleted list, but for the opening round
+  and Administrative matters.
+- **Tab titles**: a meeting's tab is titled with its date. Docs can't run
+  a script when someone edits a date chip, so "↻ Update times" also
+  retitles the tab when its date chip has been changed.
 - **New agenda item**: a link in each meeting adds a topic after its last
   topic (before Action Items Recap), with a duration of 5 minutes.
 - **Meeting length**: after "Duration (hours)" in the line above the
@@ -95,8 +103,8 @@ they need will take their own scripts.
   searches all tabs.
 - **About this circle** is filled in when the doc is created: its email
   address and Drive folder from the group's footer, and its parent and
-  sub-circles from the Circle Structure page. The Members and roles table
-  keeps its role rows but has no Member rows.
+  sub-circles from the Circle Structure page. The Roles table has just the
+  circle roles.
 - The SoFA credit lines, and its page header and footer, are gone.
 
 ## How it works

@@ -98,7 +98,7 @@ The links:
   date, start time, and length come from the event, in the line above its
   table; Place links the circle's Zoom room; Attendance lists the circle's
   members, unchecked, in columns of up to four, beside Facilitator and
-  Secretary (from the Circle tab's Members and roles) and Guests (named as in the Gather directory,
+  Secretary (from the Circle tab's Roles) and Guests (named as in the Gather directory,
   from "Circle agenda member names.json" in `admin@`'s My Drive, which
   `update_groups_in_google_and_hierarchy.py` writes on each run, or else
   as Google names them); its agenda has one 5-minute topic; its
@@ -129,7 +129,12 @@ so they stay just below where new items go.
   start time and Duration (hours) (as 1.5 or 1:30) in the line above the
   table, and the other
   items' durations. A duration it can't read turns red and counts as 0; a
-  closing round with no time left turns red. The page says why.
+  closing round with no time left turns red. The page says why. It also
+  retitles the meeting's tab, if its date chip has been changed (Docs
+  can't run a script when the chip is edited).
+- **+ Add item** gives the new topic a Presenter dropdown (defaulting to
+  "Presenter") of the meeting's attendees, and bulleted lists under it and
+  in Notes.
 
 Each opens a tab that says what it did, and to close it to return to the
 agenda, which already shows the change.

@@ -55,13 +55,16 @@ const MEETING_TAB_TITLE_RE = /^\d{4}-\d{2}-\d{2}$/;
 // Administrative matters item (see adminLines); actions: 'checkbox' or
 // 'bullet', a list under the description, for action items. The Notes
 // column starts empty.
+// Every item has a bulleted list in Notes, but those with notes: false.
+// topic: a Presenter dropdown and a bulleted list under the title.
 const AGENDA = [
-  {title: 'Opening Round / Check-in', note: ' (no notes)', minutes: 10, kind: 'round'},
-  {admin: true, minutes: 5, kind: 'round'},
+  {title: 'Opening Round / Check-in', note: ' (no notes)', minutes: 10, kind: 'round',
+    notes: false},
+  {admin: true, minutes: 5, kind: 'round', notes: false},
   {title: 'Action Items Accountability', minutes: 3, actions: 'checkbox',
     note: ' (the action items from the previous meeting\'s recap; check each one that\'s ' +
       'done, and its line is struck through)'},
-  {title: 'Topic', minutes: 5},
+  {title: 'Topic', minutes: 5, topic: true},
   {title: 'Action Items Recap', minutes: 5, kind: 'report', actions: 'bullet'},
 ];
 // The closing round's description ends with a bulleted line for each
@@ -70,12 +73,14 @@ const CLOSING_ROUND = {title: 'Closing Round / Check-out', kind: 'round', perAtt
   note: ' What went well? What can we improve? (Evaluate meeting, facilitation, group ' +
     'effectiveness.)'};
 // A meeting table's columns.
-// All but Notes have fixed widths (in points), with narrow padding; Notes
-// takes the rest of the page.
+// Every column has a fixed width (in points), the narrow ones with narrow
+// padding. In a pageless doc, a table wider than the window scrolls
+// sideways, so Notes is wide regardless of the window.
 const COL = {time: 0, duration: 1, description: 2, notes: 3};
 const MEETING_COLUMNS = 4;
-const MEETING_HEADINGS = ['Time', 'Min.', 'Description', 'Notes'];
-const COLUMN_WIDTHS = {[COL.time]: 33, [COL.duration]: 27, [COL.description]: 210};
+const MEETING_HEADINGS = ['Time', 'Min', 'Description', 'Notes'];
+const COLUMN_WIDTHS = {[COL.time]: 33, [COL.duration]: 27, [COL.description]: 210,
+  [COL.notes]: 400};
 const CELL_PADDING = 3;
 const PROBLEM_COLOR = '#cc0000';
 // The rows above the agenda items: the column headings, which stay in view
@@ -217,22 +222,12 @@ function layOut(body, docId) {
     ['   (each meeting gets a tab of its own, listed at the left, titled with its date)', MUTED]]);
   body.appendHorizontalRule();
 
-  section(body, 'Relevant Documents');
-  body.appendParagraph('Links to the circle\'s key documents, such as its decision log.')
-    .editAsText().setAttributes(HINT);
-  body.appendParagraph(token('bullet'));
-  body.appendHorizontalRule();
-
   section(body, 'About this circle');
   aboutTable(body);
   body.appendHorizontalRule();
 
-  section(body, 'Members and roles');
+  section(body, 'Roles');
   rolesTable(body);
-  body.appendHorizontalRule();
-
-  section(body, 'Policies');
-  policiesLink(body);
   body.appendHorizontalRule();
 
   leftover.removeFromParent();
@@ -245,12 +240,14 @@ function section(body, text) {
 
 function aboutTable(body) {
   const rows = [
-    [['Aim(s)'], [['What do we want to accomplish?', HINT]]],
-    [['Domain'], [['What do we have responsibility for?', HINT]]],
+    [['Aims & Domain'], [['Paste a link to the document that sets out the circle\'s aims ' +
+      'and domain', HINT]]],
     [['Parent Circle', '& link to circle document'], []],
     [['Sub-Circles', '& link to circle documents'], []],
+    [['Zoom room'], []],
     [['Circle email address'], []],
     [['Circle Drive Folder'], []],
+    [['Policies folder'], [['Paste a link to the circle\'s policies folder', HINT]]],
     [['Other Key Links'], []],
   ];
   const table = newTable(body, rows.length, 2);
@@ -275,12 +272,10 @@ function rolesTable(body) {
     role('Feedback Link', 'second voice in parent circle'),
     role('Facilitator', 'facilitates meetings'),
     role('Secretary', 'minutes and circle docs'),
-    header('Operational Roles'),
-    [[], [], []], [[], [], []], [[], [], []], [[], [], []], [[], [], []],
   ];
   const table = newTable(body, rows.length, 3);
   rows.forEach((cells, r) => {
-    const isHeader = r === 0 || r === 5;
+    const isHeader = r === 0;
     cells.forEach((runs, c) => {
       const cell = table.getCell(r, c);
       writeCell(cell, [runs]);
@@ -289,12 +284,6 @@ function rolesTable(body) {
     });
   });
   table.setColumnWidth(2, 90);
-}
-
-// A place for a link to the circle's policies folder.
-function policiesLink(body) {
-  writeRuns(body.appendParagraph(''), [['Policies folder:  ', BOLD],
-    ['paste a link to the circle\'s policies folder here', HINT]]);
 }
 
 // Appends a meeting to a tab's body, and returns its ID. Above its table:
@@ -324,6 +313,7 @@ function meetingTable(body, docId, details) {
   items.splice(recap < 0 ? items.length - 1 : recap, 0, {links: true});
 
   const meetingId = newMeetingId();
+  const presenters = (details.attendees || []).length ? presenterDropdownId(meetingId) : null;
 
   // A date chip without a time is shown in UTC, so it's given noon UTC on
   // the local date, which is that date everywhere.
@@ -357,12 +347,13 @@ function meetingTable(body, docId, details) {
       const lines = [[[item.title, BOLD], ...(item.note ? [[item.note, MUTED]] : [])]];
       if (carryOver.length) lines.push(...carryOver.map(text => [[token(item.actions)], [text]]));
       else if (item.actions) lines.push([[token(item.actions)]]);
+      if (item.topic) lines.push(...topicLines(presenters).slice(1));
       if (item.perAttendee) {
         lines.push(...(details.attendees || []).map(name => [[token('bullet')], [name + ': ']]));
       }
       writeCell(description, lines);
     }
-    writeCell(cell(COL.notes), [[]]);
+    writeCell(cell(COL.notes), [item.notes === false ? [] : [[token('bullet')]]]);
     shadeRow(table, r, item.kind);
   });
 
@@ -425,6 +416,22 @@ function attendance(body, details) {
   });
   // Docs needs a paragraph between two tables; finishMeeting makes it tiny.
   body.appendParagraph('').setSpacingBefore(0).setSpacingAfter(0).setLineSpacing(1);
+}
+
+// A topic's description: its title, a Presenter dropdown (if presenters,
+// its list of choices, is given), and a bulleted list.
+function topicLines(presenters) {
+  return [
+    [['Topic', BOLD]],
+    ...(presenters ? [[[token('presenter', presenters)]]] : []),
+    [[token('bullet')]],
+  ];
+}
+
+// The ID of a meeting's Presenter dropdown's list of choices (see
+// presenterDropdownRequest), in its tab.
+function presenterDropdownId(meetingId) {
+  return 'kix.p' + meetingId;
 }
 
 // The row of links that add an item and update the times.
@@ -617,6 +624,10 @@ function replaceTokens(docId, tabId) {
 function tokenRequest(t, tabId) {
   const location = {index: t.start, tabId};
   const [kind, ...args] = t.parts;
+  if (kind === 'presenter') {
+    return {insertDropdown: {location, dropdownDefinitionId: args[0],
+      selectedOptionId: 'dropdownItem.presenter'}};
+  }
   if (kind === 'date') {
     return {insertDate: {location, dateElementProperties: {
       timestamp: args[0],
@@ -665,6 +676,20 @@ function apiMeetingId(se) {
     }
   });
   return id;
+}
+
+// The request that creates a meeting's Presenter dropdown's choices, in its
+// tab (each tab has its own): "Presenter", the default, then each attendee
+// (up to Docs' limit of 50 choices).
+function presenterDropdownRequest(meetingId, attendees, tabId) {
+  return {createDropdownDefinition: {tabId, dropdownDefinition: {
+    dropdownDefinitionId: presenterDropdownId(meetingId),
+    dropdownDefinitionProperties: {title: 'Presenter', options: [
+      {optionId: 'dropdownItem.presenter', displayValue: 'Presenter'},
+      ...attendees.slice(0, 49).map((name, i) =>
+        ({optionId: 'dropdownItem.p' + i, displayValue: name})),
+    ]},
+  }}};
 }
 
 function apiColor(hex) {

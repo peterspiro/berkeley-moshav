@@ -102,6 +102,7 @@ function fillAbout(docId, name, email, circle, parentName) {
     }
   }
   const values = {
+    'Zoom room': circle && circle.zoomUrl ? [['Zoom room', {[A.LINK_URL]: circle.zoomUrl}]] : [],
     'Circle email address': [[email, {[A.LINK_URL]: 'mailto:' + email}]],
     'Circle Drive Folder': circle && circle.driveItemId
       ? [['Drive folder', {[A.LINK_URL]: 'https://drive.google.com/drive/folders/' + circle.driveItemId}]]

@@ -26,16 +26,43 @@
 const NEW_ITEM_MINUTES = 5;
 const PENDING_MEETING_SECONDS = 600;
 
+// Updates a meeting's times, and its tab's title, if its date chip has been
+// changed.
 function updateTimes(docId, meetingId) {
   const doc = DocumentApp.openById(docId);
   const found = findMeeting(doc, meetingId);
   if (!found) return notFound();
   const messages = recalculate(found.table);
   doc.saveAndClose();
+  const retitled = matchTabTitleToDate(docId, found.tabId);
+  if (retitled) messages.push('The meeting\'s tab is now titled ' + retitled + ', its new date.');
   return {done: true, title: 'Times updated', messages};
 }
 
-// Adds a topic, with a duration of NEW_ITEM_MINUTES, just above the links
+// Retitles a meeting's tab with the date in its date chip, if they differ;
+// returns the new title, or null.
+function matchTabTitleToDate(docId, tabId) {
+  const tab = Docs.Documents.get(docId, {includeTabsContent: true}).tabs
+    .find(t => t.tabProperties.tabId === tabId);
+  if (!tab) return null;
+  let date = null;
+  walkParagraphs(tab.documentTab.body.content, para => {
+    for (const pe of para.elements || []) {
+      if (date || !pe.dateElement) continue;
+      const props = pe.dateElement.dateElementProperties;
+      date = /^\d{4}-\d{2}-\d{2}$/.test(props.displayText || '')
+        ? props.displayText : (props.timestamp || '').slice(0, 10);
+    }
+  });
+  if (!date || !MEETING_TAB_TITLE_RE.test(date) || date === tab.tabProperties.title) return null;
+  Docs.Documents.batchUpdate({requests: [{updateDocumentTabProperties: {
+    tabProperties: {tabId, title: date}, fields: 'title',
+  }}]}, docId);
+  return date;
+}
+
+// Adds a topic (with a Presenter dropdown, if the meeting has one, and
+// bulleted lists), with a duration of NEW_ITEM_MINUTES, just above the links
 // (or, without them, Action Items Recap, or the closing round), so the links
 // stay just below the new item, and updates the times.
 function addItem(docId, meetingId) {
@@ -50,12 +77,15 @@ function addItem(docId, meetingId) {
     if (table.getCell(r, COL.description).getText().trim().startsWith('Action Items Recap')) at = r;
   }
   if (at < 0) at = closing;
+  const presenters = presenterDropdownId(meetingId);
+  const hasPresenters = presenters in dropdownDefinitions(docId, tabId);
   const row = table.insertTableRow(at);
   for (let c = 0; c < MEETING_COLUMNS; c++) row.appendTableCell();
   for (let c = 0; c < MEETING_COLUMNS; c++) writeCell(row.getCell(c), [[]]);
   writeCell(row.getCell(COL.duration), [[[String(NEW_ITEM_MINUTES), MUTED]]]);
   padRow(row);
-  writeCell(row.getCell(COL.description), [[['Topic', BOLD]]]);
+  writeCell(row.getCell(COL.description), topicLines(hasPresenters ? presenters : null));
+  writeCell(row.getCell(COL.notes), [[[token('bullet')]]]);
 
   const messages = recalculate(table);
   doc.saveAndClose();
@@ -175,6 +205,10 @@ function finishNewMeeting(key) {
   }
   doc.saveAndClose();
 
+  if (details.attendees.length) {
+    Docs.Documents.batchUpdate({requests: [
+      presenterDropdownRequest(meetingId, details.attendees, details.tabId)]}, docId);
+  }
   replaceTokens(docId, details.tabId);
   finishMeeting(docId, meetingId, details.tabId);
   CacheService.getScriptCache().remove(key);
@@ -225,6 +259,13 @@ function recapItems(table) {
   return [];
 }
 
+
+// A tab's dropdowns' lists of choices, by ID (each tab has its own).
+function dropdownDefinitions(docId, tabId) {
+  const tab = Docs.Documents.get(docId, {includeTabsContent: true}).tabs
+    .find(t => t.tabProperties.tabId === tabId);
+  return (tab && tab.documentTab.dropdownDefinitions) || {};
+}
 
 function notFound() {
   return {done: false, title: 'Meeting not found', messages: [
