@@ -20,13 +20,15 @@ Must match AGENDA_KEYS in circle_agendas/circle_docs.gs, which links each
 parent and sub-circle named to its folder, found by name among the groups'
 footers.
 
-When a circle moves to another parent (change_parent_circle.py),
-relabel_agenda_doc_structure relabels the docs of the circle and of its
-old and new parents with their new parent and sub-circles, and labels
-each built one to have those rows of About this circle rewritten.
+When the Circle Structure changes under a doc (change_parent_circle.py
+moves a circle; add_new_group.py adds a sub-circle to a parent),
+update_agenda_doc_structure relabels the doc with its group's parent and
+sub-circles as the page now has them, and labels a built doc to have
+those rows of About this circle rewritten.
 """
 
-from util.gather_utils import log
+from util.gather_utils import GatherGroup, _fetch_group_detail, log
+from util.google_group_utils import DOMAIN, is_in_domain
 
 GROUP_KEY = "circleAgendaGroup"
 PARENT_KEY = "circleAgendaParent"
@@ -151,3 +153,42 @@ def relabel_agenda_doc_structure(drive_service, group_email: str, parent_name: s
                                  supportsAllDrives=True).execute()
     log("INFO", "agenda_doc", f"Relabelled '{doc['name']}': {changed}")
     return "relabelled"
+
+
+def gather_group_list_email(page, base_url: str, group_id: str) -> str | None:
+    """The address of a Gather group's email list, if it has one in the
+    domain."""
+    detail = _fetch_group_detail(page, base_url, GatherGroup(
+        group_id=group_id, name="", kind="", availability="", description=""))
+    if not detail.list_name:
+        return None
+    email = f"{detail.list_name}@{detail.list_domain or DOMAIN}"
+    return email if is_in_domain(email) else None
+
+
+def update_agenda_doc_structure(drive_service, page, base_url: str, node, dry_run: bool) -> None:
+    """Relabel the agenda doc of a Circle Structure entry (a HierarchyNode)
+    with its parent and sub-circles as they are on the page, found by its
+    Gather group's email list, and print what happened. Errors are logged
+    and printed, not raised."""
+    gemail = gather_group_list_email(page, base_url, node.group_id) if node.group_id else None
+    if gemail is None:
+        print(f"'{node.name}' has no email list, so no agenda doc to update.")
+        return
+    parent_name = node.parent.name if node.parent else None
+    sub_names = sorted((c.name for c in node.children), key=str.casefold)
+    try:
+        result = relabel_agenda_doc_structure(drive_service, gemail, parent_name, sub_names,
+                                              dry_run)
+    except Exception as e:
+        log("ERROR", "agenda_doc", f"{node.name}: {e}")
+        print(f"ERROR: couldn't update the agenda doc of '{node.name}': {e}")
+        return
+    if result == "no doc":
+        print(f"'{node.name}' has no agenda doc.")
+    elif result == "unchanged":
+        print(f"The agenda doc of '{node.name}' already names its parent and sub-circles.")
+    else:
+        verb = "[dry-run] Would relabel" if dry_run else "Relabelled"
+        print(f"{verb} the agenda doc of '{node.name}'; the circle_agendas Apps Script "
+              "updates its About this circle within 10 minutes.")

@@ -20,7 +20,10 @@ Steps:
   4. Wire the Gather group's mailing list to the new Google Group (to the
      --alias address if given, else the group's primary address).
   5. Unless --type=club, add a row for the new group to the Circle
-     Hierarchy, alphabetically under its parent circle.
+     Hierarchy, alphabetically under its parent circle, and relabel the
+     parent's agenda doc, if it has one, with its sub-circles, for the
+     circle_agendas Apps Script to update its About this circle (see
+     util/circle_agenda_docs.py).
   6. Give the group a Google calendar, shared with the new Google Group so
      its members can add and edit events, and a permanent Zoom meeting room
      (see util/meeting_rooms.py). If calendars or rooms with matching names
@@ -94,7 +97,12 @@ from playwright.sync_api import sync_playwright
 
 from util.calendar_announcement import GROUP_CALENDAR_HOWTO_URL
 from util.calendar_event_moves import EventMover
-from util.circle_agenda_docs import AGENDA_KINDS, agenda_doc_name, ensure_agenda_doc
+from util.circle_agenda_docs import (
+    AGENDA_KINDS,
+    agenda_doc_name,
+    ensure_agenda_doc,
+    update_agenda_doc_structure,
+)
 from util.credentials import load_credentials, load_zoom_credentials
 from util.gather_utils import (
     close_log,
@@ -601,6 +609,11 @@ def main(
             else:
                 log("ERROR", "hierarchy", "Failed to write hierarchy wiki page — see log")
                 print("ERROR: failed to update the Circle Hierarchy wiki page — see log.")
+        # The parent's agenda doc lists its sub-circles, which now include
+        # this one (checked on a re-run too, in case an earlier one stopped).
+        if parent_node is not None and (already_in_hierarchy or ok):
+            update_agenda_doc_structure(drive_service, page, base_url, parent_node,
+                                        dry_run=False)
 
         # ── With --agenda-doc, give it an agenda doc, for the Apps Script to build ─
         if agenda_doc and kind in AGENDA_KINDS:

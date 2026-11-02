@@ -190,7 +190,8 @@ labelled address.
 
 When `change_parent_circle.py` moves a circle to another parent, it
 relabels the docs of the circle and of its old and new parents with their
-new parent and sub-circles, and labels each built one
+new parent and sub-circles; `add_new_group.py` relabels the new group's
+parent's doc with its sub-circles. Each labels a built doc
 `circleAgendaRefresh: structure`. Each run of `buildNewCircleDocs` then
 rewrites the Parent Circle and Sub-Circles rows of every doc so labelled
 (**`refreshCircleDocStructures`**), emptying a row with nothing left in it,

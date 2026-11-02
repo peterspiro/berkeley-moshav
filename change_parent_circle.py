@@ -40,11 +40,9 @@ from pathlib import Path
 from googleapiclient.discovery import build
 from playwright.sync_api import sync_playwright
 
-from util.circle_agenda_docs import relabel_agenda_doc_structure
+from util.circle_agenda_docs import update_agenda_doc_structure
 from util.credentials import load_credentials
 from util.gather_utils import (
-    GatherGroup,
-    _fetch_group_detail,
     close_log,
     configure,
     init_log,
@@ -52,7 +50,7 @@ from util.gather_utils import (
     log,
     login,
 )
-from util.google_group_utils import DEFAULT_CLIENT_SECRETS_PATH, DOMAIN, get_credentials, is_in_domain
+from util.google_group_utils import DEFAULT_CLIENT_SECRETS_PATH, get_credentials
 from util.hierarchy_wiki import (
     HierarchyNode,
     ensure_hierarchy_page,
@@ -84,18 +82,6 @@ def resolve_move(root: HierarchyNode, circle_prefix: str,
         where = "itself" if new_parent is node else "beneath it"
         raise ValueError(f"'{new_parent.name}' is {where}, so can't be its parent")
     return node, new_parent
-
-
-def group_email(page, base_url: str, node: HierarchyNode) -> str | None:
-    """The address of the email list of the entry's Gather group, or None."""
-    if not node.group_id:
-        return None
-    detail = _fetch_group_detail(page, base_url, GatherGroup(
-        group_id=node.group_id, name=node.name, kind="", availability="", description=""))
-    if not detail.list_name:
-        return None
-    email = f"{detail.list_name}@{detail.list_domain or DOMAIN}"
-    return email if is_in_domain(email) else None
 
 
 def main(circle_prefix: str, parent_prefix: str, base_url: str, dry_run: bool,
@@ -145,27 +131,7 @@ def main(circle_prefix: str, parent_prefix: str, base_url: str, dry_run: bool,
         # sub-circles. (When nothing moved, old_parent is new_parent.)
         doc_nodes = [node, old_parent] + ([new_parent] if new_parent is not old_parent else [])
         for doc_node in doc_nodes:
-            gemail = group_email(page, base_url, doc_node)
-            if gemail is None:
-                print(f"'{doc_node.name}' has no email list, so no agenda doc to update.")
-                continue
-            parent_name = doc_node.parent.name if doc_node.parent else None
-            sub_names = sorted((c.name for c in doc_node.children), key=str.casefold)
-            try:
-                result = relabel_agenda_doc_structure(drive_service, gemail, parent_name,
-                                                      sub_names, dry_run)
-            except Exception as e:
-                log("ERROR", "agenda_doc", f"{doc_node.name}: {e}")
-                print(f"ERROR: couldn't update '{doc_node.name}''s agenda doc: {e}")
-                continue
-            if result == "no doc":
-                print(f"'{doc_node.name}' has no agenda doc.")
-            elif result == "unchanged":
-                print(f"'{doc_node.name}''s agenda doc already names its parent and sub-circles.")
-            else:
-                verb = "[dry-run] Would relabel" if dry_run else "Relabelled"
-                print(f"{verb} '{doc_node.name}''s agenda doc; the Apps Script updates its "
-                      "About this circle within 10 minutes.")
+            update_agenda_doc_structure(drive_service, page, base_url, doc_node, dry_run)
 
         browser.close()
 

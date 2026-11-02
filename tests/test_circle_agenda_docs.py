@@ -147,3 +147,22 @@ def test_structure_properties_clears_every_unused_sub_label():
     props = structure_properties("P", ["A"])
     assert props[f"{SUB_KEY}1"] == "A"
     assert all(props[f"{SUB_KEY}{i}"] is None for i in range(2, MAX_SUB_CIRCLES + 1))
+
+
+def test_update_agenda_doc_structure_uses_the_page(monkeypatch, capsys):
+    import util.circle_agenda_docs as docs
+    from util.hierarchy_wiki import parse_hierarchy
+    root = parse_hierarchy("- Top Circle / HOA: [Members](/groups/1)\n"
+                           "    - Tech Circle: [Members](/groups/2)\n"
+                           "        - Web Working Group: [Members](/groups/4)\n"
+                           "        - App Working Group: [Members](/groups/3)\n")
+    monkeypatch.setattr(docs, "gather_group_list_email",
+                        lambda page, base_url, gid: {"2": "tech@example.org"}.get(gid))
+    drive = FakeDrive([_doc(**{STATE_KEY: STATE_BUILT})])
+    docs.update_agenda_doc_structure(drive, None, "", root.children[0], dry_run=False)
+    [(_, body)] = drive.files().updated
+    assert body["properties"][PARENT_KEY] == "Top Circle / HOA"
+    assert body["properties"][f"{SUB_KEY}1"] == "App Working Group"
+    assert body["properties"][f"{SUB_KEY}2"] == "Web Working Group"
+    docs.update_agenda_doc_structure(drive, None, "", root, dry_run=False)
+    assert "has no email list" in capsys.readouterr().out

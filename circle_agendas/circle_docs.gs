@@ -12,8 +12,8 @@
  * builds the preview, fills in About this circle, and relabels it "built",
  * with the layout version it was built with, for scripts that later update
  * existing docs. It also rewrites the Parent Circle and Sub-Circles rows of
- * each built doc that change_parent_circle.py has relabelled with a new
- * parent or sub-circles (and labelled AGENDA_REFRESH_STRUCTURE).
+ * each built doc that change_parent_circle.py or add_new_group.py has
+ * relabelled with a new parent or sub-circles (and labelled AGENDA_REFRESH_STRUCTURE).
  */
 
 // Must match util/circle_agenda_docs.py.
