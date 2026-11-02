@@ -3,32 +3,32 @@
 A Google Doc for each circle holding its meetings' agendas, based loosely on
 Sociocracy For All's "Session Circle Agenda" template (a starting point
 only; the design is expected to diverge from it), with scripts doing the
-arithmetic and the setting up. So far there's the template, built from a
+arithmetic and the setting up. There's each circle's doc, built from a
 blank doc by `circle_agendas/build_template.gs`; the web app
 (`circle_agendas/web_app.gs`), whose links add the circle's next meeting
 from its calendar, and, in each meeting, add an agenda item and update the
 times (`circle_agendas/meetings.gs`, with `circle_agendas/circles.gs`
 finding the circle); the time arithmetic in
-`circle_agendas/agenda_rules.gs`; and the tests in
-`circle_agendas/agenda_probe.gs`.
+`circle_agendas/agenda_rules.gs`; and the tests, run before any of it was
+built, in `archive/circle_agendas/agenda_probe.gs`.
 
 A new meeting is the first event on the circle's calendar after the day of
 the newest meeting in the doc (or after now, if there's none), so no
 meeting is added twice, and clicking again adds the one after.
 
-Next: making circle docs (by `add_new_group.py`, a backfill for existing
-circles, and handling copies made by hand), filling in About this circle;
-and the template changes still to come.
+Next: rolling out a doc for every circle and working group, and a guide
+for facilitators and secretaries.
 
-## The template is built from code
+## Docs are built from code
 
-The template is built from a blank doc entirely by
-`circle_agendas/build_template.gs`, not copied from another doc and edited,
-so it can be rebuilt from scratch at any time and owes nothing to the doc
-it was modelled on. Every change to the template is a change to that file;
-`buildTemplate` rebuilds it in place, keeping its ID and link. Circle docs
-already copied from the template don't change when it's rebuilt; changes
-they need will take their own scripts.
+Each doc is built from a blank doc entirely by
+`circle_agendas/build_template.gs`, not copied from a template doc and
+edited, so it owes nothing to the doc it was modelled on. Every change to
+the layout is a change to that file. Each new meeting is built by the
+code as it is when the meeting is added, so changes to meetings reach
+existing docs' next meetings; changes to the Circle Info and Backlog tabs
+don't reach docs already built, and will take their own scripts (see
+"Updating once circles have docs").
 
 ## What a circle's doc does
 
@@ -47,7 +47,7 @@ they need will take their own scripts.
   requests, and "Prioritized backlog", with Discussion underway,
   Prioritized for initial discussion, Assigned tasks, and Tasks to assign,
   each a list, as in the Technology Circle's own agenda doc);
-  then one tab per meeting, newest first. The template has no meetings.
+  then one tab per meeting, newest first. A new doc has no meetings.
 - **New meeting**: "+ New meeting" adds a meeting in a tab of its own,
   titled with its date, after the Circle Info and Backlog tabs. Its date, start time, and total duration come from
   the next event on the circle's calendar that isn't in the doc yet, and can
@@ -137,12 +137,9 @@ A meeting's ID is in its links' addresses (in their row, just above Action
 Items Recap), which is how the web app finds its table wherever it is in
 the doc.
 
-A link names its doc by ID, so a doc copied by hand from the template
-(File → Make a copy, or a `/copy` link) points at the template until its
-links are rewritten. Docs made by the scripts get theirs rewritten as
-they're made; for one made by hand, the web app could, when a link names
-the template, ask for the copy's address and rewrite its links then. Still
-to decide.
+A link names its doc by ID, so a doc copied by hand (File → Make a copy)
+still points at the original; copies aren't supported, and the guide for
+facilitators will say so.
 
 The web app works out which circle a doc belongs to from the folder or
 shared drive it's in, by finding the Google Group whose footer links that
@@ -155,8 +152,8 @@ Script calls, tested under Node like `group_meetings/event_rules.gs`.
 ## Creating a circle's doc
 
 Each circle and working group (not clubs or everybody groups) gets an
-agenda doc, built from code like the template rather than copied from it
-(a copy's links would still point at the template):
+agenda doc, built from code rather than copied from a template doc
+(a copy's links would still point at the original):
 
 - `update_groups_in_google_and_hierarchy.py --agenda-docs` and
   `add_new_group.py --agenda-doc` (opt-in until the layout is settled)
@@ -175,8 +172,8 @@ agenda doc, built from code like the template rather than copied from it
   "not empty" and left alone), and labels it "building" first, so a build
   that fails partway isn't repeated on top of itself. Nothing ever changes
   an existing doc's contents but the web app's links and update scripts.
-- So no "Create doc" link is needed; making a copy of the template by
-  hand isn't supported (its links point at the template).
+- So no "Create doc" link is needed; making a copy of a doc by
+  hand isn't supported (its links point at the original).
 - Each group calendar event links its group's agenda doc ("Agenda and
   minutes:", added by the `group_meetings` Apps Script, which finds the
   doc by its label), rather than the group's footer.
@@ -202,11 +199,12 @@ agenda doc, built from code like the template rather than copied from it
 
 ## The probes
 
-`circle_agendas/agenda_probe.gs` tests, on a copy of the template, whether
+`archive/circle_agendas/agenda_probe.gs` tested, on a copy of Sociocracy
+For All's template, whether
 copying a row or a whole meeting keeps its dropdown and date chips and its
 checked boxes, whether the Docs API can add an unchecked checklist, person
 chips, and date chips, and how checked boxes look to the API. See
-`circle_agendas/README.md`.
+`archive/circle_agendas/README.md`.
 
 Results (run 2026-10-31 on a copy of the SoFA-based doc):
 - Copying a table row or a whole meeting table with Apps Script's

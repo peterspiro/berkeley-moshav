@@ -1,24 +1,20 @@
 /**
  * Build Template
  *
- * Builds the circle agenda template from a blank document, entirely from
- * this code, so it never depends on another document's content and can be
- * rebuilt at any time. Every change to the template is a change here.
+ * Builds a circle agenda doc from a blank document, entirely from this
+ * code, so it never depends on another document's content. Every change to
+ * the layout is a change here. build() builds each circle's doc (see
+ * circle_docs.gs) and the preview.
  *
  * Run:
- *   - previewTemplate: builds a new "Template preview" doc in your My Drive
- *     and logs its link (each run moves the previous preview to the trash);
- *   - createTemplate: builds a new doc to become the template; move it to
- *     the Shared Drive and put its ID in TEMPLATE_DOC_ID (doc_helpers.gs);
- *   - buildTemplate: empties the template (TEMPLATE_DOC_ID) and builds it
- *     again in place, keeping its ID, link, and sharing;
- *   - describeTemplate: logs the template's structure;
- *   - checkTemplateAccess: logs what the running account may do to it.
+ *   - previewTemplate: builds the "Template preview" doc (again in place,
+ *     after the first run) and logs its link;
+ *   - describePreview: logs the preview's structure and links.
  *
- * The template's "+ New meeting" link runs the web app (web_app.gs), so
- * building needs the web app's address, in the WEB_APP_URL script property.
- * The template has no meetings: each meeting gets a tab of its own (see
- * meetings.gs), built by meetingTable here.
+ * The "+ New meeting" link runs the web app (web_app.gs), so building needs
+ * the web app's address, in the WEB_APP_URL script property. A new doc has
+ * no meetings: each meeting gets a tab of its own (see meetings.gs), built
+ * by meetingTable here.
  *
  * Building has two passes. The first lays out the text and tables with
  * DocumentApp, writing a token like ⟦checkbox⟧ wherever a smart chip or
@@ -125,25 +121,6 @@ function previewTemplate() {
   logLink('Preview:', DocumentApp.openById(docId).getUrl());
 }
 
-function createTemplate() {
-  const doc = DocumentApp.create('Circle Agenda Template');
-  build(doc.getId());
-  logLink('Built:', doc.getUrl());
-  Logger.log('Move it to the Shared Drive, and set TEMPLATE_DOC_ID in doc_helpers.gs to:');
-  Logger.log(doc.getId());
-}
-
-function buildTemplate() {
-  if (!TEMPLATE_DOC_ID) throw new Error('TEMPLATE_DOC_ID is not set; run createTemplate first.');
-  clearDoc(TEMPLATE_DOC_ID);
-  build(TEMPLATE_DOC_ID);
-  logLink('Rebuilt:', DocumentApp.openById(TEMPLATE_DOC_ID).getUrl());
-}
-
-function describeTemplate() {
-  Logger.log(describeStructure(TEMPLATE_DOC_ID).join('\n'));
-}
-
 function describePreview() {
   const docId = PropertiesService.getScriptProperties().getProperty('previewDocId');
   if (!docId) throw new Error('No preview; run previewTemplate first.');
@@ -160,25 +137,6 @@ function describePreview() {
     search = body.findElement(DocumentApp.ElementType.TEXT, search);
   }
   Logger.log('Links:\n' + (links.join('\n') || '(none)'));
-}
-
-// DocumentApp says only "Action not allowed" when it can't save a change;
-// this shows whether the running account can edit the template at all.
-function checkTemplateAccess() {
-  const file = Drive.Files.get(TEMPLATE_DOC_ID, {
-    fields: 'name,owners(emailAddress),driveId,capabilities(canEdit,canModifyContent),' +
-      'contentRestrictions',
-    supportsAllDrives: true,
-  });
-  Logger.log([
-    'Running as: ' + Session.getActiveUser().getEmail(),
-    'Template: ' + file.name,
-    'Owners: ' + (file.owners || []).map(o => o.emailAddress).join(', ') +
-      (file.driveId ? ' (in a shared drive)' : ''),
-    'Can edit: ' + file.capabilities.canEdit +
-      ', can change content: ' + file.capabilities.canModifyContent,
-    'Locked: ' + JSON.stringify(file.contentRestrictions || 'no'),
-  ].join('\n'));
 }
 
 // ── Building ─────────────────────────────────────────────────────────────────

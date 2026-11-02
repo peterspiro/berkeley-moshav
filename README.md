@@ -38,8 +38,8 @@ Python scripts:
   account's other calendars, including the shared community calendar.
 
 A fourth, **`circle_agendas`**, will run the circle agenda docs (see
-`circle-agendas-plan.md`): it builds the agenda template from a blank doc,
-and runs the web app that the links in an agenda doc open (so far, to add
+`circle-agendas-plan.md`): it builds each circle's agenda doc from a blank
+doc, and runs the web app that the links in an agenda doc open (so far, to add
 a meeting, add an agenda item, and update a meeting's times).
 
 The repo also keeps, in `archive/`, the one-off scripts that were used to
@@ -195,12 +195,13 @@ status line as "calendar (members can view, not edit)".
 | `groups_drive_sync/` | Apps Script project that syncs each Google Group's membership from its Drive item |
 | `calendar_notifications/` | Apps Script project that announces and gatekeeps events on the shared community calendar |
 | `group_meetings/` | Apps Script project that adds Zoom rooms and guests to group calendar events, and warns about overlapping meetings |
-| `circle_agendas/` | Apps Script project for the circle agenda docs: building the template, and the web app its links run |
+| `circle_agendas/` | Apps Script project for the circle agenda docs: building them, and the web app their links run |
 | `util/` | Shared Python modules used by the scripts |
 | `tests/` | Unit tests (`pytest`) |
 | `archive/` | One-off scripts and plans that are no longer in use, kept for reference |
 | `archive/data_import/` | Scripts that were used to populate Gather from the community's spreadsheets and website |
 | `archive/google_setup/` | Scripts that were used to set up the Google Groups and Drive links for the existing groups |
+| `archive/circle_agendas/` | The probes that were run to see what Apps Script can do to an agenda doc, before the docs were built |
 | `archive/cleanup/` | Scripts that were used to undo earlier approaches (old wiki pages, Mailman lists, Drive group permissions) |
 | `debug/` | Created at run time for logs and screenshots; not in git |
 
@@ -367,8 +368,8 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
   `group_meetings/README.md` for deployment, including the Zoom credentials
   it reads from Script Properties.
 
-- **`circle_agendas/`** builds the circle agenda template (run by hand from
-  the Apps Script editor), and is the web app behind the links in an agenda
+- **`circle_agendas/`** builds each circle's agenda doc (on a timer, and a
+  preview by hand from the Apps Script editor), and is the web app behind the links in an agenda
   doc. See `circle_agendas/README.md`.
   - **`circle_agendas/web_app.gs`** is the web app, deployed to run as
     `admin@berkeleymoshav.org` for anyone with a Google account: a link in
@@ -393,20 +394,14 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
     created empty and labelled "new" is built, gets its group's name,
     email address, Drive folder, and parent in About this circle, and is
     relabelled "built", with its layout version.
-  - **`circle_agendas/build_template.gs`** builds the agenda template from
-    a blank doc, entirely from code (so it depends on no other document):
-    a preview in a new doc, or the template itself, rebuilt in place.
+  - **`circle_agendas/build_template.gs`** builds an agenda doc from a
+    blank doc, entirely from code (so it depends on no other document):
+    each circle's doc, and a preview, rebuilt in place, for trying changes.
   - **`circle_agendas/agenda_rules.gs`** holds the agenda's time arithmetic
     (each item's start, and the closing round's share of what's left) and
     the parsing of times and durations, tested under Node.
-  - **`circle_agendas/agenda_probe.gs`** holds tests, already run, of what
-    Apps Script can do to an agenda doc, each on a copy of Sociocracy For
-    All's template: copying agenda
-    rows and whole meetings (from the same tab, another tab, or another
-    doc), adding an attendance checklist, and inserting person and date
-    chips. Each reports which smart chips and checked boxes survived.
-  - **`circle_agendas/doc_helpers.gs`** holds the template's ID and the
-    helpers the other two share.
+  - **`circle_agendas/doc_helpers.gs`** holds the helpers the others
+    share.
 
 ### `util/`: shared modules
 
@@ -464,6 +459,16 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
 - **`find_drive_folders_for_groups_without_mailing_list.py`** searched the
   Shared Drive for folders matching groups that had no email list, and linked
   the ones you picked.
+
+#### `archive/circle_agendas/`
+
+- **`agenda_probe.gs`** held tests, run by hand before the circle agenda
+  docs were built, of what Apps Script can do to an agenda doc, each on a
+  copy of Sociocracy For All's template: copying agenda rows and whole
+  meetings (from the same tab, another tab, or another doc), adding an
+  attendance checklist, inserting person and date chips, and adding tabs.
+  Each reported which smart chips and checked boxes survived. See
+  `archive/circle_agendas/README.md`.
 
 #### `archive/cleanup/`
 

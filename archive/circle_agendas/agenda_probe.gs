@@ -6,7 +6,8 @@
  * on Sociocracy For All's template (PROBE_SOURCE_DOC_ID), which they only
  * read: each makes a copy, works on the copy, and writes what it found at
  * the end of the copy, under "Probe report". Both have been run; their
- * results are in the plan.
+ * results are in the plan. Archived: it's no longer part of the
+ * circle_agendas Apps Script project.
  *
  * runProbe, on the copy:
  *   1. lists the doc's structure: its top-level elements, its tables, and
@@ -518,4 +519,57 @@ function runNewTabProbeLater() {
   writeReport(docId, lines);
   Logger.log(lines.join('\n'));
   logLink('Scratch doc:', 'https://docs.google.com/document/d/' + docId + '/edit?tab=' + tabId);
+}
+
+
+// ── Helpers only the probes used ─────────────────────────────────────────────
+// (Moved here from circle_agendas/doc_helpers.gs when the probes were
+// archived. The probes also used describeStructure, walkParagraphs,
+// paraText, snippet, and the counting helpers, still in doc_helpers.gs.)
+
+// Marks what the probes insert.
+const PROBE_MARK = '⟦probe⟧';
+
+// Copies a doc to the running account's My Drive (not beside the original,
+// where everyone who can see its folder would see the copy).
+function copyDoc(docId, name) {
+  return DriveApp.getFileById(docId).makeCopy(name, DriveApp.getRootFolder());
+}
+
+// ── Writing a report ─────────────────────────────────────────────────────────
+
+function writeReport(docId, lines) {
+  const doc = DocumentApp.openById(docId);
+  const body = doc.getBody();
+  body.appendParagraph('Probe report').setHeading(DocumentApp.ParagraphHeading.HEADING2);
+  for (const line of lines) {
+    body.appendParagraph(line).setHeading(DocumentApp.ParagraphHeading.NORMAL);
+  }
+  doc.saveAndClose();
+}
+
+// Calls fn on every table row in Docs API content, including nested tables.
+function walkTableRows(content, fn) {
+  for (const se of content || []) {
+    if (!se.table) continue;
+    for (const row of se.table.tableRows) {
+      fn(row);
+      for (const cell of row.tableCells) walkTableRows(cell.content, fn);
+    }
+  }
+}
+
+function cellText(cell) {
+  return (cell.content || []).filter(se => se.paragraph).map(se => paraText(se.paragraph)).join('');
+}
+
+// Every tab in a Docs API document, child tabs included.
+function allApiTabs(tabs) {
+  return (tabs || []).flatMap(tab => [tab, ...allApiTabs(tab.childTabs)]);
+}
+
+function mergeCounts(elements) {
+  const counts = {};
+  for (const el of elements) addLeafCounts(el, counts);
+  return formatCounts(counts);
 }

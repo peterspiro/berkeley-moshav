@@ -1,10 +1,10 @@
 # Circle Agendas
 
-The circle agenda docs (see `../circle-agendas-plan.md`): the template, and
-the web app that the links in an agenda doc run.
+The circle agenda docs (see `../circle-agendas-plan.md`): building each
+circle's doc, and the web app that the links in an agenda doc run.
 
-- `build_template.gs` — builds the agenda template from a blank doc,
-  entirely from code
+- `build_template.gs` — builds an agenda doc (a circle's, or a preview)
+  from a blank doc, entirely from code
 - `web_app.gs` — the web app: takes a link's action, doc, and meeting, and
   shows a page saying what it did
 - `meetings.gs` — what the web app does: add the circle's next meeting,
@@ -15,10 +15,10 @@ the web app that the links in an agenda doc run.
   footers), and its calendar's events and its members' names
 - `agenda_rules.gs` — the agenda's time arithmetic, with no Apps Script
   calls, tested under Node by `tests/test_circle_agenda_rules.py`
-- `agenda_probe.gs` — tests, already run, of what Apps Script can do to an
-  agenda doc
-- `doc_helpers.gs` — the template's ID (`TEMPLATE_DOC_ID`), and helpers the
-  others share
+- `doc_helpers.gs` — helpers the others share
+
+The probes that were run before any of this was built, to see what Apps
+Script can do to an agenda doc, are in `../archive/circle_agendas/`.
 - `appsscript.json` — the advanced services (Docs, Drive, Calendar, Admin
   Directory, Groups Settings), OAuth scopes, and web app settings
 
@@ -27,7 +27,7 @@ constants.
 
 ## Setting up the project
 
-Use an account that can edit the template. With
+Use `admin@berkeleymoshav.org`. With
 [clasp](https://github.com/google/clasp):
 
 ```bash
@@ -49,19 +49,10 @@ choose which of them to allow: check **Select all**. If you don't, a run
 stops with "You do not have permission to call …"; click the link in the
 error, allow the rest, and run it again.
 
-(The first probe was run by pasting `agenda_probe.gs` into a project made
-at https://script.google.com instead, with the Google Docs API added under
-**Services**. That still works, but the editor then works out which
-permissions to ask for from the code, and can miss some: if a run stops
-with "You do not have permission to call DriveApp.File.makeCopy", click the
-link in the error and run it again. The clasp project asks for them all at
-once, from `appsscript.json`. A pasted project can be deleted once the
-clasp one works.)
-
 ## Deploying the web app
 
-The template's links run the web app, so it must be deployed, and its
-address recorded, before the template is built. Once, in the editor (as
+A doc's links run the web app, so it must be deployed, and its address
+recorded, before any doc is built. Once, in the editor (as
 `admin@berkeleymoshav.org`):
 
 1. **Deploy → New deployment**, type **Web app**. `appsscript.json` already
@@ -151,17 +142,16 @@ To try the actions without the web app, run **`tryUpdateTimes`** or
 meeting), in the editor; each logs what it returned. For a new meeting,
 the preview must be in a circle's folder.
 
-## Building the template
+## Building a doc
 
-The template is built from a blank doc by `build_template.gs`, so it
-depends on no other document and can be rebuilt at any time; every change
-to it is a change to that file. Building has two passes: DocumentApp lays
+A doc is built from a blank doc by `build_template.gs`, so it depends on
+no other document; every change to the layout is a change to that file. Building has two passes: DocumentApp lays
 out the text and tables, writing a token such as `⟦checkbox⟧` wherever a
 smart chip or list goes, and then the Docs API replaces each token with its
 chip or list, sets the pageless format, names the first tab "Circle Info", and
 adds the Backlog tab: headings for requests (policy items, tasks) and for
 the prioritized backlog (discussion underway, prioritized for initial
-discussion, assigned tasks, tasks to assign), each with a list. The template has no
+discussion, assigned tasks, tasks to assign), each with a list. A new doc has no
 meetings; each is added, in a tab of its own, by "+ New meeting".
 
 Building needs `WEB_APP_URL` (see above), for the "+ New meeting" link.
@@ -172,20 +162,8 @@ Rebuilding a doc deletes its meeting tabs.
    build it again in place, so it keeps its link and stays wherever you've
    moved it (such as into a circle's folder, to try new meetings). If it's
    been deleted or trashed, a new one is made.
-2. **`createTemplate`**, once: builds a new "Circle Agenda Template" doc.
-   Move it to a folder of the Shared Drive that `admin@berkeleymoshav.org`
-   can edit, and set `TEMPLATE_DOC_ID` in `doc_helpers.gs` to its ID (the
-   part of its link between `/d/` and `/edit`).
-3. **`buildTemplate`** empties the template and builds it again in place,
-   so it keeps its ID, link, and sharing. Anything typed into the template
-   by hand is lost; File → Version history can restore an earlier version.
-4. **`describeTemplate`** logs the template's structure: each element, each
-   table row's text, and its chips. **`describePreview`** logs the same for
-   the latest preview, and every link in it.
-5. **`checkTemplateAccess`** logs which account the script runs as, and
-   whether it can edit the template (and whether the template is locked).
-   Run it if a build fails with "Action not allowed", which is all
-   DocumentApp says when a change is refused.
+2. **`describePreview`** logs the preview's structure (each element, each
+   table row's text, and its chips) and every link in it.
 
 To check the names new meetings use, run **`checkMemberNames`** in the
 editor: it logs what "Circle agenda member names.json" holds, and makes the
@@ -224,78 +202,8 @@ the next `--agenda-docs` run makes a new one). The Python scripts never
 change a doc's contents, only create an empty one when a group has none.
 
 A group's doc is found by its label, so a group never gets a second one;
-if its doc is deleted (and emptied from the trash), the next run of
+if its doc is deleted or moved to the trash, the next run of
 `update_groups_in_google_and_hierarchy.py --agenda-docs` makes a new one.
 The flags keep docs from being made for every group before their layout
 is settled: changes to the Circle Info and Backlog tabs don't reach docs
 already made (see the plan).
-
-## The probes (done)
-
-The probes in `agenda_probe.gs` were run on copies of Sociocracy For All's
-public template (`PROBE_SOURCE_DOC_ID`), which they only read; their
-results are in the plan. Each copies it to your My Drive, changes only the
-copy, and writes what it found at the end of the copy, under "Probe
-report". What they insert is marked `⟦probe⟧`.
-
-### `runProbe` (run 2026-10-31)
-
-Copies a Topic row and a whole meeting, adds an attendance checklist, and
-tries person and date chips. To check by hand:
-
-1. **Copied Topic row**, just below the first Topic: does it still have its
-   Decision or Selection chip?
-2. **Copied meeting**, at the top of MEETINGS: are its date chip, its
-   Decision and Selection chips, and the checked, struck-through "None as
-   first meeting!" all as in the original below it?
-3. **Attendance**, in the copied meeting: are Alice, Bob, and Carol
-   unchecked? Does checking one strike its name through, and unchecking it
-   remove the strikethrough? Is the person chip before Alice struck
-   through too?
-4. **Another account**: share the copy with a second account (ideally a
-   personal Gmail one) and check a name there. Is it struck through for
-   them, and for you?
-5. **Date chip** at the end of the doc: is it a chip, not plain text?
-
-### `runTabProbe` (run 2026-11-01)
-
-Tests where the blank meeting that new meetings are copied from can be
-kept: in a "Blank meeting" tab of each circle's doc, or in one central doc.
-It adds the tab to the copy (or uses the template's, if it has one; if the
-Docs API can't add tabs, the report says to add one to the template by
-hand), copies the first meeting into it, and copies that back to the top of
-MEETINGS. It also makes a second copy of the template, called "Agenda tab
-probe, other doc", standing in for a central template, and copies its first
-meeting to the top of MEETINGS too. To check by hand, in each copied
-meeting (the notes above them say where each came from), and in the
-Blank meeting tab:
-
-1. Are the Decision and Selection chips there?
-2. Click one: does it open with the same choices as the original, and can
-   you pick a different one?
-3. In the original meeting, change one chip's choices (click it, then the
-   pencil to edit the dropdown, and add a choice). Does the new choice show
-   up in any of the copies too? That would mean they share one list of
-   choices.
-
-Then send the "Probe report" section and your answers. Both copies can be
-deleted afterwards.
-
-The report's counts (such as `DATE×1, UNSUPPORTED×4`) are the chips and
-other elements Apps Script found in each place; it calls the dropdown chips
-`UNSUPPORTED`. If a copy's counts differ from its original's, something was
-lost.
-
-### `runNewTabProbe`
-
-Tests what giving each meeting a tab of its own would need, on a new
-scratch doc in your My Drive: it adds a tab with the Docs API, checks
-whether DocumentApp can see it (with the doc opened before the tab was
-added, opened again at once, and after 5 seconds), writes a paragraph and a
-table into it with DocumentApp, and adds a dropdown in it with the Docs
-API. The log, and the end of the scratch doc's first tab, say how each step
-went; check by hand that the "Meeting test" tab shows the paragraph, the
-table, and a working dropdown.
-
-Then run **`runNewTabProbeLater`**, a separate run on the same scratch doc,
-to see whether DocumentApp sees the tab once the run that added it is over.

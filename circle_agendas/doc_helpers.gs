@@ -1,24 +1,12 @@
 /**
  * Doc helpers
  *
- * Shared by the scripts in this project: the template's ID, and helpers for
- * finding things in an agenda doc and describing it, through both Apps
+ * Shared by the scripts in this project: helpers for finding things in an
+ * agenda doc and describing it, through both Apps
  * Script's DocumentApp and the Docs API (the Docs advanced service), which
  * see different things: DocumentApp shows dropdown chips only as
  * UNSUPPORTED elements, while the API shows them as `dropdown`.
  */
-
-// The circle agenda template, which build_template.gs builds. Empty until
-// createTemplate has made it.
-const TEMPLATE_DOC_ID = '';
-// Marks what the probes insert.
-const PROBE_MARK = '⟦probe⟧';
-
-// Copies a doc to the running account's My Drive (not beside the original,
-// where everyone who can see its folder would see the copy).
-function copyDoc(docId, name) {
-  return DriveApp.getFileById(docId).makeCopy(name, DriveApp.getRootFolder());
-}
 
 // Logs a doc's link on a line of its own, after what it's for, so it can be
 // selected with a triple-click.
@@ -76,19 +64,6 @@ function describeStructure(docId) {
   return lines;
 }
 
-
-// ── Writing a report ─────────────────────────────────────────────────────────
-
-function writeReport(docId, lines) {
-  const doc = DocumentApp.openById(docId);
-  const body = doc.getBody();
-  body.appendParagraph('Probe report').setHeading(DocumentApp.ParagraphHeading.HEADING2);
-  for (const line of lines) {
-    body.appendParagraph(line).setHeading(DocumentApp.ParagraphHeading.NORMAL);
-  }
-  doc.saveAndClose();
-}
-
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 // Counts the non-text leaf elements (chips and anything Apps Script can't
@@ -96,12 +71,6 @@ function writeReport(docId, lines) {
 function countLeaves(el) {
   const counts = {};
   addLeafCounts(el, counts);
-  return formatCounts(counts);
-}
-
-function mergeCounts(elements) {
-  const counts = {};
-  for (const el of elements) addLeafCounts(el, counts);
   return formatCounts(counts);
 }
 
@@ -149,31 +118,11 @@ function walkParagraphs(content, fn) {
   }
 }
 
-// Calls fn on every table row in Docs API content, including nested tables.
-function walkTableRows(content, fn) {
-  for (const se of content || []) {
-    if (!se.table) continue;
-    for (const row of se.table.tableRows) {
-      fn(row);
-      for (const cell of row.tableCells) walkTableRows(cell.content, fn);
-    }
-  }
-}
-
 function paraText(para) {
   return (para.elements || []).map(pe => (pe.textRun ? pe.textRun.content : '')).join('');
-}
-
-function cellText(cell) {
-  return (cell.content || []).filter(se => se.paragraph).map(se => paraText(se.paragraph)).join('');
 }
 
 function snippet(text, n) {
   const flat = text.replace(/\s+/g, ' ').trim();
   return flat.length > n ? flat.slice(0, n - 1) + '…' : flat;
-}
-
-// Every tab in a Docs API document, child tabs included.
-function allApiTabs(tabs) {
-  return (tabs || []).flatMap(tab => [tab, ...allApiTabs(tab.childTabs)]);
 }
