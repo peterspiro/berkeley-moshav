@@ -6,6 +6,8 @@ One-off scripts and plans that are no longer in use, kept for reference:
   community's spreadsheets and website
 - `google_setup/`: scripts that were used to set up the Google Groups and
   Drive links for the existing groups
+- `circle_agendas/`: the probes run to see what Apps Script can do to an
+  agenda doc, before the circle agenda docs were built
 - `cleanup/`: scripts that were used to undo earlier approaches
 - `gather-sandbox-plan.md`, `gather-import-plan.md`: plans for the local
   Gather test instance and the member import

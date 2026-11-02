@@ -37,6 +37,11 @@ Python scripts:
   It also invites the all-events calendar to the events created on the admin
   account's other calendars, including the shared community calendar.
 
+A fourth, **`circle_agendas`**, will run the circle agenda docs (see
+`circle-agendas-plan.md`): it builds each circle's agenda doc from a blank
+doc, and runs the web app that the links in an agenda doc open (so far, to add
+a meeting, add an agenda item, and update a meeting's times).
+
 The repo also keeps, in `archive/`, the one-off scripts that were used to
 migrate the community into Gather (members, households, groups, photos) and
 to set up the Google side, along with cleanup scripts from that migration.
@@ -190,11 +195,13 @@ status line as "calendar (members can view, not edit)".
 | `groups_drive_sync/` | Apps Script project that syncs each Google Group's membership from its Drive item |
 | `calendar_notifications/` | Apps Script project that announces and gatekeeps events on the shared community calendar |
 | `group_meetings/` | Apps Script project that adds Zoom rooms and guests to group calendar events, and warns about overlapping meetings |
+| `circle_agendas/` | Apps Script project for the circle agenda docs: building them, and the web app their links run |
 | `util/` | Shared Python modules used by the scripts |
 | `tests/` | Unit tests (`pytest`) |
 | `archive/` | One-off scripts and plans that are no longer in use, kept for reference |
 | `archive/data_import/` | Scripts that were used to populate Gather from the community's spreadsheets and website |
 | `archive/google_setup/` | Scripts that were used to set up the Google Groups and Drive links for the existing groups |
+| `archive/circle_agendas/` | The probes that were run to see what Apps Script can do to an agenda doc, before the docs were built |
 | `archive/cleanup/` | Scripts that were used to undo earlier approaches (old wiki pages, Mailman lists, Drive group permissions) |
 | `debug/` | Created at run time for logs and screenshots; not in git |
 
@@ -205,8 +212,10 @@ status line as "calendar (members can view, not edit)".
 - **`add_new_group.py`** creates a complete new group in one step: the Drive
   folder, the Google Group (optionally with a shorter address), the Gather
   group with its manager, and the group's calendar and Zoom room; links them
-  all together; adds the group to the Circle Structure page; and opens a
-  welcome email to the new list as a draft in your mail program.
+  all together; adds the group to the Circle Structure page; with
+  `--agenda-doc`, for a circle or working group, creates its agenda doc,
+  for the `circle_agendas` Apps Script to build; and opens a welcome email to the new list as a draft in
+  your mail program.
 - **`update_groups_in_google_and_hierarchy.py`** brings every group (or one,
   with `-g`) into line: offers to find or create a missing Drive folder or
   email list, enforces the Google Group settings, gives each group a calendar
@@ -235,6 +244,17 @@ status line as "calendar (members can view, not edit)".
   "shared a calendar" email, which for a group goes to the group's address
   and has a button that does nothing for members; members add a calendar
   from the link in the group's footer.
+
+  With `-a`/`--agenda-docs` (with `-g`, for that group alone), it also gives
+  every circle and working group (not everybody groups) that has a Drive item and an email list an agenda doc,
+  "<Group> Agenda", created empty in its Drive item and labelled for the
+  `circle_agendas` Apps Script to build within minutes; a group that has
+  one keeps it. Each run (with `-g` too) writes every Gather member's
+  short name
+  (first name, with the last initial if another member shares it), by
+  their Gather email and their Google Email, to "Circle agenda member
+  names.json" in `admin@`'s My Drive, so the circle agenda docs list
+  members by name (see `circle_agendas/README.md`).
 
   Calendars, Zoom meetings, and events match a group when their names are
   like the group's, or contain its acronym (for the "Development, Finance,
@@ -329,6 +349,7 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
   the room) with a link to the "BM Meetings FAQ", in place of
   any "Zoom link to follow" line, and the group and the all-events calendar as guests, unless it's marked `[no zoom]`
   or has another meeting link typed in (then it gets only the guests).
+  An event of a group with a circle agenda doc also gets a link to the doc.
   An event that's only a copy of someone's invitation gets its organizer an
   email asking them to create it on the group calendar instead. It also
   checks the next 8 weeks for meetings in rooms of the same Zoom user that
@@ -346,6 +367,41 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
   in `group_meetings/event_rules.gs`, tested under Node. See
   `group_meetings/README.md` for deployment, including the Zoom credentials
   it reads from Script Properties.
+
+- **`circle_agendas/`** builds each circle's agenda doc (on a timer, and a
+  preview by hand from the Apps Script editor), and is the web app behind the links in an agenda
+  doc. See `circle_agendas/README.md`.
+  - **`circle_agendas/web_app.gs`** is the web app, deployed to run as
+    `admin@berkeleymoshav.org` for anyone with a Google account: a link in
+    an agenda doc names an action, the doc, and a meeting, and the web app
+    shows a page saying what it did. It acts only on built circle agenda
+    docs (and the latest preview).
+  - **`circle_agendas/meetings.gs`** holds those actions: adding the
+    circle's next meeting from its calendar, in a tab of its own (with its
+    Zoom room, its
+    members as an attendance checklist, a link to the previous meeting,
+    and the previous meeting's action items); updating a meeting's times
+    (each item's start, the closing round's share of what's left, and the
+    end, flagging durations it can't read); and adding an agenda item just
+    above the links, which sit above Action Items Recap.
+  - **`circle_agendas/circles.gs`** finds the circle a doc belongs to: the
+    Google Group whose footer links the Drive folder (or shared drive) the
+    doc is in. It reads the circle's calendar events, and its members'
+    names (from the Gather directory's, which the Python scripts write to
+    Drive, or else its Drive item's sharing).
+  - **`circle_agendas/circle_docs.gs`** builds each circle's and working
+    group's agenda doc, every 10 minutes: each doc the Python scripts
+    created empty and labelled "new" is built, gets its group's name,
+    email address, Drive folder, and parent in About this circle, and is
+    relabelled "built", with its layout version.
+  - **`circle_agendas/build_template.gs`** builds an agenda doc from a
+    blank doc, entirely from code (so it depends on no other document):
+    each circle's doc, and a preview, rebuilt in place, for trying changes.
+  - **`circle_agendas/agenda_rules.gs`** holds the agenda's time arithmetic
+    (each item's start, and the closing round's share of what's left) and
+    the parsing of times and durations, tested under Node.
+  - **`circle_agendas/doc_helpers.gs`** holds the helpers the others
+    share.
 
 ### `util/`: shared modules
 
@@ -372,6 +428,10 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
   calendars, and copying them to its calendar or deleting them
 - **`zoom_utils.py`**: the Zoom API, and the standard room settings
 - **`credentials.py`**: reading `~/.gather` and `zoom_credentials`
+- **`member_names.py`**: members' short names by email address, from the Gather
+  directory, written to `admin@`'s Drive for the circle agenda docs
+- **`circle_agenda_docs.py`**: creating a circle's or working group's agenda
+  doc, empty and labelled for the `circle_agendas` Apps Script to build
 
 ### `archive/`: no longer in use
 
@@ -400,6 +460,16 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
   Shared Drive for folders matching groups that had no email list, and linked
   the ones you picked.
 
+#### `archive/circle_agendas/`
+
+- **`agenda_probe.gs`** held tests, run by hand before the circle agenda
+  docs were built, of what Apps Script can do to an agenda doc, each on a
+  copy of Sociocracy For All's template: copying agenda rows and whole
+  meetings (from the same tab, another tab, or another doc), adding an
+  attendance checklist, inserting person and date chips, and adding tabs.
+  Each reported which smart chips and checked boxes survived. See
+  `archive/circle_agendas/README.md`.
+
 #### `archive/cleanup/`
 
 - **`cleanup_wiki.py`** removed the wiki links an older version of the group
@@ -418,6 +488,8 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
 - `meeting-infrastructure-plan.md`: decisions behind the group calendars,
   Zoom rooms, and `group_meetings`, and the meeting features not built yet
   (community-wide calendars, recording archive, and more)
+- `circle-agendas-plan.md`: design of the circle agenda docs, and what
+  the tests found
 - `archive/gather-sandbox-plan.md` and `archive/gather-import-plan.md`: plans
   for the local Gather test instance and the member import
 
@@ -427,5 +499,6 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
 python -m pytest
 ```
 
-The tests of `group_meetings/event_rules.gs` run it under Node, and are
+The tests of `group_meetings/event_rules.gs` and
+`circle_agendas/agenda_rules.gs` run them under Node, and are
 skipped if `node` isn't installed.

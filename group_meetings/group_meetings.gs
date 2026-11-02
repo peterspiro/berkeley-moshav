@@ -9,8 +9,10 @@
  * calendar:
  *   1. An event the group calendar organizes gets the group's Zoom room —
  *      its link in the location, and the link, meeting ID, passcode, and
- *      the Zoom user that owns the room in the description — plus the all-events calendar and the group's
- *      Google Group as guests (see computeEventPatch in event_rules.gs).
+ *      the Zoom user that owns the room in the description — plus a link
+ *      to the group's agenda doc, if it has one (see agendaDocsByAddress),
+ *      and the all-events calendar and the group's Google Group as guests
+ *      (see computeEventPatch in event_rules.gs).
  *   2. An event that's only a copy of someone's invitation (made on their
  *      own calendar, with the group calendar invited) can't be given those,
  *      since changes to a copy don't reach the other guests; its organizer
@@ -49,7 +51,7 @@ const MEETINGS_FAQ_URL =
   'https://docs.google.com/document/d/1rr8WqPnsLKw-tgVea40NkyTxlwLFVVLnXbL3UVFQcZY';
 // Bump when computeEventPatch's rules change, so the next syncAll rechecks
 // every upcoming event, not just changed ones (see recheckIfRulesChanged).
-const RULES_VERSION = 5;
+const RULES_VERSION = 6;
 const OVERLAP_WEEKS = 8;
 // Meetings in rooms of the same Zoom user are flagged if they overlap, or if
 // the second starts less than this many minutes after the first ends (in
@@ -205,6 +207,7 @@ function loadGroups() {
  */
 function refreshGroups() {
   const previous = new Map((getJson(PROP_GROUPS, null) || []).map(g => [g.email, g]));
+  const agendaDocs = agendaDocsByAddress();
   const groups = [];
   let pageToken;
   do {
@@ -222,7 +225,10 @@ function refreshGroups() {
       }
       const links = parseFooter(footer);
       if (links.calendarId) {
-        groups.push(Object.assign({ email: g.email.toLowerCase(), name: g.name }, links));
+        const addresses = [g.email, ...(g.aliases || [])].map(a => a.toLowerCase());
+        const docId = addresses.map(a => agendaDocs[a]).find(Boolean);
+        groups.push(Object.assign({ email: g.email.toLowerCase(), name: g.name }, links,
+          docId ? { agendaUrl: `https://docs.google.com/document/d/${docId}/edit` } : {}));
       }
     }
     pageToken = resp.nextPageToken;
@@ -230,14 +236,38 @@ function refreshGroups() {
   for (const g of groups) {
     const old = previous.get(g.email);
     if (old && (old.zoomUrl !== g.zoomUrl || old.passcode !== g.passcode ||
-                old.calendarId !== g.calendarId)) {
+                old.calendarId !== g.calendarId || old.agendaUrl !== g.agendaUrl)) {
       PropertiesService.getScriptProperties().deleteProperty(PROP_SYNC_PREFIX + old.calendarId);
-      console.log(`${g.email}: Zoom room or calendar changed; rechecking its events.`);
+      console.log(`${g.email}: Zoom room, calendar, or agenda doc changed; rechecking its events.`);
     }
   }
   setJson(PROP_GROUPS, groups);
   console.log(`${groups.length} group calendar(s).`);
   return groups;
+}
+
+/**
+ * Each built circle agenda doc's ID, by the group address it's labelled
+ * with (see circle_agendas/circle_docs.gs and util/circle_agenda_docs.py;
+ * the label may hold an alias of the group's address). Its events get a
+ * link to it.
+ */
+function agendaDocsByAddress() {
+  const docs = {};
+  let pageToken;
+  do {
+    const resp = Drive.Files.list({
+      q: "properties has { key='circleAgendaState' and value='built' } and trashed = false",
+      corpora: 'allDrives', includeItemsFromAllDrives: true, supportsAllDrives: true,
+      fields: 'nextPageToken,files(id,properties)', pageToken,
+    });
+    for (const f of resp.files || []) {
+      const address = ((f.properties || {}).circleAgendaGroup || '').toLowerCase();
+      if (address) docs[address] = f.id;
+    }
+    pageToken = resp.nextPageToken;
+  } while (pageToken);
+  return docs;
 }
 
 function loadOtherCalendars(groups) {
@@ -328,6 +358,7 @@ function handleEvent(event, group, groups) {
     groupEmail: group.email,
     allEventsCalendarId: ALL_EVENTS_CALENDAR_ID,
     faqUrl: MEETINGS_FAQ_URL,
+    agendaUrl: group.agendaUrl || null,
   });
   if (!change) return;
   Calendar.Events.patch(change.patch, group.calendarId, event.id,

@@ -53,6 +53,15 @@ excluding hidden groups:
       touched when Gather itself currently implies a (possibly different)
       pairing for that email. The block also carries the group's
       "Google calendar" and "Zoom meeting" links from step 0d.
+  0f. Writes every Gather member's name, by email address (their Gather
+      email and their Google Email), to "Circle agenda member names.json"
+      in the signed-in account's My Drive, for the circle agenda docs'
+      attendance lists and Presenter choices (see util/member_names.py and
+      circle_agendas/circles.gs). In a -g run too.
+  0g. With -a/--agenda-docs, gives every circle and working group (not
+      everybody groups) with a Drive item and an email list an agenda doc,
+      created empty in its Drive item and labelled for the circle_agendas Apps Script to build
+      (see util/circle_agenda_docs.py). A group that has one keeps it.
   1.  If it's already in the hierarchy but has been renamed, updates the
       hierarchy line to the current name (matched by Gather group ID, embedded
       in the [Members] link, so renames don't break the association).
@@ -136,6 +145,7 @@ from util.gather_utils import (
     close_log,
     configure,
     fetch_all_gather_groups,
+    fetch_all_gather_users,
     init_log,
     launch_browser,
     log,
@@ -186,6 +196,8 @@ from util.google_group_utils import (
     list_group_members,
     set_member_role,
 )
+from util.circle_agenda_docs import AGENDA_KINDS, ensure_agenda_doc
+from util.member_names import build_member_names, publish_member_names
 from util.meeting_rooms import (
     LinkedResources,
     QuitRequested,
@@ -1210,6 +1222,30 @@ ROOT_NODE_NAME = "Full Community (Circle of Everyone / Top Circle / HOA)"
 ROOT_DOCUMENTS_URL = "/gdrive"
 
 
+def ensure_agenda_docs(drive_service, group_info: dict[str, dict],
+                       email_by_group_id: dict[str, str],
+                       google_file_id_by_group_id: dict[str, str], root,
+                       dry_run: bool) -> None:
+    """Give every circle and working group (not everybody groups) that has a
+    Drive item and an email list an agenda doc, labelled for the
+    circle_agendas Apps Script to build (see util/circle_agenda_docs.py)."""
+    parent_by_group_id = {n.group_id: n.parent.name for n in iter_nodes(root)
+                          if n.group_id and n.parent is not None}
+    subs_by_group_id = {n.group_id: [c.name for c in n.children] for n in iter_nodes(root)
+                        if n.group_id}
+    for group_id, info in group_info.items():
+        email = email_by_group_id.get(group_id)
+        item_id = google_file_id_by_group_id.get(group_id)
+        if info["kind"] not in AGENDA_KINDS or _is_everybody(info) or not email or not item_id:
+            continue
+        try:
+            ensure_agenda_doc(drive_service, email, info["name"], item_id,
+                              parent_by_group_id.get(group_id), dry_run,
+                              subs_by_group_id.get(group_id, []))
+        except Exception as e:
+            log("ERROR", "agenda_doc", f"{info['name']}: {e}")
+
+
 def ensure_root_node(root, group_info: dict[str, dict], dry_run: bool) -> None:
     """Force the hierarchy root's name/links to always be the "everyone"
     group: [Members] -> the "Full Community" Gather group, [Documents] ->
@@ -1415,7 +1451,7 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
          credentials_path: str, drive_id: str, group_prefix: str | None = None,
          move_events: bool = False, announce_calendars: bool = False,
          share_all_events: bool = False, full_calendar_names: bool = False,
-         draft_email: bool = False):
+         draft_email: bool = False, agenda_docs: bool = False):
     base_url = base_url.rstrip("/")
     init_log()
     log("INFO", "start", f"base_url={base_url} dry_run={dry_run} group={group_prefix!r}")
@@ -1443,6 +1479,10 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
 
         current_content = fetch_hierarchy_page_content(page, base_url)
         root = parse_hierarchy(current_content)
+
+        # Members' names, for the circle agenda docs' attendance lists.
+        publish_member_names(
+            drive_service, build_member_names(fetch_all_gather_users(page, base_url)), dry_run)
 
         # Single-group mode (-g): target_id is that group, and group_info
         # holds only it. Otherwise target_id is None and every group is
@@ -1592,6 +1632,9 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
                     excluded_ids, deactivated_ids, dry_run, only_group_id=target_id,
                 )
                 add_missing_groups(root, group_info, documents_url_by_group_id, dry_run)
+                if agenda_docs:
+                    ensure_agenda_docs(drive_service, group_info, email_by_group_id,
+                                       google_file_id_by_group_id, root, dry_run)
             except QuitScript:
                 quit_requested = True
                 print("\nQuit requested — saving progress made so far.")
@@ -1669,6 +1712,11 @@ def cli():
              "(\"Technology Circle\", \"Garden Working Group\"), creating or renaming it "
              "so; later runs leave that name as it is",
     )
+    parser.add_argument(
+        "-a", "--agenda-docs", action="store_true",
+        help="Give each circle and working group without one an agenda doc, for the "
+             "circle_agendas Apps Script to build (with -g, just that group)",
+    )
     args = parser.parse_args()
 
     if args.full_calendar_name and not args.group:
@@ -1691,7 +1739,7 @@ def cli():
     email, password = load_credentials()
     main(args.base_url, email, password, args.dry_run, args.credentials, args.drive_id,
          args.group, args.move_events, args.announce_calendar, args.share_all_events,
-         args.full_calendar_name, args.email_draft)
+         args.full_calendar_name, args.email_draft, args.agenda_docs)
 
 
 if __name__ == "__main__":

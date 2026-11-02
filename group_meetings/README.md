@@ -17,6 +17,14 @@ Apps Script that looks after every group's Google calendar (the calendars
     invitation; adding the room details or the all-events calendar sends no
     email. Events marked `[no zoom]`, or with another Zoom or Meet link typed
     in, keep their own link and get no FAQ line.
+  - and, if the group has a circle agenda doc (see `../circle_agendas/`),
+    an "Agenda and minutes:" line linking it, just above the FAQ line (or
+    at the end, for an event without Zoom details), unless the description
+    already links the doc; if the group's doc is replaced, the line is
+    relinked to the new one rather than repeated. The doc is found by the label the Python scripts
+    give it in Drive, which names one of the group's addresses; the groups
+    are reread hourly, so a group's new doc reaches its upcoming events
+    within the hour.
   - an event that's only a copy of someone's invitation (made on their own
     calendar, with the group calendar invited) can't be changed that way, so
     its organizer and `calendaring-alerts@berkeleymoshav.org` get one email
@@ -104,6 +112,11 @@ every upcoming event once, sending no email. The first run that finds a
 calendar (a new group's, or another calendar `admin@` owns) likewise handles
 all of its upcoming events, so the community calendar's existing events get
 the all-events calendar too.
+
+When a change adds a permission to `appsscript.json` (reading Drive, for
+the agenda docs' links, did), run any function in the editor after the
+push, such as `hourly`, and allow it: the triggers run with the
+permissions allowed so far, and fail without the new one.
 
 ## Smoke test
 
