@@ -42,6 +42,7 @@ const COLOR = {
   rolesBody: '#e9f6ee',
   roundRow: '#dce6f6',
   reportRow: '#f2f2f2',
+  followUp: '#fff2cc', // Docs' "light yellow 3"
 };
 
 
@@ -76,11 +77,13 @@ const CLOSING_ROUND = {title: 'Closing Round / Check-out', kind: 'round', perAtt
 // Every column has a fixed width (in points), the narrow ones with narrow
 // padding. In a pageless doc, a table wider than the window scrolls
 // sideways, so Notes is wide regardless of the window.
-const COL = {time: 0, duration: 1, description: 2, notes: 3};
-const MEETING_COLUMNS = 4;
-const MEETING_HEADINGS = ['Time', 'Min', 'Description', 'Notes'];
-const COLUMN_WIDTHS = {[COL.time]: 33, [COL.duration]: 27, [COL.description]: 210,
-  [COL.notes]: 300};
+// Follow-up is shaded light yellow, below its heading. Meetings added
+// before it had only the first four columns.
+const COL = {time: 0, duration: 1, description: 2, notes: 3, followUp: 4};
+const MEETING_COLUMNS = 5;
+const MEETING_HEADINGS = ['Time', 'Min', 'Description', 'Notes', 'Follow-up'];
+const COLUMN_WIDTHS = {[COL.time]: 33, [COL.duration]: 27, [COL.description]: 262,
+  [COL.notes]: 375, [COL.followUp]: 210};
 const CELL_PADDING = 3;
 const PROBLEM_COLOR = '#cc0000';
 // The rows above the agenda items: the column headings, which stay in view
@@ -341,6 +344,7 @@ function meetingTable(body, docId, details) {
     const cell = c => table.getCell(r, c);
     if (item.links) {
       linksRow(table.getRow(r), docId, meetingId);
+      shadeFollowUp(table, r);
       return;
     }
     writeCell(cell(COL.time), [[[formatTime(item.start), MUTED]]]);
@@ -364,6 +368,7 @@ function meetingTable(body, docId, details) {
         ? attendees.map(name => [[token('bullet')], [name + ': ']])
         : [[[token('bullet')]]]);
     shadeRow(table, r, item.kind);
+    shadeFollowUp(table, r);
   });
 
   const last = rowCount - 1;
@@ -371,6 +376,7 @@ function meetingTable(body, docId, details) {
   writeCell(table.getCell(last, COL.time), [[[formatTime(times.end), MUTED]]]);
   writeCell(table.getCell(last, COL.duration), [[['end', {...MUTED, [A.ITALIC]: true}]]]);
   shadeRow(table, last, 'round');
+  shadeFollowUp(table, last);
 
   for (const c of Object.keys(COLUMN_WIDTHS)) table.setColumnWidth(Number(c), COLUMN_WIDTHS[c]);
   for (let r = 0; r < rowCount; r++) padRow(table.getRow(r));
@@ -446,7 +452,7 @@ function presenterDropdownId(meetingId) {
 
 // The row of links that add an item and update the times.
 function linksRow(row, docId, meetingId) {
-  for (let c = 0; c < MEETING_COLUMNS; c++) writeCell(row.getCell(c), [[]]);
+  for (let c = 0; c < row.getNumCells(); c++) writeCell(row.getCell(c), [[]]);
   writeCell(row.getCell(COL.description), [[
     ['+ Add item', {[A.LINK_URL]: actionUrl('item', docId, meetingId)}], ['        '],
     ['↻ Update times', {[A.LINK_URL]: actionUrl('times', docId, meetingId)}]]]);
@@ -514,6 +520,13 @@ function shadeRow(table, r, kind) {
   const color = kind === 'round' ? COLOR.roundRow : kind === 'report' ? COLOR.reportRow : null;
   if (!color) return;
   for (let c = 0; c < table.getRow(r).getNumCells(); c++) table.getCell(r, c).setBackgroundColor(color);
+}
+
+// Shades a meeting table row's Follow-up cell, if the table has that column.
+function shadeFollowUp(table, r) {
+  if (table.getRow(r).getNumCells() > COL.followUp) {
+    table.getCell(r, COL.followUp).setBackgroundColor(COLOR.followUp);
+  }
 }
 
 // A placeholder for something only the Docs API can add; see finishWithApi.

@@ -79,13 +79,16 @@ function addItem(docId, meetingId) {
   if (at < 0) at = closing;
   const presenters = presenterDropdownId(meetingId);
   const hasPresenters = presenters in dropdownDefinitions(docId, tabId);
+  // As many cells as the meeting's own columns (older meetings have fewer).
+  const columns = table.getRow(0).getNumCells();
   const row = table.insertTableRow(at);
-  for (let c = 0; c < MEETING_COLUMNS; c++) row.appendTableCell();
-  for (let c = 0; c < MEETING_COLUMNS; c++) writeCell(row.getCell(c), [[]]);
+  for (let c = 0; c < columns; c++) row.appendTableCell();
+  for (let c = 0; c < columns; c++) writeCell(row.getCell(c), [[]]);
   writeCell(row.getCell(COL.duration), [[[String(NEW_ITEM_MINUTES), MUTED]]]);
   padRow(row);
   writeCell(row.getCell(COL.description), topicLines(hasPresenters ? presenters : null));
   writeCell(row.getCell(COL.notes), [[[token('bullet')]]]);
+  shadeFollowUp(table, at);
 
   const messages = recalculate(table);
   doc.saveAndClose();
@@ -375,7 +378,7 @@ function meetingTableIn(body) {
 function isMeetingTable(table) {
   if (table.getNumRows() <= MEETING_HEADER_ROWS) return false;
   const row = table.getRow(MEETING_HEADER_ROWS - 1);
-  return row.getNumCells() === MEETING_COLUMNS &&
+  return row.getNumCells() > COL.notes &&
     row.getCell(COL.description).getText().trim() === MEETING_HEADINGS[COL.description];
 }
 

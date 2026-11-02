@@ -121,7 +121,7 @@ function fillAbout(docId, name, email, circle, parentName, subNames, onlyEmpty) 
     'Zoom room': circle && circle.zoomUrl ? [['Zoom room', {[A.LINK_URL]: circle.zoomUrl}]] : [],
     'Circle email address': email ? [[email, {[A.LINK_URL]: 'mailto:' + email}]] : [],
     'Circle Drive Folder': circle && circle.driveItemId
-      ? [['Drive folder', folderLink(circle.driveItemId)]] : [],
+      ? [['Google Drive folder', folderLink(circle.driveItemId)]] : [],
     'Parent Circle': parentName ? [linkedName(parentName)] : [],
     'Sub-Circles': subRuns,
   };

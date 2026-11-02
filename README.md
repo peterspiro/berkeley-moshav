@@ -373,7 +373,8 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
   - **`circle_agendas/web_app.gs`** is the web app, deployed to run as
     `admin@berkeleymoshav.org` for anyone with a Google account: a link in
     an agenda doc names an action, the doc, and a meeting, and the web app
-    shows a page saying what it did.
+    shows a page saying what it did. It acts only on built circle agenda
+    docs (and the latest preview).
   - **`circle_agendas/meetings.gs`** holds those actions: adding the
     circle's next meeting from its calendar, in a tab of its own (with its
     Zoom room, its

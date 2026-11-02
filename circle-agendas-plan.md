@@ -61,9 +61,11 @@ they need will take their own scripts.
 - **Layout**: each meeting's tab has its date; a line with its start time,
   length, and place; and its attendance; then the agenda table.
 - **Columns**: Time (12-hour, without AM/PM, for room), Min (the
-  duration), Description, and Notes, each a fixed width; Notes is wide
-  (300 points), and in a pageless doc a table wider than the window
-  scrolls sideways.
+  duration), Description, Notes, and Follow-up (shaded light yellow),
+  each a fixed width; Description is 262 points, Notes 375, and Follow-up
+  210, and in a pageless doc a table wider than the window scrolls
+  sideways. (Meetings added before Follow-up was restored keep their four
+  columns, and the links still work in them.)
 - **Lists**: bulleted and numbered lists have a 0.08" left indent and a
   0.19" hanging indent.
 - **Agenda**: Opening Round; Administrative matters (Announcements, Brief
@@ -120,6 +122,14 @@ members need not approve an "unverified app" screen for each doc, members
 with personal Gmail accounts can use it, and there's one copy of the code
 to fix. The doc's links call the web app with the doc's ID (and the
 meeting's, for a new item); each opens a tab that says when it's done.
+
+Anyone who can open the doc, viewers included, can click its links: the
+web app runs as admin, and Google tells it who's clicking only for
+accounts in the berkeleymoshav.org domain, so it can't tell editors from
+viewers. The links only add to a doc or recalculate its times, so version
+history undoes anything unwanted. The web app acts only on docs labelled
+as built circle agenda docs (and the latest preview), so a link edited to
+name another doc admin can edit does nothing.
 
 A meeting's ID is in its links' addresses (in their row, just above Action
 Items Recap), which is how the web app finds its table wherever it is in

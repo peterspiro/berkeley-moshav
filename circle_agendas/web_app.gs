@@ -11,6 +11,8 @@
  *   ?action=item&doc=<doc ID>&meeting=<meeting ID>    adds an agenda item
  *   ?action=meeting&doc=<doc ID>                      adds the next meeting
  *
+ * It acts only on circle agenda docs and the latest preview (isAgendaDoc).
+ *
  * The links are written with the web app's address, from the WEB_APP_URL
  * script property, and the doc's own ID; a doc copied by hand still has
  * its original's ID in its links.
@@ -42,6 +44,10 @@ function doGet(e) {
     return page({done: false, title: 'Not a link this app knows',
       messages: ['Use the links in a circle\'s agenda doc.']});
   }
+  if (!isAgendaDoc(p.doc)) {
+    return page({done: false, title: 'Not a circle agenda doc',
+      messages: ['These links work only in a circle\'s agenda doc.']});
+  }
   const lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
@@ -51,6 +57,19 @@ function doGet(e) {
     return page({done: false, title: 'Something went wrong', messages: [err.message]});
   } finally {
     lock.releaseLock();
+  }
+}
+
+// Whether the app may change a doc: a circle agenda doc (labelled built;
+// see circle_docs.gs) or the latest preview. The app runs as admin, who can
+// edit many other docs, and a link's doc ID can be edited by hand.
+function isAgendaDoc(docId) {
+  if (docId === PropertiesService.getScriptProperties().getProperty('previewDocId')) return true;
+  try {
+    const file = Drive.Files.get(docId, {fields: 'properties,trashed', supportsAllDrives: true});
+    return !file.trashed && (file.properties || {})[AGENDA_KEYS.state] === AGENDA_STATE_BUILT;
+  } catch (e) {
+    return false;  // no such doc, or admin can't see it
   }
 }
 
