@@ -11,9 +11,11 @@ import atexit
 import io
 import os
 import shutil
+import subprocess
 import sys
 import re
 import tempfile
+import threading
 import time
 import unicodedata
 import urllib.request
@@ -572,7 +574,36 @@ def launch_browser(pw, headless: bool = True) -> BrowserContext:
             tmp_profile, headless=headless, args=["--no-sandbox"],
         )
     context.add_init_script(CLEAR_EDITOR_AUTOSAVE_JS)
+    context.close = _bounded_close(context.close, tmp_profile)
     return context
+
+
+# How long closing the browser may take before its processes are killed.
+CLOSE_TIMEOUT_SECONDS = 10
+
+
+def _bounded_close(close, profile_dir: str):
+    """A replacement for a browser context's close(): Chrome sometimes takes
+    minutes to quit (seen with system Chrome on macOS), so after
+    CLOSE_TIMEOUT_SECONDS its processes, found by their temporary profile
+    folder, are killed, which ends the wait. Everything the script did is
+    done by then; Chrome only has the temporary profile to lose."""
+    def kill():
+        log("WARN", "close_browser",
+            f"Chrome took over {CLOSE_TIMEOUT_SECONDS}s to quit; stopping it")
+        subprocess.run(["pkill", "-KILL", "-f", profile_dir], check=False)
+
+    def bounded_close(*args, **kwargs):
+        timer = threading.Timer(CLOSE_TIMEOUT_SECONDS, kill)
+        timer.daemon = True
+        timer.start()
+        try:
+            close(*args, **kwargs)
+        except Exception as e:  # the browser was killed under it
+            log("DEBUG", "close_browser", str(e))
+        finally:
+            timer.cancel()
+    return bounded_close
 
 
 # ── Sheet fetching ────────────────────────────────────────────────────────────
