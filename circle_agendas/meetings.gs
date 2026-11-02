@@ -8,8 +8,7 @@
  * after the first tab), holding its date, its "Time … Place …" line, and
  * its attendance, then one table (see meetingTable in build_template.gs):
  * a row of column headings; one row per item, in the columns COL names
- * (start time, duration in minutes, presenter, description, notes,
- * follow-up), and among them (just above Action Items Recap) the row of the
+ * (start time, duration in minutes, description, notes), and among them (just above Action Items Recap) the row of the
  * meeting's links; then the closing round; then the end time.
  *
  * A meeting is found by its ID, which is in its links' addresses. Adding a
@@ -24,7 +23,6 @@
  * know, such as a duration that couldn't be read.
  */
 
-const PROBLEM_COLOR = '#cc0000';
 const NEW_ITEM_MINUTES = 5;
 const PENDING_MEETING_SECONDS = 600;
 
@@ -52,16 +50,12 @@ function addItem(docId, meetingId) {
     if (table.getCell(r, COL.description).getText().trim().startsWith('Action Items Recap')) at = r;
   }
   if (at < 0) at = closing;
-  const presenters = presenterDropdownId(meetingId);
-  const hasPresenters = presenters in dropdownDefinitions(docId, tabId);
   const row = table.insertTableRow(at);
   for (let c = 0; c < MEETING_COLUMNS; c++) row.appendTableCell();
   for (let c = 0; c < MEETING_COLUMNS; c++) writeCell(row.getCell(c), [[]]);
   writeCell(row.getCell(COL.duration), [[[String(NEW_ITEM_MINUTES), MUTED]]]);
-  if (hasPresenters) writeCell(row.getCell(COL.presenter), [[[token('presenter', presenters)]]]);
   writeCell(row.getCell(COL.description), [[['Topic', BOLD]]]);
   writeCell(row.getCell(COL.notes), [[[token('bullet')]]]);
-  row.getCell(COL.followUp).setBackgroundColor(COLOR.followUp);
 
   const messages = recalculate(table);
   doc.saveAndClose();
@@ -79,9 +73,9 @@ function addItem(docId, meetingId) {
 // finishNewMeeting, or a result saying why it didn't.
 //
 // The meeting's date, start, and length come from the event; its Place is
-// the circle's Zoom room; its attendance list, and its Presenter
-// dropdowns' choices, are the circle's members; its Minutes link to the
-// previous meeting's tab; its Next meeting is the event after; and the
+// the circle's Zoom room; its attendance list is the circle's members; its
+// Administrative matters link the previous meeting's tab (its minutes) and
+// give the event after as the next meeting; and the
 // previous meeting's Action Items Recap is copied to its Action Items
 // Accountability.
 function startNewMeeting(docId) {
@@ -117,17 +111,16 @@ function startNewMeeting(docId) {
   const end = new Date(event.end.dateTime);
   const details = {
     date: Utilities.formatDate(start, TIME_ZONE, 'yyyy-MM-dd'),
-    start: Utilities.formatDate(start, TIME_ZONE, 'H:mm'),
+    start: Utilities.formatDate(start, TIME_ZONE, 'h:mm a'),
     hours: formatHours((end - start) / 60000),
     place: circle.zoomUrl,
     attendees: circleMemberNames(circle),
     next: following ? Utilities.formatDate(new Date(following.start.dateTime), TIME_ZONE,
-      'EEE yyyy-MM-dd, H:mm') : 'Not on the calendar yet',
+      'EEE yyyy-MM-dd, h:mm a') : 'not on the calendar yet',
   };
   if (newest) {
     details.previousTabId = newest.tabProperties.tabId;
-    details.minutes = [['Previous meeting (' + newestDate + ')',
-      {[A.LINK_URL]: tabUrl(docId, details.previousTabId)}]];
+    details.previousUrl = tabUrl(docId, details.previousTabId);
   }
 
   const reply = Docs.Documents.batchUpdate({requests: [{addDocumentTab: {
@@ -177,10 +170,6 @@ function finishNewMeeting(key) {
   }
   doc.saveAndClose();
 
-  if (details.attendees.length) {
-    Docs.Documents.batchUpdate({requests: [
-      presenterDropdownRequest(meetingId, details.attendees, details.tabId)]}, docId);
-  }
   replaceTokens(docId, details.tabId);
   finishMeeting(docId, meetingId, details.tabId);
   CacheService.getScriptCache().remove(key);
@@ -213,12 +202,6 @@ function recapItems(table) {
   return [];
 }
 
-// A tab's dropdowns' lists of choices, by ID (each tab has its own).
-function dropdownDefinitions(docId, tabId) {
-  const tab = Docs.Documents.get(docId, {includeTabsContent: true}).tabs
-    .find(t => t.tabProperties.tabId === tabId);
-  return (tab && tab.documentTab.dropdownDefinitions) || {};
-}
 
 function notFound() {
   return {done: false, title: 'Meeting not found', messages: [
@@ -268,13 +251,16 @@ function recalculate(table) {
   const times = scheduleTimes(start, durations, total);
   times.starts.forEach((t, i) => writeMuted(table.getCell(itemRows[i], COL.time), formatTime(t)));
   writeMuted(table.getCell(closing, COL.time), formatTime(times.closingStart));
-  const overrun = times.closingMinutes < 0;
+  const noTimeLeft = times.closingMinutes <= 0;
   writeMuted(table.getCell(closing, COL.duration), String(times.closingMinutes),
-    {[A.ITALIC]: true, [A.FOREGROUND_COLOR]: overrun ? PROBLEM_COLOR : COLOR.muted});
+    {[A.ITALIC]: true, [A.FOREGROUND_COLOR]: noTimeLeft ? PROBLEM_COLOR : COLOR.muted});
   writeMuted(table.getCell(last, COL.time), formatTime(times.end));
-  if (overrun) {
+  if (times.closingMinutes < 0) {
     messages.push('The items before the closing round run ' + -times.closingMinutes +
       ' minutes past the end of the meeting, so its duration is negative.');
+  } else if (noTimeLeft) {
+    messages.push('The items before the closing round take the whole meeting, so it has ' +
+      'no time left.');
   }
   return messages;
 }

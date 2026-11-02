@@ -21,10 +21,11 @@ function scheduleTimes(startMinutes, durations, totalMinutes) {
   return {starts, closingStart: t, closingMinutes: end - t, end};
 }
 
-// "19:30" from 1170; wraps past midnight.
+// "7:30" from 1170 (19:30): a 12-hour time, without AM or PM, which the
+// agenda's Time column has no room for; wraps past midnight.
 function formatTime(minutes) {
   const m = ((minutes % 1440) + 1440) % 1440;
-  return Math.floor(m / 60) + ':' + String(m % 60).padStart(2, '0');
+  return ((Math.floor(m / 60) + 11) % 12 + 1) + ':' + String(m % 60).padStart(2, '0');
 }
 
 // 1170 from "19:30" or "7:30 pm"; null if it isn't a time.

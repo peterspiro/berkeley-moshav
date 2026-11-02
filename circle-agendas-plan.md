@@ -48,9 +48,14 @@ they need will take their own scripts.
   and not to be changed.
 - **Layout**: each meeting's tab has its date; a line with its start time,
   length, and place; and its attendance; then the agenda table.
-- **Columns**: Time, Duration, Presenter (a dropdown of the meeting's
-  attendees, made when the meeting is), Description, Notes, and Follow-up
-  (light yellow).
+- **Columns**: Time (12-hour, without AM/PM, for room), Min. (the
+  duration), Description, and Notes; the first two narrow, the others
+  sharing the rest of the page.
+- **Agenda**: Opening Round; Administrative matters (Announcements, Brief
+  Reports, Next meeting date & time, Minutes of last meeting, and
+  modifications and consent to the agenda, as a bulleted list); Consent to
+  Agenda; Action Items Accountability; one 5-minute Topic; Action Items
+  Recap; Closing Round, whose duration is red when there's no time left.
 - **New agenda item**: a link in each meeting adds a topic after its last
   topic (before Action Items Recap), with a duration of 5 minutes.
 - **Meeting length**: after "Duration (hours)" in the line above the
@@ -70,15 +75,13 @@ they need will take their own scripts.
   Names start unchecked; checking one marks that member absent, and Docs
   strikes the name through (an instruction above the names says so; Docs
   strikes through only checked checklist items, or text formatted by hand).
-  Below it, a bulleted list for guests' names. Guests aren't among the
-  Presenter dropdown's choices.
+  Below it, "Guests:", for their names.
 - **Tabs**: Apps Script can't make a tab, and doesn't see one the Docs API
   made in the same run (`runNewTabProbe`), but does in a later run
   (`runNewTabProbeLater`). So adding a meeting takes two runs: the link's
   run adds the tab, and the page it returns runs the second, which builds
-  the meeting in it. Each tab has its own dropdowns' choices, so each
-  meeting's Presenter choices are made in its tab. Docs' Find searches all
-  tabs.
+  the meeting in it. Each tab has its own dropdowns' choices. Docs' Find
+  searches all tabs.
 - **About this circle** is filled in when the doc is created: its email
   address and Drive folder from the group's footer, and its parent and
   sub-circles from the Circle Structure page. The Members and roles table

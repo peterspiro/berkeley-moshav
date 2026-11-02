@@ -36,10 +36,10 @@ class TestScheduleTimes:
         # 19:30, 90 minutes, items of 10, 3, 2, 3, 20, 20, 20, 5.
         result = js("scheduleTimes(1170, [10, 3, 2, 3, 20, 20, 20, 5], 90)")
         assert [js(f"formatTime({t})") for t in result["starts"]] == [
-            "19:30", "19:40", "19:43", "19:45", "19:48", "20:08", "20:28", "20:48"]
-        assert js(f"formatTime({result['closingStart']})") == "20:53"
+            "7:30", "7:40", "7:43", "7:45", "7:48", "8:08", "8:28", "8:48"]
+        assert js(f"formatTime({result['closingStart']})") == "8:53"
         assert result["closingMinutes"] == 7
-        assert js(f"formatTime({result['end']})") == "21:00"
+        assert js(f"formatTime({result['end']})") == "9:00"
 
     def test_overrun_gives_negative_closing(self):
         assert js("scheduleTimes(600, [50, 20], 60)")["closingMinutes"] == -10
@@ -51,7 +51,8 @@ class TestScheduleTimes:
 
 class TestFormatTime:
     @pytest.mark.parametrize("minutes, text", [
-        (0, "0:00"), (545, "9:05"), (1170, "19:30"), (1440 + 30, "0:30")])
+        (0, "12:00"), (545, "9:05"), (720, "12:00"), (735, "12:15"), (1170, "7:30"),
+        (1440 + 30, "12:30")])
     def test_formats(self, minutes, text):
         assert js(f"formatTime({minutes})") == text
 
