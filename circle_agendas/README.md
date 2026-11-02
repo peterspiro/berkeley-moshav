@@ -95,7 +95,10 @@ The links:
   date, start time, and length come from the event, in the line above its
   table; Place links the circle's Zoom room; Attendance lists the circle's
   members, unchecked, with space for guests below; each item's Presenter
-  is a dropdown of the members; Minutes links the previous meeting's tab;
+  is a dropdown of the members (both named as in the Gather directory,
+  from "Circle agenda member names.json" in `admin@`'s My Drive, which
+  `update_groups_in_google_and_hierarchy.py` writes on each run, or else
+  as Google names them); Minutes links the previous meeting's tab;
   Next meeting is the event after; and the items of the previous meeting's
   Action Items Recap (a bulleted list) become the checklist of its Action
   Items Accountability (their text only). The meetings before it lose their links, so they're no

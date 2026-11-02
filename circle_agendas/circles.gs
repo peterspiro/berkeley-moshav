@@ -11,6 +11,11 @@
  */
 
 const DOMAIN = 'berkeleymoshav.org';
+// Members' names by email address, from the Gather directory, written to
+// admin@'s My Drive by update_groups_in_google_and_hierarchy.py (see
+// util/member_names.py, whose MEMBER_NAMES_FILE this must match).
+const MEMBER_NAMES_FILE = 'Circle agenda member names.json';
+const MEMBER_NAMES_CACHE_SECONDS = 60 * 60;
 const CIRCLES_CACHE_KEY = 'circles';
 const CIRCLES_CACHE_SECONDS = 6 * 60 * 60;
 
@@ -84,9 +89,10 @@ function refreshCircles() {
 }
 
 // The circle's members' names, sorted: each member of its Google Group, by
-// the name Drive gives them on the circle's Drive item (whose sharing
-// groups_drive_sync keeps in step with the group), or by email address if
-// it gives none.
+// their name in the Gather directory (MEMBER_NAMES_FILE), or else the name
+// Drive gives them on the circle's Drive item (whose sharing
+// groups_drive_sync keeps in step with the group), or else their email
+// address.
 function circleMemberNames(circle) {
   const emails = [];
   let pageToken;
@@ -111,7 +117,29 @@ function circleMemberNames(circle) {
     pageToken = resp.nextPageToken;
   } while (pageToken);
 
-  return emails.map(e => names[e] || e).sort((a, b) => a.localeCompare(b));
+  const gatherNames = memberNames();
+  return emails.map(e => gatherNames[e] || names[e] || e).sort((a, b) => a.localeCompare(b));
+}
+
+// MEMBER_NAMES_FILE's names by (lowercase) email address, or {} if there's
+// no such file; cached for MEMBER_NAMES_CACHE_SECONDS.
+function memberNames() {
+  const cache = CacheService.getScriptCache();
+  const cached = cache.get(MEMBER_NAMES_FILE);
+  if (cached) return JSON.parse(cached);
+  const files = DriveApp.getRootFolder().getFilesByName(MEMBER_NAMES_FILE);
+  if (!files.hasNext()) {
+    console.warn('No ' + MEMBER_NAMES_FILE + ' in My Drive; run ' +
+      'update_groups_in_google_and_hierarchy.py to write it.');
+    return {};
+  }
+  const text = files.next().getBlob().getDataAsString('UTF-8');
+  try {
+    cache.put(MEMBER_NAMES_FILE, text, MEMBER_NAMES_CACHE_SECONDS);
+  } catch (e) {
+    // Too big to cache (over 100 KB); read it each time.
+  }
+  return JSON.parse(text);
 }
 
 // The circle's next count timed (not all-day) events starting after a

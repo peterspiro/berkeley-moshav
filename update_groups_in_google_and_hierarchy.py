@@ -53,6 +53,11 @@ excluding hidden groups:
       touched when Gather itself currently implies a (possibly different)
       pairing for that email. The block also carries the group's
       "Google calendar" and "Zoom meeting" links from step 0d.
+  0f. Writes every Gather member's name, by email address (their Gather
+      email and their Google Email), to "Circle agenda member names.json"
+      in the signed-in account's My Drive, for the circle agenda docs'
+      attendance lists and Presenter choices (see util/member_names.py and
+      circle_agendas/circles.gs). In a -g run too.
   1.  If it's already in the hierarchy but has been renamed, updates the
       hierarchy line to the current name (matched by Gather group ID, embedded
       in the [Members] link, so renames don't break the association).
@@ -136,6 +141,7 @@ from util.gather_utils import (
     close_log,
     configure,
     fetch_all_gather_groups,
+    fetch_all_gather_users,
     init_log,
     launch_browser,
     log,
@@ -186,6 +192,7 @@ from util.google_group_utils import (
     list_group_members,
     set_member_role,
 )
+from util.member_names import build_member_names, publish_member_names
 from util.meeting_rooms import (
     LinkedResources,
     QuitRequested,
@@ -1443,6 +1450,10 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
 
         current_content = fetch_hierarchy_page_content(page, base_url)
         root = parse_hierarchy(current_content)
+
+        # Members' names, for the circle agenda docs' attendance lists.
+        publish_member_names(
+            drive_service, build_member_names(fetch_all_gather_users(page, base_url)), dry_run)
 
         # Single-group mode (-g): target_id is that group, and group_info
         # holds only it. Otherwise target_id is None and every group is

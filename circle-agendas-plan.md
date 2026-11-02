@@ -63,7 +63,10 @@ they need will take their own scripts.
   recalculated (when someone clicks a link, and possibly on a timer).
   A duration that can't be read as a number is flagged, not guessed.
 - **Attendance**: a checklist of the circle's members, from its Google
-  Group, with names from the Drive item's permissions, closely spaced.
+  Group, named as in the Gather directory (a file that
+  `update_groups_in_google_and_hierarchy.py` writes to `admin@`'s Drive;
+  Google often gives only the start of the address), or else as Drive gives
+  them, closely spaced.
   Names start unchecked; checking one marks that member absent, and Docs
   strikes the name through (an instruction above the names says so; Docs
   strikes through only checked checklist items, or text formatted by hand).
