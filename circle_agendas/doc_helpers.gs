@@ -118,6 +118,21 @@ function walkParagraphs(content, fn) {
   }
 }
 
+// The text of a Docs API table cell.
+function apiCellText(cell) {
+  let text = '';
+  walkParagraphs(cell.content, para => { text += paraText(para); });
+  return text;
+}
+
+// A date chip's date, 'yyyy-MM-dd' (from its text, if it shows that, else
+// its timestamp).
+function chipDate(dateElement) {
+  const props = dateElement.dateElementProperties || {};
+  return /^\d{4}-\d{2}-\d{2}$/.test(props.displayText || '')
+    ? props.displayText : (props.timestamp || '').slice(0, 10);
+}
+
 function paraText(para) {
   return (para.elements || []).map(pe => (pe.textRun ? pe.textRun.content : '')).join('');
 }

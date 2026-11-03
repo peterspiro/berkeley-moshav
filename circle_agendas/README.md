@@ -89,7 +89,8 @@ The links:
   date, start time, and length come from the event, in the line above its
   table; Place links the circle's Zoom room; Attendance lists the circle's
   members, unchecked, in columns of up to four, beside Facilitator and
-  Secretary (from the Circle Info tab's Roles) and Guests (named as in the Gather directory,
+  Secretary (dropdowns of the members, set to the holders chosen in the
+  Circle Info tab's Roles) and Guests (named as in the Gather directory,
   from "Circle agenda member names.json" in `admin@`'s My Drive, which
   `update_groups_in_google_and_hierarchy.py` writes on each run, or else
   as Google names them); its agenda has one 5-minute topic; its
@@ -117,7 +118,7 @@ so they stay just below where new items go.
   updates the times.
 - **↻ Update times** rewrites each item's start time, the closing round's
   duration (the time left before the end), and the end time, from the
-  start time and Duration (hours) (as 1.5 or 1:30) in the line above the
+  start time and Duration (as 1.5 or 1:30) in the line above the
   table, and the other
   items' durations. A duration it can't read turns red and counts as 0; a
   closing round with no time left turns red. The page says why. It also
@@ -245,8 +246,14 @@ empty because the group has no sub-circles needs nothing: the list
 appears when a sub-circle is added.
 
 Once, in the editor, run **`installTriggers`**, which runs
-`buildNewCircleDocs` every 10 minutes (and asks to allow managing
-triggers). It can also be run by hand, to build waiting docs at once; the
+`buildNewCircleDocs` every 10 minutes and `markPastTermEndsInCircleDocs`
+every day at 1 am (and asks to allow managing triggers). The Roles
+table's Name cells are dropdowns of the circle's members (as they were when
+the doc was built; anyone can add a choice in Docs), and its Term ends cells
+date chips, starting at the day the doc was built; the daily run colors
+red each one that's past (Docs can't run a script when a chip is edited).
+Docs built before layout version 4 keep their plain-text Roles, which new
+meetings still read. It can also be run by hand, to build waiting docs at once; the
 log links each doc it built.
 
 Building only ever adds to a doc, so it's done only to one that's still

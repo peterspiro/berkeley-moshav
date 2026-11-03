@@ -48,10 +48,7 @@ function matchTabTitleToDate(docId, tabId) {
   let date = null;
   walkParagraphs(tab.documentTab.body.content, para => {
     for (const pe of para.elements || []) {
-      if (date || !pe.dateElement) continue;
-      const props = pe.dateElement.dateElementProperties;
-      date = /^\d{4}-\d{2}-\d{2}$/.test(props.displayText || '')
-        ? props.displayText : (props.timestamp || '').slice(0, 10);
+      if (!date && pe.dateElement) date = chipDate(pe.dateElement);
     }
   });
   if (!date || !MEETING_TAB_TITLE_RE.test(date) || date === tab.tabProperties.title) return null;
@@ -190,8 +187,9 @@ function finishNewMeeting(key) {
     const previous = previousTab && meetingTableIn(previousTab.asDocumentTab().getBody());
     if (previous) details.carryOver = recapItems(previous);
   }
-  details.facilitator = roleHolder(doc, 'Facilitator');
-  details.secretary = roleHolder(doc, 'Secretary');
+  details.facilitator = roleHolder(docId, 'Facilitator');
+  details.secretary = roleHolder(docId, 'Secretary');
+  details.roleOptions = roleChoices(details.attendees, [details.facilitator, details.secretary]);
   const body = tab.asDocumentTab().getBody();
   const leftover = body.getChild(0);
   const meetingId = meetingTable(body, docId, details);
@@ -209,10 +207,11 @@ function finishNewMeeting(key) {
   }
   doc.saveAndClose();
 
-  if (details.attendees.length) {
-    Docs.Documents.batchUpdate({requests: [
-      presenterDropdownRequest(meetingId, details.attendees, details.tabId)]}, docId);
-  }
+  Docs.Documents.batchUpdate({requests: [
+    roleDropdownRequest(meetingRolesDropdownId(meetingId), details.roleOptions, details.tabId),
+    ...(details.attendees.length
+      ? [presenterDropdownRequest(meetingId, details.attendees, details.tabId)] : []),
+  ]}, docId);
   replaceTokens(docId, details.tabId);
   finishMeeting(docId, meetingId, details.tabId);
   CacheService.getScriptCache().remove(key);
@@ -222,7 +221,7 @@ function finishNewMeeting(key) {
 }
 
 // When a meeting ends (milliseconds since 1970), from its tab's title (its
-// date) and its "Time … Duration (hours) …" line; null if they can't be
+// date) and its "Time … Duration … " line; null if they can't be
 // read.
 function meetingEnd(title, body) {
   if (!MEETING_TAB_TITLE_RE.test(title)) return null;
@@ -233,10 +232,26 @@ function meetingEnd(title, body) {
   return Utilities.parseDate(title, TIME_ZONE, 'yyyy-MM-dd').getTime() + (start + length) * 60000;
 }
 
-// Who holds a role, from the Circle Info tab's Roles table, or ''.
-function roleHolder(doc, role) {
-  const found = findRow(firstTabBody(doc), text => text.startsWith(role + ' ('));
-  return found && found.row.getNumCells() > 1 ? found.row.getCell(1).getText().trim() : '';
+// Who holds a role, from the Circle Info tab's Roles table: the choice in
+// its Name dropdown (or, in docs built before it had one, the cell's text),
+// or '' if none has been chosen.
+function roleHolder(docId, role) {
+  for (const se of apiTab(docId).content) {
+    if (!se.table) continue;
+    for (const row of se.table.tableRows) {
+      const cells = row.tableCells;
+      if (cells.length < 2 || !apiCellText(cells[0]).trim().startsWith(role + ' (')) continue;
+      let chosen = null;
+      walkParagraphs(cells[1].content, para => {
+        for (const pe of para.elements || []) {
+          if (chosen === null && pe.dropdown) chosen = pe.dropdown.dropdownProperties.displayValue || '';
+        }
+      });
+      const holder = chosen === null ? apiCellText(cells[1]).trim() : chosen;
+      return holder === ROLE_PLACEHOLDER ? '' : holder;
+    }
+  }
+  return '';
 }
 
 function tabUrl(docId, tabId) {
@@ -294,7 +309,7 @@ function recalculate(table) {
   const lengthText = headerHoursText(timeLine);
   const total = parseHours(lengthText);
   if (total === null) {
-    return ['Couldn\'t read the meeting\'s Duration (hours) "' + lengthText + '"; ' +
+    return ['Couldn\'t read the meeting\'s Duration "' + lengthText + '"; ' +
       'nothing was changed. Write it like 1.5 or 1:30.'];
   }
 
@@ -333,7 +348,7 @@ function recalculate(table) {
   return messages;
 }
 
-// The text of the "Time … Duration (hours) … Place …" line above a
+// The text of the "Time … Duration … Place …" line above a
 // meeting's table, in the body (its tab's) that holds it, or ''.
 function timeLineText(body) {
   for (let i = 0; i < body.getNumChildren(); i++) {

@@ -86,6 +86,7 @@ class TestHeaderTimeText:
         ("Time 7:30 pm Place Zoom", "7:30 pm"),
         ("Time 19:30", "19:30"),
         ("Time  19:30     Duration (hours)  1.5     Place  Zoom room", "19:30"),
+        ("Time  7:30 pm     Duration (h:mm or h.hh format)  1.5     Place", "7:30 pm"),
         ("Time  Place", ""),
         ("When?", "")])
     def test_reads_time(self, line, text):
@@ -93,11 +94,45 @@ class TestHeaderTimeText:
 
     @pytest.mark.parametrize("line, text", [
         ("Time  19:30     Duration (hours)  1.5     Place  Zoom room", "1.5"),
+        ("Time  19:30     Duration (h:mm or h.hh format)  1:30     Place  Zoom room", "1:30"),
         ("Time 19:30 Duration 1:30", "1:30"),
         ("Time 19:30 Place Zoom", ""),
         ("Time  19:30     Duration (hours)     Place", "")])
     def test_reads_hours(self, line, text):
         assert js(f"headerHoursText({json.dumps(line)})") == text
+
+
+class TestRoleChoices:
+    def test_placeholder_names_holders_vacant(self):
+        options = js('roleChoices(["Ann", "Bo"], ["Bo", "Cy", "", "Name", "Vacant"])')
+        assert options == [
+            {"optionId": "dropdownItem.none", "displayValue": "Name"},
+            {"optionId": "dropdownItem.m0", "displayValue": "Ann"},
+            {"optionId": "dropdownItem.m1", "displayValue": "Bo"},
+            {"optionId": "dropdownItem.m2", "displayValue": "Cy"},
+            {"optionId": "dropdownItem.vacant", "displayValue": "Vacant"}]
+
+    def test_no_names_still_two_choices(self):
+        assert len(js("roleChoices([], [])")) == 2
+
+    def test_at_most_fifty(self):
+        names = json.dumps([f"P{i}" for i in range(60)])
+        assert len(js(f"roleChoices({names}, [])")) == 50
+
+    @pytest.mark.parametrize("holder, option_id", [
+        ("Bo", "dropdownItem.m1"), (" Bo ", "dropdownItem.m1"), ("Vacant", "dropdownItem.vacant"),
+        ("", "dropdownItem.none"), ("Zed", "dropdownItem.none")])
+    def test_option_id(self, holder, option_id):
+        expr = f'roleOptionId(roleChoices(["Ann", "Bo"], []), {json.dumps(holder)})'
+        assert js(expr) == option_id
+
+
+class TestTermEnded:
+    @pytest.mark.parametrize("date, ended", [
+        ("2026-11-02", True), ("2026-11-03", False), ("2027-01-01", False), ("", False),
+        ("Nov 2, 2026", False)])
+    def test_ended(self, date, ended):
+        assert js(f'termEnded({json.dumps(date)}, "2026-11-03")') is ended
 
 
 class TestMeetingIdFromUrl:

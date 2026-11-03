@@ -60,15 +60,16 @@ function parseHours(text) {
 }
 
 // The time typed after "Time" in a meeting's
-// "Time 19:30   Duration (hours) 1.5   Place …" line.
+// "Time 19:30   Duration (h:mm or h.hh format) 1.5   Place …" line.
 function headerTimeText(line) {
   const m = /Time\s*(.*?)\s*(?:Duration\b|Place\b|$)/i.exec(line || '');
   return m ? m[1] : '';
 }
 
-// The meeting's length typed after "Duration (hours)" in the same line.
+// The meeting's length typed after "Duration" and its parenthesized hint
+// (in older meetings, "(hours)") in the same line.
 function headerHoursText(line) {
-  const m = /Duration\s*(?:\(hours\))?\s*(.*?)\s*(?:Place\b|$)/i.exec(line || '');
+  const m = /Duration\s*(?:\([^)]*\))?\s*(.*?)\s*(?:Place\b|$)/i.exec(line || '');
   return m ? m[1] : '';
 }
 
@@ -79,9 +80,46 @@ function meetingIdFromUrl(url) {
 }
 
 // "1.5" from 90 minutes, "2" from 120: a meeting's length as written after
-// its "Duration (hours)".
+// its "Duration".
 function formatHours(minutes) {
   return String(Math.round(minutes / 60 * 100) / 100);
+}
+
+// ── Roles ────────────────────────────────────────────────────────────────────
+
+// A role dropdown's choices (the Roles table's Name, a meeting's Facilitator
+// and Secretary): ROLE_PLACEHOLDER, which new dropdowns show, then each of
+// names, then each of holders not among them (so a holder typed by hand
+// can still be chosen), then ROLE_VACANT; as Docs API DropdownOptions,
+// at most Docs' 50.
+const ROLE_PLACEHOLDER = 'Name';
+const ROLE_PLACEHOLDER_ID = 'dropdownItem.none';
+const ROLE_VACANT = 'Vacant';
+function roleChoices(names, holders) {
+  const values = [];
+  for (const n of [...(names || []), ...(holders || [])]) {
+    const v = String(n || '').trim();
+    if (v && v !== ROLE_PLACEHOLDER && v !== ROLE_VACANT && !values.includes(v)) values.push(v);
+  }
+  return [
+    {optionId: ROLE_PLACEHOLDER_ID, displayValue: ROLE_PLACEHOLDER},
+    ...values.slice(0, 48).map((v, i) => ({optionId: 'dropdownItem.m' + i, displayValue: v})),
+    {optionId: 'dropdownItem.vacant', displayValue: ROLE_VACANT},
+  ];
+}
+
+// The ID of the choice (from roleChoices) showing holder, or the
+// placeholder's.
+function roleOptionId(options, holder) {
+  const v = String(holder || '').trim();
+  const found = options.find(o => o.displayValue === v);
+  return found ? found.optionId : ROLE_PLACEHOLDER_ID;
+}
+
+// Whether a term ending on date ('yyyy-MM-dd') is over, on today
+// ('yyyy-MM-dd'); false if date can't be read.
+function termEnded(date, today) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(date || '') && date < today;
 }
 
 // ── A circle's Google Group footer ───────────────────────────────────────────

@@ -41,20 +41,74 @@ const AGENDA_STATE_NOT_EMPTY = 'not empty';
 // folder row renamed Google Drive Folder and linked by the circle's name.
 // 3: About this circle's Circle calendar and Remind before meetings rows added,
 // below Zoom room.
-const LAYOUT_VERSION = 3;
+// 4: the Roles table's Name a dropdown of the circle's members, and its Term
+// ends a date chip.
+const LAYOUT_VERSION = 4;
 // The first layout version with About this circle in ABOUT_LABELS' order.
 const ABOUT_ORDER_LAYOUT = 2;
 // The first layout version with the Circle calendar and Remind before meetings rows.
 const NEW_ROWS_LAYOUT = 3;
 const BUILD_EVERY_MINUTES = 10;
 
-// Run once, in the editor: builds new circle docs every BUILD_EVERY_MINUTES.
+// The hour (in the script's time zone) markPastTermEndsInCircleDocs runs,
+// each day.
+const TERM_CHECK_HOUR = 1;
+
+// Run once, in the editor: builds new circle docs every BUILD_EVERY_MINUTES,
+// and marks the terms that have ended every day.
 function installTriggers() {
+  const handlers = ['buildNewCircleDocs', 'markPastTermEndsInCircleDocs'];
   for (const t of ScriptApp.getProjectTriggers()) {
-    if (t.getHandlerFunction() === 'buildNewCircleDocs') ScriptApp.deleteTrigger(t);
+    if (handlers.includes(t.getHandlerFunction())) ScriptApp.deleteTrigger(t);
   }
   ScriptApp.newTrigger('buildNewCircleDocs').timeBased().everyMinutes(BUILD_EVERY_MINUTES).create();
-  Logger.log('buildNewCircleDocs will run every ' + BUILD_EVERY_MINUTES + ' minutes.');
+  ScriptApp.newTrigger('markPastTermEndsInCircleDocs').timeBased().everyDays(1)
+    .atHour(TERM_CHECK_HOUR).create();
+  Logger.log('buildNewCircleDocs will run every ' + BUILD_EVERY_MINUTES + ' minutes, and ' +
+    'markPastTermEndsInCircleDocs every day at ' + TERM_CHECK_HOUR + ':00.');
+}
+
+// Run every day by the trigger installTriggers makes (or by hand): marks
+// the past Term ends dates red in every built doc (see markPastTermEnds).
+function markPastTermEndsInCircleDocs() {
+  for (const file of builtCircleDocs()) {
+    try {
+      markPastTermEnds(file.id);
+    } catch (e) {
+      console.error('Couldn\'t check the terms in ' + file.name + ': ' + e.message);
+    }
+  }
+}
+
+// Colors each Term ends date chip in the Roles table red if its date is
+// past, and back to the default once it's changed to one that isn't. Docs
+// can't run a script when a chip is edited, so this runs daily.
+function markPastTermEnds(docId) {
+  const today = Utilities.formatDate(new Date(), TIME_ZONE, 'yyyy-MM-dd');
+  const requests = [];
+  for (const se of apiTab(docId).content) {
+    const rows = se.table ? se.table.tableRows : [];
+    if (!rows.length || !apiCellText(rows[0].tableCells[0]).trim().startsWith('Circle Roles')) continue;
+    for (const row of rows.slice(1)) {
+      const cell = row.tableCells[2];
+      if (!cell) continue;
+      walkParagraphs(cell.content, para => {
+        for (const pe of para.elements || []) {
+          if (!pe.dateElement) continue;
+          const past = termEnded(chipDate(pe.dateElement), today);
+          const style = pe.dateElement.textStyle || {};
+          const red = !!(style.foregroundColor && style.foregroundColor.color);
+          if (past === red) continue;
+          requests.push({updateTextStyle: {
+            range: {startIndex: pe.startIndex, endIndex: pe.endIndex},
+            textStyle: past ? {foregroundColor: apiColor(PROBLEM_COLOR)} : {},
+            fields: 'foregroundColor',
+          }});
+        }
+      });
+    }
+  }
+  if (requests.length) Docs.Documents.batchUpdate({requests}, docId);
 }
 
 function buildNewCircleDocs() {
@@ -95,8 +149,14 @@ function buildCircleDoc(file) {
       AGENDA_STATE_NOT_EMPTY + '")');
   }
   setAgendaState(file.id, AGENDA_STATE_BUILDING);
-  build(file.id);
   const circle = circleOfDoc(file.id, email);
+  let members = [];
+  try {
+    members = circle ? circleMemberNames(circle) : [];
+  } catch (e) {
+    console.error('Couldn\'t list ' + file.name + '\'s members, for its Roles: ' + e.message);
+  }
+  build(file.id, members);
   const subNames = subNamesOf(props);
   fillAbout(file.id, file.name.replace(/ Agenda$/, ''), email, circle, props[AGENDA_KEYS.parent],
     subNames);
