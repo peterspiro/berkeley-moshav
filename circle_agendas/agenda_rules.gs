@@ -79,6 +79,56 @@ function meetingIdFromUrl(url) {
   return m ? m[1] : null;
 }
 
+// ── Announcing a meeting's agenda ────────────────────────────────────────────
+
+// The address of Gmail's compose window, which an agenda's "✉ Announce
+// agenda" link opens, filled in (see announceUrl).
+const GMAIL_COMPOSE_URL = 'https://mail.google.com/mail/?view=cm&fs=1';
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August',
+  'September', 'October', 'November', 'December'];
+
+// Whether a link's address is an "✉ Announce agenda" link's.
+function isAnnounceUrl(url) {
+  return String(url || '').startsWith(GMAIL_COMPOSE_URL);
+}
+
+// "Tuesday, November 10" from '2026-11-10'; '' if it isn't such a date.
+function formatLongDate(date) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date || '');
+  if (!m) return '';
+  const day = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+  return WEEKDAYS[day.getUTCDay()] + ', ' + MONTH_NAMES[day.getUTCMonth()] + ' ' + day.getUTCDate();
+}
+
+// "7:30 pm" from 1170 (19:30); wraps past midnight.
+function formatClockTime(minutes) {
+  const m = ((minutes % 1440) + 1440) % 1440;
+  return formatTime(m) + (m < 720 ? ' am' : ' pm');
+}
+
+// The address of an "✉ Announce agenda" link: Gmail's compose window,
+// addressed to the circle's email list (to), saying that the agenda of
+// the circle's (circleName's) meeting on date ('yyyy-MM-dd') is ready,
+// with a link to it (agendaUrl, the meeting's tab), its time, from start
+// (as written after "Time") and hours (after "Duration"), each left out
+// if it can't be read, and its Zoom room (zoomUrl), if it has one.
+function announceUrl({to, circleName, date, start, hours, zoomUrl, agendaUrl}) {
+  const longDate = formatLongDate(date);
+  const subject = circleName + ' meeting' + (longDate ? ' on ' + longDate : '') + ': agenda ready';
+  const from = parseTime(start);
+  const length = parseHours(hours);
+  const lines = ['The agenda for the ' + circleName + ' meeting' +
+    (longDate ? ' on ' + longDate : '') + ' is ready:', agendaUrl, ''];
+  if (from !== null) {
+    lines.push('Time: ' + formatClockTime(from) +
+      (length !== null ? ' to ' + formatClockTime(from + length) : ''));
+  }
+  if (zoomUrl) lines.push('Zoom: ' + zoomUrl);
+  return GMAIL_COMPOSE_URL + '&to=' + encodeURIComponent(to) +
+    '&su=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(lines.join('\n').trim());
+}
+
 // "1.5" from 90 minutes, "2" from 120: a meeting's length as written after
 // its "Duration".
 function formatHours(minutes) {

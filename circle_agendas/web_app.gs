@@ -13,6 +13,9 @@
  *
  * It acts only on circle agenda docs and the latest preview (isAgendaDoc).
  *
+ * A meeting's "✉ Announce agenda" link doesn't come here: it opens Gmail's
+ * compose window directly (see announceUrl in agenda_rules.gs).
+ *
  * The links are written with the web app's address, from the WEB_APP_URL
  * script property, and the doc's own ID; a doc copied by hand still has
  * its original's ID in its links.

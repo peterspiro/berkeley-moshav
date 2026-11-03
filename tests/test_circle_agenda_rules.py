@@ -205,6 +205,52 @@ class TestMeetingIdFromUrl:
         assert js(f"meetingIdFromUrl({json.dumps(url)})") == meeting_id
 
 
+class TestAnnounceUrl:
+    ARGS = {
+        "to": "tech@berkeleymoshav.org", "circleName": "Technology Circle",
+        "date": "2026-11-10", "start": "7:30 PM", "hours": "1.5",
+        "zoomUrl": "https://us02web.zoom.us/j/123",
+        "agendaUrl": "https://docs.google.com/document/d/D/edit?tab=t.abc"}
+
+    def _parts(self, **changes):
+        from urllib.parse import parse_qs, urlsplit
+        url = js(f"announceUrl({json.dumps({**self.ARGS, **changes})})")
+        assert url.startswith("https://mail.google.com/mail/?view=cm&fs=1&")
+        assert js(f"isAnnounceUrl({json.dumps(url)})") is True
+        # Not mistaken for one of the meeting's web app links.
+        assert js(f"meetingIdFromUrl({json.dumps(url)})") is None
+        query = parse_qs(urlsplit(url).query)
+        return query["to"][0], query["su"][0], query["body"][0]
+
+    def test_announces_the_meeting(self):
+        to, subject, body = self._parts()
+        assert to == "tech@berkeleymoshav.org"
+        assert subject == "Technology Circle meeting on Tuesday, November 10: agenda ready"
+        assert body == (
+            "The agenda for the Technology Circle meeting on Tuesday, November 10 is ready:\n"
+            "https://docs.google.com/document/d/D/edit?tab=t.abc\n\n"
+            "Time: 7:30 pm to 9:00 pm\n"
+            "Zoom: https://us02web.zoom.us/j/123")
+
+    def test_reads_typed_times(self):
+        _, _, body = self._parts(start="11:15", hours="1:30")
+        assert "Time: 11:15 am to 12:45 pm" in body
+
+    def test_leaves_out_what_it_cannot_read(self):
+        _, subject, body = self._parts(date="soon", start="?", hours="?", zoomUrl=None)
+        assert subject == "Technology Circle meeting: agenda ready"
+        assert body == ("The agenda for the Technology Circle meeting is ready:\n"
+                        "https://docs.google.com/document/d/D/edit?tab=t.abc")
+
+    def test_time_without_length(self):
+        _, _, body = self._parts(hours="?")
+        assert "Time: 7:30 pm\n" in body
+
+    def test_other_links_are_not_announce_links(self):
+        assert js('isAnnounceUrl("https://x/exec?action=times&doc=D&meeting=m")') is False
+        assert js("isAnnounceUrl(null)") is False
+
+
 class TestFormatHours:
     @pytest.mark.parametrize("minutes, text", [(90, "1.5"), (120, "2"), (45, "0.75"), (100, "1.67")])
     def test_formats(self, minutes, text):

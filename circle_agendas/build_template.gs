@@ -331,7 +331,7 @@ function meetingTable(body, docId, details) {
     const r = MEETING_HEADER_ROWS + i;
     const cell = c => table.getCell(r, c);
     if (item.links) {
-      linksRow(table.getRow(r), docId, meetingId);
+      linksRow(table.getRow(r), docId, meetingId, details);
       shadeFollowUp(table, r);
       return;
     }
@@ -454,12 +454,24 @@ function meetingRolesDropdownId(meetingId) {
 // first tab.
 const ROLES_DROPDOWN_ID = 'kix.roles';
 
-// The row of links that add an item and update the times.
-function linksRow(row, docId, meetingId) {
+const ANNOUNCE_LABEL = '✉ Announce agenda';
+// The space between a meeting's links.
+const LINK_GAP = '        ';
+
+// The row of links that add an item, update the times, and (if details
+// give the circle's email address and the meeting's tab) open an email to
+// the circle announcing the agenda (see announceUrl).
+function linksRow(row, docId, meetingId, details) {
   for (let c = 0; c < row.getNumCells(); c++) writeCell(row.getCell(c), [[]]);
+  const announce = details && details.circleEmail && details.tabId
+    ? [[LINK_GAP], [ANNOUNCE_LABEL, {[A.LINK_URL]: announceUrl({
+      to: details.circleEmail, circleName: details.circleName, date: details.date,
+      start: details.start, hours: details.hours, zoomUrl: details.place,
+      agendaUrl: tabUrl(docId, details.tabId)})}]]
+    : [];
   writeCell(row.getCell(COL.description), [[
-    ['+ Add item', {[A.LINK_URL]: actionUrl('item', docId, meetingId)}], ['        '],
-    ['↻ Update times', {[A.LINK_URL]: actionUrl('times', docId, meetingId)}]]]);
+    ['+ Add item', {[A.LINK_URL]: actionUrl('item', docId, meetingId)}], [LINK_GAP],
+    ['↻ Update times', {[A.LINK_URL]: actionUrl('times', docId, meetingId)}], ...announce]]);
 }
 
 // The Administrative matters item's description: its title and a bulleted
