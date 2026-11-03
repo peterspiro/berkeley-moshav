@@ -315,7 +315,7 @@ function meetingTable(body, docId, details) {
   body.appendParagraph(token('date', details.date + 'T12:00:00Z'))
     .setHeading(DocumentApp.ParagraphHeading.HEADING2);
   writeRuns(body.appendParagraph(''), [['Time  ', BOLD], [details.start],
-    ['     Duration ', BOLD], ['(h:mm or h.hh format)  ', MUTED], [details.hours],
+    ['     Duration ', BOLD], ['(h:mm or h.hh)  ', MUTED], [details.hours],
     ['     Place  ', BOLD],
     ...(details.place ? [['Zoom room', {[A.LINK_URL]: details.place}]] : [])]);
   const spacer = attendance(body, details, meetingId);

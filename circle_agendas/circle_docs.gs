@@ -48,6 +48,8 @@ const LAYOUT_VERSION = 4;
 const ABOUT_ORDER_LAYOUT = 2;
 // The first layout version with the Circle calendar and Remind before meetings rows.
 const NEW_ROWS_LAYOUT = 3;
+// The first layout version with the Roles' dropdowns and date chips.
+const ROLES_CHIPS_LAYOUT = 4;
 const BUILD_EVERY_MINUTES = 10;
 
 // The hour (in the script's time zone) updateRolesInCircleDocs runs, each
@@ -606,6 +608,142 @@ function addNewAboutRows(docId) {
   }
   doc.saveAndClose();
   return adds.map(a => a.label);
+}
+
+// Run from the editor: in every built doc from before the Roles had
+// dropdowns and date chips (layout version 3), makes its Roles table as
+// rolesTable makes it (see upgradeRoles), and labels the doc layout version
+// ROLES_CHIPS_LAYOUT, so the daily and 10-minute runs look after it. Docs
+// on an older layout are skipped: run addNewAboutRowsToCircleDocs first.
+function upgradeRolesInCircleDocs() {
+  for (const file of builtCircleDocs()) {
+    const props = file.properties || {};
+    const layout = Number(props[AGENDA_KEYS.layout] || 1);
+    if (layout >= ROLES_CHIPS_LAYOUT) continue;
+    if (layout < NEW_ROWS_LAYOUT) {
+      console.warn('Skipped ' + file.name + ': run addNewAboutRowsToCircleDocs first.');
+      continue;
+    }
+    try {
+      const notes = upgradeRolesOf(file.id, props);
+      Drive.Files.update({properties: {[AGENDA_KEYS.layout]: String(ROLES_CHIPS_LAYOUT)}},
+        file.id, null, {supportsAllDrives: true});
+      logLink('Upgraded the Roles in ' + file.name + ':',
+        'https://docs.google.com/document/d/' + file.id + '/edit');
+      for (const note of notes) Logger.log('  ' + note);
+    } catch (e) {
+      console.error('Couldn\'t upgrade the Roles in ' + file.name + ': ' + e.message);
+    }
+  }
+}
+
+// Run from the editor: copies the first built doc that
+// upgradeRolesInCircleDocs would change into your My Drive, unlabelled (so
+// no script acts on it), upgrades the copy's Roles as that would, and logs
+// its link, to look at before running upgradeRolesInCircleDocs. Delete the
+// copy after.
+function tryUpgradeRolesOnCopy() {
+  const file = builtCircleDocs().find(f => {
+    const layout = Number((f.properties || {})[AGENDA_KEYS.layout] || 1);
+    return layout >= NEW_ROWS_LAYOUT && layout < ROLES_CHIPS_LAYOUT;
+  });
+  if (!file) return Logger.log('No built doc needs its Roles upgraded.');
+  const copy = DriveApp.getFileById(file.id).makeCopy('Roles test: ' + file.name,
+    DriveApp.getRootFolder());
+  const unlabel = {};
+  for (const key of Object.keys(file.properties || {})) unlabel[key] = null;
+  Drive.Files.update({properties: unlabel}, copy.getId(), null, {supportsAllDrives: true});
+  const notes = upgradeRolesOf(copy.getId(), file.properties || {});
+  logLink('Upgraded the Roles in a copy of ' + file.name + ':',
+    'https://docs.google.com/document/d/' + copy.getId() + '/edit');
+  for (const note of notes) Logger.log('  ' + note);
+}
+
+// Upgrades a doc's Roles with its circle's members (the circle of the doc,
+// or of labels props, from the doc it was copied from).
+function upgradeRolesOf(docId, props) {
+  const circle = circleOfDoc(docId, props[AGENDA_KEYS.group]);
+  return upgradeRoles(docId, circle ? circleMemberNames(circle) : []);
+}
+
+// Makes a doc's Roles table as rolesTable makes it, keeping what's in it:
+// each Name cell becomes a dropdown of the circle's members (names) showing
+// what was written there (a choice of its own, if it isn't a member's
+// name; the dash, if it was empty), and each Term ends cell a date chip of
+// the date written there (today's, if it was empty). A Term ends that
+// can't be read as a date is left as it is. Its heading loses its grey
+// "yyyy-mm-dd". Returns notes on what was left as it was. Throws, changing
+// nothing, if the doc has no Roles table or its Roles already have
+// dropdowns.
+function upgradeRoles(docId, names) {
+  const tab = Docs.Documents.get(docId, {includeTabsContent: true}).tabs[0];
+  if ((tab.documentTab.dropdownDefinitions || {})[ROLES_DROPDOWN_ID]) {
+    throw new Error('its Roles already have dropdowns');
+  }
+  const apiTable = tab.documentTab.body.content.find(se => se.table &&
+    apiCellText(se.table.tableRows[0].tableCells[0]).trim().startsWith('Circle Roles'));
+  if (!apiTable) throw new Error('it has no Roles table');
+  // What's written in each role's Name and Term ends, chips included.
+  const written = apiTable.table.tableRows.slice(1).map(row => ({
+    role: apiCellText(row.tableCells[0]).trim(),
+    name: row.tableCells[1] ? apiCellValue(row.tableCells[1]) : '',
+    term: row.tableCells[2] ? apiCellValue(row.tableCells[2]) : '',
+  }));
+  const options = roleChoices(names, written.map(w => w.name));
+  const today = Utilities.formatDate(new Date(), TIME_ZONE, 'yyyy-MM-dd');
+  const notes = [];
+
+  const doc = DocumentApp.openById(docId);
+  const found = findRow(firstTabBody(doc), text => text.startsWith('Circle Roles'));
+  if (!found || found.table.getNumRows() !== written.length + 1) {
+    throw new Error('its Roles table couldn\'t be read');
+  }
+  const table = found.table;
+  const rewrite = (cell, runs, align) => {
+    resetCell(cell);
+    writeCell(cell, [runs]);
+    if (align) alignCell(cell, DocumentApp.HorizontalAlignment.CENTER);
+  };
+  if (table.getRow(0).getNumCells() > 2) rewrite(table.getCell(0, 2), [['Term ends', BOLD]], true);
+  written.forEach((w, i) => {
+    const row = table.getRow(i + 1);
+    if (row.getNumCells() < 3) {
+      notes.push('Left the ' + snippet(w.role, 30) + ' row as it was: it has too few cells.');
+      return;
+    }
+    rewrite(row.getCell(1), [[token('dropdown', ROLES_DROPDOWN_ID, roleOptionId(options, w.name))]]);
+    const date = w.term ? dateFromDisplayText(w.term) : today;
+    if (date) {
+      rewrite(row.getCell(2), [[token('date', date)]], true);
+    } else {
+      notes.push('Left ' + snippet(w.role, 30) + '\'s Term ends, "' + w.term + '", as it was: ' +
+        'it isn\'t a date the script can read. Replace it with a date chip (@date) by hand.');
+    }
+  });
+  doc.saveAndClose();
+
+  Docs.Documents.batchUpdate({requests: [
+    roleDropdownRequest(ROLES_DROPDOWN_ID, options, tab.tabProperties.tabId)]}, docId);
+  replaceTokens(docId);
+  markPastTermEnds(docId);
+  return notes;
+}
+
+// What a Docs API table cell says, chips included (a person chip by name, a
+// dropdown by its choice, a date as shown), its lines joined by spaces.
+function apiCellValue(cell) {
+  const parts = [];
+  walkParagraphs(cell.content, para => {
+    for (const pe of para.elements || []) {
+      if (pe.textRun) parts.push(pe.textRun.content);
+      else if (pe.person) parts.push((pe.person.personProperties || {}).name ||
+        (pe.person.personProperties || {}).email || '');
+      else if (pe.dropdown) parts.push((pe.dropdown.dropdownProperties || {}).displayValue || '');
+      else if (pe.dateElement) parts.push((pe.dateElement.dateElementProperties || {}).displayText || '');
+    }
+    parts.push(' ');
+  });
+  return parts.join('').replace(/\s+/g, ' ').trim();
 }
 
 // Every built circle doc ({id, name, properties}).

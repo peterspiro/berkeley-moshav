@@ -262,8 +262,18 @@ since its last run, so a changed date is colored within about 10 minutes.
 Date chips are in Docs' default format ("Nov 3, 2026"), which, unlike the
 others, Docs keeps when someone picks a new date. To try the daily run on the latest preview, run
 **`tryUpdateRoles`** in the editor; it logs what it changed.
-Docs built before layout version 4 keep their plain-text Roles, which new
-meetings still read. It can also be run by hand, to build waiting docs at once; the
+Docs built before layout version 4 have plain-text Roles (which new
+meetings still read); **`upgradeRolesInCircleDocs`**, run in the editor,
+changes them over: in every doc on layout version 3, each Name becomes a
+dropdown of the circle's members showing what was written there (as a
+choice of its own if it isn't a member's name, the dash if it was empty),
+and each Term ends a date chip of the date written there (today's if it was
+empty); a Term ends it can't read as a date is left as it is, and the log
+says so, to replace by hand. It labels the doc layout version 4, and skips
+docs on older layouts (run `addNewAboutRowsToCircleDocs` first). To see
+what it does first, run **`tryUpgradeRolesOnCopy`**: it upgrades an
+unlabelled copy of one such doc, in your My Drive, and logs its link
+(delete the copy after). It can also be run by hand, to build waiting docs at once; the
 log links each doc it built.
 
 Building only ever adds to a doc, so it's done only to one that's still

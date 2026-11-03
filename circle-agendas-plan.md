@@ -84,7 +84,7 @@ don't reach docs already built, and will take their own scripts (see
   retitles the tab when its date chip has been changed.
 - **New agenda item**: a link in each meeting adds a topic after its last
   topic (before Action Items Recap), with a duration of 5 minutes.
-- **Meeting length**: after "Duration (h:mm or h.hh format)" in the line
+- **Meeting length**: after "Duration (h:mm or h.hh)" in the line
   above the table, as 1.5 or 1:30.
 - **Times**: every item's duration can be edited except the closing
   round's, which is the meeting's end minus the time the closing round

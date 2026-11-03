@@ -95,6 +95,7 @@ class TestHeaderTimeText:
     @pytest.mark.parametrize("line, text", [
         ("Time  19:30     Duration (hours)  1.5     Place  Zoom room", "1.5"),
         ("Time  19:30     Duration (h:mm or h.hh format)  1:30     Place  Zoom room", "1:30"),
+        ("Time  19:30     Duration (h:mm or h.hh)  1:30     Place  Zoom room", "1:30"),
         ("Time 19:30 Duration 1:30", "1:30"),
         ("Time 19:30 Place Zoom", ""),
         ("Time  19:30     Duration (hours)     Place", "")])

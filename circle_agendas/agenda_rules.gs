@@ -60,7 +60,7 @@ function parseHours(text) {
 }
 
 // The time typed after "Time" in a meeting's
-// "Time 19:30   Duration (h:mm or h.hh format) 1.5   Place …" line.
+// "Time 19:30   Duration (h:mm or h.hh) 1.5   Place …" line.
 function headerTimeText(line) {
   const m = /Time\s*(.*?)\s*(?:Duration\b|Place\b|$)/i.exec(line || '');
   return m ? m[1] : '';
