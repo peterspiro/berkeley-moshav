@@ -653,17 +653,24 @@ function tryUpgradeRolesOnCopy() {
   const unlabel = {};
   for (const key of Object.keys(file.properties || {})) unlabel[key] = null;
   Drive.Files.update({properties: unlabel}, copy.getId(), null, {supportsAllDrives: true});
-  const notes = upgradeRolesOf(copy.getId(), file.properties || {});
+  // The copy isn't in the circle's folder, so its circle is the original's.
+  const notes = upgradeRolesOf(copy.getId(), file.properties || {}, file.id);
   logLink('Upgraded the Roles in a copy of ' + file.name + ':',
     'https://docs.google.com/document/d/' + copy.getId() + '/edit');
   for (const note of notes) Logger.log('  ' + note);
 }
 
-// Upgrades a doc's Roles with its circle's members (the circle of the doc,
-// or of labels props, from the doc it was copied from).
-function upgradeRolesOf(docId, props) {
-  const circle = circleOfDoc(docId, props[AGENDA_KEYS.group]);
-  return upgradeRoles(docId, circle ? circleMemberNames(circle) : []);
+// Upgrades a doc's Roles with its circle's members: the circle of the doc
+// (or of circleDocId, the doc a copy was made from) or of its labels props.
+// Returns notes, starting with whose members the dropdowns list.
+function upgradeRolesOf(docId, props, circleDocId) {
+  const circle = circleOfDoc(circleDocId || docId, props[AGENDA_KEYS.group]);
+  const names = circle ? circleMemberNames(circle) : [];
+  const notes = upgradeRoles(docId, names);
+  notes.unshift(circle
+    ? 'The Name dropdowns list ' + names.length + ' members of ' + circle.name + '.'
+    : 'Couldn\'t find the doc\'s circle, so the Name dropdowns list no members.');
+  return notes;
 }
 
 // Makes a doc's Roles table as rolesTable makes it, keeping what's in it:
