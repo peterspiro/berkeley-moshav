@@ -10,7 +10,8 @@
  *   1. An event the group calendar organizes gets the group's Zoom room —
  *      its link in the location, and the link, meeting ID, passcode, and
  *      the Zoom user that owns the room in the description — plus a link
- *      to the group's agenda doc, if it has one (see agendaDocsByAddress),
+ *      to the group's agenda doc, if it has one (see agendaDocsByAddress;
+ *      if its doc is trashed or deleted, the link is removed),
  *      and the all-events calendar and the group's Google Group as guests
  *      (see computeEventPatch in event_rules.gs).
  *   2. An event that's only a copy of someone's invitation (made on their
@@ -72,7 +73,7 @@ const ZOOM_USER_NUMBERS = {
 
 // Script Properties keys.
 const PROP_GROUPS = 'groups';                // JSON [{ email, name, calendarId, zoomUrl, passcode,
-                                             //         agendaUrl?, reminders? }]
+                                             //         agendaUrl?, reminders?, staleAgendaUrl? }]
 const PROP_OTHER_CALENDARS = 'otherCalendars'; // JSON [{ id, name }], see refreshOtherCalendars
 const PROP_SYNC_PREFIX = 'syncToken:';       // + calendar ID
 const PROP_COPY_ALERTS = 'copyAlerts';       // JSON { iCalUID: forgetAfterMs }
@@ -240,10 +241,13 @@ function refreshGroups() {
       if (links.calendarId) {
         const addresses = [g.email, ...(g.aliases || [])].map(a => a.toLowerCase());
         const docId = addresses.map(a => agendaDocs[a]).find(Boolean);
-        const group = Object.assign({ email: g.email.toLowerCase(), name: g.name }, links);
+        const email = g.email.toLowerCase();
+        const group = Object.assign({ email, name: g.name }, links);
         if (docId) {
           group.agendaUrl = `https://docs.google.com/document/d/${docId}/edit`;
-          group.reminders = reminderSetting(docId, previous.get(group.email));
+          group.reminders = reminderSetting(docId, previous.get(email));
+        } else {
+          Object.assign(group, staleAgendaDoc(previous.get(email)));
         }
         groups.push(group);
       }
@@ -261,6 +265,16 @@ function refreshGroups() {
   setJson(PROP_GROUPS, groups);
   console.log(`${groups.length} group calendar(s).`);
   return groups;
+}
+
+/**
+ * For a group found with no agenda doc: the doc it last had, which was
+ * trashed or deleted (or {} if none), kept until it has a doc again, so
+ * its events lose their lines linking that doc (see computeEventPatch).
+ */
+function staleAgendaDoc(old) {
+  const url = old && (old.agendaUrl || old.staleAgendaUrl);
+  return url ? { staleAgendaUrl: url } : {};
 }
 
 /**
@@ -390,6 +404,7 @@ function handleEvent(event, group, groups) {
     allEventsCalendarId: ALL_EVENTS_CALENDAR_ID,
     faqUrl: MEETINGS_FAQ_URL,
     agendaUrl: group.agendaUrl || null,
+    staleAgendaUrl: group.staleAgendaUrl || null,
   });
   if (!change) return;
   Calendar.Events.patch(change.patch, group.calendarId, event.id,

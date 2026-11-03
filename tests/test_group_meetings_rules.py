@@ -235,6 +235,77 @@ class TestAgendaLink:
         assert "Agenda and minutes" not in patch({}, CTX_FAQ)["patch"]["description"]
 
 
+class TestStaleAgendaLink:
+    """A group whose agenda doc was trashed or deleted: agendaUrl is gone,
+    and staleAgendaUrl names the doc it had."""
+    GONE = "https://docs.google.com/document/d/GONE_doc-9/edit"
+    OTHER = "https://docs.google.com/document/d/OTHER_doc-2/edit"
+    LINE = f"Agenda and minutes: {GONE}"
+    CTX = {**CTX_FAQ, "staleAgendaUrl": GONE}
+    NO_ZOOM_CTX = {**CTX, "zoomUrl": None}
+
+    def test_removed_from_event_with_zoom(self):
+        event = done_with({"description": "Notes"}, {**CTX_FAQ, "agendaUrl": self.GONE})
+        assert self.LINE in event["description"]
+        desc = patch(event, self.CTX)["patch"]["description"]
+        assert desc == done_with({"description": "Notes"}, CTX_FAQ)["description"]
+
+    def test_removed_once(self):
+        event = done_with({"description": "Notes"}, {**CTX_FAQ, "agendaUrl": self.GONE})
+        assert patch(done_with(event, self.CTX), self.CTX) is None
+
+    def test_removed_without_zoom(self):
+        event = {"description": f"In person [no zoom]\n\n{self.LINE}"}
+        assert patch(event, self.CTX)["patch"]["description"] == "In person [no zoom]"
+
+    def test_removed_from_start(self):
+        event = {"description": f"{self.LINE}\n\nIn person [no zoom]"}
+        assert patch(event, self.CTX)["patch"]["description"] == "In person [no zoom]"
+
+    def test_removed_from_html_link(self):
+        event = {"description": (f'Notes<br><br>Agenda and minutes: <a href="{self.GONE}">'
+                                 f'{self.GONE}</a><br>More [no zoom]')}
+        assert patch(event, self.CTX)["patch"]["description"] == "Notes<br>More [no zoom]"
+
+    def test_removed_with_no_zoom_room(self):
+        event = {"description": f"Notes\n\n{self.LINE}"}
+        change = patch(event, self.NO_ZOOM_CTX)
+        assert change["patch"]["description"] == "Notes"
+
+    def test_other_docs_kept(self):
+        desc = (f"[no zoom] Minutes: {self.GONE}\n\nAgenda and minutes: {self.OTHER}\n\n"
+                f"{self.LINE}")
+        assert patch({"description": desc}, self.CTX)["patch"]["description"] == (
+            f"[no zoom] Minutes: {self.GONE}\n\nAgenda and minutes: {self.OTHER}")
+
+    def test_rest_of_line_kept(self):
+        """Text typed after the link stays, so a "[no zoom]" there still counts."""
+        event = {"description": f"Notes\n\n{self.LINE} [no zoom]"}
+        assert patch(event, self.CTX)["patch"]["description"] == "Notes\n\n[no zoom]"
+
+    def test_reminder_tag_on_line_kept(self):
+        event = {"description": f"Notes\n\n{self.LINE} [remind 2 hours] [no zoom]"}
+        desc = patch(event, self.CTX)["patch"]["description"]
+        assert desc == "Notes\n\n[remind 2 hours] [no zoom]"
+        assert js("reminderLeads(e, null).leads", e={"description": desc}) == [2 * 3600 * 1000]
+
+    def test_rest_of_html_line_kept(self):
+        event = {"description": (f'Notes<br>Agenda and minutes: <a href="{self.GONE}">'
+                                 f'{self.GONE}</a> [no zoom]<br>More')}
+        assert patch(event, self.CTX)["patch"]["description"] == (
+            "Notes<br>[no zoom]<br>More")
+
+    def test_nothing_to_remove(self):
+        change = patch({"description": "In person [no zoom]"}, self.CTX)
+        assert "description" not in change["patch"]
+
+    def test_current_doc_takes_precedence(self):
+        """A group that has a doc again relinks the line instead."""
+        ctx = {**self.CTX, "agendaUrl": self.OTHER}
+        desc = patch({"description": f"{self.LINE} [no zoom]"}, ctx)["patch"]["description"]
+        assert desc == f"Agenda and minutes: {self.OTHER} [no zoom]"
+
+
 class TestZoomLinkToFollow:
     def desc(self, description):
         return patch({"description": description})["patch"]["description"]

@@ -363,7 +363,8 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
   the room) with a link to the "BM Meetings FAQ", in place of
   any "Zoom link to follow" line, and the group and the all-events calendar as guests, unless it's marked `[no zoom]`
   or has another meeting link typed in (then it gets only the guests).
-  An event of a group with a circle agenda doc also gets a link to the doc.
+  An event of a group with a circle agenda doc also gets a link to the doc,
+  removed again if the doc is trashed or deleted.
   An event that's only a copy of someone's invitation gets its organizer an
   email asking them to create it on the group calendar instead. Each group
   gets a reminder email before each of its meetings: 24 hours before, unless
