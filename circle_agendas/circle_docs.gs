@@ -348,8 +348,8 @@ function reorderAbout(docId) {
 
 // Run from the editor: adds the rows added to About this circle since
 // layout version 2 (ABOUT_ADDED_LATER: Circle calendar, linking the
-// circle's calendar, and Meeting reminders, saying 24 hours before, the
-// default, with examples of what else it can say), each in its place, to
+// circle's calendar, and Meeting reminders, saying 24 hours, the default,
+// with how to write it in its label cell), each in its place, to
 // every built doc of layout version 2 that lacks them, and labels it
 // NEW_ROWS_LAYOUT. A doc of layout version 1 is skipped (the log says so):
 // run reorderAboutInCircleDocs first. Safe to run again.
@@ -379,7 +379,8 @@ function addNewAboutRowsToCircleDocs() {
 
 // Adds the rows ABOUT_ADDED_LATER that a doc's About this circle lacks,
 // each just below the row it follows (see aboutRowsToAdd), as aboutTable
-// makes them, empty but for Meeting reminders' default and examples.
+// makes them, empty but for Meeting reminders' default (and, in its label
+// cell, how to write it).
 // Returns the labels of the rows added.
 function addNewAboutRows(docId) {
   const doc = DocumentApp.openById(docId);
@@ -394,8 +395,8 @@ function addNewAboutRows(docId) {
     const row = table.insertTableRow(index);
     row.appendTableCell('');
     row.appendTableCell('');
-    writeAboutRow(row, [label], label === REMINDER_ROW_LABEL
-      ? [[[REMINDER_DEFAULT_TEXT]], [[REMINDER_HINT, HINT]]] : []);
+    writeAboutRow(row, label === REMINDER_ROW_LABEL ? [label, REMINDER_HINT] : [label],
+      label === REMINDER_ROW_LABEL ? [[[REMINDER_DEFAULT_TEXT]]] : []);
   }
   doc.saveAndClose();
   return adds.map(a => a.label);

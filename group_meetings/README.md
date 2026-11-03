@@ -38,7 +38,8 @@ Apps Script that looks after every group's Google calendar (the calendars
     reminders** row of About this circle (see `../circle_agendas/`): any
     length of time ("24 hours", "2 days", "90 minutes", "1h30m"), several
     separated by commas or "and" ("2 days, 1 hour"), or "none" for no
-    reminders. The row is reread hourly. Up to two weeks before;
+    reminders (an empty cell means the default). The row's value cell is
+    reread hourly. Up to two weeks before;
   - one meeting can have its own, in its title or description:
     `[remind 2 hours]`, `[remind 1 day, 1 hour]`, or `[no reminder]`.
     This wins over the group's setting.

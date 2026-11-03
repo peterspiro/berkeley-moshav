@@ -216,7 +216,7 @@ function aboutTable(body) {
     [['Policies folder'], [['Paste a link to the circle\'s policies folder', HINT]]],
     [['Zoom room'], []],
     [[CALENDAR_ROW_LABEL], []],
-    [[REMINDER_ROW_LABEL], [[REMINDER_DEFAULT_TEXT]], [[REMINDER_HINT, HINT]]],
+    [[REMINDER_ROW_LABEL, REMINDER_HINT], [[REMINDER_DEFAULT_TEXT]]],
     [['Circle email address'], []],
     [['Other Key Links'], []],
     [['Google Drive Folder'], []],

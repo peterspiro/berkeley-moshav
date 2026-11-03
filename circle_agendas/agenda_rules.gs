@@ -144,9 +144,10 @@ const CALENDAR_ROW_LABEL = 'Circle calendar';
 // (its first line) to know when to email the circle a reminder of each
 // meeting (see parseReminderLeads in group_meetings/event_rules.gs).
 const REMINDER_ROW_LABEL = 'Meeting reminders';
-const REMINDER_DEFAULT_TEXT = '24 hours before';
-const REMINDER_HINT = 'Examples: “24 hours”; “2 days”; “90 minutes”; “2 days, 1 hour”. ' +
-  'Write “none” for no reminders.';
+// The row's value cell holds only the setting; how to write it is the
+// grey second line of its label cell.
+const REMINDER_DEFAULT_TEXT = '24 hours';
+const REMINDER_HINT = 'how long before each meeting, e.g. 2 days; 90 minutes; 2 days, 1 hour; none';
 const ABOUT_LABELS = ['Aims & Domain', 'Policies folder', 'Zoom room', CALENDAR_ROW_LABEL,
   REMINDER_ROW_LABEL, 'Circle email address', 'Other Key Links', 'Google Drive Folder',
   'Parent Circle', 'Sub-Circles'];

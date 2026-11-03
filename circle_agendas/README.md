@@ -222,9 +222,10 @@ doc, in your My Drive, and logs its link (delete the copy after).
 
 The Meeting reminders row says when the circle's email list gets an email
 reminder of each meeting (`group_meetings/` sends them, and reads the row's
-first line hourly): "24 hours before" to start with, followed by a grey
-line of examples: "Examples: “24 hours”; “2 days”; “90 minutes”; “2 days,
-1 hour”. Write “none” for no reminders." (A meeting's own
+value cell hourly): it holds only the setting, "24 hours" to start with
+(empty means that default too). How to write it is the grey second line of
+the label cell: "how long before each meeting, e.g. 2 days; 90 minutes;
+2 days, 1 hour; none". (A meeting's own
 `[remind 2 hours]` or `[no reminder]`, in its description, wins; each
 reminder email says so.)
 

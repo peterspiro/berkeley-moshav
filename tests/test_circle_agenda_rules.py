@@ -206,34 +206,26 @@ class TestAboutReorder:
                     "share@berkeleymoshav.org"]:
             assert js(f"calendarUrl({json.dumps(cal)})") == calendar_url(cal)
 
-    def test_reminder_default_and_hint_parse_as_meant(self):
-        # The default reads as 24 hours; the hint (the row's second line)
-        # mentions "none", but isn't itself read as a setting.
+    def test_reminder_default_and_examples_parse_as_meant(self):
+        # The default, and each example in the label's grey line, reads as
+        # the setting it shows.
         group_rules = RULES.parent.parent / "group_meetings" / "event_rules.gs"
+        hint = js("REMINDER_HINT")
+        examples = hint.split("e.g. ")[1].split("; ")
+        assert examples[-1] == "none"
+        texts = [js("REMINDER_DEFAULT_TEXT")] + examples
         program = f"""
 const vm = require('vm'), fs = require('fs');
 const ctx = vm.createContext({{}});
 vm.runInContext(fs.readFileSync({json.dumps(str(group_rules))}, 'utf8'), ctx);
-process.stdout.write(JSON.stringify([
-  vm.runInContext('parseReminderLeads(' + JSON.stringify({json.dumps(js("REMINDER_DEFAULT_TEXT"))}) + ')', ctx),
-  vm.runInContext('parseReminderLeads(' + JSON.stringify({json.dumps(js("REMINDER_HINT"))}) + ')', ctx)]));
+process.stdout.write(JSON.stringify({json.dumps(texts)}.map(t =>
+  vm.runInContext('parseReminderLeads(' + JSON.stringify(t) + ')', ctx))));
 """
         out = json.loads(subprocess.run(["node", "-e", program], capture_output=True, text=True,
                                         check=True).stdout)
-        assert out[0] == {"leads": [24 * 60 * 60 * 1000]}
-        assert "error" in out[1]
-        assert "“none”" in js("REMINDER_HINT")
-        # Each example in the hint reads as a length of time.
-        examples = js("REMINDER_HINT").split("Examples: ")[1].split(". Write")[0].split("; ")
-        for example in examples:
-            out = subprocess.run(["node", "-e", f"""
-const vm = require('vm'), fs = require('fs');
-const ctx = vm.createContext({{}});
-vm.runInContext(fs.readFileSync({json.dumps(str(group_rules))}, 'utf8'), ctx);
-process.stdout.write(JSON.stringify(vm.runInContext('parseReminderLeads(' +
-  JSON.stringify({json.dumps(example)}) + ')', ctx)));
-"""], capture_output=True, text=True, check=True).stdout
-            assert "leads" in json.loads(out), example
+        hour = 60 * 60 * 1000
+        assert out == [{"leads": [24 * hour]}, {"leads": [48 * hour]}, {"leads": [90 * 60 * 1000]},
+                       {"leads": [48 * hour, hour]}, {"leads": []}]
 
     def test_hand_filled_rows_out_of_order(self):
         labels = ["Policies folder"] + [l for l in self.OLD if l != "Policies folder"]

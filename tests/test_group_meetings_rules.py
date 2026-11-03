@@ -649,10 +649,12 @@ def docs_api_doc(rows):
 
 
 class TestDocRowValue:
-    def test_first_line_of_the_value(self):
+    def test_the_whole_value_cell(self):
         doc = docs_api_doc([("Zoom room", "x"),
-                            ("Meeting reminders", "\n2 hours\nWhen the circle's email list...")])
+                            ("Meeting reminders\nhow long before each meeting", "\n2 hours\n")])
         assert js("docRowValue(d, 'Meeting reminders')", d=doc) == "2 hours"
+        doc = docs_api_doc([("Meeting reminders", "2 days\n 1 hour ")])
+        assert js("docRowValue(d, 'Meeting reminders')", d=doc) == "2 days, 1 hour"
 
     def test_empty_and_missing(self):
         doc = docs_api_doc([("Meeting reminders", "")])
@@ -668,6 +670,9 @@ class TestReminderLeads:
     def test_group_setting(self):
         assert js("reminderLeads({}, '2 hours')") == {"leads": [2 * HOUR], "source": "group"}
         assert js("reminderLeads({}, 'none')") == {"leads": [], "source": "group"}
+
+    def test_empty_group_setting_is_the_default_quietly(self):
+        assert js("reminderLeads({}, ' ')") == {"leads": [DAY], "source": "default"}
 
     def test_event_tag_wins(self):
         event = {"summary": "Meeting", "description": "Bring snacks [remind 1 hour, 1 day]"}

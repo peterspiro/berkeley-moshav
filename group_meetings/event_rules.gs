@@ -550,7 +550,8 @@ function formatLead(ms) {
 /**
  * The text of the row labelled label (its first line, ignoring case) in
  * the first table holding one, in a Docs API document (Docs.Documents.get),
- * as the first non-empty line of its second cell; '' if that cell is
+ * as the text of its second cell, its lines joined by commas (so lead
+ * times on separate lines read as separate reminders); '' if that cell is
  * empty, null if there's no such row.
  */
 function docRowValue(doc, label) {
@@ -562,7 +563,7 @@ function docRowValue(doc, label) {
       const cells = row.tableCells || [];
       if (cells.length < 2) continue;
       if (lower(cellText(cells[0]).split('\n')[0].trim()) !== lower(label)) continue;
-      return cellText(cells[1]).split('\n').map(l => l.trim()).find(Boolean) || '';
+      return cellText(cells[1]).split('\n').map(l => l.trim()).filter(Boolean).join(', ');
     }
   }
   return null;
@@ -572,7 +573,7 @@ function docRowValue(doc, label) {
  * When an event's reminders go out: { leads, source, error }. A tag in the
  * event ("[remind 2 hours]", "[no reminder]") wins; then the group's
  * setting (the text of its agenda doc's Meeting reminders row, null if it
- * has none); then DEFAULT_REMINDER_LEADS. source is 'event', 'group', or
+ * has none, '' if it's empty); then DEFAULT_REMINDER_LEADS. source is 'event', 'group', or
  * 'default'; error says why a tag or setting that couldn't be read was
  * passed over, naming which.
  */
@@ -584,7 +585,7 @@ function reminderLeads(event, groupSetting) {
     if (parsed.leads) return { leads: parsed.leads, source: 'event' };
     errors.push(`the event's ${tag[0]} tag: ${parsed.error}`);
   }
-  if (groupSetting !== null && groupSetting !== undefined) {
+  if (groupSetting !== null && groupSetting !== undefined && groupSetting.trim()) {
     const parsed = parseReminderLeads(groupSetting);
     if (parsed.leads) {
       return Object.assign({ leads: parsed.leads, source: 'group' },
