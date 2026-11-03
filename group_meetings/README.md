@@ -21,10 +21,12 @@ Apps Script that looks after every group's Google calendar (the calendars
     an "Agenda and minutes:" line linking it, just above the FAQ line (or
     at the end, for an event without Zoom details), unless the description
     already links the doc; if the group's doc is replaced, the line is
-    relinked to the new one rather than repeated. The doc is found by the label the Python scripts
+    relinked to the new one rather than repeated. If the doc is trashed or
+    deleted (and the group has no other), the link and its label are removed
+    from the line, and the line too if nothing else is on it. The doc is found by the label the Python scripts
     give it in Drive, which names one of the group's addresses; the groups
-    are reread hourly, so a group's new doc reaches its upcoming events
-    within the hour.
+    are reread hourly, so a group's new or removed doc reaches its upcoming
+    events within the hour.
   - an event that's only a copy of someone's invitation (made on their own
     calendar, with the group calendar invited) can't be changed that way, so
     its organizer and `calendaring-alerts@berkeleymoshav.org` get one email

@@ -87,6 +87,11 @@ const GOOGLE_DOC_ID_RE = /\/document\/d\/([\w-]+)/;
 // The rest of an "Agenda and minutes:" line, up to its line break or the
 // end of its HTML element.
 const AGENDA_LINE_RE = /(Agenda and minutes:)((?:(?!\n|<br\s*\/?>|<\/(?:p|div|li)>).)*)/gi;
+// The same, with the line breaks before it.
+const AGENDA_LINE_WITH_BREAKS_RE =
+  new RegExp(String.raw`((?:\n|<br\s*\/?>)*)` + AGENDA_LINE_RE.source, 'gi');
+const LEADING_BREAKS_RE = /^(?:\s|<br\s*\/?>)+/i;
+const HTML_LINK_RE = /<a\b[^>]*>[\s\S]*?<\/a>/gi;
 // A Google Doc's address, as written in a description (bare or in a link).
 const GOOGLE_DOC_URL_RE = /https?:\/\/docs\.google\.com\/document\/d\/[\w-]+[^\s"'<>]*/g;
 // A line saying the Zoom link is still to come ("Zoom link to follow",
@@ -124,7 +129,7 @@ function zoomBlock(room, br) {
 /**
  * What to change on an event organized by a group's own calendar, or null
  * if nothing. ctx: { zoomUrl, passcode, zoomUser, groupEmail,
- * allEventsCalendarId, faqUrl, agendaUrl }, where zoomUser names the Zoom user that
+ * allEventsCalendarId, faqUrl, agendaUrl, staleAgendaUrl }, where zoomUser names the Zoom user that
  * owns the room (null if none is known, undefined to keep the one the
  * description already names).
  *
@@ -144,7 +149,10 @@ function zoomBlock(room, br) {
  *     above the FAQ line (or, without Zoom details, at the end), unless the
  *     description already links that doc anywhere; an "Agenda and minutes:"
  *     line linking another doc (the group's previous one) is relinked
- *     instead.
+ *     instead. A group with no agenda doc (agendaUrl null) loses its
+ *     "Agenda and minutes:" lines that link its last one (staleAgendaUrl),
+ *     since that doc was trashed or deleted; lines linking any other doc
+ *     are kept.
  *   - Guests: the all-events calendar and the group's Google Group.
  * sendUpdates is 'all' when the group is newly invited (so members get the
  * invitation), else 'none'.
@@ -165,6 +173,7 @@ function computeEventPatch(event, ctx) {
     const br = /<[a-z][^>]*>/i.test(description) ? '<br>' : '\n';
     let text = removeToFollowLines(description.replace(ZOOM_BLOCK_RE, '')).replace(/\s+$/, '');
     if (ctx.agendaUrl) text = relinkAgendaLines(text, ctx.agendaUrl);
+    else if (ctx.staleAgendaUrl) text = removeAgendaLines(text, ctx.staleAgendaUrl);
     if (ctx.agendaUrl && !linksDocument(text, ctx.agendaUrl)) {
       const agenda = `${AGENDA_TEXT} ${ctx.agendaUrl}`;
       text = text ? `${text}${br}${br}${agenda}` : agenda;
@@ -195,6 +204,9 @@ function computeEventPatch(event, ctx) {
     } else if (relinked !== description) {
       patch.description = relinked;
     }
+  } else if (ctx.staleAgendaUrl) {
+    const removed = removeAgendaLines(description, ctx.staleAgendaUrl);
+    if (removed !== description) patch.description = removed;
   }
 
   const attendees = event.attendees || [];
@@ -218,8 +230,6 @@ function removeToFollowLines(text) {
     .replace(TO_FOLLOW_ELEMENT_RE, '><');
 }
 
-/** True if text links the Google Doc at docUrl, in any form (a section
- * link, an /edit link, inside formatted text): it contains the doc's ID. */
 /** text with every doc linked on its "Agenda and minutes:" lines replaced
  * by agendaUrl, so a group whose agenda doc is replaced has its events'
  * line point at the new doc rather than gain a second line. */
@@ -228,6 +238,27 @@ function relinkAgendaLines(text, agendaUrl) {
     label + rest.replace(GOOGLE_DOC_URL_RE, agendaUrl));
 }
 
+/** text without the links to the doc at docUrl on its "Agenda and
+ * minutes:" lines, and their label. A line left with nothing else on it is
+ * removed, with the line breaks before it (or, for a line at the start,
+ * after it); anything else typed on the line, such as "[no zoom]", is kept. */
+function removeAgendaLines(text, docUrl) {
+  let atStart = false;
+  const out = (text || '').replace(AGENDA_LINE_WITH_BREAKS_RE, (line, breaks, label, rest, offset) => {
+    if (!linksDocument(rest, docUrl)) return line;
+    const left = rest
+      .replace(HTML_LINK_RE, a => (linksDocument(a, docUrl) ? '' : a))
+      .replace(GOOGLE_DOC_URL_RE, url => (linksDocument(url, docUrl) ? '' : url))
+      .replace(/^(?:\s|&nbsp;)+/, '');
+    if (left.replace(/&nbsp;|<[^>]*>/g, '').trim()) return breaks + left;
+    if (offset === 0) atStart = true;
+    return '';
+  });
+  return atStart ? out.replace(LEADING_BREAKS_RE, '') : out;
+}
+
+/** True if text links the Google Doc at docUrl, in any form (a section
+ * link, an /edit link, inside formatted text): it contains the doc's ID. */
 function linksDocument(text, docUrl) {
   const m = docUrl.match(GOOGLE_DOC_ID_RE);
   return (text || '').includes(m ? m[1] : docUrl);
