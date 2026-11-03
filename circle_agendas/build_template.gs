@@ -701,20 +701,13 @@ function findTokens(content) {
   return found.sort((a, b) => b.start - a.start);
 }
 
-// The format of the date chips the scripts make (a Docs API dateFormat,
-// such as 'DATE_FORMAT_ISO8601', yyyy-mm-dd), or null for Docs' default.
-// With a format, fixDateChipFormats (circle_docs.gs) gives it back to the
-// dates the scripts read when Docs changes it (as it does when someone
-// picks a new date); with null, it leaves them as they are.
-const DATE_CHIP_FORMAT = null;
-
-// A date chip's properties, in DATE_CHIP_FORMAT, for a date ('yyyy-MM-dd',
-// or a timestamp). A chip without a time is shown in UTC, so a date is
-// given noon UTC, which is that date everywhere.
+// A date chip's properties, for a date ('yyyy-MM-dd', or a timestamp), in
+// Docs' default format ("Nov 3, 2026"), which, unlike others, Docs keeps
+// when someone picks a new date. A chip without a time is shown in UTC, so
+// a date is given noon UTC, which is that date everywhere.
 function dateChip(date) {
   return {
     timestamp: /^\d{4}-\d{2}-\d{2}$/.test(date) ? date + 'T12:00:00Z' : date,
-    ...(DATE_CHIP_FORMAT ? {dateFormat: DATE_CHIP_FORMAT} : {}),
     timeFormat: 'TIME_FORMAT_DISABLED',
   };
 }

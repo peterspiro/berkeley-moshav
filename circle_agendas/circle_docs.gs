@@ -84,9 +84,8 @@ function updateRolesInCircleDocs() {
 
 // What the daily run does to a doc: brings the Roles table's Name
 // dropdowns' choices up to date with the circle's members (see
-// updateRoleDropdowns; not without a circle), gives its dates back their
-// format (see fixDateChipFormats), and marks its past Term ends dates red
-// (see markPastTermEnds). Returns lines saying what changed, or what
+// updateRoleDropdowns; not without a circle), and marks its past Term ends
+// dates red (see markPastTermEnds). Returns lines saying what changed, or what
 // couldn't be done; each step is tried even if one before it failed.
 function updateRoles(docId, circle) {
   const lines = [];
@@ -101,10 +100,6 @@ function updateRoles(docId, circle) {
     if (circle && updateRoleDropdowns(docId, circleMemberNames(circle))) {
       lines.push('Updated the Roles choices.');
     }
-  });
-  step('fix the dates\' format', () => {
-    const fixed = fixDateChipFormats(docId);
-    if (fixed) lines.push('Gave ' + fixed + ' date(s) back their format.');
   });
   step('check the terms', () => {
     const marked = markPastTermEnds(docId);
@@ -222,56 +217,6 @@ function describeRoles(docId) {
   return lines;
 }
 
-// Whether a date chip (its properties) is shown in DATE_CHIP_FORMAT: in
-// that format, and, for yyyy-mm-dd, when the API gives its text, showing
-// that. (The API may report the format a chip was made with after Docs has
-// changed it.)
-function showsChipFormat(props) {
-  return props.dateFormat === DATE_CHIP_FORMAT && (DATE_CHIP_FORMAT !== 'DATE_FORMAT_ISO8601' ||
-    !props.displayText || /^\d{4}-\d{2}-\d{2}$/.test(props.displayText));
-}
-
-// Gives the dates the scripts read (the Roles table's Term ends, and each
-// meeting's date, its tab's first) back DATE_CHIP_FORMAT, which Docs
-// changes (to mm/dd/yyyy, say) when someone picks a new date; nothing,
-// when it's null (Docs' default). The Docs API can't change a chip's
-// format, so each is replaced by a new chip of the same date (losing its
-// color, which markPastTermEnds gives back). Returns how many.
-function fixDateChipFormats(docId) {
-  if (!DATE_CHIP_FORMAT) return 0;
-  const flatten = tabs => tabs.flatMap(tab => [tab, ...flatten(tab.childTabs || [])]);
-  const tabs = flatten(Docs.Documents.get(docId, {includeTabsContent: true}).tabs);
-  let count = 0;
-  tabs.forEach((tab, i) => {
-    const tabId = tab.tabProperties.tabId;
-    const content = tab.documentTab.body.content;
-    let chips = [];
-    if (i === 0) {
-      chips = termEndChips(content);
-    } else if (MEETING_TAB_TITLE_RE.test(tab.tabProperties.title)) {
-      walkParagraphs(content, para => {
-        for (const pe of para.elements || []) if (!chips.length && pe.dateElement) chips.push(pe);
-      });
-    }
-    const requests = [];
-    chips.filter(pe => !showsChipFormat(pe.dateElement.dateElementProperties || {}))
-      .sort((a, b) => b.startIndex - a.startIndex)
-      .forEach(pe => {
-        const date = chipDate(pe.dateElement);
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
-        requests.push(
-          {deleteContentRange: {range: {startIndex: pe.startIndex, endIndex: pe.endIndex, tabId}}},
-          {insertDate: {location: {index: pe.startIndex, tabId}, dateElementProperties:
-            dateChip(date)}});
-      });
-    if (requests.length) {
-      Docs.Documents.batchUpdate({requests}, docId);
-      count += requests.length / 2;
-    }
-  });
-  return count;
-}
-
 function buildNewCircleDocs() {
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(1000)) return;
@@ -294,29 +239,28 @@ function buildNewCircleDocs() {
     }
     refreshCircleDocStructures();
     try {
-      fixDatesInChangedCircleDocs();
+      markPastTermEndsInChangedCircleDocs();
     } catch (e) {
-      console.error('Couldn\'t check the changed docs\' dates: ' + e.message);
+      console.error('Couldn\'t check the changed docs\' terms: ' + e.message);
     }
   } finally {
     lock.releaseLock();
   }
 }
 
-// The script property holding when fixDatesInChangedCircleDocs last
-// started.
+// The script property holding when markPastTermEndsInChangedCircleDocs
+// last started.
 const DATES_CHECKED_KEY = 'circleDocDatesCheckedAt';
 // How far before its last start each run looks, in case Drive notes a
 // change a little after it's made.
 const DATES_CHECK_OVERLAP_MS = 2 * 60 * 1000;
 
-// Run by buildNewCircleDocs, every BUILD_EVERY_MINUTES: in each built doc
-// changed since the last run, gives its dates back their format
-// (fixDateChipFormats) and recolors its Term ends dates (markPastTermEnds),
-// so a date someone changes is put right within minutes rather than at
-// the daily run. (A doc a run fixes counts as changed for the next one,
+// Run by buildNewCircleDocs, every BUILD_EVERY_MINUTES: recolors the Term
+// ends dates (markPastTermEnds) in each built doc changed since the last
+// run, so a date someone changes is colored within minutes rather than at
+// the daily run. (A doc a run recolors counts as changed for the next one,
 // which finds nothing to do.)
-function fixDatesInChangedCircleDocs() {
+function markPastTermEndsInChangedCircleDocs() {
   const props = PropertiesService.getScriptProperties();
   const started = Date.now();
   const last = Number(props.getProperty(DATES_CHECKED_KEY)) ||
@@ -330,12 +274,8 @@ function fixDatesInChangedCircleDocs() {
   });
   for (const file of resp.files || []) {
     try {
-      const fixed = fixDateChipFormats(file.id);
       const marked = markPastTermEnds(file.id);
-      if (fixed || marked) {
-        console.log(file.name + ': fixed the format of ' + fixed + ' date(s), recolored ' +
-          marked + ' Term ends date(s).');
-      }
+      if (marked) console.log(file.name + ': recolored ' + marked + ' Term ends date(s).');
     } catch (e) {
       console.error('Couldn\'t check the dates in ' + file.name + ': ' + e.message);
     }
