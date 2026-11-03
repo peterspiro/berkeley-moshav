@@ -104,7 +104,7 @@ function updateRoles(docId, circle) {
   });
   step('fix the dates\' format', () => {
     const fixed = fixDateChipFormats(docId);
-    if (fixed) lines.push('Gave ' + fixed + ' date(s) back their yyyy-mm-dd format.');
+    if (fixed) lines.push('Gave ' + fixed + ' date(s) back their format.');
   });
   step('check the terms', () => {
     const marked = markPastTermEnds(docId);
@@ -222,21 +222,23 @@ function describeRoles(docId) {
   return lines;
 }
 
-// Whether a date chip (its properties) is shown as yyyy-mm-dd: in that
-// format, and, when the API gives its text, showing that. (The API may
-// report the format a chip was made with after Docs has changed it.)
-function showsIsoDate(props) {
-  return props.dateFormat === 'DATE_FORMAT_ISO8601' &&
-    (!props.displayText || /^\d{4}-\d{2}-\d{2}$/.test(props.displayText));
+// Whether a date chip (its properties) is shown in DATE_CHIP_FORMAT: in
+// that format, and, for yyyy-mm-dd, when the API gives its text, showing
+// that. (The API may report the format a chip was made with after Docs has
+// changed it.)
+function showsChipFormat(props) {
+  return props.dateFormat === DATE_CHIP_FORMAT && (DATE_CHIP_FORMAT !== 'DATE_FORMAT_ISO8601' ||
+    !props.displayText || /^\d{4}-\d{2}-\d{2}$/.test(props.displayText));
 }
 
 // Gives the dates the scripts read (the Roles table's Term ends, and each
-// meeting's date, its tab's first) back their yyyy-mm-dd format, which
-// Docs changes (to mm/dd/yyyy, say) when someone picks a new date. The
-// Docs API can't change a chip's format, so each is replaced by a new chip
-// of the same date (losing its color, which markPastTermEnds gives back).
-// Returns how many.
+// meeting's date, its tab's first) back DATE_CHIP_FORMAT, which Docs
+// changes (to mm/dd/yyyy, say) when someone picks a new date; nothing,
+// when it's null (Docs' default). The Docs API can't change a chip's
+// format, so each is replaced by a new chip of the same date (losing its
+// color, which markPastTermEnds gives back). Returns how many.
 function fixDateChipFormats(docId) {
+  if (!DATE_CHIP_FORMAT) return 0;
   const flatten = tabs => tabs.flatMap(tab => [tab, ...flatten(tab.childTabs || [])]);
   const tabs = flatten(Docs.Documents.get(docId, {includeTabsContent: true}).tabs);
   let count = 0;
@@ -252,7 +254,7 @@ function fixDateChipFormats(docId) {
       });
     }
     const requests = [];
-    chips.filter(pe => !showsIsoDate(pe.dateElement.dateElementProperties || {}))
+    chips.filter(pe => !showsChipFormat(pe.dateElement.dateElementProperties || {}))
       .sort((a, b) => b.startIndex - a.startIndex)
       .forEach(pe => {
         const date = chipDate(pe.dateElement);
@@ -260,7 +262,7 @@ function fixDateChipFormats(docId) {
         requests.push(
           {deleteContentRange: {range: {startIndex: pe.startIndex, endIndex: pe.endIndex, tabId}}},
           {insertDate: {location: {index: pe.startIndex, tabId}, dateElementProperties:
-            isoDateChip(date)}});
+            dateChip(date)}});
       });
     if (requests.length) {
       Docs.Documents.batchUpdate({requests}, docId);
@@ -309,7 +311,7 @@ const DATES_CHECKED_KEY = 'circleDocDatesCheckedAt';
 const DATES_CHECK_OVERLAP_MS = 2 * 60 * 1000;
 
 // Run by buildNewCircleDocs, every BUILD_EVERY_MINUTES: in each built doc
-// changed since the last run, gives its dates back their yyyy-mm-dd format
+// changed since the last run, gives its dates back their format
 // (fixDateChipFormats) and recolors its Term ends dates (markPastTermEnds),
 // so a date someone changes is put right within minutes rather than at
 // the daily run. (A doc a run fixes counts as changed for the next one,

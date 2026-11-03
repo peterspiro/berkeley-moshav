@@ -256,13 +256,15 @@ adding a meeting, bring the dropdowns' choices up to date with the
 circle's members: new members are added, and members who've left, and
 choices added by hand in Docs, are removed unless a Name cell shows them,
 so no cell's choice changes. The daily run also colors red each Term ends
-date that's past (Docs can't run a script when a chip is edited), and
-gives the Term ends dates and meetings' dates back their yyyy-mm-dd format,
-which Docs changes (to mm/dd/yyyy) when someone picks a new date. Since
-Docs can't run a script when a date is changed, `buildNewCircleDocs` also
-does those two, every 10 minutes, in each doc changed since its last run,
-so a changed date is put right within about 10 minutes ("↻ Update times"
-does it at once). To try the daily run on the latest preview, run
+date that's past (Docs can't run a script when a chip is edited). Date
+chips are in Docs' default format, unless `DATE_CHIP_FORMAT`
+(`build_template.gs`) names one (such as `'DATE_FORMAT_ISO8601'`,
+yyyy-mm-dd); then the daily run also gives the Term ends dates and
+meetings' dates back that format, which Docs changes (to mm/dd/yyyy) when
+someone picks a new date. Since Docs can't run a script when a date is
+changed, `buildNewCircleDocs` also does those, every 10 minutes, in each
+doc changed since its last run, so a changed date is put right within
+about 10 minutes ("↻ Update times" does it at once). To try the daily run on the latest preview, run
 **`tryUpdateRoles`** in the editor; it logs what it changed.
 Docs built before layout version 4 keep their plain-text Roles, which new
 meetings still read. It can also be run by hand, to build waiting docs at once; the

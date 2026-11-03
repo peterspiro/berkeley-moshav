@@ -668,7 +668,7 @@ function tokenRequest(t, tabId) {
     return {insertDropdown: {location, dropdownDefinitionId: args[0],
       selectedOptionId: 'dropdownItem.presenter'}};
   }
-  if (kind === 'date') return {insertDate: {location, dateElementProperties: isoDateChip(args[0])}};
+  if (kind === 'date') return {insertDate: {location, dateElementProperties: dateChip(args[0])}};
   if (kind === 'checkbox' || kind === 'bullet') {
     return {createParagraphBullets: {
       range: {startIndex: t.start, endIndex: t.start + 1, tabId},
@@ -701,13 +701,21 @@ function findTokens(content) {
   return found.sort((a, b) => b.start - a.start);
 }
 
-// A date chip's properties, shown as yyyy-mm-dd, for a date ('yyyy-MM-dd',
+// The format of the date chips the scripts make (a Docs API dateFormat,
+// such as 'DATE_FORMAT_ISO8601', yyyy-mm-dd), or null for Docs' default.
+// With a format, fixDateChipFormats (circle_docs.gs) gives it back to the
+// dates the scripts read when Docs changes it (as it does when someone
+// picks a new date); with null, it leaves them as they are.
+const DATE_CHIP_FORMAT = null;
+
+// A date chip's properties, in DATE_CHIP_FORMAT, for a date ('yyyy-MM-dd',
 // or a timestamp). A chip without a time is shown in UTC, so a date is
 // given noon UTC, which is that date everywhere.
-function isoDateChip(date) {
+function dateChip(date) {
   return {
     timestamp: /^\d{4}-\d{2}-\d{2}$/.test(date) ? date + 'T12:00:00Z' : date,
-    dateFormat: 'DATE_FORMAT_ISO8601', timeFormat: 'TIME_FORMAT_DISABLED',
+    ...(DATE_CHIP_FORMAT ? {dateFormat: DATE_CHIP_FORMAT} : {}),
+    timeFormat: 'TIME_FORMAT_DISABLED',
   };
 }
 
