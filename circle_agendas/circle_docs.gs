@@ -115,30 +115,37 @@ function updateRoles(docId, circle) {
 
 // Brings the Roles table's Name dropdowns' choices up to date with the
 // circle's members (names), keeping what each dropdown shows (see
-// updatedRoleChoices). Returns whether anything changed. Does nothing in
-// docs built before the Roles had dropdowns, or with no members (which
-// more likely means they couldn't be read than that everyone left).
+// updatedRoleChoices). The dropdowns start sharing ROLES_DROPDOWN_ID's
+// choices, but Docs may give one whose choices someone edits a list of its
+// own, so each list a Name dropdown uses is updated. Returns whether
+// anything changed. Does nothing in docs built before the Roles had
+// dropdowns, or with no members (which more likely means they couldn't be
+// read than that everyone left).
 function updateRoleDropdowns(docId, names) {
   if (!names.length) return false;
   const tab = Docs.Documents.get(docId, {includeTabsContent: true}).tabs[0];
-  const definition = (tab.documentTab.dropdownDefinitions || {})[ROLES_DROPDOWN_ID];
-  if (!definition) return false;
-  const existing = definition.dropdownDefinitionProperties.options || [];
-  const selected = [];
-  walkParagraphs(tab.documentTab.body.content, para => {
-    for (const pe of para.elements || []) {
-      const props = pe.dropdown && pe.dropdown.dropdownProperties;
-      if (props && props.dropdownDefinitionId === ROLES_DROPDOWN_ID) selected.push(props.selectedOptionId);
-    }
-  });
-  const {options, replacements} = updatedRoleChoices(existing, names, selected);
-  if (sameChoices(existing, options)) return false;
-  Docs.Documents.batchUpdate({requests: [{updateDropdownDefinitionProperties: {
-    tabId: tab.tabProperties.tabId, dropdownDefinitionId: ROLES_DROPDOWN_ID,
-    dropdownDefinitionProperties: {options}, fields: 'options',
-    selectedOptionIdReplacements: replacements,
-  }}]}, docId);
-  return true;
+  const definitions = tab.documentTab.dropdownDefinitions || {};
+  // The options each list's dropdowns show, by the list's ID.
+  const selected = {};
+  for (const pe of rolesColumnElements(tab.documentTab.body.content, 1, 'dropdown')) {
+    const props = pe.dropdown.dropdownProperties || {};
+    (selected[props.dropdownDefinitionId] = selected[props.dropdownDefinitionId] || [])
+      .push(props.selectedOptionId);
+  }
+  const requests = [];
+  for (const id of Object.keys(selected)) {
+    if (!definitions[id]) continue;
+    const existing = definitions[id].dropdownDefinitionProperties.options || [];
+    const {options, replacements} = updatedRoleChoices(existing, names, selected[id]);
+    if (sameChoices(existing, options)) continue;
+    requests.push({updateDropdownDefinitionProperties: {
+      tabId: tab.tabProperties.tabId, dropdownDefinitionId: id,
+      dropdownDefinitionProperties: {options}, fields: 'options',
+      selectedOptionIdReplacements: replacements,
+    }});
+  }
+  if (requests.length) Docs.Documents.batchUpdate({requests}, docId);
+  return requests.length > 0;
 }
 
 // Colors each Term ends date chip in the Roles table red if its date is
@@ -166,19 +173,61 @@ function markPastTermEnds(docId) {
 // The Term ends date chips (Docs API paragraph elements) in a tab's
 // content: those in the third column of the Roles table.
 function termEndChips(content) {
-  const chips = [];
+  return rolesColumnElements(content, 2, 'dateElement');
+}
+
+// The paragraph elements of a kind ('dropdown', 'dateElement') in a column
+// of the Roles table, below its headings, in a tab's Docs API content.
+function rolesColumnElements(content, column, kind) {
+  const found = [];
   for (const se of content) {
     const rows = se.table ? se.table.tableRows : [];
     if (!rows.length || !apiCellText(rows[0].tableCells[0]).trim().startsWith('Circle Roles')) continue;
     for (const row of rows.slice(1)) {
-      const cell = row.tableCells[2];
+      const cell = row.tableCells[column];
       if (!cell) continue;
       walkParagraphs(cell.content, para => {
-        for (const pe of para.elements || []) if (pe.dateElement) chips.push(pe);
+        for (const pe of para.elements || []) if (pe[kind]) found.push(pe);
       });
     }
   }
-  return chips;
+  return found;
+}
+
+// Lines describing what the Docs API sees of the Roles table: each Name
+// dropdown's list and choice, each list's choices, and each Term ends
+// chip's properties. For tryUpdateRoles.
+function describeRoles(docId) {
+  const tab = Docs.Documents.get(docId, {includeTabsContent: true}).tabs[0];
+  const content = tab.documentTab.body.content;
+  const definitions = tab.documentTab.dropdownDefinitions || {};
+  const lines = ['Name dropdowns:'];
+  const ids = [];
+  for (const pe of rolesColumnElements(content, 1, 'dropdown')) {
+    const props = pe.dropdown.dropdownProperties || {};
+    lines.push('  list ' + props.dropdownDefinitionId + ', showing ' + props.selectedOptionId +
+      ' "' + props.displayValue + '"');
+    if (!ids.includes(props.dropdownDefinitionId)) ids.push(props.dropdownDefinitionId);
+  }
+  for (const id of ids) {
+    const options = definitions[id] ? definitions[id].dropdownDefinitionProperties.options || [] : null;
+    lines.push('List ' + id + ': ' + (options
+      ? options.map(o => o.optionId + ' "' + o.displayValue + '"').join(', ') : '(not found)'));
+  }
+  lines.push('Term ends chips:');
+  for (const pe of termEndChips(content)) {
+    lines.push('  ' + JSON.stringify(pe.dateElement.dateElementProperties) +
+      ' color ' + JSON.stringify((pe.dateElement.textStyle || {}).foregroundColor || null));
+  }
+  return lines;
+}
+
+// Whether a date chip (its properties) is shown as yyyy-mm-dd: in that
+// format, and, when the API gives its text, showing that. (The API may
+// report the format a chip was made with after Docs has changed it.)
+function showsIsoDate(props) {
+  return props.dateFormat === 'DATE_FORMAT_ISO8601' &&
+    (!props.displayText || /^\d{4}-\d{2}-\d{2}$/.test(props.displayText));
 }
 
 // Gives the dates the scripts read (the Roles table's Term ends, and each
@@ -203,7 +252,7 @@ function fixDateChipFormats(docId) {
       });
     }
     const requests = [];
-    chips.filter(pe => (pe.dateElement.dateElementProperties || {}).dateFormat !== 'DATE_FORMAT_ISO8601')
+    chips.filter(pe => !showsIsoDate(pe.dateElement.dateElementProperties || {}))
       .sort((a, b) => b.startIndex - a.startIndex)
       .forEach(pe => {
         const date = chipDate(pe.dateElement);

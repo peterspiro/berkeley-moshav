@@ -170,8 +170,10 @@ function tryUpdateRoles() {
   const circle = circleForDoc(docId);
   if (!circle) Logger.log('The preview isn\'t in a circle\'s folder, so its Roles choices ' +
     'can\'t be updated; checking its dates only.');
+  Logger.log('Before:\n' + describeRoles(docId).join('\n'));
   const lines = updateRoles(docId, circle);
   Logger.log(lines.join('\n') || 'Nothing needed changing.');
+  if (lines.length) Logger.log('After:\n' + describeRoles(docId).join('\n'));
   logLink('Preview:', DocumentApp.openById(docId).getUrl());
 }
 
