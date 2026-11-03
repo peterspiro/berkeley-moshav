@@ -11,6 +11,9 @@
  *     after the first run) and logs its link;
  *   - describePreview: logs the preview's structure and links.
  *
+ * Roles' holders are dropdowns of the circle's members, so building takes
+ * their names (none, for a preview outside a circle's folder).
+ *
  * The "+ New meeting" link runs the web app (web_app.gs), so building needs
  * the web app's address, in the WEB_APP_URL script property. A new doc has
  * no meetings: each meeting gets a tab of its own (see meetings.gs), built
@@ -60,7 +63,7 @@ const MEETING_TAB_TITLE_RE = /^\d{4}-\d{2}-\d{2}$/;
 // Items with followUp start their Follow-up cell with a bullet (as do
 // topics added later).
 const AGENDA = [
-  {title: 'Opening Round / Check-in', note: ' (no notes)', minutes: 10, kind: 'round',
+  {title: 'Opening Round / Check-in', note: ' (no notes)', minutes: 5, kind: 'round',
     notes: false},
   {admin: true, minutes: 5, kind: 'round', followUp: true},
   {title: 'Action Items Accountability', minutes: 3, actions: 'checkbox', followUp: true,
@@ -83,7 +86,7 @@ const CLOSING_ROUND = {title: 'Closing Round / Check-out', kind: 'round', perAtt
 const COL = {time: 0, duration: 1, description: 2, notes: 3, followUp: 4};
 const MEETING_COLUMNS = 5;
 const MEETING_HEADINGS = ['Time', 'Min', 'Description', 'Notes', 'Follow-up'];
-const COLUMN_WIDTHS = {[COL.time]: 33, [COL.duration]: 27, [COL.description]: 262,
+const COLUMN_WIDTHS = {[COL.time]: 35, [COL.duration]: 27, [COL.description]: 262,
   [COL.notes]: 375, [COL.followUp]: 210};
 const CELL_PADDING = 3;
 const PROBLEM_COLOR = '#cc0000';
@@ -112,11 +115,11 @@ function previewTemplate() {
     docId = DocumentApp.create('Template preview').getId();
     props.setProperty('previewDocId', docId);
   }
-  build(docId);
-  // In a circle's folder, the preview gets that circle's details, as a
-  // circle's own doc does (without its parent or sub-circles, which come
-  // from the Circle Structure).
+  // In a circle's folder, the preview gets that circle's members and
+  // details, as a circle's own doc does (without its parent or sub-circles,
+  // which come from the Circle Structure).
   const circle = circleForDoc(docId);
+  build(docId, circle ? circleMemberNames(circle) : []);
   if (circle) fillAbout(docId, 'Circle Agenda', circle.email, circle, null, []);
   logLink('Preview:', DocumentApp.openById(docId).getUrl());
 }
@@ -141,11 +144,13 @@ function describePreview() {
 
 // ── Building ─────────────────────────────────────────────────────────────────
 
-function build(docId) {
+// members: the circle's members' names, the choices of the Roles table's
+// Name dropdowns.
+function build(docId, members) {
   const doc = DocumentApp.openById(docId);
   layOut(doc.getTabs()[0].asDocumentTab().getBody(), docId);
   doc.saveAndClose();
-  finishWithApi(docId);
+  finishWithApi(docId, members || []);
 }
 
 // Empties a doc: its first tab's body, its other tabs, its headers and
@@ -244,10 +249,16 @@ function writeAboutRow(row, label, paragraphs) {
   row.getCell(1).setBackgroundColor(COLOR.aboutValue);
 }
 
+// The Roles table: each role's holder is a dropdown of the circle's members
+// (ROLES_DROPDOWN_ID; see finishWithApi), and its term's end a date chip,
+// starting at today, which markPastTermEnds (circle_docs.gs) colors red
+// once it's past.
 function rolesTable(body) {
-  const header = label => [[[label, BOLD]], [['Name', BOLD]],
-    [['Term ends', BOLD], ['\nyyyy-mm-dd', MUTED]]];
-  const role = (name, what) => [[[name, BOLD], [' (' + what + ')', MUTED]], [], []];
+  const header = label => [[[label, BOLD]], [['Name', BOLD]], [['Term ends', BOLD]]];
+  const today = Utilities.formatDate(new Date(), TIME_ZONE, 'yyyy-MM-dd');
+  const role = (name, what) => [[[name, BOLD], [' (' + what + ')', MUTED]],
+    [[token('dropdown', ROLES_DROPDOWN_ID, ROLE_PLACEHOLDER_ID)]],
+    [[token('date', today + 'T12:00:00Z')]]];
   const rows = [
     header('Circle Roles'),
     role('Leader', 'supports circle operations'),
@@ -278,7 +289,9 @@ function rolesTable(body) {
 //
 // details: date ('yyyy-MM-dd'), start ('19:30'), hours ('1.5'), and
 // optionally place (the Zoom link), attendees (names), facilitator and
-// secretary (names, from the Circle Info tab's roles), previousUrl (a link
+// secretary (names, from the Circle Info tab's roles), roleOptions (the
+// choices of the Facilitator and Secretary dropdowns, from roleChoices;
+// without them, the names are plain text), previousUrl (a link
 // to the previous meeting's tab), next (text, the next meeting's date and
 // time), and carryOver (the text of the previous
 // meeting's Action Items Recap's items, for Action Items Accountability's
@@ -302,9 +315,10 @@ function meetingTable(body, docId, details) {
   body.appendParagraph(token('date', details.date + 'T12:00:00Z'))
     .setHeading(DocumentApp.ParagraphHeading.HEADING2);
   writeRuns(body.appendParagraph(''), [['Time  ', BOLD], [details.start],
-    ['     Duration (hours)  ', BOLD], [details.hours], ['     Place  ', BOLD],
+    ['     Duration ', BOLD], ['(h:mm or h.hh)  ', MUTED], [details.hours],
+    ['     Place  ', BOLD],
     ...(details.place ? [['Zoom room', {[A.LINK_URL]: details.place}]] : [])]);
-  const spacer = attendance(body, details);
+  const spacer = attendance(body, details, meetingId);
 
   const rowCount = MEETING_HEADER_ROWS + items.length + 1;
   const table = newTable(body, rowCount, MEETING_COLUMNS);
@@ -370,14 +384,19 @@ function padRow(row) {
 const ATTENDEES_PER_COLUMN = 4;
 
 // The meeting's attendance, above its table: a line saying to check anyone
-// who isn't there, then, side by side and closely spaced, the attendees as
+// who is absent, then, side by side and closely spaced, the attendees as
 // a checklist in columns of up to ATTENDEES_PER_COLUMN, and the meeting's
-// Facilitator, Secretary (from details, or left to fill in), and Guests;
+// Facilitator, Secretary (dropdowns, set to details' holders), and Guests;
 // then a little space before the agenda table.
-function attendance(body, details) {
+function attendance(body, details, meetingId) {
   const attendees = details.attendees || [];
   writeRuns(body.appendParagraph(''), [['Attendance', BOLD],
-    ['   Check the box next to anyone who isn\'t here.', MUTED]]);
+    ['   Check the box next to anyone who ', MUTED], ['is absent', {...MUTED, ...BOLD}],
+    ['.', MUTED]]);
+  const holder = name => details.roleOptions
+    ? [[token('dropdown', meetingRolesDropdownId(meetingId),
+      roleOptionId(details.roleOptions, name))]]
+    : name ? [[name]] : [];
 
   // As few columns as hold everyone, as evenly filled as can be (5 names
   // make columns of 3 and 2, not 4 and 1).
@@ -390,8 +409,8 @@ function attendance(body, details) {
       : [[[token('checkbox')]]]);
   }
   columns.push([
-    [['Facilitator: ', BOLD], ...(details.facilitator ? [[details.facilitator]] : [])],
-    [['Secretary: ', BOLD], ...(details.secretary ? [[details.secretary]] : [])],
+    [['Facilitator: ', BOLD], ...holder(details.facilitator)],
+    [['Secretary: ', BOLD], ...holder(details.secretary)],
     [['Guests: ', BOLD]],
   ]);
   const table = body.appendTable([columns.map(() => '')]);
@@ -424,6 +443,16 @@ function topicLines(presenters) {
 function presenterDropdownId(meetingId) {
   return 'kix.p' + meetingId;
 }
+
+// The ID of the list of choices of a meeting's Facilitator and Secretary
+// dropdowns (see roleDropdownRequest), in its tab.
+function meetingRolesDropdownId(meetingId) {
+  return 'kix.r' + meetingId;
+}
+
+// The ID of the list of choices of the Roles table's Name dropdowns, in the
+// first tab.
+const ROLES_DROPDOWN_ID = 'kix.roles';
 
 // The row of links that add an item and update the times.
 function linksRow(row, docId, meetingId) {
@@ -513,9 +542,10 @@ function token(kind, ...args) {
 
 // ── Pass 2: the Docs API ─────────────────────────────────────────────────────
 
-function finishWithApi(docId) {
+function finishWithApi(docId, members) {
   const firstTabId = Docs.Documents.get(docId, {includeTabsContent: true}).tabs[0].tabProperties.tabId;
   Docs.Documents.batchUpdate({requests: [
+    roleDropdownRequest(ROLES_DROPDOWN_ID, roleChoices(members, []), firstTabId),
     {updateDocumentStyle: {
       documentStyle: {documentFormat: {documentMode: 'PAGELESS'}},
       fields: 'documentFormat.documentMode',
@@ -631,16 +661,14 @@ function replaceTokens(docId, tabId) {
 function tokenRequest(t, tabId) {
   const location = {index: t.start, tabId};
   const [kind, ...args] = t.parts;
+  if (kind === 'dropdown') {
+    return {insertDropdown: {location, dropdownDefinitionId: args[0], selectedOptionId: args[1]}};
+  }
   if (kind === 'presenter') {
     return {insertDropdown: {location, dropdownDefinitionId: args[0],
       selectedOptionId: 'dropdownItem.presenter'}};
   }
-  if (kind === 'date') {
-    return {insertDate: {location, dateElementProperties: {
-      timestamp: args[0],
-      dateFormat: 'DATE_FORMAT_ISO8601', timeFormat: 'TIME_FORMAT_DISABLED',
-    }}};
-  }
+  if (kind === 'date') return {insertDate: {location, dateElementProperties: dateChip(args[0])}};
   if (kind === 'checkbox' || kind === 'bullet') {
     return {createParagraphBullets: {
       range: {startIndex: t.start, endIndex: t.start + 1, tabId},
@@ -673,6 +701,17 @@ function findTokens(content) {
   return found.sort((a, b) => b.start - a.start);
 }
 
+// A date chip's properties, for a date ('yyyy-MM-dd', or a timestamp), in
+// Docs' default format ("Nov 3, 2026"), which, unlike others, Docs keeps
+// when someone picks a new date. A chip without a time is shown in UTC, so
+// a date is given noon UTC, which is that date everywhere.
+function dateChip(date) {
+  return {
+    timestamp: /^\d{4}-\d{2}-\d{2}$/.test(date) ? date + 'T12:00:00Z' : date,
+    timeFormat: 'TIME_FORMAT_DISABLED',
+  };
+}
+
 // The meeting ID in the links in a Docs API table element, or null.
 function apiMeetingId(se) {
   let id = null;
@@ -696,6 +735,15 @@ function presenterDropdownRequest(meetingId, attendees, tabId) {
       ...attendees.slice(0, 49).map((name, i) =>
         ({optionId: 'dropdownItem.p' + i, displayValue: name})),
     ]},
+  }}};
+}
+
+// The request that creates a list of role holders' choices (options, from
+// roleChoices), in a tab.
+function roleDropdownRequest(id, options, tabId) {
+  return {createDropdownDefinition: {tabId, dropdownDefinition: {
+    dropdownDefinitionId: id,
+    dropdownDefinitionProperties: {title: 'Name', options},
   }}};
 }
 

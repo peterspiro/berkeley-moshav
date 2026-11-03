@@ -60,15 +60,16 @@ function parseHours(text) {
 }
 
 // The time typed after "Time" in a meeting's
-// "Time 19:30   Duration (hours) 1.5   Place …" line.
+// "Time 19:30   Duration (h:mm or h.hh) 1.5   Place …" line.
 function headerTimeText(line) {
   const m = /Time\s*(.*?)\s*(?:Duration\b|Place\b|$)/i.exec(line || '');
   return m ? m[1] : '';
 }
 
-// The meeting's length typed after "Duration (hours)" in the same line.
+// The meeting's length typed after "Duration" and its parenthesized hint
+// (in older meetings, "(hours)") in the same line.
 function headerHoursText(line) {
-  const m = /Duration\s*(?:\(hours\))?\s*(.*?)\s*(?:Place\b|$)/i.exec(line || '');
+  const m = /Duration\s*(?:\([^)]*\))?\s*(.*?)\s*(?:Place\b|$)/i.exec(line || '');
   return m ? m[1] : '';
 }
 
@@ -79,9 +80,109 @@ function meetingIdFromUrl(url) {
 }
 
 // "1.5" from 90 minutes, "2" from 120: a meeting's length as written after
-// its "Duration (hours)".
+// its "Duration".
 function formatHours(minutes) {
   return String(Math.round(minutes / 60 * 100) / 100);
+}
+
+// ── Roles ────────────────────────────────────────────────────────────────────
+
+// A role dropdown's choices (the Roles table's Name, a meeting's Facilitator
+// and Secretary): ROLE_PLACEHOLDER, which new dropdowns show, then each of
+// names, then each of holders not among them (so a holder typed by hand
+// can still be chosen), then ROLE_VACANT; as Docs API DropdownOptions,
+// at most Docs' 50.
+// The placeholder is a dash, since a choice can't be blank (docs built
+// before showed "Name"); it and Vacant always have the same IDs.
+const ROLE_PLACEHOLDER = '—';
+const ROLE_PLACEHOLDER_ID = 'dropdownItem.none';
+const ROLE_VACANT = 'Vacant';
+const ROLE_VACANT_ID = 'dropdownItem.vacant';
+function roleChoices(names, holders) {
+  const values = [];
+  for (const n of [...(names || []), ...(holders || [])]) {
+    const v = String(n || '').trim();
+    if (v && v !== ROLE_PLACEHOLDER && v !== ROLE_VACANT && !values.includes(v)) values.push(v);
+  }
+  return [
+    {optionId: ROLE_PLACEHOLDER_ID, displayValue: ROLE_PLACEHOLDER},
+    ...values.slice(0, 48).map((v, i) => ({optionId: 'dropdownItem.m' + i, displayValue: v})),
+    {optionId: ROLE_VACANT_ID, displayValue: ROLE_VACANT},
+  ];
+}
+
+// The ID of the choice (from roleChoices) showing holder, or the
+// placeholder's.
+function roleOptionId(options, holder) {
+  const v = String(holder || '').trim();
+  const found = options.find(o => o.displayValue === v);
+  return found ? found.optionId : ROLE_PLACEHOLDER_ID;
+}
+
+// The Roles dropdown's choices brought up to date with the circle's
+// members (names), from its choices now (existing, Docs API
+// DropdownOptions) and the IDs of the choices its chips show (selected):
+// as roleChoices gives, but with the members who've left, and choices
+// added by hand, kept only while a chip shows them, and each choice that
+// stays keeping its ID, so the chips showing it still do. The placeholder
+// and Vacant keep their IDs whatever they showed (so an old "Name"
+// placeholder becomes the dash). Returns
+// {options, replacements}: replacements, for updateDropdownDefinition-
+// PropertiesRequest, gives the placeholder to any chip whose choice is
+// gone (only past Docs' limit of 50).
+function updatedRoleChoices(existing, names, selected) {
+  const fixed = [ROLE_PLACEHOLDER_ID, ROLE_VACANT_ID];
+  const others = existing.filter(o => !fixed.includes(o.optionId));
+  const shown = others.filter(o => (selected || []).includes(o.optionId)).map(o => o.displayValue);
+  const fresh = roleChoices(names, shown);
+  const idOf = {};
+  for (const o of others) if (!(o.displayValue in idOf)) idOf[o.displayValue] = o.optionId;
+  // Every ID there is now is taken, so no new choice gets the ID of one
+  // that's gone (which a chip might still show).
+  const used = new Set(existing.map(o => o.optionId));
+  let next = 0;
+  const newId = () => {
+    while (used.has('dropdownItem.m' + next)) next++;
+    used.add('dropdownItem.m' + next);
+    return 'dropdownItem.m' + next;
+  };
+  const options = fresh.map(o => fixed.includes(o.optionId) ? o
+    : {optionId: idOf[o.displayValue] || newId(), displayValue: o.displayValue});
+  const placeholder = ROLE_PLACEHOLDER_ID;
+  const replacements = {};
+  for (const id of selected || []) {
+    if (!options.some(o => o.optionId === id)) replacements[id] = placeholder;
+  }
+  return {options, replacements};
+}
+
+// Whether two lists of dropdown choices are the same: the same IDs and
+// values, in the same order.
+function sameChoices(a, b) {
+  const key = list => JSON.stringify(list.map(o => [o.optionId, o.displayValue]));
+  return key(a) === key(b);
+}
+
+// The date ('yyyy-MM-dd') a date chip shows, from its text: yyyy-mm-dd,
+// m/d/yyyy (what Docs shows, in the US, once someone picks a new date), or
+// "Nov 3, 2026" (the Docs API's default format); or null.
+const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+function dateFromDisplayText(text) {
+  const t = String(text || '').trim();
+  const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(t);
+  const us = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(t);
+  const named = /^([a-z]{3})[a-z]*\.?\s+(\d{1,2}),?\s+(\d{4})$/i.exec(t);
+  const month = named ? MONTHS.indexOf(named[1].toLowerCase()) + 1 : 0;
+  const [y, m, d] = iso ? [iso[1], iso[2], iso[3]] : us ? [us[3], us[1], us[2]]
+    : month ? [named[3], String(month), named[2]] : [];
+  if (!y || Number(m) < 1 || Number(m) > 12 || Number(d) < 1 || Number(d) > 31) return null;
+  return y + '-' + m.padStart(2, '0') + '-' + d.padStart(2, '0');
+}
+
+// Whether a term ending on date ('yyyy-MM-dd') is over, on today
+// ('yyyy-MM-dd'); false if date can't be read.
+function termEnded(date, today) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(date || '') && date < today;
 }
 
 // ── A circle's Google Group footer ───────────────────────────────────────────

@@ -86,6 +86,7 @@ class TestHeaderTimeText:
         ("Time 7:30 pm Place Zoom", "7:30 pm"),
         ("Time 19:30", "19:30"),
         ("Time  19:30     Duration (hours)  1.5     Place  Zoom room", "19:30"),
+        ("Time  7:30 pm     Duration (h:mm or h.hh format)  1.5     Place", "7:30 pm"),
         ("Time  Place", ""),
         ("When?", "")])
     def test_reads_time(self, line, text):
@@ -93,11 +94,104 @@ class TestHeaderTimeText:
 
     @pytest.mark.parametrize("line, text", [
         ("Time  19:30     Duration (hours)  1.5     Place  Zoom room", "1.5"),
+        ("Time  19:30     Duration (h:mm or h.hh format)  1:30     Place  Zoom room", "1:30"),
+        ("Time  19:30     Duration (h:mm or h.hh)  1:30     Place  Zoom room", "1:30"),
         ("Time 19:30 Duration 1:30", "1:30"),
         ("Time 19:30 Place Zoom", ""),
         ("Time  19:30     Duration (hours)     Place", "")])
     def test_reads_hours(self, line, text):
         assert js(f"headerHoursText({json.dumps(line)})") == text
+
+
+class TestRoleChoices:
+    def test_placeholder_names_holders_vacant(self):
+        options = js('roleChoices(["Ann", "Bo"], ["Bo", "Cy", "", "—", "Vacant"])')
+        assert options == [
+            {"optionId": "dropdownItem.none", "displayValue": "—"},
+            {"optionId": "dropdownItem.m0", "displayValue": "Ann"},
+            {"optionId": "dropdownItem.m1", "displayValue": "Bo"},
+            {"optionId": "dropdownItem.m2", "displayValue": "Cy"},
+            {"optionId": "dropdownItem.vacant", "displayValue": "Vacant"}]
+
+    def test_no_names_still_two_choices(self):
+        assert len(js("roleChoices([], [])")) == 2
+
+    def test_at_most_fifty(self):
+        names = json.dumps([f"P{i}" for i in range(60)])
+        assert len(js(f"roleChoices({names}, [])")) == 50
+
+    @pytest.mark.parametrize("holder, option_id", [
+        ("Bo", "dropdownItem.m1"), (" Bo ", "dropdownItem.m1"), ("Vacant", "dropdownItem.vacant"),
+        ("", "dropdownItem.none"), ("Zed", "dropdownItem.none")])
+    def test_option_id(self, holder, option_id):
+        expr = f'roleOptionId(roleChoices(["Ann", "Bo"], []), {json.dumps(holder)})'
+        assert js(expr) == option_id
+
+
+class TestUpdatedRoleChoices:
+    EXISTING = [
+        {"optionId": "dropdownItem.none", "displayValue": "Name"},
+        {"optionId": "dropdownItem.m0", "displayValue": "Ann"},
+        {"optionId": "dropdownItem.m1", "displayValue": "Bo"},
+        {"optionId": "dropdownItem.m2", "displayValue": "Cy"},
+        {"optionId": "dropdownItem.hand", "displayValue": "Guest Rae"},
+        {"optionId": "dropdownItem.vacant", "displayValue": "Vacant"}]
+
+    def update(self, names, selected, existing=None):
+        return js(f"updatedRoleChoices({json.dumps(existing or self.EXISTING)}, "
+                  f"{json.dumps(names)}, {json.dumps(selected)})")
+
+    def test_keeps_ids_adds_new_drops_unshown(self):
+        # Ann stays; Bo left but is shown; Cy left and isn't; Dee joined;
+        # the hand-added guest isn't shown.
+        # The old "Name" placeholder becomes the dash, keeping its ID.
+        result = self.update(["Ann", "Dee"], ["dropdownItem.m1", "dropdownItem.none"])
+        assert result == {"options": [
+            {"optionId": "dropdownItem.none", "displayValue": "—"},
+            {"optionId": "dropdownItem.m0", "displayValue": "Ann"},
+            {"optionId": "dropdownItem.m3", "displayValue": "Dee"},
+            {"optionId": "dropdownItem.m1", "displayValue": "Bo"},
+            {"optionId": "dropdownItem.vacant", "displayValue": "Vacant"}], "replacements": {}}
+
+    def test_keeps_shown_hand_added_choice(self):
+        options = self.update(["Ann"], ["dropdownItem.hand"])["options"]
+        assert {"optionId": "dropdownItem.hand", "displayValue": "Guest Rae"} in options
+
+    def test_unchanged(self):
+        existing = js('roleChoices(["Ann", "Bo"], [])')
+        result = self.update(["Ann", "Bo"], ["dropdownItem.m1"], existing)
+        assert js(f"sameChoices({json.dumps(existing)}, {json.dumps(result['options'])})") is True
+
+    def test_new_names_never_reuse_a_gone_choices_id(self):
+        result = self.update(["Zed"], [])
+        ids = {o["optionId"] for o in result["options"]}
+        assert ids.isdisjoint({"dropdownItem.m0", "dropdownItem.m1", "dropdownItem.m2",
+                               "dropdownItem.hand"})
+
+    def test_replaces_choices_past_the_limit(self):
+        names = [f"P{i}" for i in range(60)]
+        result = self.update(names, ["dropdownItem.m2"])
+        # Cy is shown, but comes after 48 names: past the limit.
+        assert result["replacements"] == {"dropdownItem.m2": "dropdownItem.none"}
+        assert len(result["options"]) == 50
+
+
+class TestDateFromDisplayText:
+    @pytest.mark.parametrize("text, date", [
+        ("2026-11-03", "2026-11-03"), ("11/05/2026", "2026-11-05"), ("1/5/2027", "2027-01-05"),
+        (" 12/31/2026 ", "2026-12-31"), ("13/01/2026", None), ("Nov 5, 2026", "2026-11-05"),
+        ("September 30, 2027", "2027-09-30"), ("Foo 5, 2026", None), ("", None),
+        (None, None)])
+    def test_reads(self, text, date):
+        assert js(f"dateFromDisplayText({json.dumps(text)})") == date
+
+
+class TestTermEnded:
+    @pytest.mark.parametrize("date, ended", [
+        ("2026-11-02", True), ("2026-11-03", False), ("2027-01-01", False), ("", False),
+        ("Nov 2, 2026", False)])
+    def test_ended(self, date, ended):
+        assert js(f'termEnded({json.dumps(date)}, "2026-11-03")') is ended
 
 
 class TestMeetingIdFromUrl:

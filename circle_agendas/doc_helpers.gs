@@ -118,6 +118,29 @@ function walkParagraphs(content, fn) {
   }
 }
 
+// The text of a Docs API table cell.
+function apiCellText(cell) {
+  let text = '';
+  walkParagraphs(cell.content, para => { text += paraText(para); });
+  return text;
+}
+
+// A date chip's date, 'yyyy-MM-dd': from its text, if it can be read
+// (see dateFromDisplayText), else from its timestamp, in its time zone;
+// or '' if it has neither.
+function chipDate(dateElement) {
+  const props = dateElement.dateElementProperties || {};
+  const shown = dateFromDisplayText(props.displayText);
+  if (shown) return shown;
+  if (!props.timestamp) return '';
+  const when = new Date(props.timestamp);
+  try {
+    return Utilities.formatDate(when, props.timeZoneId || 'UTC', 'yyyy-MM-dd');
+  } catch (e) {
+    return Utilities.formatDate(when, 'UTC', 'yyyy-MM-dd');
+  }
+}
+
 function paraText(para) {
   return (para.elements || []).map(pe => (pe.textRun ? pe.textRun.content : '')).join('');
 }

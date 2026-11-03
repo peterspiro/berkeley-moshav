@@ -40,8 +40,10 @@ don't reach docs already built, and will take their own scripts (see
   filled in when the doc is built (and, for a preview in a circle's
   folder, by `previewTemplate`, without parent and sub-circles); no lines
   between sections; and Roles: Leader,
-  Feedback Link, Facilitator, and Secretary, with names and when each term
-  ends); "Backlog" (built with the
+  Feedback Link, Facilitator, and Secretary, each with its holder (a
+  dropdown of the circle's members, and Vacant, kept up to date daily and
+  when a meeting is added) and when its term ends (a
+  date chip, red once it's past)); "Backlog" (built with the
   Docs API alone, since DocumentApp can't see a tab added in the same run:
   "Requested for prioritization", with Policy item requests and Task
   requests, and "Prioritized backlog", with Discussion underway,
@@ -70,7 +72,7 @@ don't reach docs already built, and will take their own scripts (see
   columns, and the links still work in them.)
 - **Lists**: bulleted and numbered lists have a 0.08" left indent and a
   0.19" hanging indent.
-- **Agenda**: Opening Round; Administrative matters (Announcements, Brief
+- **Agenda**: Opening Round (5 minutes); Administrative matters (Announcements, Brief
   Reports, Next meeting date & time, Minutes of last meeting, and
   modifications and consent to the agenda, as a bulleted list; 5 minutes);
   Action Items Accountability; one 5-minute Topic (a Presenter dropdown,
@@ -82,8 +84,8 @@ don't reach docs already built, and will take their own scripts (see
   retitles the tab when its date chip has been changed.
 - **New agenda item**: a link in each meeting adds a topic after its last
   topic (before Action Items Recap), with a duration of 5 minutes.
-- **Meeting length**: after "Duration (hours)" in the line above the
-  table, as 1.5 or 1:30.
+- **Meeting length**: after "Duration (h:mm or h.hh)" in the line
+  above the table, as 1.5 or 1:30.
 - **Times**: every item's duration can be edited except the closing
   round's, which is the meeting's end minus the time the closing round
   starts. Each item's time, and the final "end" row, are calculated from the
@@ -97,8 +99,8 @@ don't reach docs already built, and will take their own scripts (see
   that `update_groups_in_google_and_hierarchy.py` writes to `admin@`'s
   Drive; Google often gives only the start of the address), closely
   spaced, in columns of up to four, beside the meeting's Facilitator and
-  Secretary (filled in from the Circle Info tab's roles, if they're there) and
-  Guests. The closing round's Notes have a bulleted line for each of them,
+  Secretary (dropdowns of the attendees, set to the Circle Info tab's
+  Roles' holders, if they're chosen) and Guests. The closing round's Notes have a bulleted line for each of them,
   their name and a colon, for their feedback.
   Names start unchecked; checking one marks that member absent, and Docs
   strikes the name through (an instruction above the names says so; Docs

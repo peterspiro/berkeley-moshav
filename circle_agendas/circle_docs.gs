@@ -41,20 +41,182 @@ const AGENDA_STATE_NOT_EMPTY = 'not empty';
 // folder row renamed Google Drive Folder and linked by the circle's name.
 // 3: About this circle's Circle calendar and Remind before meetings rows added,
 // below Zoom room.
-const LAYOUT_VERSION = 3;
+// 4: the Roles table's Name a dropdown of the circle's members, and its Term
+// ends a date chip.
+const LAYOUT_VERSION = 4;
 // The first layout version with About this circle in ABOUT_LABELS' order.
 const ABOUT_ORDER_LAYOUT = 2;
 // The first layout version with the Circle calendar and Remind before meetings rows.
 const NEW_ROWS_LAYOUT = 3;
+// The first layout version with the Roles' dropdowns and date chips.
+const ROLES_CHIPS_LAYOUT = 4;
 const BUILD_EVERY_MINUTES = 10;
 
-// Run once, in the editor: builds new circle docs every BUILD_EVERY_MINUTES.
+// The hour (in the script's time zone) updateRolesInCircleDocs runs, each
+// day.
+const ROLES_UPDATE_HOUR = 1;
+
+// Run once, in the editor: builds new circle docs every BUILD_EVERY_MINUTES,
+// and updates their Roles every day.
 function installTriggers() {
+  const handlers = ['buildNewCircleDocs', 'updateRolesInCircleDocs'];
   for (const t of ScriptApp.getProjectTriggers()) {
-    if (t.getHandlerFunction() === 'buildNewCircleDocs') ScriptApp.deleteTrigger(t);
+    if (handlers.includes(t.getHandlerFunction())) ScriptApp.deleteTrigger(t);
   }
   ScriptApp.newTrigger('buildNewCircleDocs').timeBased().everyMinutes(BUILD_EVERY_MINUTES).create();
-  Logger.log('buildNewCircleDocs will run every ' + BUILD_EVERY_MINUTES + ' minutes.');
+  ScriptApp.newTrigger('updateRolesInCircleDocs').timeBased().everyDays(1)
+    .atHour(ROLES_UPDATE_HOUR).create();
+  Logger.log('buildNewCircleDocs will run every ' + BUILD_EVERY_MINUTES + ' minutes, and ' +
+    'updateRolesInCircleDocs every day at ' + ROLES_UPDATE_HOUR + ':00.');
+}
+
+// Run every day by the trigger installTriggers makes (or by hand): updates
+// the Roles in every built doc (see updateRoles), and logs what changed.
+function updateRolesInCircleDocs() {
+  for (const file of builtCircleDocs()) {
+    let circle = null;
+    try {
+      circle = circleOfDoc(file.id, (file.properties || {})[AGENDA_KEYS.group]);
+    } catch (e) {
+      console.error('Couldn\'t find ' + file.name + '\'s circle: ' + e.message);
+    }
+    for (const line of updateRoles(file.id, circle)) console.log(file.name + ': ' + line);
+  }
+}
+
+// What the daily run does to a doc: brings the Roles table's Name
+// dropdowns' choices up to date with the circle's members (see
+// updateRoleDropdowns; not without a circle), and marks its past Term ends
+// dates red (see markPastTermEnds). Returns lines saying what changed, or what
+// couldn't be done; each step is tried even if one before it failed.
+function updateRoles(docId, circle) {
+  const lines = [];
+  const step = (what, fn) => {
+    try {
+      fn();
+    } catch (e) {
+      lines.push('Couldn\'t ' + what + ': ' + e.message);
+    }
+  };
+  step('update the Roles choices', () => {
+    if (circle && updateRoleDropdowns(docId, circleMemberNames(circle))) {
+      lines.push('Updated the Roles choices.');
+    }
+  });
+  step('check the terms', () => {
+    const marked = markPastTermEnds(docId);
+    if (marked) lines.push('Recolored ' + marked + ' Term ends date(s).');
+  });
+  return lines;
+}
+
+// Brings the Roles table's Name dropdowns' choices up to date with the
+// circle's members (names), keeping what each dropdown shows (see
+// updatedRoleChoices). The dropdowns start sharing ROLES_DROPDOWN_ID's
+// choices, but Docs may give one whose choices someone edits a list of its
+// own, so each list a Name dropdown uses is updated. Returns whether
+// anything changed. Does nothing in docs built before the Roles had
+// dropdowns, or with no members (which more likely means they couldn't be
+// read than that everyone left).
+function updateRoleDropdowns(docId, names) {
+  if (!names.length) return false;
+  const tab = Docs.Documents.get(docId, {includeTabsContent: true}).tabs[0];
+  const definitions = tab.documentTab.dropdownDefinitions || {};
+  // The options each list's dropdowns show, by the list's ID.
+  const selected = {};
+  for (const pe of rolesColumnElements(tab.documentTab.body.content, 1, 'dropdown')) {
+    const props = pe.dropdown.dropdownProperties || {};
+    (selected[props.dropdownDefinitionId] = selected[props.dropdownDefinitionId] || [])
+      .push(props.selectedOptionId);
+  }
+  const requests = [];
+  for (const id of Object.keys(selected)) {
+    if (!definitions[id]) continue;
+    const existing = definitions[id].dropdownDefinitionProperties.options || [];
+    const {options, replacements} = updatedRoleChoices(existing, names, selected[id]);
+    if (sameChoices(existing, options)) continue;
+    requests.push({updateDropdownDefinitionProperties: {
+      tabId: tab.tabProperties.tabId, dropdownDefinitionId: id,
+      dropdownDefinitionProperties: {options}, fields: 'options',
+      selectedOptionIdReplacements: replacements,
+    }});
+  }
+  if (requests.length) Docs.Documents.batchUpdate({requests}, docId);
+  return requests.length > 0;
+}
+
+// Colors each Term ends date chip in the Roles table red if its date is
+// past, and back to the default once it's changed to one that isn't.
+// Docs can't run a script when a chip is edited, so this runs daily.
+// Returns how many it recolored.
+function markPastTermEnds(docId) {
+  const today = Utilities.formatDate(new Date(), TIME_ZONE, 'yyyy-MM-dd');
+  const requests = [];
+  for (const pe of termEndChips(apiTab(docId).content)) {
+    const past = termEnded(chipDate(pe.dateElement), today);
+    const style = pe.dateElement.textStyle || {};
+    const red = !!(style.foregroundColor && style.foregroundColor.color);
+    if (past === red) continue;
+    requests.push({updateTextStyle: {
+      range: {startIndex: pe.startIndex, endIndex: pe.endIndex},
+      textStyle: past ? {foregroundColor: apiColor(PROBLEM_COLOR)} : {},
+      fields: 'foregroundColor',
+    }});
+  }
+  if (requests.length) Docs.Documents.batchUpdate({requests}, docId);
+  return requests.length;
+}
+
+// The Term ends date chips (Docs API paragraph elements) in a tab's
+// content: those in the third column of the Roles table.
+function termEndChips(content) {
+  return rolesColumnElements(content, 2, 'dateElement');
+}
+
+// The paragraph elements of a kind ('dropdown', 'dateElement') in a column
+// of the Roles table, below its headings, in a tab's Docs API content.
+function rolesColumnElements(content, column, kind) {
+  const found = [];
+  for (const se of content) {
+    const rows = se.table ? se.table.tableRows : [];
+    if (!rows.length || !apiCellText(rows[0].tableCells[0]).trim().startsWith('Circle Roles')) continue;
+    for (const row of rows.slice(1)) {
+      const cell = row.tableCells[column];
+      if (!cell) continue;
+      walkParagraphs(cell.content, para => {
+        for (const pe of para.elements || []) if (pe[kind]) found.push(pe);
+      });
+    }
+  }
+  return found;
+}
+
+// Lines describing what the Docs API sees of the Roles table: each Name
+// dropdown's list and choice, each list's choices, and each Term ends
+// chip's properties. For tryUpdateRoles.
+function describeRoles(docId) {
+  const tab = Docs.Documents.get(docId, {includeTabsContent: true}).tabs[0];
+  const content = tab.documentTab.body.content;
+  const definitions = tab.documentTab.dropdownDefinitions || {};
+  const lines = ['Name dropdowns:'];
+  const ids = [];
+  for (const pe of rolesColumnElements(content, 1, 'dropdown')) {
+    const props = pe.dropdown.dropdownProperties || {};
+    lines.push('  list ' + props.dropdownDefinitionId + ', showing ' + props.selectedOptionId +
+      ' "' + props.displayValue + '"');
+    if (!ids.includes(props.dropdownDefinitionId)) ids.push(props.dropdownDefinitionId);
+  }
+  for (const id of ids) {
+    const options = definitions[id] ? definitions[id].dropdownDefinitionProperties.options || [] : null;
+    lines.push('List ' + id + ': ' + (options
+      ? options.map(o => o.optionId + ' "' + o.displayValue + '"').join(', ') : '(not found)'));
+  }
+  lines.push('Term ends chips:');
+  for (const pe of termEndChips(content)) {
+    lines.push('  ' + JSON.stringify(pe.dateElement.dateElementProperties) +
+      ' color ' + JSON.stringify((pe.dateElement.textStyle || {}).foregroundColor || null));
+  }
+  return lines;
 }
 
 function buildNewCircleDocs() {
@@ -78,9 +240,49 @@ function buildNewCircleDocs() {
       }
     }
     refreshCircleDocStructures();
+    try {
+      markPastTermEndsInChangedCircleDocs();
+    } catch (e) {
+      console.error('Couldn\'t check the changed docs\' terms: ' + e.message);
+    }
   } finally {
     lock.releaseLock();
   }
+}
+
+// The script property holding when markPastTermEndsInChangedCircleDocs
+// last started.
+const DATES_CHECKED_KEY = 'circleDocDatesCheckedAt';
+// How far before its last start each run looks, in case Drive notes a
+// change a little after it's made.
+const DATES_CHECK_OVERLAP_MS = 2 * 60 * 1000;
+
+// Run by buildNewCircleDocs, every BUILD_EVERY_MINUTES: recolors the Term
+// ends dates (markPastTermEnds) in each built doc changed since the last
+// run, so a date someone changes is colored within minutes rather than at
+// the daily run. (A doc a run recolors counts as changed for the next one,
+// which finds nothing to do.)
+function markPastTermEndsInChangedCircleDocs() {
+  const props = PropertiesService.getScriptProperties();
+  const started = Date.now();
+  const last = Number(props.getProperty(DATES_CHECKED_KEY)) ||
+    started - BUILD_EVERY_MINUTES * 60 * 1000;
+  const since = new Date(last - DATES_CHECK_OVERLAP_MS).toISOString();
+  const resp = Drive.Files.list({
+    q: 'properties has { key=\'' + AGENDA_KEYS.state + '\' and value=\'' + AGENDA_STATE_BUILT +
+      '\' } and trashed = false and modifiedTime > \'' + since + '\'',
+    corpora: 'allDrives', includeItemsFromAllDrives: true, supportsAllDrives: true,
+    fields: 'files(id,name)',
+  });
+  for (const file of resp.files || []) {
+    try {
+      const marked = markPastTermEnds(file.id);
+      if (marked) console.log(file.name + ': recolored ' + marked + ' Term ends date(s).');
+    } catch (e) {
+      console.error('Couldn\'t check the dates in ' + file.name + ': ' + e.message);
+    }
+  }
+  props.setProperty(DATES_CHECKED_KEY, String(started));
 }
 
 // Builds one labelled doc, fills in About this circle, and relabels it.
@@ -95,8 +297,14 @@ function buildCircleDoc(file) {
       AGENDA_STATE_NOT_EMPTY + '")');
   }
   setAgendaState(file.id, AGENDA_STATE_BUILDING);
-  build(file.id);
   const circle = circleOfDoc(file.id, email);
+  let members = [];
+  try {
+    members = circle ? circleMemberNames(circle) : [];
+  } catch (e) {
+    console.error('Couldn\'t list ' + file.name + '\'s members, for its Roles: ' + e.message);
+  }
+  build(file.id, members);
   const subNames = subNamesOf(props);
   fillAbout(file.id, file.name.replace(/ Agenda$/, ''), email, circle, props[AGENDA_KEYS.parent],
     subNames);
@@ -400,6 +608,149 @@ function addNewAboutRows(docId) {
   }
   doc.saveAndClose();
   return adds.map(a => a.label);
+}
+
+// Run from the editor: in every built doc from before the Roles had
+// dropdowns and date chips (layout version 3), makes its Roles table as
+// rolesTable makes it (see upgradeRoles), and labels the doc layout version
+// ROLES_CHIPS_LAYOUT, so the daily and 10-minute runs look after it. Docs
+// on an older layout are skipped: run addNewAboutRowsToCircleDocs first.
+function upgradeRolesInCircleDocs() {
+  for (const file of builtCircleDocs()) {
+    const props = file.properties || {};
+    const layout = Number(props[AGENDA_KEYS.layout] || 1);
+    if (layout >= ROLES_CHIPS_LAYOUT) continue;
+    if (layout < NEW_ROWS_LAYOUT) {
+      console.warn('Skipped ' + file.name + ': run addNewAboutRowsToCircleDocs first.');
+      continue;
+    }
+    try {
+      const notes = upgradeRolesOf(file.id, props);
+      Drive.Files.update({properties: {[AGENDA_KEYS.layout]: String(ROLES_CHIPS_LAYOUT)}},
+        file.id, null, {supportsAllDrives: true});
+      logLink('Upgraded the Roles in ' + file.name + ':',
+        'https://docs.google.com/document/d/' + file.id + '/edit');
+      for (const note of notes) Logger.log('  ' + note);
+    } catch (e) {
+      console.error('Couldn\'t upgrade the Roles in ' + file.name + ': ' + e.message);
+    }
+  }
+}
+
+// Run from the editor: copies the first built doc that
+// upgradeRolesInCircleDocs would change into your My Drive, unlabelled (so
+// no script acts on it), upgrades the copy's Roles as that would, and logs
+// its link, to look at before running upgradeRolesInCircleDocs. Delete the
+// copy after.
+function tryUpgradeRolesOnCopy() {
+  const file = builtCircleDocs().find(f => {
+    const layout = Number((f.properties || {})[AGENDA_KEYS.layout] || 1);
+    return layout >= NEW_ROWS_LAYOUT && layout < ROLES_CHIPS_LAYOUT;
+  });
+  if (!file) return Logger.log('No built doc needs its Roles upgraded.');
+  const copy = DriveApp.getFileById(file.id).makeCopy('Roles test: ' + file.name,
+    DriveApp.getRootFolder());
+  const unlabel = {};
+  for (const key of Object.keys(file.properties || {})) unlabel[key] = null;
+  Drive.Files.update({properties: unlabel}, copy.getId(), null, {supportsAllDrives: true});
+  // The copy isn't in the circle's folder, so its circle is the original's.
+  const notes = upgradeRolesOf(copy.getId(), file.properties || {}, file.id);
+  logLink('Upgraded the Roles in a copy of ' + file.name + ':',
+    'https://docs.google.com/document/d/' + copy.getId() + '/edit');
+  for (const note of notes) Logger.log('  ' + note);
+}
+
+// Upgrades a doc's Roles with its circle's members: the circle of the doc
+// (or of circleDocId, the doc a copy was made from) or of its labels props.
+// Returns notes, starting with whose members the dropdowns list.
+function upgradeRolesOf(docId, props, circleDocId) {
+  const circle = circleOfDoc(circleDocId || docId, props[AGENDA_KEYS.group]);
+  const names = circle ? circleMemberNames(circle) : [];
+  const notes = upgradeRoles(docId, names);
+  notes.unshift(circle
+    ? 'The Name dropdowns list ' + names.length + ' members of ' + circle.name + '.'
+    : 'Couldn\'t find the doc\'s circle, so the Name dropdowns list no members.');
+  return notes;
+}
+
+// Makes a doc's Roles table as rolesTable makes it, keeping what's in it:
+// each Name cell becomes a dropdown of the circle's members (names) showing
+// what was written there (a choice of its own, if it isn't a member's
+// name; the dash, if it was empty), and each Term ends cell a date chip of
+// the date written there (today's, if it was empty). A Term ends that
+// can't be read as a date is left as it is. Its heading loses its grey
+// "yyyy-mm-dd". Returns notes on what was left as it was. Throws, changing
+// nothing, if the doc has no Roles table or its Roles already have
+// dropdowns.
+function upgradeRoles(docId, names) {
+  const tab = Docs.Documents.get(docId, {includeTabsContent: true}).tabs[0];
+  if ((tab.documentTab.dropdownDefinitions || {})[ROLES_DROPDOWN_ID]) {
+    throw new Error('its Roles already have dropdowns');
+  }
+  const apiTable = tab.documentTab.body.content.find(se => se.table &&
+    apiCellText(se.table.tableRows[0].tableCells[0]).trim().startsWith('Circle Roles'));
+  if (!apiTable) throw new Error('it has no Roles table');
+  // What's written in each role's Name and Term ends, chips included.
+  const written = apiTable.table.tableRows.slice(1).map(row => ({
+    role: apiCellText(row.tableCells[0]).trim(),
+    name: row.tableCells[1] ? apiCellValue(row.tableCells[1]) : '',
+    term: row.tableCells[2] ? apiCellValue(row.tableCells[2]) : '',
+  }));
+  const options = roleChoices(names, written.map(w => w.name));
+  const today = Utilities.formatDate(new Date(), TIME_ZONE, 'yyyy-MM-dd');
+  const notes = [];
+
+  const doc = DocumentApp.openById(docId);
+  const found = findRow(firstTabBody(doc), text => text.startsWith('Circle Roles'));
+  if (!found || found.table.getNumRows() !== written.length + 1) {
+    throw new Error('its Roles table couldn\'t be read');
+  }
+  const table = found.table;
+  const rewrite = (cell, runs, align) => {
+    resetCell(cell);
+    writeCell(cell, [runs]);
+    if (align) alignCell(cell, DocumentApp.HorizontalAlignment.CENTER);
+  };
+  if (table.getRow(0).getNumCells() > 2) rewrite(table.getCell(0, 2), [['Term ends', BOLD]], true);
+  written.forEach((w, i) => {
+    const row = table.getRow(i + 1);
+    if (row.getNumCells() < 3) {
+      notes.push('Left the ' + snippet(w.role, 30) + ' row as it was: it has too few cells.');
+      return;
+    }
+    rewrite(row.getCell(1), [[token('dropdown', ROLES_DROPDOWN_ID, roleOptionId(options, w.name))]]);
+    const date = w.term ? dateFromDisplayText(w.term) : today;
+    if (date) {
+      rewrite(row.getCell(2), [[token('date', date)]], true);
+    } else {
+      notes.push('Left ' + snippet(w.role, 30) + '\'s Term ends, "' + w.term + '", as it was: ' +
+        'it isn\'t a date the script can read. Replace it with a date chip (@date) by hand.');
+    }
+  });
+  doc.saveAndClose();
+
+  Docs.Documents.batchUpdate({requests: [
+    roleDropdownRequest(ROLES_DROPDOWN_ID, options, tab.tabProperties.tabId)]}, docId);
+  replaceTokens(docId);
+  markPastTermEnds(docId);
+  return notes;
+}
+
+// What a Docs API table cell says, chips included (a person chip by name, a
+// dropdown by its choice, a date as shown), its lines joined by spaces.
+function apiCellValue(cell) {
+  const parts = [];
+  walkParagraphs(cell.content, para => {
+    for (const pe of para.elements || []) {
+      if (pe.textRun) parts.push(pe.textRun.content);
+      else if (pe.person) parts.push((pe.person.personProperties || {}).name ||
+        (pe.person.personProperties || {}).email || '');
+      else if (pe.dropdown) parts.push((pe.dropdown.dropdownProperties || {}).displayValue || '');
+      else if (pe.dateElement) parts.push((pe.dateElement.dateElementProperties || {}).displayText || '');
+    }
+    parts.push(' ');
+  });
+  return parts.join('').replace(/\s+/g, ' ').trim();
 }
 
 // Every built circle doc ({id, name, properties}).
