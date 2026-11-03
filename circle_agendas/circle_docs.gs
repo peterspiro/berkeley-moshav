@@ -291,9 +291,54 @@ function buildNewCircleDocs() {
       }
     }
     refreshCircleDocStructures();
+    try {
+      fixDatesInChangedCircleDocs();
+    } catch (e) {
+      console.error('Couldn\'t check the changed docs\' dates: ' + e.message);
+    }
   } finally {
     lock.releaseLock();
   }
+}
+
+// The script property holding when fixDatesInChangedCircleDocs last
+// started.
+const DATES_CHECKED_KEY = 'circleDocDatesCheckedAt';
+// How far before its last start each run looks, in case Drive notes a
+// change a little after it's made.
+const DATES_CHECK_OVERLAP_MS = 2 * 60 * 1000;
+
+// Run by buildNewCircleDocs, every BUILD_EVERY_MINUTES: in each built doc
+// changed since the last run, gives its dates back their yyyy-mm-dd format
+// (fixDateChipFormats) and recolors its Term ends dates (markPastTermEnds),
+// so a date someone changes is put right within minutes rather than at
+// the daily run. (A doc a run fixes counts as changed for the next one,
+// which finds nothing to do.)
+function fixDatesInChangedCircleDocs() {
+  const props = PropertiesService.getScriptProperties();
+  const started = Date.now();
+  const last = Number(props.getProperty(DATES_CHECKED_KEY)) ||
+    started - BUILD_EVERY_MINUTES * 60 * 1000;
+  const since = new Date(last - DATES_CHECK_OVERLAP_MS).toISOString();
+  const resp = Drive.Files.list({
+    q: 'properties has { key=\'' + AGENDA_KEYS.state + '\' and value=\'' + AGENDA_STATE_BUILT +
+      '\' } and trashed = false and modifiedTime > \'' + since + '\'',
+    corpora: 'allDrives', includeItemsFromAllDrives: true, supportsAllDrives: true,
+    fields: 'files(id,name)',
+  });
+  for (const file of resp.files || []) {
+    try {
+      const fixed = fixDateChipFormats(file.id);
+      const marked = markPastTermEnds(file.id);
+      if (fixed || marked) {
+        console.log(file.name + ': fixed the format of ' + fixed + ' date(s), recolored ' +
+          marked + ' Term ends date(s).');
+      }
+    } catch (e) {
+      console.error('Couldn\'t check the dates in ' + file.name + ': ' + e.message);
+    }
+  }
+  props.setProperty(DATES_CHECKED_KEY, String(started));
 }
 
 // Builds one labelled doc, fills in About this circle, and relabels it.

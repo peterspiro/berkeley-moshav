@@ -258,8 +258,11 @@ choices added by hand in Docs, are removed unless a Name cell shows them,
 so no cell's choice changes. The daily run also colors red each Term ends
 date that's past (Docs can't run a script when a chip is edited), and
 gives the Term ends dates and meetings' dates back their yyyy-mm-dd format,
-which Docs changes (to mm/dd/yyyy) when someone picks a new date ("↻ Update
-times" does that too). To try the daily run on the latest preview, run
+which Docs changes (to mm/dd/yyyy) when someone picks a new date. Since
+Docs can't run a script when a date is changed, `buildNewCircleDocs` also
+does those two, every 10 minutes, in each doc changed since its last run,
+so a changed date is put right within about 10 minutes ("↻ Update times"
+does it at once). To try the daily run on the latest preview, run
 **`tryUpdateRoles`** in the editor; it logs what it changed.
 Docs built before layout version 4 keep their plain-text Roles, which new
 meetings still read. It can also be run by hand, to build waiting docs at once; the
