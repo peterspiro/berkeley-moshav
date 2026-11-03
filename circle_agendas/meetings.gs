@@ -27,16 +27,46 @@ const NEW_ITEM_MINUTES = 5;
 const PENDING_MEETING_SECONDS = 600;
 
 // Updates a meeting's times, and its tab's title, if its date chip has been
-// changed.
+// changed, and lines up its table's lists (see alignListIndents).
 function updateTimes(docId, meetingId) {
   const doc = DocumentApp.openById(docId);
   const found = findMeeting(doc, meetingId);
   if (!found) return notFound();
   const messages = recalculate(found.table);
   doc.saveAndClose();
+  alignListIndents(docId, meetingId, found.tabId);
   const retitled = matchTabTitleToDate(docId, found.tabId);
   if (retitled) messages.push('The meeting\'s tab is now titled ' + retitled + ', its new date.');
   return {done: true, title: 'Times updated', messages};
+}
+
+// Gives each bulleted or numbered paragraph in a meeting's table the
+// indents of its nesting level (see listIndents), as Docs gives a nested
+// one its list's own, wider, indent. The attendance checklist, outside the
+// table, keeps Docs' own.
+function alignListIndents(docId, meetingId, tabId) {
+  const table = apiTab(docId, tabId).content
+    .find(se => se.table && apiMeetingId(se) === meetingId);
+  if (!table) return;
+  const paragraphs = [];
+  walkParagraphs([table], para => {
+    const elements = para.elements || [];
+    if (!para.bullet || !elements.length) return;
+    const style = para.paragraphStyle || {};
+    paragraphs.push({
+      start: elements[0].startIndex, end: elements[elements.length - 1].endIndex,
+      level: para.bullet.nestingLevel || 0,
+      firstLine: style.indentFirstLine && style.indentFirstLine.magnitude,
+      indentStart: style.indentStart && style.indentStart.magnitude,
+    });
+  });
+  const requests = listIndentFixes(paragraphs).map(f => ({updateParagraphStyle: {
+    range: {startIndex: f.start, endIndex: f.end, tabId},
+    paragraphStyle: {
+      indentFirstLine: {magnitude: f.firstLine, unit: 'PT'},
+      indentStart: {magnitude: f.indentStart, unit: 'PT'},
+    }, fields: 'indentFirstLine,indentStart'}}));
+  if (requests.length) Docs.Documents.batchUpdate({requests}, docId);
 }
 
 // Retitles a meeting's tab with the date in its date chip, if they differ;

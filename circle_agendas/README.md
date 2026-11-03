@@ -123,7 +123,11 @@ so they stay just below where new items go.
   items' durations. A duration it can't read turns red and counts as 0; a
   closing round with no time left turns red. The page says why. It also
   retitles the meeting's tab, if its date chip has been changed (Docs
-  can't run a script when the chip is edited).
+  can't run a script when the chip is edited). And it lines up the
+  bulleted and numbered lists in the meeting's table: each nested level
+  0.25" further in than the one outside it, rather than at Docs' own,
+  wider, indents (a script can't change a list's indents, only each
+  paragraph's, and can't run when someone presses Tab).
 - **+ Add item** gives the new topic a Presenter dropdown (defaulting to
   "Presenter") of the meeting's attendees, and bulleted lists under it and
   in Notes.

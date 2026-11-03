@@ -324,3 +324,32 @@ function aboutReorder(labels) {
   }
   return {move: labels.filter(l => !ABOUT_HAND_FILLED.includes(l)), order: target};
 }
+
+// Bulleted and numbered lists' indents, in points: at the outer level, the
+// bullet 0.08" from the margin and the text a 0.19" hanging indent beyond
+// it (Format → Bullets & numbering → Indentation options: left 0.08",
+// hanging 0.19"); each nested level LIST_LEVEL_STEP_PT further in. Docs
+// keeps a list's own indent for each level, which scripts can't change, so
+// these are set on each paragraph.
+const LIST_INDENT_PT = 0.08 * 72;
+const LIST_HANGING_PT = 0.19 * 72;
+const LIST_LEVEL_STEP_PT = 0.25 * 72;
+function listIndents(level) {
+  const firstLine = LIST_INDENT_PT + (level || 0) * LIST_LEVEL_STEP_PT;
+  return {firstLine, start: firstLine + LIST_HANGING_PT};
+}
+
+// The list paragraphs (each {start, end, level, firstLine, indentStart},
+// its range, nesting level and indents in points, if set) whose indents
+// aren't listIndents' for their level, each with the indents it should
+// have: [{start, end, firstLine, indentStart}].
+function listIndentFixes(paragraphs) {
+  const near = (a, b) => typeof a === 'number' && Math.abs(a - b) < 0.01;
+  const fixes = [];
+  for (const p of paragraphs) {
+    const want = listIndents(p.level);
+    if (near(p.firstLine, want.firstLine) && near(p.indentStart, want.start)) continue;
+    fixes.push({start: p.start, end: p.end, firstLine: want.firstLine, indentStart: want.start});
+  }
+  return fixes;
+}
