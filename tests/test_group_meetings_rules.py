@@ -651,14 +651,14 @@ def docs_api_doc(rows):
 class TestDocRowValue:
     def test_the_whole_value_cell(self):
         doc = docs_api_doc([("Zoom room", "x"),
-                            ("Meeting reminders\nhow long before each meeting", "\n2 hours\n")])
-        assert js("docRowValue(d, 'Meeting reminders')", d=doc) == "2 hours"
-        doc = docs_api_doc([("Meeting reminders", "2 days\n 1 hour ")])
-        assert js("docRowValue(d, 'Meeting reminders')", d=doc) == "2 days, 1 hour"
+                            ("Remind before meetings\ne.g. 2 days; none", "\n2 hours\n")])
+        assert js("docRowValue(d, 'Remind before meetings')", d=doc) == "2 hours"
+        doc = docs_api_doc([("Remind before meetings", "2 days\n 1 hour ")])
+        assert js("docRowValue(d, 'Remind before meetings')", d=doc) == "2 days, 1 hour"
 
     def test_empty_and_missing(self):
-        doc = docs_api_doc([("Meeting reminders", "")])
-        assert js("docRowValue(d, 'Meeting reminders')", d=doc) == ""
+        doc = docs_api_doc([("Remind before meetings", "")])
+        assert js("docRowValue(d, 'Remind before meetings')", d=doc) == ""
         assert js("docRowValue(d, 'Nope')", d=doc) is None
         assert js("docRowValue({}, 'Nope')") is None
 
@@ -686,7 +686,7 @@ class TestReminderLeads:
     def test_unreadable_setting_falls_back_and_says_so(self):
         result = js("reminderLeads({}, 'whenever')")
         assert result["leads"] == [DAY] and result["source"] == "default"
-        assert "Meeting reminders row" in result["error"] and "whenever" in result["error"]
+        assert "Remind before meetings row" in result["error"] and "whenever" in result["error"]
 
     def test_unreadable_tag_falls_back_to_the_group(self):
         result = js("reminderLeads(e, '2 hours')", e={"description": "[remind soonish]"})
@@ -735,7 +735,7 @@ class TestReminderMessage:
         assert "  Agenda and minutes: https://docs.google.com/document/d/DOC/edit\n" in body
         assert "  Calendar event: https://cal/e\n" in body
         assert "24 hours before the meeting" in body
-        assert '"Meeting reminders" under About this circle' in body
+        assert '"Remind before meetings" under About this circle' in body
         assert "[no reminder]" in body and "Couldn't read" not in body
 
     def test_no_agenda_doc_or_zoom(self):
@@ -746,12 +746,12 @@ class TestReminderMessage:
 
     def test_says_what_it_couldnt_read(self):
         opts = {**self.OPTS, "source": "default",
-                "error": "the agenda doc's Meeting reminders row: \"x\" isn't a length of time"}
+                "error": "the agenda doc's Remind before meetings row: \"x\" isn't a length of time"}
         body = js("reminderMessage({}, o)", o=opts)["body"]
-        assert "(Couldn't read the agenda doc's Meeting reminders row" in body
+        assert "(Couldn't read the agenda doc's Remind before meetings row" in body
 
 
 def test_reminder_row_label_matches_the_agenda_doc():
     agenda_rules = (RULES.parent.parent / "circle_agendas" / "agenda_rules.gs").read_text()
-    assert "const REMINDER_ROW_LABEL = 'Meeting reminders';" in agenda_rules
-    assert js("REMINDER_ROW_LABEL") == "Meeting reminders"
+    assert "const REMINDER_ROW_LABEL = 'Remind before meetings';" in agenda_rules
+    assert js("REMINDER_ROW_LABEL") == "Remind before meetings"

@@ -25,7 +25,7 @@
  * On the same run, each group's meetings starting soon get their reminder
  * emails (see sendDueReminders): to the group's Google Group, by default
  * 24 hours before; a group can change that, or turn reminders off, in its
- * agenda doc's Meeting reminders row, and one meeting can be changed with a
+ * agenda doc's Remind before meetings row, and one meeting can be changed with a
  * tag in its description (see reminderLeads in event_rules.gs).
  * Then, if anything changed, and every hour regardless (hourly), it looks for
  * meetings in the next OVERLAP_WEEKS weeks in rooms owned by the same Zoom
@@ -262,7 +262,7 @@ function refreshGroups() {
 }
 
 /**
- * The text of the Meeting reminders row in About this circle in a group's
+ * The text of the Remind before meetings row in About this circle in a group's
  * agenda doc (null if the doc has no such row, as docs built before it
  * don't). If the doc can't be read, what the group had before is kept.
  */

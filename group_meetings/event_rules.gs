@@ -482,7 +482,7 @@ function conflictFingerprint(c) {
 
 // The About this circle row in a group's agenda doc that says when the
 // group's meetings get reminders (see circle_agendas/agenda_rules.gs).
-const REMINDER_ROW_LABEL = 'Meeting reminders';
+const REMINDER_ROW_LABEL = 'Remind before meetings';
 const DEFAULT_REMINDER_LEADS = [24 * 60 * 60 * 1000];
 // Longer lead times aren't read: reminders are looked for this far ahead.
 const MAX_REMINDER_LEAD_MS = 14 * 24 * 60 * 60 * 1000;
@@ -572,7 +572,7 @@ function docRowValue(doc, label) {
 /**
  * When an event's reminders go out: { leads, source, error }. A tag in the
  * event ("[remind 2 hours]", "[no reminder]") wins; then the group's
- * setting (the text of its agenda doc's Meeting reminders row, null if it
+ * setting (the text of its agenda doc's Remind before meetings row, null if it
  * has none, '' if it's empty); then DEFAULT_REMINDER_LEADS. source is 'event', 'group', or
  * 'default'; error says why a tag or setting that couldn't be read was
  * passed over, naming which.

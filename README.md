@@ -367,7 +367,7 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
   An event that's only a copy of someone's invitation gets its organizer an
   email asking them to create it on the group calendar instead. Each group
   gets a reminder email before each of its meetings: 24 hours before, unless
-  its agenda doc's Meeting reminders row says another time (or "none"), or
+  its agenda doc's Remind before meetings row says another time (or "none"), or
   the event says `[remind 2 hours]` or `[no reminder]`. It also
   checks the next 8 weeks for meetings in rooms of the same Zoom user that
   overlap or are less than 15 minutes apart, including ones scheduled
@@ -415,7 +415,7 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
     rewrites the Parent Circle and Sub-Circles rows of each built doc that
     `change_parent_circle.py` or `add_new_group.py` has relabelled. Below
     About this circle's Zoom room row come a link to the circle's
-    calendar and the Meeting reminders row, which says when the circle's
+    calendar and the Remind before meetings row, which says when the circle's
     meetings get reminders (`group_meetings` reads it); run by hand, it
     adds those rows to docs built before them.
   - **`circle_agendas/build_template.gs`** builds an agenda doc from a

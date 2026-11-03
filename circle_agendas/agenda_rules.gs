@@ -140,14 +140,14 @@ function base64ToString(text) {
 // About this circle's rows, in order (aboutTable, build_template.gs, makes
 // them).
 const CALENDAR_ROW_LABEL = 'Circle calendar';
-// The Meeting reminders row, which group_meetings/group_meetings.gs reads
+// The Remind before meetings row, which group_meetings/group_meetings.gs reads
 // (its first line) to know when to email the circle a reminder of each
 // meeting (see parseReminderLeads in group_meetings/event_rules.gs).
-const REMINDER_ROW_LABEL = 'Meeting reminders';
+const REMINDER_ROW_LABEL = 'Remind before meetings';
 // The row's value cell holds only the setting; how to write it is the
 // grey second line of its label cell.
 const REMINDER_DEFAULT_TEXT = '24 hours';
-const REMINDER_HINT = 'how long before each meeting, e.g. 2 days; 90 minutes; 2 days, 1 hour; none';
+const REMINDER_HINT = 'e.g. 2 days; 90 minutes; 2 days, 1 hour; none';
 const ABOUT_LABELS = ['Aims & Domain', 'Policies folder', 'Zoom room', CALENDAR_ROW_LABEL,
   REMINDER_ROW_LABEL, 'Circle email address', 'Other Key Links', 'Google Drive Folder',
   'Parent Circle', 'Sub-Circles'];

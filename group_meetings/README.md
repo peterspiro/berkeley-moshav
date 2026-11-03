@@ -34,8 +34,8 @@ Apps Script that looks after every group's Google calendar (the calendars
   meeting's time, Zoom link and passcode (or other location), agenda doc
   link, and a link to the event:
   - by default, 24 hours before;
-  - a group with a circle agenda doc sets its own time in the **Meeting
-    reminders** row of About this circle (see `../circle_agendas/`): any
+  - a group with a circle agenda doc sets its own time in the **Remind
+    before meetings** row of About this circle (see `../circle_agendas/`): any
     length of time ("24 hours", "2 days", "90 minutes", "1h30m"), several
     separated by commas or "and" ("2 days, 1 hour"), or "none" for no
     reminders (an empty cell means the default). The row's value cell is
@@ -137,7 +137,7 @@ the all-events calendar too.
 
 When a change adds a permission to `appsscript.json` (reading Drive, for
 the agenda docs' links, did, and so did reading the agenda docs, for their
-Meeting reminders row), run any function in the editor after the
+Remind before meetings row), run any function in the editor after the
 push, such as `hourly`, and allow it: the triggers run with the
 permissions allowed so far, and fail without the new one.
 
@@ -160,7 +160,7 @@ permissions allowed so far, and fail without the new one.
 5. On a test group's calendar, create an event starting in 24 hours and 10
    minutes. Within 15 minutes the group should get one reminder email. Put
    `[remind 2 hours]` in an event's description, or set the group's
-   agenda doc's Meeting reminders row to "none" (then wait for `hourly`, or
+   agenda doc's Remind before meetings row to "none" (then wait for `hourly`, or
    run it), to check those.
 
 Run **`syncAll`** or **`hourly`** from the editor to force a pass, and read

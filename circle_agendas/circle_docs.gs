@@ -15,7 +15,7 @@
  * each built doc that change_parent_circle.py or add_new_group.py has
  * relabelled with a new parent or sub-circles (and labelled AGENDA_REFRESH_STRUCTURE).
  * addNewAboutRowsToCircleDocs, run by hand, gives docs built before the
- * Circle calendar and Meeting reminders rows were added those rows.
+ * Circle calendar and Remind before meetings rows were added those rows.
  */
 
 // Must match util/circle_agenda_docs.py.
@@ -39,12 +39,12 @@ const AGENDA_STATE_NOT_EMPTY = 'not empty';
 // existing docs can tell which they're looking at.
 // 2: About this circle's rows reordered (ABOUT_LABELS), and its Drive
 // folder row renamed Google Drive Folder and linked by the circle's name.
-// 3: About this circle's Circle calendar and Meeting reminders rows added,
+// 3: About this circle's Circle calendar and Remind before meetings rows added,
 // below Zoom room.
 const LAYOUT_VERSION = 3;
 // The first layout version with About this circle in ABOUT_LABELS' order.
 const ABOUT_ORDER_LAYOUT = 2;
-// The first layout version with the Circle calendar and Meeting reminders rows.
+// The first layout version with the Circle calendar and Remind before meetings rows.
 const NEW_ROWS_LAYOUT = 3;
 const BUILD_EVERY_MINUTES = 10;
 
@@ -348,7 +348,7 @@ function reorderAbout(docId) {
 
 // Run from the editor: adds the rows added to About this circle since
 // layout version 2 (ABOUT_ADDED_LATER: Circle calendar, linking the
-// circle's calendar, and Meeting reminders, saying 24 hours, the default,
+// circle's calendar, and Remind before meetings, saying 24 hours, the default,
 // with how to write it in its label cell), each in its place, to
 // every built doc of layout version 2 that lacks them, and labels it
 // NEW_ROWS_LAYOUT. A doc of layout version 1 is skipped (the log says so):
@@ -379,7 +379,7 @@ function addNewAboutRowsToCircleDocs() {
 
 // Adds the rows ABOUT_ADDED_LATER that a doc's About this circle lacks,
 // each just below the row it follows (see aboutRowsToAdd), as aboutTable
-// makes them, empty but for Meeting reminders' default (and, in its label
+// makes them, empty but for Remind before meetings' default (and, in its label
 // cell, how to write it).
 // Returns the labels of the rows added.
 function addNewAboutRows(docId) {

@@ -176,27 +176,27 @@ class TestAboutReorder:
             "move"] == []
         plan = js(f"aboutReorder({json.dumps(self.OLD)})")
         assert "error" not in plan
-        assert not set(plan["move"]) & {"Circle calendar", "Meeting reminders"}
+        assert not set(plan["move"]) & {"Circle calendar", "Remind before meetings"}
         assert "Circle calendar" not in plan["order"]
 
     def test_new_rows_come_below_zoom_room(self):
         labels = js("ABOUT_LABELS")
         i = labels.index("Zoom room")
-        assert labels[i + 1:i + 3] == ["Circle calendar", "Meeting reminders"]
+        assert labels[i + 1:i + 3] == ["Circle calendar", "Remind before meetings"]
 
     def test_where_to_add_the_new_rows(self):
         layout2 = js("ABOUT_LABELS.filter(l => !ABOUT_ADDED_LATER.includes(l))")
         adds = js(f"aboutRowsToAdd({json.dumps(layout2)})")
         assert adds == [{"label": "Circle calendar", "index": 3},
-                        {"label": "Meeting reminders", "index": 4}]
+                        {"label": "Remind before meetings", "index": 4}]
         labels = list(layout2)
         for add in adds:
             labels.insert(add["index"], add["label"])
         assert labels == js("ABOUT_LABELS")
         assert js("aboutRowsToAdd(ABOUT_LABELS)") == []
-        with_calendar = [l for l in js("ABOUT_LABELS") if l != "Meeting reminders"]
+        with_calendar = [l for l in js("ABOUT_LABELS") if l != "Remind before meetings"]
         assert js(f"aboutRowsToAdd({json.dumps(with_calendar)})") == [
-            {"label": "Meeting reminders", "index": 4}]
+            {"label": "Remind before meetings", "index": 4}]
         assert "Zoom room" in js(
             f"aboutRowsToAdd({json.dumps([l for l in layout2 if l != 'Zoom room'])})")["error"]
 
