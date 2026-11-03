@@ -418,8 +418,9 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
     About this circle's Zoom room row come a link to the circle's
     calendar and the Remind before meetings row, which says when the circle's
     meetings get reminders (`group_meetings` reads it); run by hand, it
-    adds those rows to docs built before them. Each day, it colors red the
-    Roles table's Term ends dates that are past.
+    adds those rows to docs built before them. Each day, it brings the Roles
+    table's Name dropdowns up to date with the circle's members (as adding
+    a meeting also does) and colors red its Term ends dates that are past.
   - **`circle_agendas/build_template.gs`** builds an agenda doc from a
     blank doc, entirely from code (so it depends on no other document):
     each circle's doc, and a preview, rebuilt in place, for trying changes.

@@ -108,7 +108,8 @@ function addItem(docId, meetingId) {
 // Administrative matters link the previous meeting's tab (its minutes) and
 // give the event after as the next meeting; and the
 // previous meeting's Action Items Recap is copied to its Action Items
-// Accountability.
+// Accountability. The Circle Info tab's Roles dropdowns get the members as
+// their choices (see updateRoleDropdowns).
 function startNewMeeting(docId) {
   const circle = circleForDoc(docId);
   if (!circle) {
@@ -214,6 +215,12 @@ function finishNewMeeting(key) {
   ]}, docId);
   replaceTokens(docId, details.tabId);
   finishMeeting(docId, meetingId, details.tabId);
+  // The members just read keep the Roles table's choices up to date too.
+  try {
+    updateRoleDropdowns(docId, details.attendees);
+  } catch (e) {
+    console.error('Couldn\'t update the Roles choices: ' + e.message);
+  }
   CacheService.getScriptCache().remove(key);
   return {done: true, title: 'Meeting added', messages: [
     'Added the meeting on ' + details.date + ' at ' + details.start + ', in a tab of its own ' +

@@ -246,12 +246,15 @@ empty because the group has no sub-circles needs nothing: the list
 appears when a sub-circle is added.
 
 Once, in the editor, run **`installTriggers`**, which runs
-`buildNewCircleDocs` every 10 minutes and `markPastTermEndsInCircleDocs`
+`buildNewCircleDocs` every 10 minutes and `updateRolesInCircleDocs`
 every day at 1 am (and asks to allow managing triggers). The Roles
-table's Name cells are dropdowns of the circle's members (as they were when
-the doc was built; anyone can add a choice in Docs), and its Term ends cells
-date chips, starting at the day the doc was built; the daily run colors
-red each one that's past (Docs can't run a script when a chip is edited).
+table's Name cells are dropdowns of the circle's members, and its Term ends
+cells date chips, starting at the day the doc was built. The daily run, and
+adding a meeting, bring the dropdowns' choices up to date with the
+circle's members: new members are added, and members who've left, and
+choices added by hand in Docs, are removed unless a Name cell shows them,
+so no cell's choice changes. The daily run also colors red each Term ends
+date that's past (Docs can't run a script when a chip is edited).
 Docs built before layout version 4 keep their plain-text Roles, which new
 meetings still read. It can also be run by hand, to build waiting docs at once; the
 log links each doc it built.

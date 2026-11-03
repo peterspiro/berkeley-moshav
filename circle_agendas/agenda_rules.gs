@@ -116,6 +116,46 @@ function roleOptionId(options, holder) {
   return found ? found.optionId : ROLE_PLACEHOLDER_ID;
 }
 
+// The Roles dropdown's choices brought up to date with the circle's
+// members (names), from its choices now (existing, Docs API
+// DropdownOptions) and the IDs of the choices its chips show (selected):
+// as roleChoices gives, but with the members who've left, and choices
+// added by hand, kept only while a chip shows them, and each choice that
+// stays keeping its ID, so the chips showing it still do. Returns
+// {options, replacements}: replacements, for updateDropdownDefinition-
+// PropertiesRequest, gives the placeholder to any chip whose choice is
+// gone (only past Docs' limit of 50).
+function updatedRoleChoices(existing, names, selected) {
+  const shown = existing.filter(o => (selected || []).includes(o.optionId)).map(o => o.displayValue);
+  const fresh = roleChoices(names, shown);
+  const idOf = {};
+  for (const o of existing) if (!(o.displayValue in idOf)) idOf[o.displayValue] = o.optionId;
+  // Every ID there is now is taken, so no new choice gets the ID of one
+  // that's gone (which a chip might still show).
+  const used = new Set(existing.map(o => o.optionId));
+  let next = 0;
+  const newId = () => {
+    while (used.has('dropdownItem.m' + next)) next++;
+    used.add('dropdownItem.m' + next);
+    return 'dropdownItem.m' + next;
+  };
+  const options = fresh.map(o => ({optionId: idOf[o.displayValue] ||
+    (used.has(o.optionId) ? newId() : (used.add(o.optionId), o.optionId)), displayValue: o.displayValue}));
+  const placeholder = options[0].optionId;
+  const replacements = {};
+  for (const id of selected || []) {
+    if (!options.some(o => o.optionId === id)) replacements[id] = placeholder;
+  }
+  return {options, replacements};
+}
+
+// Whether two lists of dropdown choices are the same: the same IDs and
+// values, in the same order.
+function sameChoices(a, b) {
+  const key = list => JSON.stringify(list.map(o => [o.optionId, o.displayValue]));
+  return key(a) === key(b);
+}
+
 // Whether a term ending on date ('yyyy-MM-dd') is over, on today
 // ('yyyy-MM-dd'); false if date can't be read.
 function termEnded(date, today) {

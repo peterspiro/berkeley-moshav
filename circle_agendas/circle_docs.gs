@@ -50,34 +50,72 @@ const ABOUT_ORDER_LAYOUT = 2;
 const NEW_ROWS_LAYOUT = 3;
 const BUILD_EVERY_MINUTES = 10;
 
-// The hour (in the script's time zone) markPastTermEndsInCircleDocs runs,
-// each day.
-const TERM_CHECK_HOUR = 1;
+// The hour (in the script's time zone) updateRolesInCircleDocs runs, each
+// day.
+const ROLES_UPDATE_HOUR = 1;
 
 // Run once, in the editor: builds new circle docs every BUILD_EVERY_MINUTES,
-// and marks the terms that have ended every day.
+// and updates their Roles every day.
 function installTriggers() {
-  const handlers = ['buildNewCircleDocs', 'markPastTermEndsInCircleDocs'];
+  const handlers = ['buildNewCircleDocs', 'updateRolesInCircleDocs'];
   for (const t of ScriptApp.getProjectTriggers()) {
     if (handlers.includes(t.getHandlerFunction())) ScriptApp.deleteTrigger(t);
   }
   ScriptApp.newTrigger('buildNewCircleDocs').timeBased().everyMinutes(BUILD_EVERY_MINUTES).create();
-  ScriptApp.newTrigger('markPastTermEndsInCircleDocs').timeBased().everyDays(1)
-    .atHour(TERM_CHECK_HOUR).create();
+  ScriptApp.newTrigger('updateRolesInCircleDocs').timeBased().everyDays(1)
+    .atHour(ROLES_UPDATE_HOUR).create();
   Logger.log('buildNewCircleDocs will run every ' + BUILD_EVERY_MINUTES + ' minutes, and ' +
-    'markPastTermEndsInCircleDocs every day at ' + TERM_CHECK_HOUR + ':00.');
+    'updateRolesInCircleDocs every day at ' + ROLES_UPDATE_HOUR + ':00.');
 }
 
-// Run every day by the trigger installTriggers makes (or by hand): marks
-// the past Term ends dates red in every built doc (see markPastTermEnds).
-function markPastTermEndsInCircleDocs() {
+// Run every day by the trigger installTriggers makes (or by hand): in every
+// built doc, brings the Roles table's Name dropdowns' choices up to date
+// with the circle's members (see updateRoleDropdowns), and marks its past
+// Term ends dates red (see markPastTermEnds).
+function updateRolesInCircleDocs() {
   for (const file of builtCircleDocs()) {
+    try {
+      const circle = circleOfDoc(file.id, (file.properties || {})[AGENDA_KEYS.group]);
+      if (circle && updateRoleDropdowns(file.id, circleMemberNames(circle))) {
+        console.log('Updated the Roles choices in ' + file.name);
+      }
+    } catch (e) {
+      console.error('Couldn\'t update the Roles choices in ' + file.name + ': ' + e.message);
+    }
     try {
       markPastTermEnds(file.id);
     } catch (e) {
       console.error('Couldn\'t check the terms in ' + file.name + ': ' + e.message);
     }
   }
+}
+
+// Brings the Roles table's Name dropdowns' choices up to date with the
+// circle's members (names), keeping what each dropdown shows (see
+// updatedRoleChoices). Returns whether anything changed. Does nothing in
+// docs built before the Roles had dropdowns, or with no members (which
+// more likely means they couldn't be read than that everyone left).
+function updateRoleDropdowns(docId, names) {
+  if (!names.length) return false;
+  const tab = Docs.Documents.get(docId, {includeTabsContent: true}).tabs[0];
+  const definition = (tab.documentTab.dropdownDefinitions || {})[ROLES_DROPDOWN_ID];
+  if (!definition) return false;
+  const existing = definition.dropdownDefinitionProperties.options || [];
+  const selected = [];
+  walkParagraphs(tab.documentTab.body.content, para => {
+    for (const pe of para.elements || []) {
+      const props = pe.dropdown && pe.dropdown.dropdownProperties;
+      if (props && props.dropdownDefinitionId === ROLES_DROPDOWN_ID) selected.push(props.selectedOptionId);
+    }
+  });
+  const {options, replacements} = updatedRoleChoices(existing, names, selected);
+  if (sameChoices(existing, options)) return false;
+  Docs.Documents.batchUpdate({requests: [{updateDropdownDefinitionProperties: {
+    tabId: tab.tabProperties.tabId, dropdownDefinitionId: ROLES_DROPDOWN_ID,
+    dropdownDefinitionProperties: {options}, fields: 'options',
+    selectedOptionIdReplacements: replacements,
+  }}]}, docId);
+  return true;
 }
 
 // Colors each Term ends date chip in the Roles table red if its date is

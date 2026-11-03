@@ -41,7 +41,8 @@ don't reach docs already built, and will take their own scripts (see
   folder, by `previewTemplate`, without parent and sub-circles); no lines
   between sections; and Roles: Leader,
   Feedback Link, Facilitator, and Secretary, each with its holder (a
-  dropdown of the circle's members, and Vacant) and when its term ends (a
+  dropdown of the circle's members, and Vacant, kept up to date daily and
+  when a meeting is added) and when its term ends (a
   date chip, red once it's past)); "Backlog" (built with the
   Docs API alone, since DocumentApp can't see a tab added in the same run:
   "Requested for prioritization", with Policy item requests and Task

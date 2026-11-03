@@ -127,6 +127,53 @@ class TestRoleChoices:
         assert js(expr) == option_id
 
 
+class TestUpdatedRoleChoices:
+    EXISTING = [
+        {"optionId": "dropdownItem.none", "displayValue": "Name"},
+        {"optionId": "dropdownItem.m0", "displayValue": "Ann"},
+        {"optionId": "dropdownItem.m1", "displayValue": "Bo"},
+        {"optionId": "dropdownItem.m2", "displayValue": "Cy"},
+        {"optionId": "dropdownItem.hand", "displayValue": "Guest Rae"},
+        {"optionId": "dropdownItem.vacant", "displayValue": "Vacant"}]
+
+    def update(self, names, selected, existing=None):
+        return js(f"updatedRoleChoices({json.dumps(existing or self.EXISTING)}, "
+                  f"{json.dumps(names)}, {json.dumps(selected)})")
+
+    def test_keeps_ids_adds_new_drops_unshown(self):
+        # Ann stays; Bo left but is shown; Cy left and isn't; Dee joined;
+        # the hand-added guest isn't shown.
+        result = self.update(["Ann", "Dee"], ["dropdownItem.m1", "dropdownItem.none"])
+        assert result == {"options": [
+            {"optionId": "dropdownItem.none", "displayValue": "Name"},
+            {"optionId": "dropdownItem.m0", "displayValue": "Ann"},
+            {"optionId": "dropdownItem.m3", "displayValue": "Dee"},
+            {"optionId": "dropdownItem.m1", "displayValue": "Bo"},
+            {"optionId": "dropdownItem.vacant", "displayValue": "Vacant"}], "replacements": {}}
+
+    def test_keeps_shown_hand_added_choice(self):
+        options = self.update(["Ann"], ["dropdownItem.hand"])["options"]
+        assert {"optionId": "dropdownItem.hand", "displayValue": "Guest Rae"} in options
+
+    def test_unchanged(self):
+        existing = js('roleChoices(["Ann", "Bo"], [])')
+        result = self.update(["Ann", "Bo"], ["dropdownItem.m1"], existing)
+        assert js(f"sameChoices({json.dumps(existing)}, {json.dumps(result['options'])})") is True
+
+    def test_new_names_never_reuse_a_gone_choices_id(self):
+        result = self.update(["Zed"], [])
+        ids = {o["optionId"] for o in result["options"]}
+        assert ids.isdisjoint({"dropdownItem.m0", "dropdownItem.m1", "dropdownItem.m2",
+                               "dropdownItem.hand"})
+
+    def test_replaces_choices_past_the_limit(self):
+        names = [f"P{i}" for i in range(60)]
+        result = self.update(names, ["dropdownItem.m2"])
+        # Cy is shown, but comes after 48 names: past the limit.
+        assert result["replacements"] == {"dropdownItem.m2": "dropdownItem.none"}
+        assert len(result["options"]) == 50
+
+
 class TestTermEnded:
     @pytest.mark.parametrize("date, ended", [
         ("2026-11-02", True), ("2026-11-03", False), ("2027-01-01", False), ("", False),
