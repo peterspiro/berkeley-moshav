@@ -14,6 +14,8 @@
  * existing docs. It also rewrites the Parent Circle and Sub-Circles rows of
  * each built doc that change_parent_circle.py or add_new_group.py has
  * relabelled with a new parent or sub-circles (and labelled AGENDA_REFRESH_STRUCTURE).
+ * addNewAboutRowsToCircleDocs, run by hand, gives docs built before the
+ * Circle calendar and Remind before meetings rows were added those rows.
  */
 
 // Must match util/circle_agenda_docs.py.
@@ -37,9 +39,13 @@ const AGENDA_STATE_NOT_EMPTY = 'not empty';
 // existing docs can tell which they're looking at.
 // 2: About this circle's rows reordered (ABOUT_LABELS), and its Drive
 // folder row renamed Google Drive Folder and linked by the circle's name.
-const LAYOUT_VERSION = 2;
+// 3: About this circle's Circle calendar and Remind before meetings rows added,
+// below Zoom room.
+const LAYOUT_VERSION = 3;
 // The first layout version with About this circle in ABOUT_LABELS' order.
 const ABOUT_ORDER_LAYOUT = 2;
+// The first layout version with the Circle calendar and Remind before meetings rows.
+const NEW_ROWS_LAYOUT = 3;
 const BUILD_EVERY_MINUTES = 10;
 
 // Run once, in the editor: builds new circle docs every BUILD_EVERY_MINUTES.
@@ -135,7 +141,7 @@ function subNamesOf(props) {
 }
 
 // The doc's title becomes the group's name, and About this circle gets its
-// Zoom room, email address, Drive item (linked by the circle's name), and
+// Zoom room, calendar, email address, Drive item (linked by the circle's name), and
 // parent and sub-circles (each named, and linked to its Drive folder when
 // it's a group with one; the sub-circles as a bulleted list).
 // With onlyEmpty, only rows that are empty are filled in; with onlyRows,
@@ -161,6 +167,8 @@ function fillAbout(docId, name, email, circle, parentName, subNames, onlyEmpty, 
   // Each row's paragraphs, each a list of runs.
   const values = {
     'Zoom room': circle && circle.zoomUrl ? [[['Zoom room', {[A.LINK_URL]: circle.zoomUrl}]]] : [],
+    [CALENDAR_ROW_LABEL]: circle && circle.calendarId
+      ? [[['Circle calendar', {[A.LINK_URL]: calendarUrl(circle.calendarId)}]]] : [],
     'Circle email address': email ? [[[email, {[A.LINK_URL]: 'mailto:' + email}]]] : [],
     'Google Drive Folder': circle && circle.driveItemId
       ? [[[name || circle.name || 'Google Drive folder', folderLink(circle.driveItemId)]]] : [],
@@ -215,7 +223,7 @@ function circleOfDoc(docId, email) {
 }
 
 // Run from the editor: fills in the empty rows of About this circle (Zoom
-// room, email address, Drive folder, parent, sub-circles) in every built
+// room, calendar, email address, Drive folder, parent, sub-circles) in every built
 // circle doc, for docs built before those rows were filled in. Rows that
 // already say something are left alone.
 function fillAboutForCircleDocs() {
@@ -327,15 +335,71 @@ function reorderAbout(docId) {
     copies[labels[r]] = table.getRow(r).copy();
     table.removeRow(r);
   }
-  ABOUT_LABELS.forEach((label, i) => {
+  plan.order.forEach((label, i) => {
     if (copies[label]) table.insertTableRow(i, copies[label]);
   });
-  const driveLabel = table.getCell(ABOUT_LABELS.indexOf('Google Drive Folder'), 0);
+  const driveLabel = table.getCell(plan.order.indexOf('Google Drive Folder'), 0);
   if (driveLabel.getText().trim() !== 'Google Drive Folder') {
     writeCell(driveLabel, [[['Google Drive Folder', BOLD]]]);
     alignCell(driveLabel, DocumentApp.HorizontalAlignment.RIGHT);
   }
   doc.saveAndClose();
+}
+
+// Run from the editor: adds the rows added to About this circle since
+// layout version 2 (ABOUT_ADDED_LATER: Circle calendar, linking the
+// circle's calendar, and Remind before meetings, saying 24 hours, the default,
+// with how to write it in its label cell), each in its place, to
+// every built doc of layout version 2 that lacks them, and labels it
+// NEW_ROWS_LAYOUT. A doc of layout version 1 is skipped (the log says so):
+// run reorderAboutInCircleDocs first. Safe to run again.
+function addNewAboutRowsToCircleDocs() {
+  for (const file of builtCircleDocs()) {
+    const props = file.properties || {};
+    const layout = Number(props[AGENDA_KEYS.layout] || 1);
+    if (layout >= NEW_ROWS_LAYOUT) continue;
+    if (layout < ABOUT_ORDER_LAYOUT) {
+      console.warn('Skipped ' + file.name + ': run reorderAboutInCircleDocs first.');
+      continue;
+    }
+    try {
+      const added = addNewAboutRows(file.id);
+      const email = props[AGENDA_KEYS.group];
+      fillAbout(file.id, null, email, circleOfDoc(file.id, email), props[AGENDA_KEYS.parent],
+        subNamesOf(props), false, [CALENDAR_ROW_LABEL]);
+      Drive.Files.update({properties: {[AGENDA_KEYS.layout]: String(NEW_ROWS_LAYOUT)}},
+        file.id, null, {supportsAllDrives: true});
+      logLink((added.length ? 'Added ' + added.join(' and ') + ' to ' : 'Relabelled ') +
+        file.name + ':', 'https://docs.google.com/document/d/' + file.id + '/edit');
+    } catch (e) {
+      console.error('Couldn\'t add rows to ' + file.name + ': ' + e.message);
+    }
+  }
+}
+
+// Adds the rows ABOUT_ADDED_LATER that a doc's About this circle lacks,
+// each just below the row it follows (see aboutRowsToAdd), as aboutTable
+// makes them, empty but for Remind before meetings' default (and, in its label
+// cell, how to write it).
+// Returns the labels of the rows added.
+function addNewAboutRows(docId) {
+  const doc = DocumentApp.openById(docId);
+  const found = findRow(firstTabBody(doc), text => text === 'Circle email address');
+  if (!found) throw new Error('it has no About this circle table');
+  const table = found.table;
+  const labels = [];
+  for (let r = 0; r < table.getNumRows(); r++) labels.push(aboutLabel(table.getCell(r, 0).getText()));
+  const adds = aboutRowsToAdd(labels);
+  if (adds.error) throw new Error(adds.error);
+  for (const {label, index} of adds) {
+    const row = table.insertTableRow(index);
+    row.appendTableCell('');
+    row.appendTableCell('');
+    writeAboutRow(row, label === REMINDER_ROW_LABEL ? [label, REMINDER_HINT] : [label],
+      label === REMINDER_ROW_LABEL ? [[[REMINDER_DEFAULT_TEXT]]] : []);
+  }
+  doc.saveAndClose();
+  return adds.map(a => a.label);
 }
 
 // Every built circle doc ({id, name, properties}).

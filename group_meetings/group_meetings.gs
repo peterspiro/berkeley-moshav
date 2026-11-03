@@ -23,6 +23,11 @@
  * shared community calendar, and any others it owns), except that an event
  * one of them organizes gets only the all-events calendar as a guest, and
  * invitation copies on them are left alone.
+ * On the same run, each group's meetings starting soon get their reminder
+ * emails (see sendDueReminders): to the group's Google Group, by default
+ * 24 hours before; a group can change that, or turn reminders off, in its
+ * agenda doc's Remind before meetings row, and one meeting can be changed with a
+ * tag in its description (see reminderLeads in event_rules.gs).
  * Then, if anything changed, and every hour regardless (hourly), it looks for
  * meetings in the next OVERLAP_WEEKS weeks in rooms owned by the same Zoom
  * user (a Zoom user can run only one meeting at a time) that overlap or are
@@ -67,7 +72,8 @@ const ZOOM_USER_NUMBERS = {
 };
 
 // Script Properties keys.
-const PROP_GROUPS = 'groups';                // JSON [{ email, name, calendarId, zoomUrl, passcode }]
+const PROP_GROUPS = 'groups';                // JSON [{ email, name, calendarId, zoomUrl, passcode,
+                                             //         agendaUrl?, reminders?, staleAgendaUrl? }]
 const PROP_OTHER_CALENDARS = 'otherCalendars'; // JSON [{ id, name }], see refreshOtherCalendars
 const PROP_SYNC_PREFIX = 'syncToken:';       // + calendar ID
 const PROP_COPY_ALERTS = 'copyAlerts';       // JSON { iCalUID: forgetAfterMs }
@@ -76,12 +82,18 @@ const PROP_ZOOM_MEETINGS = 'zoomMeetings';   // JSON, fixed-time Zoom meetings
 const PROP_ROOM_OWNER_PREFIX = 'roomOwner:'; // + Zoom meeting ID -> JSON { owner, type } or ''
 const PROP_ZOOM_USER_NAMES = 'zoomUserNames'; // JSON { email: name in Zoom }
 const PROP_RULES_VERSION = 'rulesVersion';
+const PROP_REMINDERS_SENT = 'remindersSent'; // JSON { reminderKey: forgetAfterMs }
 // Zoom app credentials (Script Properties, set by hand; see README.md).
 const PROP_ZOOM_ACCOUNT_ID = 'ZOOM_ACCOUNT_ID';
 const PROP_ZOOM_CLIENT_ID = 'ZOOM_CLIENT_ID';
 const PROP_ZOOM_CLIENT_SECRET = 'ZOOM_CLIENT_SECRET';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+// A reminder is sent at most this long after it was due (runs can be
+// skipped, or fail), and never for a meeting created after it was due.
+const REMINDER_GRACE_MS = 60 * 60 * 1000;
+// How far ahead explainReminders looks.
+const REMINDER_EXPLAIN_DAYS = 3;
 
 // ── Entry points ─────────────────────────────────────────────────────────────
 
@@ -106,6 +118,7 @@ function syncAll() {
         console.error(`Error syncing ${cal.name}: ${err}`);
       }
     }
+    sendDueReminders(groups);
     if (changed) checkOverlaps(groups);
   });
 }
@@ -229,9 +242,14 @@ function refreshGroups() {
         const addresses = [g.email, ...(g.aliases || [])].map(a => a.toLowerCase());
         const docId = addresses.map(a => agendaDocs[a]).find(Boolean);
         const email = g.email.toLowerCase();
-        groups.push(Object.assign({ email, name: g.name }, links,
-          docId ? { agendaUrl: `https://docs.google.com/document/d/${docId}/edit` }
-                : staleAgendaDoc(previous.get(email))));
+        const group = Object.assign({ email, name: g.name }, links);
+        if (docId) {
+          group.agendaUrl = `https://docs.google.com/document/d/${docId}/edit`;
+          group.reminders = reminderSetting(docId, previous.get(email));
+        } else {
+          Object.assign(group, staleAgendaDoc(previous.get(email)));
+        }
+        groups.push(group);
       }
     }
     pageToken = resp.nextPageToken;
@@ -257,6 +275,20 @@ function refreshGroups() {
 function staleAgendaDoc(old) {
   const url = old && (old.agendaUrl || old.staleAgendaUrl);
   return url ? { staleAgendaUrl: url } : {};
+}
+
+/**
+ * The text of the Remind before meetings row in About this circle in a group's
+ * agenda doc (null if the doc has no such row, as docs built before it
+ * don't). If the doc can't be read, what the group had before is kept.
+ */
+function reminderSetting(docId, previous) {
+  try {
+    return docRowValue(Docs.Documents.get(docId), REMINDER_ROW_LABEL);
+  } catch (err) {
+    console.error(`Couldn't read the reminder setting in agenda doc ${docId}: ${err}`);
+    return previous && previous.reminders !== undefined ? previous.reminders : null;
+  }
 }
 
 /**
@@ -421,6 +453,124 @@ function eventEndMs(event) {
 function isExpiredSyncToken(err) {
   const m = (err && err.message) || '';
   return (err && err.details && err.details.code === 410) || /sync token|410|full sync/i.test(m);
+}
+
+// ── Reminders ────────────────────────────────────────────────────────────────
+
+/**
+ * Email each group about its meetings whose reminder is due (see
+ * dueReminderLeads in event_rules.gs): events the group calendar organizes
+ * (not invitation copies, or all-day events) starting within
+ * MAX_REMINDER_LEAD_MS. Each reminder is sent once; a meeting moved to
+ * another time gets its reminders again.
+ */
+function sendDueReminders(groups) {
+  const sent = getJson(PROP_REMINDERS_SENT, {});
+  const now = Date.now();
+  for (const key of Object.keys(sent)) if (sent[key] < now) delete sent[key];
+  for (const group of groups) {
+    try {
+      sendGroupReminders(group, sent, now);
+    } catch (err) {
+      console.error(`Error sending ${group.email}'s reminders: ${err}`);
+    }
+  }
+  setJson(PROP_REMINDERS_SENT, sent);
+}
+
+/**
+ * Run from the editor, to see why a reminder was or wasn't sent: logs,
+ * for each group's meetings in the next REMINDER_EXPLAIN_DAYS days (or
+ * only the groups whose address or name contains onlyGroup), when each
+ * reminder is due and where it stands (see reminderTiming), and the
+ * events passed over and why. Sends nothing.
+ */
+function explainReminders(onlyGroup) {
+  const filter = typeof onlyGroup === 'string' ? lower(onlyGroup) : '';
+  const sent = getJson(PROP_REMINDERS_SENT, {});
+  const now = Date.now();
+  const lines = [];
+  for (const group of loadGroups()) {
+    if (filter && !lower(group.email).includes(filter) && !lower(group.name).includes(filter)) continue;
+    const setting = group.reminders === undefined || group.reminders === null
+      ? (group.agendaUrl ? 'its agenda doc has no Remind before meetings row' : 'no agenda doc')
+      : `agenda doc says "${group.reminders}"`;
+    lines.push(`${group.name} <${group.email}> (${setting}; read hourly):`);
+    let count = 0;
+    let pageToken;
+    do {
+      const resp = Calendar.Events.list(group.calendarId, {
+        singleEvents: true, orderBy: 'startTime', timeMin: new Date(now).toISOString(),
+        timeMax: new Date(now + REMINDER_EXPLAIN_DAYS * DAY_MS).toISOString(),
+        maxResults: 250, pageToken,
+      });
+      for (const event of resp.items || []) {
+        if (event.status === 'cancelled') continue;
+        count++;
+        const title = `"${event.summary || '(untitled)'}"`;
+        if (!(event.start || {}).dateTime) {
+          lines.push(`  ${title} ${event.start.date}: all-day, so no reminder`);
+          continue;
+        }
+        const start = new Date(event.start.dateTime).getTime();
+        const when = formatRange(start, new Date(event.end.dateTime).getTime());
+        if (lower((event.organizer || {}).email) !== lower(group.calendarId)) {
+          lines.push(`  ${title} ${when}: organized by ${(event.organizer || {}).email}, ` +
+                     'not the group calendar, so no reminder');
+          continue;
+        }
+        const r = reminderLeads(event, group.reminders === undefined ? null : group.reminders);
+        const created = event.created ? new Date(event.created).getTime() : null;
+        const parts = r.leads.map(lead => {
+          const timing = sent[reminderKey(group.calendarId, event, start, lead)]
+            ? 'sent' : reminderTiming(start, created, lead, now, REMINDER_GRACE_MS);
+          const due = Utilities.formatDate(new Date(start - lead), TIME_ZONE, 'EEE MMM d, h:mm a');
+          return `${formatLead(lead)} before (due ${due}): ${timing}`;
+        });
+        lines.push(`  ${title} ${when}: from ${r.source}: ` +
+                   (parts.length ? parts.join('; ') : 'no reminders') +
+                   (r.error ? ` [couldn't read ${r.error}]` : ''));
+      }
+      pageToken = resp.nextPageToken;
+    } while (pageToken);
+    if (!count) lines.push(`  no meetings in the next ${REMINDER_EXPLAIN_DAYS} days`);
+  }
+  console.log(lines.join('\n') || `No group matches "${onlyGroup}".`);
+}
+
+function sendGroupReminders(group, sent, now) {
+  let pageToken;
+  do {
+    const resp = Calendar.Events.list(group.calendarId, {
+      singleEvents: true, timeMin: new Date(now).toISOString(),
+      timeMax: new Date(now + MAX_REMINDER_LEAD_MS).toISOString(), maxResults: 250, pageToken,
+    });
+    for (const event of resp.items || []) {
+      if (event.status === 'cancelled' || !(event.start || {}).dateTime) continue;
+      if (lower((event.organizer || {}).email) !== lower(group.calendarId)) continue;
+      const start = new Date(event.start.dateTime).getTime();
+      const setting = reminderLeads(event, group.reminders === undefined ? null : group.reminders);
+      const created = event.created ? new Date(event.created).getTime() : null;
+      const due = dueReminderLeads(start, created, setting.leads, now, REMINDER_GRACE_MS)
+        .filter(lead => !sent[reminderKey(group.calendarId, event, start, lead)]);
+      if (!due.length) continue;
+      const message = reminderMessage(event, {
+        groupEmail: group.email, groupName: group.name,
+        when: formatRange(start, new Date(event.end.dateTime).getTime()),
+        lead: due[0], agendaUrl: group.agendaUrl || null,
+        zoomUrl: group.zoomUrl, passcode: group.passcode,
+        source: setting.source, error: setting.error,
+      });
+      MailApp.sendEmail({
+        to: message.to, replyTo: group.email, subject: message.subject,
+        body: message.body, htmlBody: textToHtml(message.body),
+      });
+      for (const lead of due) sent[reminderKey(group.calendarId, event, start, lead)] = start;
+      console.log(`${group.email}: sent the ${formatLead(due[0])} reminder for "${event.summary}"` +
+                  (setting.error ? ` (couldn't read ${setting.error})` : ''));
+    }
+    pageToken = resp.nextPageToken;
+  } while (pageToken);
 }
 
 // ── Invitation-copy alerts ───────────────────────────────────────────────────

@@ -31,6 +31,28 @@ Apps Script that looks after every group's Google calendar (the calendars
     calendar, with the group calendar invited) can't be changed that way, so
     its organizer and `calendaring-alerts@berkeleymoshav.org` get one email
     asking them to create it on the group calendar instead.
+- **Every 5 minutes**, each group's meetings get their **reminder email**,
+  sent to the group's Google Group (replies go to the group), with the
+  meeting's time, Zoom link and passcode (or other location), agenda doc
+  link, and a link to the event:
+  - by default, 24 hours before;
+  - a group with a circle agenda doc sets its own time in the **Remind
+    before meetings** row of About this circle (see `../circle_agendas/`): any
+    length of time ("24 hours", "2 days", "90 minutes", "1h30m"), several
+    separated by commas or "and" ("2 days, 1 hour"), or "none" for no
+    reminders (an empty cell means the default). The row's value cell is
+    reread hourly. Up to two weeks before;
+  - one meeting can have its own, in its title or description:
+    `[remind 2 hours]`, `[remind 1 day, 1 hour]`, or `[no reminder]`.
+    This wins over the group's setting.
+
+  A setting that can't be read is passed over (a tag for the group's
+  setting, the group's setting for 24 hours), and the reminder says so. Only
+  timed events the group calendar organizes get reminders, not all-day
+  events or invitation copies. Each reminder is sent once, up to an hour
+  late if runs were missed, and not at all if the meeting was created after
+  its reminder was due (its invitation has just gone out). A meeting moved
+  to another time gets its reminders again.
 - **Every 5 minutes**, for each changed event on the other calendars
   `admin@berkeleymoshav.org` owns (its primary, which is the shared community
   calendar, and any others, but not the all-events calendar; the list is
@@ -116,7 +138,8 @@ all of its upcoming events, so the community calendar's existing events get
 the all-events calendar too.
 
 When a change adds a permission to `appsscript.json` (reading Drive, for
-the agenda docs' links, did), run any function in the editor after the
+the agenda docs' links, did, and so did reading the agenda docs, for their
+Remind before meetings row), run any function in the editor after the
 push, such as `hourly`, and allow it: the triggers run with the
 permissions allowed so far, and fail without the new one.
 
@@ -136,6 +159,22 @@ permissions allowed so far, and fail without the new one.
    both groups should get one overlap email. Then move one so they're 10
    minutes apart: one "too close together" email. At 15 minutes apart or
    more: no email.
+5. On a test group's calendar, create an event starting in 24 hours and 10
+   minutes. Within 15 minutes the group should get one reminder email. Put
+   `[remind 2 hours]` in an event's description, or set the group's
+   agenda doc's Remind before meetings row to "none" (then wait for `hourly`, or
+   run it), to check those.
 
 Run **`syncAll`** or **`hourly`** from the editor to force a pass, and read
-**Executions** for the log.
+**Executions** for the log. A run that changed and sent nothing logs
+nothing ("No logs are available for this execution").
+
+To see why a reminder was or wasn't sent, run **`explainReminders`** from
+the editor: for each group's meetings in the next 3 days, it logs the
+setting it used (from the event's tag, the agenda doc, or the default),
+when each reminder is due, and whether it's upcoming, due, sent, missed
+(due over an hour ago), or skipped because the event was created after it
+was due, plus the events passed over (all-day, or invitation copies) and
+any tag or setting it couldn't read. It sends nothing. To look at one
+group only, call it from another function, as
+`explainReminders('tech')` (part of the group's address or name).
