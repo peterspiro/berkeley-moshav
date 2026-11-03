@@ -569,6 +569,15 @@ function docRowValue(doc, label) {
   return null;
 }
 
+/** An event description's text without its HTML: tags removed (a line
+ * break kept as one), and the entities Calendar writes (such as the
+ * &nbsp; its editor puts between words) decoded. */
+function plainText(html) {
+  return (html || '').replace(/<br\s*\/?>|<\/(?:p|div|li)>/gi, '\n').replace(/<[^>]*>/g, '')
+    .replace(/&nbsp;|&#160;/gi, ' ').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"').replace(/&#39;|&apos;/gi, "'").replace(/&amp;/gi, '&');
+}
+
 /**
  * When an event's reminders go out: { leads, source, error }. A tag in the
  * event ("[remind 2 hours]", "[no reminder]") wins; then the group's
@@ -579,7 +588,7 @@ function docRowValue(doc, label) {
  */
 function reminderLeads(event, groupSetting) {
   const errors = [];
-  const tag = `${event.summary || ''} ${event.description || ''}`.match(REMINDER_TAG_RE);
+  const tag = plainText(`${event.summary || ''} ${event.description || ''}`).match(REMINDER_TAG_RE);
   if (tag) {
     const parsed = /^no/i.test(tag[1]) ? { leads: [] } : parseReminderLeads(tag[2]);
     if (parsed.leads) return { leads: parsed.leads, source: 'event' };
@@ -607,11 +616,23 @@ function reminderLeads(event, groupSetting) {
  * marked sent with it.
  */
 function dueReminderLeads(startMs, createdMs, leads, nowMs, graceMs) {
-  if (nowMs >= startMs) return [];
-  return leads.filter(lead => {
-    const due = startMs - lead;
-    return due <= nowMs && nowMs < due + graceMs && (createdMs === null || createdMs < due);
-  }).sort((x, y) => x - y);
+  return leads.filter(lead => reminderTiming(startMs, createdMs, lead, nowMs, graceMs) === 'due')
+    .sort((x, y) => x - y);
+}
+
+/**
+ * Where one reminder (lead ms before a meeting starting at startMs) stands
+ * now: 'due' (send it), 'upcoming' (its time hasn't come), 'missed' (due
+ * more than graceMs ago), 'created after due' (the event was created after
+ * its time, so its invitation went out instead), or 'started' (the
+ * meeting has begun). See dueReminderLeads.
+ */
+function reminderTiming(startMs, createdMs, lead, nowMs, graceMs) {
+  const due = startMs - lead;
+  if (nowMs >= startMs) return 'started';
+  if (createdMs !== null && createdMs >= due) return 'created after due';
+  if (nowMs < due) return 'upcoming';
+  return nowMs < due + graceMs ? 'due' : 'missed';
 }
 
 /**

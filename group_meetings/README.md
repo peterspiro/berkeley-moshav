@@ -164,4 +164,15 @@ permissions allowed so far, and fail without the new one.
    run it), to check those.
 
 Run **`syncAll`** or **`hourly`** from the editor to force a pass, and read
-**Executions** for the log.
+**Executions** for the log. A run that changed and sent nothing logs
+nothing ("No logs are available for this execution").
+
+To see why a reminder was or wasn't sent, run **`explainReminders`** from
+the editor: for each group's meetings in the next 3 days, it logs the
+setting it used (from the event's tag, the agenda doc, or the default),
+when each reminder is due, and whether it's upcoming, due, sent, missed
+(due over an hour ago), or skipped because the event was created after it
+was due, plus the events passed over (all-day, or invitation copies) and
+any tag or setting it couldn't read. It sends nothing. To look at one
+group only, call it from another function, as
+`explainReminders('tech')` (part of the group's address or name).

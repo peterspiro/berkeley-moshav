@@ -683,6 +683,14 @@ class TestReminderLeads:
         assert js("reminderLeads(e, null)", e={"description": "<p>[reminder: none]</p>"}) == {
             "leads": [], "source": "event"}
 
+    def test_tag_typed_in_calendars_editor(self):
+        # The editor saves spaces as &nbsp;, and may wrap the tag in tags.
+        for description in ["Notes<br>[remind&nbsp;15 minutes]",
+                            "<p>[remind&nbsp;<b>15</b>&nbsp;minutes]</p>",
+                            "[no&nbsp;reminder]"]:
+            leads = js("reminderLeads(e, null)", e={"description": description})["leads"]
+            assert leads == ([] if "no" in description else [15 * MIN]), description
+
     def test_unreadable_setting_falls_back_and_says_so(self):
         result = js("reminderLeads({}, 'whenever')")
         assert result["leads"] == [DAY] and result["source"] == "default"
@@ -717,6 +725,20 @@ class TestDueReminderLeads:
     def test_shortest_first_when_several_are_due(self):
         assert self.due(self.START - HOUR, leads=[HOUR, HOUR + 30 * MIN, DAY]) == [
             HOUR, HOUR + 30 * MIN]
+
+
+class TestReminderTiming:
+    START = 100 * DAY
+
+    def timing(self, now, created=0):
+        return js("reminderTiming(s, c, l, n, g)", s=self.START, c=created, l=DAY, n=now, g=HOUR)
+
+    def test_each_state(self):
+        assert self.timing(self.START - 2 * DAY) == "upcoming"
+        assert self.timing(self.START - DAY) == "due"
+        assert self.timing(self.START - DAY + 2 * HOUR) == "missed"
+        assert self.timing(self.START - HOUR, created=self.START - 2 * HOUR) == "created after due"
+        assert self.timing(self.START) == "started"
 
 
 class TestReminderMessage:

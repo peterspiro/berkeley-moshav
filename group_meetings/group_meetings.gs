@@ -91,6 +91,8 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 // A reminder is sent at most this long after it was due (runs can be
 // skipped, or fail), and never for a meeting created after it was due.
 const REMINDER_GRACE_MS = 60 * 60 * 1000;
+// How far ahead explainReminders looks.
+const REMINDER_EXPLAIN_DAYS = 3;
 
 // ── Entry points ─────────────────────────────────────────────────────────────
 
@@ -459,6 +461,66 @@ function sendDueReminders(groups) {
     }
   }
   setJson(PROP_REMINDERS_SENT, sent);
+}
+
+/**
+ * Run from the editor, to see why a reminder was or wasn't sent: logs,
+ * for each group's meetings in the next REMINDER_EXPLAIN_DAYS days (or
+ * only the groups whose address or name contains onlyGroup), when each
+ * reminder is due and where it stands (see reminderTiming), and the
+ * events passed over and why. Sends nothing.
+ */
+function explainReminders(onlyGroup) {
+  const filter = typeof onlyGroup === 'string' ? lower(onlyGroup) : '';
+  const sent = getJson(PROP_REMINDERS_SENT, {});
+  const now = Date.now();
+  const lines = [];
+  for (const group of loadGroups()) {
+    if (filter && !lower(group.email).includes(filter) && !lower(group.name).includes(filter)) continue;
+    const setting = group.reminders === undefined || group.reminders === null
+      ? (group.agendaUrl ? 'its agenda doc has no Remind before meetings row' : 'no agenda doc')
+      : `agenda doc says "${group.reminders}"`;
+    lines.push(`${group.name} <${group.email}> (${setting}; read hourly):`);
+    let count = 0;
+    let pageToken;
+    do {
+      const resp = Calendar.Events.list(group.calendarId, {
+        singleEvents: true, orderBy: 'startTime', timeMin: new Date(now).toISOString(),
+        timeMax: new Date(now + REMINDER_EXPLAIN_DAYS * DAY_MS).toISOString(),
+        maxResults: 250, pageToken,
+      });
+      for (const event of resp.items || []) {
+        if (event.status === 'cancelled') continue;
+        count++;
+        const title = `"${event.summary || '(untitled)'}"`;
+        if (!(event.start || {}).dateTime) {
+          lines.push(`  ${title} ${event.start.date}: all-day, so no reminder`);
+          continue;
+        }
+        const start = new Date(event.start.dateTime).getTime();
+        const when = formatRange(start, new Date(event.end.dateTime).getTime());
+        if (lower((event.organizer || {}).email) !== lower(group.calendarId)) {
+          lines.push(`  ${title} ${when}: organized by ${(event.organizer || {}).email}, ` +
+                     'not the group calendar, so no reminder');
+          continue;
+        }
+        const r = reminderLeads(event, group.reminders === undefined ? null : group.reminders);
+        const created = event.created ? new Date(event.created).getTime() : null;
+        const parts = r.leads.map(lead => {
+          const timing = sent[reminderKey(group.calendarId, event, start, lead)]
+            ? 'sent' : reminderTiming(start, created, lead, now, REMINDER_GRACE_MS);
+          const due = Utilities.formatDate(new Date(start - lead), TIME_ZONE, 'EEE MMM d, h:mm a');
+          return `${formatLead(lead)} before (due ${due}): ${timing}`;
+        });
+        lines.push(`  ${title} ${when}: from ${r.source}: ` +
+                   (parts.length ? parts.join('; ') : 'no reminders') +
+                   (r.error ? ` [couldn't read ${r.error}]` : ''));
+      }
+      pageToken = resp.nextPageToken;
+    } while (pageToken);
+    if (!count) lines.push(`  no meetings in the next ${REMINDER_EXPLAIN_DAYS} days`);
+  }
+  console.log(lines.join('\n') || `No group matches "${onlyGroup}".`);
 }
 
 function sendGroupReminders(group, sent, now) {
