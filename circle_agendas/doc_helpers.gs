@@ -125,12 +125,20 @@ function apiCellText(cell) {
   return text;
 }
 
-// A date chip's date, 'yyyy-MM-dd' (from its text, if it shows that, else
-// its timestamp).
+// A date chip's date, 'yyyy-MM-dd': from its text, if it can be read
+// (see dateFromDisplayText), else from its timestamp, in its time zone;
+// or '' if it has neither.
 function chipDate(dateElement) {
   const props = dateElement.dateElementProperties || {};
-  return /^\d{4}-\d{2}-\d{2}$/.test(props.displayText || '')
-    ? props.displayText : (props.timestamp || '').slice(0, 10);
+  const shown = dateFromDisplayText(props.displayText);
+  if (shown) return shown;
+  if (!props.timestamp) return '';
+  const when = new Date(props.timestamp);
+  try {
+    return Utilities.formatDate(when, props.timeZoneId || 'UTC', 'yyyy-MM-dd');
+  } catch (e) {
+    return Utilities.formatDate(when, 'UTC', 'yyyy-MM-dd');
+  }
 }
 
 function paraText(para) {

@@ -668,12 +668,7 @@ function tokenRequest(t, tabId) {
     return {insertDropdown: {location, dropdownDefinitionId: args[0],
       selectedOptionId: 'dropdownItem.presenter'}};
   }
-  if (kind === 'date') {
-    return {insertDate: {location, dateElementProperties: {
-      timestamp: args[0],
-      dateFormat: 'DATE_FORMAT_ISO8601', timeFormat: 'TIME_FORMAT_DISABLED',
-    }}};
-  }
+  if (kind === 'date') return {insertDate: {location, dateElementProperties: isoDateChip(args[0])}};
   if (kind === 'checkbox' || kind === 'bullet') {
     return {createParagraphBullets: {
       range: {startIndex: t.start, endIndex: t.start + 1, tabId},
@@ -704,6 +699,16 @@ function findTokens(content) {
     }
   });
   return found.sort((a, b) => b.start - a.start);
+}
+
+// A date chip's properties, shown as yyyy-mm-dd, for a date ('yyyy-MM-dd',
+// or a timestamp). A chip without a time is shown in UTC, so a date is
+// given noon UTC, which is that date everywhere.
+function isoDateChip(date) {
+  return {
+    timestamp: /^\d{4}-\d{2}-\d{2}$/.test(date) ? date + 'T12:00:00Z' : date,
+    dateFormat: 'DATE_FORMAT_ISO8601', timeFormat: 'TIME_FORMAT_DISABLED',
+  };
 }
 
 // The meeting ID in the links in a Docs API table element, or null.

@@ -162,6 +162,19 @@ function tryFinishMeeting() {
   Logger.log(JSON.stringify(finishNewMeeting(key), null, 2));
 }
 
+// Does to the latest preview what the daily run (updateRolesInCircleDocs)
+// does to each circle doc, and logs what changed.
+function tryUpdateRoles() {
+  const docId = PropertiesService.getScriptProperties().getProperty('previewDocId');
+  if (!docId) throw new Error('No preview; run previewTemplate first.');
+  const circle = circleForDoc(docId);
+  if (!circle) Logger.log('The preview isn\'t in a circle\'s folder, so its Roles choices ' +
+    'can\'t be updated; checking its dates only.');
+  const lines = updateRoles(docId, circle);
+  Logger.log(lines.join('\n') || 'Nothing needed changing.');
+  logLink('Preview:', DocumentApp.openById(docId).getUrl());
+}
+
 // Runs an action on the newest meeting with links in the latest preview,
 // and logs what it returned.
 function tryOnPreview(action) {

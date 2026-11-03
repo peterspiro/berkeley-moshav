@@ -34,6 +34,8 @@ function updateTimes(docId, meetingId) {
   if (!found) return notFound();
   const messages = recalculate(found.table);
   doc.saveAndClose();
+  // Docs changes a date chip's format when a new date is picked.
+  fixDateChipFormats(docId);
   const retitled = matchTabTitleToDate(docId, found.tabId);
   if (retitled) messages.push('The meeting\'s tab is now titled ' + retitled + ', its new date.');
   return {done: true, title: 'Times updated', messages};

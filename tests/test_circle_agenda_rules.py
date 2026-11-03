@@ -175,6 +175,15 @@ class TestUpdatedRoleChoices:
         assert len(result["options"]) == 50
 
 
+class TestDateFromDisplayText:
+    @pytest.mark.parametrize("text, date", [
+        ("2026-11-03", "2026-11-03"), ("11/05/2026", "2026-11-05"), ("1/5/2027", "2027-01-05"),
+        (" 12/31/2026 ", "2026-12-31"), ("13/01/2026", None), ("Nov 5, 2026", None), ("", None),
+        (None, None)])
+    def test_reads(self, text, date):
+        assert js(f"dateFromDisplayText({json.dumps(text)})") == date
+
+
 class TestTermEnded:
     @pytest.mark.parametrize("date, ended", [
         ("2026-11-02", True), ("2026-11-03", False), ("2027-01-01", False), ("", False),

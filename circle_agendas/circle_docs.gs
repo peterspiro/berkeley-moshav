@@ -68,26 +68,49 @@ function installTriggers() {
     'updateRolesInCircleDocs every day at ' + ROLES_UPDATE_HOUR + ':00.');
 }
 
-// Run every day by the trigger installTriggers makes (or by hand): in every
-// built doc, brings the Roles table's Name dropdowns' choices up to date
-// with the circle's members (see updateRoleDropdowns), and marks its past
-// Term ends dates red (see markPastTermEnds).
+// Run every day by the trigger installTriggers makes (or by hand): updates
+// the Roles in every built doc (see updateRoles), and logs what changed.
 function updateRolesInCircleDocs() {
   for (const file of builtCircleDocs()) {
+    let circle = null;
     try {
-      const circle = circleOfDoc(file.id, (file.properties || {})[AGENDA_KEYS.group]);
-      if (circle && updateRoleDropdowns(file.id, circleMemberNames(circle))) {
-        console.log('Updated the Roles choices in ' + file.name);
-      }
+      circle = circleOfDoc(file.id, (file.properties || {})[AGENDA_KEYS.group]);
     } catch (e) {
-      console.error('Couldn\'t update the Roles choices in ' + file.name + ': ' + e.message);
+      console.error('Couldn\'t find ' + file.name + '\'s circle: ' + e.message);
     }
-    try {
-      markPastTermEnds(file.id);
-    } catch (e) {
-      console.error('Couldn\'t check the terms in ' + file.name + ': ' + e.message);
-    }
+    for (const line of updateRoles(file.id, circle)) console.log(file.name + ': ' + line);
   }
+}
+
+// What the daily run does to a doc: brings the Roles table's Name
+// dropdowns' choices up to date with the circle's members (see
+// updateRoleDropdowns; not without a circle), gives its dates back their
+// format (see fixDateChipFormats), and marks its past Term ends dates red
+// (see markPastTermEnds). Returns lines saying what changed, or what
+// couldn't be done; each step is tried even if one before it failed.
+function updateRoles(docId, circle) {
+  const lines = [];
+  const step = (what, fn) => {
+    try {
+      fn();
+    } catch (e) {
+      lines.push('Couldn\'t ' + what + ': ' + e.message);
+    }
+  };
+  step('update the Roles choices', () => {
+    if (circle && updateRoleDropdowns(docId, circleMemberNames(circle))) {
+      lines.push('Updated the Roles choices.');
+    }
+  });
+  step('fix the dates\' format', () => {
+    const fixed = fixDateChipFormats(docId);
+    if (fixed) lines.push('Gave ' + fixed + ' date(s) back their yyyy-mm-dd format.');
+  });
+  step('check the terms', () => {
+    const marked = markPastTermEnds(docId);
+    if (marked) lines.push('Recolored ' + marked + ' Term ends date(s).');
+  });
+  return lines;
 }
 
 // Brings the Roles table's Name dropdowns' choices up to date with the
@@ -119,34 +142,83 @@ function updateRoleDropdowns(docId, names) {
 }
 
 // Colors each Term ends date chip in the Roles table red if its date is
-// past, and back to the default once it's changed to one that isn't. Docs
-// can't run a script when a chip is edited, so this runs daily.
+// past, and back to the default once it's changed to one that isn't.
+// Docs can't run a script when a chip is edited, so this runs daily.
+// Returns how many it recolored.
 function markPastTermEnds(docId) {
   const today = Utilities.formatDate(new Date(), TIME_ZONE, 'yyyy-MM-dd');
   const requests = [];
-  for (const se of apiTab(docId).content) {
+  for (const pe of termEndChips(apiTab(docId).content)) {
+    const past = termEnded(chipDate(pe.dateElement), today);
+    const style = pe.dateElement.textStyle || {};
+    const red = !!(style.foregroundColor && style.foregroundColor.color);
+    if (past === red) continue;
+    requests.push({updateTextStyle: {
+      range: {startIndex: pe.startIndex, endIndex: pe.endIndex},
+      textStyle: past ? {foregroundColor: apiColor(PROBLEM_COLOR)} : {},
+      fields: 'foregroundColor',
+    }});
+  }
+  if (requests.length) Docs.Documents.batchUpdate({requests}, docId);
+  return requests.length;
+}
+
+// The Term ends date chips (Docs API paragraph elements) in a tab's
+// content: those in the third column of the Roles table.
+function termEndChips(content) {
+  const chips = [];
+  for (const se of content) {
     const rows = se.table ? se.table.tableRows : [];
     if (!rows.length || !apiCellText(rows[0].tableCells[0]).trim().startsWith('Circle Roles')) continue;
     for (const row of rows.slice(1)) {
       const cell = row.tableCells[2];
       if (!cell) continue;
       walkParagraphs(cell.content, para => {
-        for (const pe of para.elements || []) {
-          if (!pe.dateElement) continue;
-          const past = termEnded(chipDate(pe.dateElement), today);
-          const style = pe.dateElement.textStyle || {};
-          const red = !!(style.foregroundColor && style.foregroundColor.color);
-          if (past === red) continue;
-          requests.push({updateTextStyle: {
-            range: {startIndex: pe.startIndex, endIndex: pe.endIndex},
-            textStyle: past ? {foregroundColor: apiColor(PROBLEM_COLOR)} : {},
-            fields: 'foregroundColor',
-          }});
-        }
+        for (const pe of para.elements || []) if (pe.dateElement) chips.push(pe);
       });
     }
   }
-  if (requests.length) Docs.Documents.batchUpdate({requests}, docId);
+  return chips;
+}
+
+// Gives the dates the scripts read (the Roles table's Term ends, and each
+// meeting's date, its tab's first) back their yyyy-mm-dd format, which
+// Docs changes (to mm/dd/yyyy, say) when someone picks a new date. The
+// Docs API can't change a chip's format, so each is replaced by a new chip
+// of the same date (losing its color, which markPastTermEnds gives back).
+// Returns how many.
+function fixDateChipFormats(docId) {
+  const flatten = tabs => tabs.flatMap(tab => [tab, ...flatten(tab.childTabs || [])]);
+  const tabs = flatten(Docs.Documents.get(docId, {includeTabsContent: true}).tabs);
+  let count = 0;
+  tabs.forEach((tab, i) => {
+    const tabId = tab.tabProperties.tabId;
+    const content = tab.documentTab.body.content;
+    let chips = [];
+    if (i === 0) {
+      chips = termEndChips(content);
+    } else if (MEETING_TAB_TITLE_RE.test(tab.tabProperties.title)) {
+      walkParagraphs(content, para => {
+        for (const pe of para.elements || []) if (!chips.length && pe.dateElement) chips.push(pe);
+      });
+    }
+    const requests = [];
+    chips.filter(pe => (pe.dateElement.dateElementProperties || {}).dateFormat !== 'DATE_FORMAT_ISO8601')
+      .sort((a, b) => b.startIndex - a.startIndex)
+      .forEach(pe => {
+        const date = chipDate(pe.dateElement);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
+        requests.push(
+          {deleteContentRange: {range: {startIndex: pe.startIndex, endIndex: pe.endIndex, tabId}}},
+          {insertDate: {location: {index: pe.startIndex, tabId}, dateElementProperties:
+            isoDateChip(date)}});
+      });
+    if (requests.length) {
+      Docs.Documents.batchUpdate({requests}, docId);
+      count += requests.length / 2;
+    }
+  });
+  return count;
 }
 
 function buildNewCircleDocs() {

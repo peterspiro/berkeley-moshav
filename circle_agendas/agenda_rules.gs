@@ -163,6 +163,18 @@ function sameChoices(a, b) {
   return key(a) === key(b);
 }
 
+// The date ('yyyy-MM-dd') a date chip shows, from its text: yyyy-mm-dd, or
+// m/d/yyyy (what Docs shows, in the US, once someone picks a new date); or
+// null.
+function dateFromDisplayText(text) {
+  const t = String(text || '').trim();
+  const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(t);
+  const us = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(t);
+  const [y, m, d] = iso ? [iso[1], iso[2], iso[3]] : us ? [us[3], us[1], us[2]] : [];
+  if (!y || Number(m) < 1 || Number(m) > 12 || Number(d) < 1 || Number(d) > 31) return null;
+  return y + '-' + m.padStart(2, '0') + '-' + d.padStart(2, '0');
+}
+
 // Whether a term ending on date ('yyyy-MM-dd') is over, on today
 // ('yyyy-MM-dd'); false if date can't be read.
 function termEnded(date, today) {

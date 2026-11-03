@@ -420,7 +420,8 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
     meetings get reminders (`group_meetings` reads it); run by hand, it
     adds those rows to docs built before them. Each day, it brings the Roles
     table's Name dropdowns up to date with the circle's members (as adding
-    a meeting also does) and colors red its Term ends dates that are past.
+    a meeting also does) and colors red its Term ends dates that are past, and gives its dates
+    back the yyyy-mm-dd format Docs drops when someone picks a new one.
   - **`circle_agendas/build_template.gs`** builds an agenda doc from a
     blank doc, entirely from code (so it depends on no other document):
     each circle's doc, and a preview, rebuilt in place, for trying changes.
