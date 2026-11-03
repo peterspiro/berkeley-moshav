@@ -47,8 +47,8 @@ function updateTimes(docId, meetingId) {
 }
 
 // Rewrites a meeting's "✉ Announce agenda" link (see announceUrl) from its
-// tab's title (its date), its "Time … Duration … Place …" line and the Zoom
-// room linked there, and the circle's email address; or, in a meeting added
+// tab's title (its date), the Zoom room linked in its "Time … Duration …
+// Place …" line, and the circle's email address; or, in a meeting added
 // before there was such a link, adds one after its other links. Does
 // nothing to a doc that isn't in a circle's folder.
 function refreshAnnounceLink(docId, meetingId, tabId) {
@@ -58,19 +58,16 @@ function refreshAnnounceLink(docId, meetingId, tabId) {
     .find(t => t.tabProperties.tabId === tabId);
   if (!tab) return;
   const content = tab.documentTab.body.content;
-  let line = '';
   let zoomUrl = null;
   const timeLine = content.find(se => se.paragraph && /^\s*Time\b/.test(paraText(se.paragraph)));
   if (timeLine) {
-    line = paraText(timeLine.paragraph);
     for (const pe of timeLine.paragraph.elements || []) {
       const link = pe.textRun && pe.textRun.textStyle.link;
       if (!zoomUrl && link && /zoom\.us\//.test(link.url || '')) zoomUrl = link.url;
     }
   }
   const url = announceUrl({
-    to: circle.email, circleName: circle.name, date: tab.tabProperties.title,
-    start: headerTimeText(line), hours: headerHoursText(line), zoomUrl,
+    to: circle.email, circleName: circle.name, date: tab.tabProperties.title, zoomUrl,
     agendaUrl: tabUrl(docId, tabId),
   });
 

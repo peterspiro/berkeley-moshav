@@ -405,8 +405,7 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
     end, flagging durations it can't read), which also rewrites the
     meeting's "✉ Announce agenda" link (a Gmail compose link, not a web app
     action, addressed to the circle's list, announcing the agenda, with a
-    link to it, the meeting's time, and its Zoom room) from the meeting's
-    date and times, or adds one to a meeting that lacks it; and adding an
+    link to it and its Zoom room) from the meeting's date, or adds one to a meeting that lacks it; and adding an
     agenda item just above the links, which sit above Action Items Recap.
   - **`circle_agendas/circles.gs`** finds the circle a doc belongs to: the
     Google Group whose footer links the Drive folder (or shared drive) the

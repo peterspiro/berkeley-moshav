@@ -315,7 +315,7 @@ function meetingTable(body, docId, details) {
   body.appendParagraph(token('date', details.date + 'T12:00:00Z'))
     .setHeading(DocumentApp.ParagraphHeading.HEADING2);
   writeRuns(body.appendParagraph(''), [['Time  ', BOLD], [details.start],
-    ['     Duration ', BOLD], ['(h:mm or h.hh)  ', MUTED], [details.hours],
+    ['     Duration ', BOLD], ['(h:mm or h.hh)  '], [details.hours],
     ['     Place  ', BOLD],
     ...(details.place ? [['Zoom room', {[A.LINK_URL]: details.place}]] : [])]);
   const spacer = attendance(body, details, meetingId);
@@ -466,7 +466,7 @@ function linksRow(row, docId, meetingId, details) {
   const announce = details && details.circleEmail && details.tabId
     ? [[LINK_GAP], [ANNOUNCE_LABEL, {[A.LINK_URL]: announceUrl({
       to: details.circleEmail, circleName: details.circleName, date: details.date,
-      start: details.start, hours: details.hours, zoomUrl: details.place,
+      zoomUrl: details.place,
       agendaUrl: tabUrl(docId, details.tabId)})}]]
     : [];
   writeCell(row.getCell(COL.description), [[
