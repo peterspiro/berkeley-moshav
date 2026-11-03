@@ -251,11 +251,13 @@ function roleHolder(docId, role) {
       let chosen = null;
       walkParagraphs(cells[1].content, para => {
         for (const pe of para.elements || []) {
-          if (chosen === null && pe.dropdown) chosen = pe.dropdown.dropdownProperties.displayValue || '';
+          const props = pe.dropdown && pe.dropdown.dropdownProperties;
+          if (chosen === null && props) {
+            chosen = props.selectedOptionId === ROLE_PLACEHOLDER_ID ? '' : props.displayValue || '';
+          }
         }
       });
-      const holder = chosen === null ? apiCellText(cells[1]).trim() : chosen;
-      return holder === ROLE_PLACEHOLDER ? '' : holder;
+      return chosen === null ? apiCellText(cells[1]).trim() : chosen;
     }
   }
   return '';

@@ -92,9 +92,12 @@ function formatHours(minutes) {
 // names, then each of holders not among them (so a holder typed by hand
 // can still be chosen), then ROLE_VACANT; as Docs API DropdownOptions,
 // at most Docs' 50.
-const ROLE_PLACEHOLDER = 'Name';
+// The placeholder is a dash, since a choice can't be blank (docs built
+// before showed "Name"); it and Vacant always have the same IDs.
+const ROLE_PLACEHOLDER = '—';
 const ROLE_PLACEHOLDER_ID = 'dropdownItem.none';
 const ROLE_VACANT = 'Vacant';
+const ROLE_VACANT_ID = 'dropdownItem.vacant';
 function roleChoices(names, holders) {
   const values = [];
   for (const n of [...(names || []), ...(holders || [])]) {
@@ -104,7 +107,7 @@ function roleChoices(names, holders) {
   return [
     {optionId: ROLE_PLACEHOLDER_ID, displayValue: ROLE_PLACEHOLDER},
     ...values.slice(0, 48).map((v, i) => ({optionId: 'dropdownItem.m' + i, displayValue: v})),
-    {optionId: 'dropdownItem.vacant', displayValue: ROLE_VACANT},
+    {optionId: ROLE_VACANT_ID, displayValue: ROLE_VACANT},
   ];
 }
 
@@ -121,15 +124,19 @@ function roleOptionId(options, holder) {
 // DropdownOptions) and the IDs of the choices its chips show (selected):
 // as roleChoices gives, but with the members who've left, and choices
 // added by hand, kept only while a chip shows them, and each choice that
-// stays keeping its ID, so the chips showing it still do. Returns
+// stays keeping its ID, so the chips showing it still do. The placeholder
+// and Vacant keep their IDs whatever they showed (so an old "Name"
+// placeholder becomes the dash). Returns
 // {options, replacements}: replacements, for updateDropdownDefinition-
 // PropertiesRequest, gives the placeholder to any chip whose choice is
 // gone (only past Docs' limit of 50).
 function updatedRoleChoices(existing, names, selected) {
-  const shown = existing.filter(o => (selected || []).includes(o.optionId)).map(o => o.displayValue);
+  const fixed = [ROLE_PLACEHOLDER_ID, ROLE_VACANT_ID];
+  const others = existing.filter(o => !fixed.includes(o.optionId));
+  const shown = others.filter(o => (selected || []).includes(o.optionId)).map(o => o.displayValue);
   const fresh = roleChoices(names, shown);
   const idOf = {};
-  for (const o of existing) if (!(o.displayValue in idOf)) idOf[o.displayValue] = o.optionId;
+  for (const o of others) if (!(o.displayValue in idOf)) idOf[o.displayValue] = o.optionId;
   // Every ID there is now is taken, so no new choice gets the ID of one
   // that's gone (which a chip might still show).
   const used = new Set(existing.map(o => o.optionId));
@@ -139,9 +146,9 @@ function updatedRoleChoices(existing, names, selected) {
     used.add('dropdownItem.m' + next);
     return 'dropdownItem.m' + next;
   };
-  const options = fresh.map(o => ({optionId: idOf[o.displayValue] ||
-    (used.has(o.optionId) ? newId() : (used.add(o.optionId), o.optionId)), displayValue: o.displayValue}));
-  const placeholder = options[0].optionId;
+  const options = fresh.map(o => fixed.includes(o.optionId) ? o
+    : {optionId: idOf[o.displayValue] || newId(), displayValue: o.displayValue});
+  const placeholder = ROLE_PLACEHOLDER_ID;
   const replacements = {};
   for (const id of selected || []) {
     if (!options.some(o => o.optionId === id)) replacements[id] = placeholder;

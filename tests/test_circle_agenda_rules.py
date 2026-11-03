@@ -104,9 +104,9 @@ class TestHeaderTimeText:
 
 class TestRoleChoices:
     def test_placeholder_names_holders_vacant(self):
-        options = js('roleChoices(["Ann", "Bo"], ["Bo", "Cy", "", "Name", "Vacant"])')
+        options = js('roleChoices(["Ann", "Bo"], ["Bo", "Cy", "", "—", "Vacant"])')
         assert options == [
-            {"optionId": "dropdownItem.none", "displayValue": "Name"},
+            {"optionId": "dropdownItem.none", "displayValue": "—"},
             {"optionId": "dropdownItem.m0", "displayValue": "Ann"},
             {"optionId": "dropdownItem.m1", "displayValue": "Bo"},
             {"optionId": "dropdownItem.m2", "displayValue": "Cy"},
@@ -143,9 +143,10 @@ class TestUpdatedRoleChoices:
     def test_keeps_ids_adds_new_drops_unshown(self):
         # Ann stays; Bo left but is shown; Cy left and isn't; Dee joined;
         # the hand-added guest isn't shown.
+        # The old "Name" placeholder becomes the dash, keeping its ID.
         result = self.update(["Ann", "Dee"], ["dropdownItem.m1", "dropdownItem.none"])
         assert result == {"options": [
-            {"optionId": "dropdownItem.none", "displayValue": "Name"},
+            {"optionId": "dropdownItem.none", "displayValue": "—"},
             {"optionId": "dropdownItem.m0", "displayValue": "Ann"},
             {"optionId": "dropdownItem.m3", "displayValue": "Dee"},
             {"optionId": "dropdownItem.m1", "displayValue": "Bo"},

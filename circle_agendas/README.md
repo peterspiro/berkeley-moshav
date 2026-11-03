@@ -248,7 +248,9 @@ appears when a sub-circle is added.
 Once, in the editor, run **`installTriggers`**, which runs
 `buildNewCircleDocs` every 10 minutes and `updateRolesInCircleDocs`
 every day at 1 am (and asks to allow managing triggers). The Roles
-table's Name cells are dropdowns of the circle's members, and its Term ends
+table's Name cells are dropdowns of the circle's members (showing a dash
+until one is chosen, as do a meeting's Facilitator and Secretary when the
+Roles have none), and its Term ends
 cells date chips, starting at the day the doc was built. The daily run, and
 adding a meeting, bring the dropdowns' choices up to date with the
 circle's members: new members are added, and members who've left, and
