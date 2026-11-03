@@ -116,7 +116,8 @@ function announceUrl({to, circleName, date, zoomUrl, agendaUrl}) {
   const lines = [
     'Hello ' + circleName + ',', '',
     'The agenda for our ' + (bodyDate ? bodyDate + ' ' : '') + 'meeting is ready:', agendaUrl, '',
-    'Please review it.  If you have change requests, please send them soon.',
+    'Please review it, and send any change requests as soon as possible.', '',
+    'Thank you!',
   ];
   if (zoomUrl) lines.push('', 'Zoom: ' + zoomUrl);
   return GMAIL_COMPOSE_URL + '&to=' + encodeURIComponent(to) +

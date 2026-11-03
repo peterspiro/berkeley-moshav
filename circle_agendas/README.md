@@ -136,7 +136,7 @@ so they stay just below where new items go.
   "Agenda ready: Dec 4 Technology Circle meeting", greeting the circle
   ("Hello Technology Circle,"), linking the meeting's tab ("The agenda for
   our Fri Dec 4 meeting is ready:"), asking for a review and any change
-  requests soon, and giving its Zoom room. It leaves out the time, which
+  requests as soon as possible, thanking them, and giving its Zoom room. It leaves out the time, which
   may change after the link is written. It's sent
   from the clicker's own Gmail, and can be changed before it's sent. It
   doesn't go through the web app, so it's one click, but the email is

@@ -229,7 +229,8 @@ class TestAnnounceUrl:
             "Hello Technology Circle,\n\n"
             "The agenda for our Fri Dec 4 meeting is ready:\n"
             "https://docs.google.com/document/d/D/edit?tab=t.abc\n\n"
-            "Please review it.  If you have change requests, please send them soon.\n\n"
+            "Please review it, and send any change requests as soon as possible.\n\n"
+            "Thank you!\n\n"
             "Zoom: https://us02web.zoom.us/j/123")
 
     def test_leaves_out_what_it_cannot_read(self):
@@ -239,7 +240,8 @@ class TestAnnounceUrl:
             "Hello Technology Circle,\n\n"
             "The agenda for our meeting is ready:\n"
             "https://docs.google.com/document/d/D/edit?tab=t.abc\n\n"
-            "Please review it.  If you have change requests, please send them soon.")
+            "Please review it, and send any change requests as soon as possible.\n\n"
+            "Thank you!")
 
     def test_other_links_are_not_announce_links(self):
         assert js('isAnnounceUrl("https://x/exec?action=times&doc=D&meeting=m")') is False
