@@ -152,23 +152,80 @@ class TestAboutReorder:
         assert js("aboutLabel(' Zoom room ')") == "Zoom room"
 
     def test_moves_only_the_rows_the_scripts_fill_in(self):
-        assert js(f"aboutReorder({json.dumps(self.OLD)})") == {"move": [
+        assert js(f"aboutReorder({json.dumps(self.OLD)})")["move"] == [
             "Parent Circle", "Sub-Circles", "Zoom room", "Circle email address",
-            "Google Drive Folder"]}
+            "Google Drive Folder"]
 
     def test_moving_them_gives_the_new_order(self):
         plan = js(f"aboutReorder({json.dumps(self.OLD)})")
         kept = [label for label in self.OLD if label not in plan["move"]]
-        target = js("ABOUT_LABELS")
+        # A doc as old as OLD lacks the rows added later.
+        target = [label for label in js("ABOUT_LABELS") if label not in js("ABOUT_ADDED_LATER")]
         assert [label for label in target if label not in plan["move"]] == kept
 
     def test_already_in_order(self):
-        assert js("aboutReorder(ABOUT_LABELS)") == {"move": []}
+        assert js("aboutReorder(ABOUT_LABELS)") == {"move": [], "order": js("ABOUT_LABELS")}
 
     def test_unexpected_rows(self):
         labels = self.OLD[:-1] + ["Notes"]
         error = js(f"aboutReorder({json.dumps(labels)})")["error"]
         assert "missing: Other Key Links" in error and "unexpected: Notes" in error
+
+    def test_rows_added_later_may_be_missing(self):
+        assert js("aboutReorder(ABOUT_LABELS.filter(l => !ABOUT_ADDED_LATER.includes(l)))")[
+            "move"] == []
+        plan = js(f"aboutReorder({json.dumps(self.OLD)})")
+        assert "error" not in plan
+        assert not set(plan["move"]) & {"Circle calendar", "Remind before meetings"}
+        assert "Circle calendar" not in plan["order"]
+
+    def test_new_rows_come_below_zoom_room(self):
+        labels = js("ABOUT_LABELS")
+        i = labels.index("Zoom room")
+        assert labels[i + 1:i + 3] == ["Circle calendar", "Remind before meetings"]
+
+    def test_where_to_add_the_new_rows(self):
+        layout2 = js("ABOUT_LABELS.filter(l => !ABOUT_ADDED_LATER.includes(l))")
+        adds = js(f"aboutRowsToAdd({json.dumps(layout2)})")
+        assert adds == [{"label": "Circle calendar", "index": 3},
+                        {"label": "Remind before meetings", "index": 4}]
+        labels = list(layout2)
+        for add in adds:
+            labels.insert(add["index"], add["label"])
+        assert labels == js("ABOUT_LABELS")
+        assert js("aboutRowsToAdd(ABOUT_LABELS)") == []
+        with_calendar = [l for l in js("ABOUT_LABELS") if l != "Remind before meetings"]
+        assert js(f"aboutRowsToAdd({json.dumps(with_calendar)})") == [
+            {"label": "Remind before meetings", "index": 4}]
+        assert "Zoom room" in js(
+            f"aboutRowsToAdd({json.dumps([l for l in layout2 if l != 'Zoom room'])})")["error"]
+
+    def test_calendar_url_matches_the_footer(self):
+        from util.google_group_footer import calendar_url
+        for cal in ["c_abc123@group.calendar.google.com", "a?>", "ab", "abc", "abcd",
+                    "share@berkeleymoshav.org"]:
+            assert js(f"calendarUrl({json.dumps(cal)})") == calendar_url(cal)
+
+    def test_reminder_default_and_examples_parse_as_meant(self):
+        # The default, and each example in the label's grey line, reads as
+        # the setting it shows.
+        group_rules = RULES.parent.parent / "group_meetings" / "event_rules.gs"
+        hint = js("REMINDER_HINT")
+        examples = hint.split("e.g. ")[1].split("; ")
+        assert examples[-1] == "none"
+        texts = [js("REMINDER_DEFAULT_TEXT")] + examples
+        program = f"""
+const vm = require('vm'), fs = require('fs');
+const ctx = vm.createContext({{}});
+vm.runInContext(fs.readFileSync({json.dumps(str(group_rules))}, 'utf8'), ctx);
+process.stdout.write(JSON.stringify({json.dumps(texts)}.map(t =>
+  vm.runInContext('parseReminderLeads(' + JSON.stringify(t) + ')', ctx))));
+"""
+        out = json.loads(subprocess.run(["node", "-e", program], capture_output=True, text=True,
+                                        check=True).stdout)
+        hour = 60 * 60 * 1000
+        assert out == [{"leads": [24 * hour]}, {"leads": [48 * hour]}, {"leads": [90 * 60 * 1000]},
+                       {"leads": [48 * hour, hour]}, {"leads": []}]
 
     def test_hand_filled_rows_out_of_order(self):
         labels = ["Policies folder"] + [l for l in self.OLD if l != "Policies folder"]

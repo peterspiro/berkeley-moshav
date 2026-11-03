@@ -139,8 +139,56 @@ function base64ToString(text) {
 
 // About this circle's rows, in order (aboutTable, build_template.gs, makes
 // them).
-const ABOUT_LABELS = ['Aims & Domain', 'Policies folder', 'Zoom room', 'Circle email address',
-  'Other Key Links', 'Google Drive Folder', 'Parent Circle', 'Sub-Circles'];
+const CALENDAR_ROW_LABEL = 'Circle calendar';
+// The Remind before meetings row, which group_meetings/group_meetings.gs reads
+// (its first line) to know when to email the circle a reminder of each
+// meeting (see parseReminderLeads in group_meetings/event_rules.gs).
+const REMINDER_ROW_LABEL = 'Remind before meetings';
+// The row's value cell holds only the setting; how to write it is the
+// grey second line of its label cell.
+const REMINDER_DEFAULT_TEXT = '24 hours';
+const REMINDER_HINT = 'e.g. 2 days; 90 minutes; 2 days, 1 hour; none';
+const ABOUT_LABELS = ['Aims & Domain', 'Policies folder', 'Zoom room', CALENDAR_ROW_LABEL,
+  REMINDER_ROW_LABEL, 'Circle email address', 'Other Key Links', 'Google Drive Folder',
+  'Parent Circle', 'Sub-Circles'];
+// Rows added since docs were first built, which older docs may lack
+// (addNewAboutRowsToCircleDocs, circle_docs.gs, adds them).
+const ABOUT_ADDED_LATER = [CALENDAR_ROW_LABEL, REMINDER_ROW_LABEL];
+// The label of the row each of ABOUT_ADDED_LATER goes just below.
+const ABOUT_ADDED_AFTER = {[CALENDAR_ROW_LABEL]: 'Zoom room', [REMINDER_ROW_LABEL]: CALENDAR_ROW_LABEL};
+
+// The link in a group's footer to its Google calendar, which offers to add
+// the calendar to the clicker's own (as calendar_url, in
+// util/google_group_footer.py, writes it): the ID, base64-encoded without
+// padding, percent-encoded.
+function calendarUrl(calendarId) {
+  const bytes = unescape(encodeURIComponent(calendarId));
+  let out = '';
+  for (let i = 0; i < bytes.length; i += 3) {
+    const n = (bytes.charCodeAt(i) << 16) | ((bytes.charCodeAt(i + 1) || 0) << 8) |
+      (bytes.charCodeAt(i + 2) || 0);
+    const chars = Math.min(4, Math.ceil((bytes.length - i) * 4 / 3));
+    for (let k = 0; k < chars; k++) out += BASE64_ALPHABET[(n >> (18 - 6 * k)) & 63];
+  }
+  return 'https://calendar.google.com/calendar/u/0?cid=' + encodeURIComponent(out);
+}
+
+// Where to insert the rows ABOUT_ADDED_LATER that a doc's About this circle
+// (labels, in order, from aboutLabel) lacks: [{label, index}], in the order
+// to insert them, each just below the row it follows; or {error} if a row
+// it follows is missing.
+function aboutRowsToAdd(labels) {
+  const now = labels.slice();
+  const adds = [];
+  for (const label of ABOUT_ADDED_LATER) {
+    if (now.includes(label)) continue;
+    const after = now.indexOf(ABOUT_ADDED_AFTER[label]);
+    if (after < 0) return {error: 'it has no ' + ABOUT_ADDED_AFTER[label] + ' row'};
+    now.splice(after + 1, 0, label);
+    adds.push({label, index: after + 1});
+  }
+  return adds;
+}
 // What the Google Drive Folder row was called in docs built before.
 const OLD_DRIVE_LABELS = ['Circle Google Drive Folder', 'Circle Drive Folder'];
 // The rows people fill in by hand, which reordering never moves (they may
@@ -155,21 +203,23 @@ function aboutLabel(text) {
 }
 
 // How to put About this circle's rows, labelled labels (in their order,
-// from aboutLabel), in ABOUT_LABELS' order: {move}, the labels of the rows
-// to take out and put back in their places (none if they're in order
+// from aboutLabel), in ABOUT_LABELS' order (leaving out any rows
+// ABOUT_ADDED_LATER it lacks): {move, order}, the labels of the rows to
+// take out and put back in their places in order (none if they're in order
 // already), or {error}, why it can't be done.
 function aboutReorder(labels) {
-  const missing = ABOUT_LABELS.filter(l => !labels.includes(l));
-  const extra = labels.filter(l => !ABOUT_LABELS.includes(l));
-  if (missing.length || extra.length || labels.length !== ABOUT_LABELS.length) {
+  const target = ABOUT_LABELS.filter(l => labels.includes(l) || !ABOUT_ADDED_LATER.includes(l));
+  const missing = target.filter(l => !labels.includes(l));
+  const extra = labels.filter(l => !target.includes(l));
+  if (missing.length || extra.length || labels.length !== target.length) {
     return {error: 'its rows aren\'t the expected ones' +
       (missing.length ? '; missing: ' + missing.join(', ') : '') +
       (extra.length ? '; unexpected: ' + extra.join(', ') : '')};
   }
-  if (labels.join('|') === ABOUT_LABELS.join('|')) return {move: []};
+  if (labels.join('|') === target.join('|')) return {move: [], order: target};
   const kept = labels.filter(l => ABOUT_HAND_FILLED.includes(l));
   if (kept.join('|') !== ABOUT_HAND_FILLED.join('|')) {
     return {error: 'its ' + ABOUT_HAND_FILLED.join(', ') + ' rows are in another order'};
   }
-  return {move: labels.filter(l => !ABOUT_HAND_FILLED.includes(l))};
+  return {move: labels.filter(l => !ABOUT_HAND_FILLED.includes(l)), order: target};
 }

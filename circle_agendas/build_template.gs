@@ -215,6 +215,8 @@ function aboutTable(body) {
     [['Aims & Domain'], [['Paste a link to circle\'s aims and domain document', HINT]]],
     [['Policies folder'], [['Paste a link to the circle\'s policies folder', HINT]]],
     [['Zoom room'], []],
+    [[CALENDAR_ROW_LABEL], []],
+    [[REMINDER_ROW_LABEL, REMINDER_HINT], [[REMINDER_DEFAULT_TEXT]]],
     [['Circle email address'], []],
     [['Other Key Links'], []],
     [['Google Drive Folder'], []],
@@ -226,15 +228,20 @@ function aboutTable(body) {
     throw new Error('aboutTable\'s rows don\'t match ABOUT_LABELS');
   }
   const table = newTable(body, rows.length, 2);
-  rows.forEach(([label, value], r) => {
-    const labelCell = table.getCell(r, 0);
-    writeCell(labelCell, [[[label[0], BOLD]], ...(label[1] ? [[[label[1], MUTED]]] : [])]);
-    alignCell(labelCell, DocumentApp.HorizontalAlignment.RIGHT);
-    labelCell.setBackgroundColor(COLOR.aboutLabel);
-    writeCell(table.getCell(r, 1), [value]);
-    table.getCell(r, 1).setBackgroundColor(COLOR.aboutValue);
-  });
+  rows.forEach(([label, ...value], r) => writeAboutRow(table.getRow(r), label, value));
   table.setColumnWidth(0, 150);
+}
+
+// Writes one About this circle row: its label cell (label: the label, and
+// a second, grey line, if any) and its value (paragraphs, each a list of
+// runs, or none).
+function writeAboutRow(row, label, paragraphs) {
+  const labelCell = row.getCell(0);
+  writeCell(labelCell, [[[label[0], BOLD]], ...(label[1] ? [[[label[1], MUTED]]] : [])]);
+  alignCell(labelCell, DocumentApp.HorizontalAlignment.RIGHT);
+  labelCell.setBackgroundColor(COLOR.aboutLabel);
+  writeCell(row.getCell(1), paragraphs.length ? paragraphs : [[]]);
+  row.getCell(1).setBackgroundColor(COLOR.aboutValue);
 }
 
 function rolesTable(body) {

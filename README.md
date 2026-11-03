@@ -32,7 +32,8 @@ Python scripts:
   invitations from anyone who isn't allowed to add events.
 - **`group_meetings`** looks after the groups' calendars: it gives each
   group's meetings its Zoom room and invites the group and the all-events
-  calendar, and emails warnings about meetings that would clash over a Zoom
+  calendar, emails each group a reminder before its meetings, and emails
+  warnings about meetings that would clash over a Zoom
   user, and about meetings set up as invitations from someone's own calendar.
   It also invites the all-events calendar to the events created on the admin
   account's other calendars, including the shared community calendar.
@@ -364,7 +365,10 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
   or has another meeting link typed in (then it gets only the guests).
   An event of a group with a circle agenda doc also gets a link to the doc.
   An event that's only a copy of someone's invitation gets its organizer an
-  email asking them to create it on the group calendar instead. It also
+  email asking them to create it on the group calendar instead. Each group
+  gets a reminder email before each of its meetings: 24 hours before, unless
+  its agenda doc's Remind before meetings row says another time (or "none"), or
+  the event says `[remind 2 hours]` or `[no reminder]`. It also
   checks the next 8 weeks for meetings in rooms of the same Zoom user that
   overlap or are less than 15 minutes apart, including ones scheduled
   directly in Zoom, and emails the groups involved (and, for a meeting
@@ -405,11 +409,15 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
   - **`circle_agendas/circle_docs.gs`** builds each circle's and working
     group's agenda doc, every 10 minutes: each doc the Python scripts
     created empty and labelled "new" is built, gets its group's name,
-    email address, Drive folder, parent, and sub-circles (as a bulleted
+    calendar, email address, Drive folder, parent, and sub-circles (as a bulleted
     list) in About this circle, and is
     relabelled "built", with its layout version. On the same timer, it
     rewrites the Parent Circle and Sub-Circles rows of each built doc that
-    `change_parent_circle.py` or `add_new_group.py` has relabelled.
+    `change_parent_circle.py` or `add_new_group.py` has relabelled. Below
+    About this circle's Zoom room row come a link to the circle's
+    calendar and the Remind before meetings row, which says when the circle's
+    meetings get reminders (`group_meetings` reads it); run by hand, it
+    adds those rows to docs built before them.
   - **`circle_agendas/build_template.gs`** builds an agenda doc from a
     blank doc, entirely from code (so it depends on no other document):
     each circle's doc, and a preview, rebuilt in place, for trying changes.
