@@ -391,7 +391,7 @@ const ATTENDEES_PER_COLUMN = 4;
 function attendance(body, details, meetingId) {
   const attendees = details.attendees || [];
   writeRuns(body.appendParagraph(''), [['Attendance', BOLD],
-    ['   Check the box next to anyone who ', MUTED], ['is absent', {...MUTED, ...BOLD}],
+    ['   Check the box next to anyone who ', MUTED], ['is absent', BOLD],
     ['.', MUTED]]);
   const holder = name => details.roleOptions
     ? [[token('dropdown', meetingRolesDropdownId(meetingId),
