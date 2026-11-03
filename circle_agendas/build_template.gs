@@ -456,7 +456,7 @@ const ROLES_DROPDOWN_ID = 'kix.roles';
 
 const ANNOUNCE_LABEL = '✉ Announce agenda';
 // The space between a meeting's links.
-const LINK_GAP = '        ';
+const LINK_GAP = '    ';
 
 // The row of links that add an item, update the times, and (if details
 // give the circle's email address and the meeting's tab) open an email to
