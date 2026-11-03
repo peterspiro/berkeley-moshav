@@ -391,8 +391,8 @@ const ATTENDEES_PER_COLUMN = 4;
 function attendance(body, details, meetingId) {
   const attendees = details.attendees || [];
   writeRuns(body.appendParagraph(''), [['Attendance', BOLD],
-    ['   Check the box next to anyone who ', MUTED], ['is absent', {...MUTED, ...BOLD}],
-    ['.', MUTED]]);
+    ['   Check the box next to anyone who '], ['is absent', {...BOLD, [A.ITALIC]: true}],
+    ['.']]);
   const holder = name => details.roleOptions
     ? [[token('dropdown', meetingRolesDropdownId(meetingId),
       roleOptionId(details.roleOptions, name))]]
@@ -747,16 +747,13 @@ function roleDropdownRequest(id, options, tabId) {
   }}};
 }
 
-// Bulleted and numbered lists' indents: the bullet 0.08" from the margin,
-// and the text a 0.19" hanging indent beyond it (Format → Bullets &
-// numbering → Indentation options: left 0.08", hanging 0.19").
-const LIST_INDENT_PT = 0.08 * 72;
-const LIST_HANGING_PT = 0.19 * 72;
-
-function listIndentRequest(range) {
+// The request that gives a range's paragraphs the outer level's list
+// indents (see listIndents), or another level's.
+function listIndentRequest(range, level) {
+  const {firstLine, start} = listIndents(level);
   return {updateParagraphStyle: {range, paragraphStyle: {
-    indentFirstLine: {magnitude: LIST_INDENT_PT, unit: 'PT'},
-    indentStart: {magnitude: LIST_INDENT_PT + LIST_HANGING_PT, unit: 'PT'},
+    indentFirstLine: {magnitude: firstLine, unit: 'PT'},
+    indentStart: {magnitude: start, unit: 'PT'},
   }, fields: 'indentFirstLine,indentStart'}};
 }
 

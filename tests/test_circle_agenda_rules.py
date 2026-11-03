@@ -324,3 +324,21 @@ process.stdout.write(JSON.stringify({json.dumps(texts)}.map(t =>
     def test_hand_filled_rows_out_of_order(self):
         labels = ["Policies folder"] + [l for l in self.OLD if l != "Policies folder"]
         assert "another order" in js(f"aboutReorder({json.dumps(labels)})")["error"]
+
+
+class TestListIndents:
+    def test_outer_level(self):
+        assert js("listIndents(0)") == pytest.approx({"firstLine": 5.76, "start": 19.44})
+
+    def test_each_nested_level_is_a_quarter_inch_further_in(self):
+        assert js("listIndents(2)") == pytest.approx({"firstLine": 41.76, "start": 55.44})
+
+    def test_fixes_only_paragraphs_with_other_indents(self):
+        fixes = js("listIndentFixes(["
+                   "{start: 1, end: 5, level: 0, firstLine: 5.76, indentStart: 19.44},"
+                   "{start: 5, end: 9, level: 1, firstLine: 54, indentStart: 72},"
+                   "{start: 9, end: 12, level: 0}])")
+        assert fixes == [
+            pytest.approx({"start": 5, "end": 9, "firstLine": 23.76, "indentStart": 37.44}),
+            pytest.approx({"start": 9, "end": 12, "firstLine": 5.76, "indentStart": 19.44}),
+        ]
