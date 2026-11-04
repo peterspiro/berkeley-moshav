@@ -1,17 +1,14 @@
 """
-Unit tests for the pure helpers in add_group_wiki_page.py: resolving a
-group from a unique name prefix, and locating its hierarchy node.
+Unit tests for resolving a group from a unique name prefix, as
+add_group_wiki_page.py does.
 
 All names and links are fictional.
 """
 
-import textwrap
-
 import pytest
 
-from add_group_wiki_page import find_node_by_group_id, resolve_group_by_prefix
+from add_group_wiki_page import resolve_group_by_prefix
 from util.gather_utils import GatherGroup
-from util.hierarchy_wiki import parse_hierarchy
 
 
 def _group(group_id: str, name: str) -> GatherGroup:
@@ -43,24 +40,3 @@ class TestResolveGroupByPrefix:
 
     def test_full_name_is_a_valid_prefix(self):
         assert resolve_group_by_prefix(self._groups(), "Care Circle").group_id == "1"
-
-
-class TestFindNodeByGroupId:
-    def _root(self):
-        md = textwrap.dedent("""\
-            - Root: [Members](/groups/0)
-                - Care Circle: [Members](/groups/1) | [Documents](/gdrive/item/2)
-                - Housing Circle
-        """)
-        return parse_hierarchy(md)
-
-    def test_found(self):
-        node = find_node_by_group_id(self._root(), "1")
-        assert node is not None and node.name == "Care Circle"
-
-    def test_not_in_hierarchy_returns_none(self):
-        assert find_node_by_group_id(self._root(), "99") is None
-
-    def test_row_without_members_link_has_no_group_id(self):
-        # "Housing Circle" has no [Members] link, so it isn't matchable by id.
-        assert find_node_by_group_id(self._root(), "") is None

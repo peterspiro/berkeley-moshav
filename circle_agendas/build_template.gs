@@ -120,7 +120,7 @@ function previewTemplate() {
   // which come from the Circle Structure).
   const circle = circleForDoc(docId);
   build(docId, circle ? circleMemberNames(circle) : []);
-  if (circle) fillAbout(docId, 'Circle Agenda', circle.email, circle, null, []);
+  if (circle) fillAbout(docId, 'Circle Agenda', circle.email, circle);
   logLink('Preview:', DocumentApp.openById(docId).getUrl());
 }
 

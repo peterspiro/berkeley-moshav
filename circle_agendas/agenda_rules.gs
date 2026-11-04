@@ -241,19 +241,26 @@ const FOOTER_CALENDAR_RE =
   /Google calendar:\s*https:\/\/calendar\.google\.com\/calendar\/u\/0\?cid=([A-Za-z0-9%+\/_=-]+)/;
 const FOOTER_ZOOM_RE = /Zoom meeting:\s*(https:\/\/\S+)/;
 const FOOTER_NAME_RE = /^(.+)'s:$/m;
+const FOOTER_GATHER_RE = /Gather group:\s*(https:\/\/\S+\/groups\/\d+)/;
 
-// The links in a group's footer that a circle's agenda doc uses:
-// {name, driveItemId, calendarId, zoomUrl}, each null if absent. Only the
-// auto-managed block is read.
+// The links in a group's footer that a circle's agenda doc and the Circle
+// Structure use: {name, gatherUrl, gatherId, driveItemId, calendarId,
+// zoomUrl}, each null if absent. Only the auto-managed block is read.
 function parseCircleFooter(footerText) {
   const text = footerText || '';
   const idx = text.indexOf(FOOTER_MARKER);
-  if (idx < 0) return {name: null, driveItemId: null, calendarId: null, zoomUrl: null};
+  if (idx < 0) {
+    return {name: null, gatherUrl: null, gatherId: null, driveItemId: null, calendarId: null,
+      zoomUrl: null};
+  }
   const block = text.slice(idx);
   const match = re => { const m = re.exec(block); return m ? m[1] : null; };
   const cid = match(FOOTER_CALENDAR_RE);
+  const gatherUrl = match(FOOTER_GATHER_RE);
   return {
     name: match(FOOTER_NAME_RE),
+    gatherUrl,
+    gatherId: gatherUrl ? gatherUrl.replace(/^.*\/groups\//, '') : null,
     driveItemId: match(FOOTER_DRIVE_ITEM_RE),
     calendarId: cid ? base64ToString(decodeURIComponent(cid)) : null,
     zoomUrl: match(FOOTER_ZOOM_RE),

@@ -1,6 +1,6 @@
 """
-Helpers for a group's own wiki page (distinct from the shared "Circle
-Hierarchy" page handled by util/hierarchy_wiki.py).
+Helpers for a group's own wiki page (distinct from the old, shared
+"Circle Structure" page read by util/hierarchy_wiki.py).
 
 The slug/title convention matches the per-group wiki pages the codebase has
 always used: a page titled "<Name> Wiki" at slug "<name-slug>-wiki".

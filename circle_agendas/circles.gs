@@ -65,7 +65,17 @@ function loadCircles() {
 
 // Every Google Group whose footer links a Drive item.
 function refreshCircles() {
-  const circles = [];
+  const circles = readGroupFooters().groups.filter(g => g.driveItemId);
+  CacheService.getScriptCache().put(CIRCLES_CACHE_KEY, JSON.stringify(circles), CIRCLES_CACHE_SECONDS);
+  return circles;
+}
+
+// Every Google Group in the domain, with its footer's links (see
+// parseCircleFooter): {groups: [{email, name, ...links}], complete}, complete
+// false if a footer couldn't be read (that group is left out).
+function readGroupFooters() {
+  const groups = [];
+  let complete = true;
   let pageToken;
   do {
     const resp = AdminDirectory.Groups.list({domain: DOMAIN, maxResults: 200, pageToken});
@@ -75,17 +85,15 @@ function refreshCircles() {
         footer = GroupsSettings.Groups.get(g.email).customFooterText;
       } catch (e) {
         console.error('Couldn\'t read ' + g.email + '\'s footer: ' + e.message);
+        complete = false;
         continue;
       }
       const links = parseCircleFooter(footer);
-      if (links.driveItemId) {
-        circles.push({...links, email: g.email.toLowerCase(), name: links.name || g.name});
-      }
+      groups.push({...links, email: g.email.toLowerCase(), name: links.name || g.name});
     }
     pageToken = resp.nextPageToken;
   } while (pageToken);
-  CacheService.getScriptCache().put(CIRCLES_CACHE_KEY, JSON.stringify(circles), CIRCLES_CACHE_SECONDS);
-  return circles;
+  return {groups, complete};
 }
 
 // The circle's members' short names, sorted: each member of its Google

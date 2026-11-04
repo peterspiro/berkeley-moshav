@@ -1,0 +1,701 @@
+/**
+ * Circle Structure
+ *
+ * The tree of circles and working groups. Its one source is the Circle
+ * Structure sheet, in admin@'s My Drive, whose rows are the groups: the
+ * Coordinating Circle (STRUCTURE_EDITORS) can change only each group's
+ * Parent, a dropdown of the groups it may be under (structure_rules.gs has
+ * the rules), and the script fills in everything else from the Google
+ * Groups' footers. Everyone else sees the structure in the Circle Structure
+ * doc, which the script rewrites whenever the structure changes, and in each
+ * circle's agenda doc, whose About this circle's Parent Circle and
+ * Sub-Circles rows the script writes, and puts back if they're edited.
+ *
+ * - setupCircleStructure (run once, in the editor) makes the sheet and the
+ *   doc, shares them, and installs the triggers (see installTriggers,
+ *   circle_docs.gs).
+ * - syncCircleStructureGroups, hourly, brings the sheet's rows up to date
+ *   with the groups: adds new groups (not yet placed, unless
+ *   PLACEMENTS_FILE gives them a parent), renames, relinks, retypes, and
+ *   removes groups that are gone.
+ * - applyStructure, on each edit of the sheet (onCircleStructureEdit)
+ *   and every BUILD_EVERY_MINUTES (from buildNewCircleDocs), refuses
+ *   parents that break the rules (putting back the one from before, with a
+ *   note saying why), updates the dropdowns and the Problems column, and,
+ *   for whatever changed, rewrites the doc and the agenda docs' rows.
+ * - refreshStructureRows writes one agenda doc's rows, if they don't say
+ *   what they should: for the docs whose place changed, each doc edited in
+ *   the last BUILD_EVERY_MINUTES (checkChangedCircleDocs, circle_docs.gs),
+ *   and every doc daily (for the next meetings they list).
+ */
+
+// Who can change the structure: they can edit the sheet's Parent column.
+const STRUCTURE_EDITORS = 'coordinating-circle@berkeleymoshav.org';
+const STRUCTURE_SHEET_NAME = 'Circle Structure (editing)';
+const STRUCTURE_DOC_NAME = 'Circle Structure';
+const STRUCTURE_TAB_NAME = 'Groups';
+// Script properties: the sheet's and doc's IDs, each group's parent as last
+// applied (see resolveParents), and hashes of what was last written to the
+// doc and of each group's place, to tell what's changed.
+const STRUCTURE_SHEET_KEY = 'STRUCTURE_SHEET_ID';
+const STRUCTURE_DOC_KEY = 'STRUCTURE_DOC_ID';
+const STRUCTURE_APPLIED_KEY = 'circleStructureApplied';
+const STRUCTURE_PLACES_KEY = 'circleStructurePlaces';
+const STRUCTURE_DOC_HASH_KEY = 'circleStructureDocHash';
+// Parents for groups, by Gather group ID ({"<id>": "<parent's id>"}), in
+// admin@'s My Drive, written by the Python scripts (seed_circle_structure.py,
+// to bring over the old wiki page's parents, and add_new_group.py, for a new
+// group; see util/circle_structure_placements.py, which must match). Each is
+// given to its group when the group's Parent is empty, and then removed.
+const PLACEMENTS_FILE = 'Circle structure placements.json';
+// The Shared Drive's folder of clubs' folders.
+const CLUBS_FOLDER_NAME = 'Clubs';
+const SYNC_EVERY_HOURS = 1;
+
+// The sheet's columns (1-based); ID, the Gather group's, is the row's key,
+// and hidden.
+const SCOL = {group: 1, type: 2, parent: 3, problems: 4, email: 5, gather: 6, folder: 7,
+  agenda: 8, id: 9};
+const STRUCTURE_HEADINGS = ['Group', 'Type', 'Parent', 'Problems', 'Email list', 'Gather group',
+  'Drive folder', 'Agenda doc', 'Gather ID'];
+const STRUCTURE_COLUMNS = STRUCTURE_HEADINGS.length;
+const PARENT_HELP = 'The circle it\'s under (for a working group, the circle or working group).';
+
+// ── Setting up ───────────────────────────────────────────────────────────────
+
+// Run once, in the editor: makes the sheet (shared with STRUCTURE_EDITORS,
+// who can change only the Parent column) and the doc (anyone with the link
+// can view it), fills the sheet in, installs the triggers, and logs both
+// links. Safe to run again: it keeps the sheet and doc it made, and
+// protects and shares them again.
+function setupCircleStructure() {
+  const props = PropertiesService.getScriptProperties();
+  let sheetId = liveFileId(props.getProperty(STRUCTURE_SHEET_KEY));
+  if (!sheetId) {
+    sheetId = SpreadsheetApp.create(STRUCTURE_SHEET_NAME).getId();
+    props.setProperty(STRUCTURE_SHEET_KEY, sheetId);
+  }
+  let docId = liveFileId(props.getProperty(STRUCTURE_DOC_KEY));
+  if (!docId) {
+    docId = DocumentApp.create(STRUCTURE_DOC_NAME).getId();
+    props.setProperty(STRUCTURE_DOC_KEY, docId);
+    props.deleteProperty(STRUCTURE_DOC_HASH_KEY);
+  }
+
+  const sheet = structureSheet();
+  sheet.getRange(1, 1, 1, STRUCTURE_COLUMNS).setValues([STRUCTURE_HEADINGS]).setFontWeight('bold');
+  sheet.getRange(1, SCOL.parent).setNote(PARENT_HELP);
+  sheet.setFrozenRows(1);
+  sheet.setFrozenColumns(1);
+  sheet.setColumnWidth(SCOL.group, 220);
+  sheet.setColumnWidth(SCOL.type, 140);
+  sheet.setColumnWidth(SCOL.parent, 220);
+  sheet.setColumnWidth(SCOL.problems, 360);
+  sheet.hideColumns(SCOL.id);
+  for (const p of sheet.getProtections(SpreadsheetApp.ProtectionType.SHEET)) p.remove();
+  const protection = sheet.protect().setDescription('Filled in by the Circle Structure script');
+  protection.setUnprotectedRanges([sheet.getRange('C2:C')]);
+  protection.removeEditors(protection.getEditors());
+  if (protection.canDomainEdit()) protection.setDomainEdit(false);
+
+  Drive.Permissions.create({role: 'writer', type: 'group', emailAddress: STRUCTURE_EDITORS},
+    sheetId, {sendNotificationEmail: false});
+  // Only admin@ shares it further.
+  Drive.Files.update({writersCanShare: false}, sheetId);
+  try {
+    DriveApp.getFileById(docId).setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  } catch (e) {
+    console.warn('Couldn\'t let anyone with the link view the doc (' + e.message + '); letting ' +
+      'anyone in ' + DOMAIN + ' with the link view it instead.');
+    DriveApp.getFileById(docId).setSharing(DriveApp.Access.DOMAIN_WITH_LINK, DriveApp.Permission.VIEW);
+  }
+
+  installTriggers();
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    syncGroups();
+    applyStructure();
+  } finally {
+    lock.releaseLock();
+  }
+  logLink('The sheet, which ' + STRUCTURE_EDITORS + ' can edit (send them the link):',
+    'https://docs.google.com/spreadsheets/d/' + sheetId + '/edit');
+  logLink('The doc, which anyone with the link can view:', structureDocUrl());
+}
+
+// The file's ID, if it's there and not in the trash; else null.
+function liveFileId(id) {
+  if (!id) return null;
+  try {
+    return DriveApp.getFileById(id).isTrashed() ? null : id;
+  } catch (e) {
+    return null;
+  }
+}
+
+// The sheet's Groups tab, or null if setupCircleStructure hasn't been run.
+function structureSheet() {
+  const id = PropertiesService.getScriptProperties().getProperty(STRUCTURE_SHEET_KEY);
+  if (!id) return null;
+  const ss = SpreadsheetApp.openById(id);
+  let sheet = ss.getSheetByName(STRUCTURE_TAB_NAME);
+  if (!sheet) sheet = ss.getSheets()[0].setName(STRUCTURE_TAB_NAME);
+  return sheet;
+}
+
+function structureDocUrl() {
+  const id = PropertiesService.getScriptProperties().getProperty(STRUCTURE_DOC_KEY);
+  return id ? 'https://docs.google.com/document/d/' + id + '/edit' : null;
+}
+
+// ── Entry points ─────────────────────────────────────────────────────────────
+
+// Run hourly by the trigger installTriggers makes (or by hand).
+function syncCircleStructureGroups() {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(60000)) return;
+  try {
+    if (!structureSheet()) return;
+    syncGroups();
+    applyStructure();
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// Run on each edit of the sheet, by the trigger installTriggers makes (as
+// admin@, whoever made the edit).
+function onCircleStructureEdit() {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(60000);
+  try {
+    applyStructure();
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// Run from the editor: rewrites the doc and every agenda doc's rows that
+// don't say what they should.
+function refreshCircleStructureEverywhere() {
+  PropertiesService.getScriptProperties().deleteProperty(STRUCTURE_DOC_HASH_KEY);
+  applyStructure();
+  refreshStructureInAllCircleDocs();
+}
+
+// ── The sheet's rows ─────────────────────────────────────────────────────────
+
+// The sheet's rows: [{row, id, name, type, parent, problems, email,
+// gatherUrl, folderUrl, agendaUrl}], row the sheet's row number.
+function readGroups(sheet) {
+  const n = sheet.getLastRow() - 1;
+  if (n < 1) return [];
+  const range = sheet.getRange(2, 1, n, STRUCTURE_COLUMNS);
+  const values = range.getValues();
+  const rich = range.getRichTextValues();
+  const link = (r, c) => (rich[r][c - 1] && rich[r][c - 1].getLinkUrl()) || '';
+  const groups = [];
+  values.forEach((v, r) => {
+    const id = String(v[SCOL.id - 1] || '').trim();
+    if (!id) return;
+    groups.push({
+      row: r + 2, id, name: String(v[SCOL.group - 1]).trim(), type: String(v[SCOL.type - 1]).trim(),
+      parent: String(v[SCOL.parent - 1]).trim(), problems: String(v[SCOL.problems - 1]),
+      email: String(v[SCOL.email - 1]).trim().toLowerCase(),
+      gatherUrl: link(r, SCOL.gather), folderUrl: link(r, SCOL.folder),
+      agendaUrl: link(r, SCOL.agenda),
+    });
+  });
+  return groups;
+}
+
+// Brings the rows up to date with the Google Groups whose footers link a
+// Gather group and a Drive item: each group's name (renaming it in the
+// Parent cells that name it), type (see guessGroupType), email address,
+// and links, and, for a group not in the structure, why, in Problems. A
+// new group gets a row of its own, with an empty Parent; a group that's
+// gone (only if every footer could be read) loses its row. The rows are
+// kept in order by name.
+function syncGroups() {
+  const sheet = structureSheet();
+  const {groups: footers, complete} = readGroupFooters();
+  const docs = agendaDocsByFolder();
+  const existing = readGroups(sheet);
+  const byId = {};
+  for (const g of existing) byId[g.id] = g;
+  const seen = {};
+  const renames = [];
+  const rows = [];
+  for (const f of footers) {
+    if (!f.gatherId || !f.driveItemId || seen[f.gatherId]) continue;
+    seen[f.gatherId] = true;
+    const {type, reason} = guessGroupType(f.name, driveItemInfo(f.driveItemId));
+    const old = byId[f.gatherId];
+    if (old && old.name !== f.name) renames.push([old.name, f.name]);
+    const doc = docs[f.driveItemId] || docs[f.email];
+    rows.push({
+      id: f.gatherId, name: f.name, type, problems: type === TYPE_OUT ? 'Not in the structure: ' + reason
+        : (old ? old.problems : ''),
+      parent: old ? old.parent : '', isNew: !old, email: f.email, gatherUrl: f.gatherUrl,
+      folderUrl: 'https://drive.google.com/drive/folders/' + f.driveItemId,
+      agendaUrl: doc ? 'https://docs.google.com/document/d/' + doc + '/edit' : '',
+    });
+  }
+  for (const g of existing) {
+    if (seen[g.id]) continue;
+    if (complete) {
+      console.log('Circle Structure: removed ' + g.name + ', whose group is gone.');
+    } else {
+      rows.push(Object.assign({}, g, {isNew: false}));
+    }
+  }
+  for (const r of rows) {
+    for (const [from, to] of renames) if (sameName(r.parent, from)) r.parent = to;
+  }
+  rows.sort((a, b) => a.name.localeCompare(b.name));
+
+  // Rewrite the rows, all but the Parent cells that haven't changed (so an
+  // edit made meanwhile isn't lost).
+  const n = rows.length;
+  const extra = sheet.getLastRow() - 1 - n;
+  if (extra > 0) {
+    sheet.getRange(n + 2, 1, extra, STRUCTURE_COLUMNS).clearContent().clearNote()
+      .setDataValidation(null);
+  }
+  if (!n) return;
+  const old = existing.slice();
+  const text = (t, url) => SpreadsheetApp.newRichTextValue().setText(t || '').setLinkUrl(url || null).build();
+  sheet.getRange(2, SCOL.group, n, 2).setValues(rows.map(r => [r.name, r.type]));
+  sheet.getRange(2, SCOL.problems, n, 2).setValues(rows.map(r => [r.problems, r.email]));
+  sheet.getRange(2, SCOL.gather, n, 3).setRichTextValues(rows.map(r => [
+    text(r.gatherUrl ? 'Members' : '', r.gatherUrl), text('Documents', r.folderUrl),
+    text(r.agendaUrl ? 'Agenda' : '', r.agendaUrl)]));
+  sheet.getRange(2, SCOL.id, n, 1).setNumberFormat('@').setValues(rows.map(r => [r.id]));
+  rows.forEach((r, i) => {
+    const before = old[i];
+    if (!before || before.id !== r.id || before.parent !== r.parent) {
+      const cell = sheet.getRange(i + 2, SCOL.parent);
+      cell.setDataValidation(null).setValue(r.parent);
+    }
+  });
+  const added = rows.filter(r => r.isNew).map(r => r.name);
+  if (added.length) console.log('Circle Structure: added ' + added.join(', ') + '.');
+}
+
+// What guessGroupType needs to know of a Drive item: {name, isSharedDrive,
+// inClubs}, or null if it can't be read.
+function driveItemInfo(id) {
+  try {
+    const file = Drive.Files.get(id, {fields: 'id,name,parents,driveId', supportsAllDrives: true});
+    if (file.driveId && file.driveId === id) {
+      let name = file.name;
+      try {
+        name = Drive.Drives.get(id).name;
+      } catch (e) {
+        // The root folder's name will do.
+      }
+      return {name, isSharedDrive: true, inClubs: false};
+    }
+    const parent = (file.parents || [])[0];
+    let inClubs = false;
+    if (parent && parent !== file.driveId) {
+      inClubs = Drive.Files.get(parent, {fields: 'name', supportsAllDrives: true}).name ===
+        CLUBS_FOLDER_NAME;
+    }
+    return {name: file.name, isSharedDrive: false, inClubs};
+  } catch (e) {
+    console.warn('Couldn\'t read Drive item ' + id + ': ' + e.message);
+    return null;
+  }
+}
+
+// The circle agenda docs (built, or waiting to be), by the ID of the
+// Drive item they're in and by their labelled address: {key: doc ID}.
+function agendaDocsByFolder() {
+  const docs = {};
+  for (const file of agendaDocFiles()) {
+    for (const p of file.parents || []) docs[p] = docs[p] || file.id;
+    const email = ((file.properties || {})[AGENDA_KEYS.group] || '').toLowerCase();
+    if (email) docs[email] = docs[email] || file.id;
+  }
+  return docs;
+}
+
+function agendaDocFiles() {
+  const state = s => 'properties has { key=\'' + AGENDA_KEYS.state + '\' and value=\'' + s + '\' }';
+  const files = [];
+  let pageToken;
+  do {
+    const resp = Drive.Files.list({
+      q: '(' + state(AGENDA_STATE_BUILT) + ' or ' + state(AGENDA_STATE_NEW) + ') and trashed = false',
+      corpora: 'allDrives', includeItemsFromAllDrives: true, supportsAllDrives: true,
+      pageSize: 1000, pageToken, fields: 'nextPageToken,files(id,name,parents,properties)',
+    });
+    files.push(...(resp.files || []));
+    pageToken = resp.nextPageToken;
+  } while (pageToken);
+  return files;
+}
+
+// ── Applying the structure ───────────────────────────────────────────────────
+
+// See the top of this file. Callers hold the script lock.
+function applyStructure() {
+  const sheet = structureSheet();
+  if (!sheet) return;
+  const props = PropertiesService.getScriptProperties();
+  const lastApplied = JSON.parse(props.getProperty(STRUCTURE_APPLIED_KEY) || '{}');
+  const groups = readGroups(sheet);
+  applyPlacements(sheet, groups);
+
+  const {parentOf, refused} = resolveParents(groups, lastApplied);
+  const byId = {};
+  for (const g of groups) byId[g.id] = g;
+  const when = Utilities.formatDate(new Date(), TIME_ZONE, 'MMM d, h:mm a');
+  for (const r of refused) {
+    const g = byId[r.id];
+    const kept = parentCellText(r.kept, byId);
+    sheet.getRange(g.row, SCOL.parent).setValue(kept).setNote(when + ': couldn\'t put it under "' +
+      r.tried + '": ' + r.reason + '. ' + (kept ? 'It\'s still under ' + kept + '.' : 'It isn\'t placed.'));
+    g.parent = kept;
+  }
+  const refusedIds = refused.map(r => r.id);
+  for (const g of groups) {
+    const want = inStructure(g) ? parentCellText(parentOf[g.id], byId) : '';
+    const cell = sheet.getRange(g.row, SCOL.parent);
+    if (!refusedIds.includes(g.id) && want !== g.parent && (isRootGroup(g) || !inStructure(g))) {
+      cell.setValue(want);
+      g.parent = want;
+    }
+    if (inStructure(g) && !refusedIds.includes(g.id) && (parentOf[g.id] || '') !== (lastApplied[g.id] || '')) {
+      cell.clearNote();
+    }
+  }
+
+  const tree = buildTree(groups, parentOf);
+  const problems = groups.map(g => [inStructure(g) ? groupProblem(g, '', parentOf, tree, byId) : g.problems]);
+  if (groups.length) {
+    // The rows readGroups skipped (no ID) would shift these; there are none,
+    // as only the script writes IDs.
+    const rows = groups[groups.length - 1].row - 1;
+    if (rows === groups.length) {
+      const current = groups.map(g => [g.problems]);
+      if (JSON.stringify(current) !== JSON.stringify(problems)) {
+        sheet.getRange(2, SCOL.problems, rows, 1).setValues(problems);
+      }
+      sheet.getRange(2, SCOL.parent, rows, 1).setDataValidations(groups.map(g => {
+        const choices = parentChoices(g, groups, tree.children);
+        return [choices.length ? SpreadsheetApp.newDataValidation()
+          .requireValueInList(choices, true).setAllowInvalid(false).setHelpText(PARENT_HELP).build()
+          : null];
+      }));
+    }
+  }
+  props.setProperty(STRUCTURE_APPLIED_KEY, JSON.stringify(parentOf));
+
+  const ctx = structureContext(groups, parentOf, tree);
+  writeStructureDocIfChanged(ctx);
+  // Each group's place, as its agenda doc shows it but for meetings and
+  // roles; the docs of the groups whose place changed are rewritten.
+  const oldPlaces = JSON.parse(props.getProperty(STRUCTURE_PLACES_KEY) || '{}');
+  const places = {};
+  for (const g of groups) places[g.id] = shortHash(JSON.stringify(placeOf(ctx, g, true)));
+  for (const g of groups) {
+    if (places[g.id] === oldPlaces[g.id] || !g.agendaUrl) continue;
+    const docId = docIdOf(g.agendaUrl);
+    try {
+      if (refreshStructureRows(docId, ctx, g)) console.log('Updated the place in ' + g.name + '\'s agenda doc.');
+    } catch (e) {
+      console.error('Couldn\'t update the place in ' + g.name + '\'s agenda doc: ' + e.message);
+      delete places[g.id];
+    }
+  }
+  props.setProperty(STRUCTURE_PLACES_KEY, JSON.stringify(places));
+}
+
+// Gives each group whose Parent is empty the parent PLACEMENTS_FILE has for
+// it (by Gather group ID), and removes from the file each placement given,
+// or whose group already has a parent; the others wait for their groups'
+// rows.
+function applyPlacements(sheet, groups) {
+  const files = DriveApp.getRootFolder().getFilesByName(PLACEMENTS_FILE);
+  if (!files.hasNext()) return;
+  const file = files.next();
+  let placements;
+  try {
+    placements = JSON.parse(file.getBlob().getDataAsString('UTF-8') || '{}');
+  } catch (e) {
+    console.error('Couldn\'t read ' + PLACEMENTS_FILE + ': ' + e.message);
+    return;
+  }
+  const byId = {};
+  for (const g of groups) byId[g.id] = g;
+  let changed = false;
+  for (const id of Object.keys(placements)) {
+    const g = byId[id];
+    const parent = byId[placements[id]];
+    if (!g) continue;
+    if (!g.parent && parent && !isRootGroup(g)) {
+      sheet.getRange(g.row, SCOL.parent).setValue(parent.name);
+      g.parent = parent.name;
+    }
+    delete placements[id];
+    changed = true;
+  }
+  if (changed) file.setContent(JSON.stringify(placements, null, 1));
+}
+
+// What the doc and the agenda docs' rows are written from.
+function structureContext(groups, parentOf, tree) {
+  const byId = {};
+  for (const g of groups) byId[g.id] = g;
+  const circles = {};
+  for (const c of loadCircles()) circles[c.email] = c;
+  return {groups, byId, parentOf, tree, circles, structureUrl: structureDocUrl(), meetings: {}};
+}
+
+// The sheet's groups and parents, for refreshing agenda docs outside
+// applyStructure; null if there's no sheet yet.
+function loadStructureContext() {
+  const sheet = structureSheet();
+  if (!sheet) return null;
+  const groups = readGroups(sheet);
+  const parentOf = JSON.parse(PropertiesService.getScriptProperties()
+    .getProperty(STRUCTURE_APPLIED_KEY) || '{}');
+  return structureContext(groups, parentOf, buildTree(groups, parentOf));
+}
+
+function shortHash(text) {
+  return Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, text,
+    Utilities.Charset.UTF_8)).slice(0, 12);
+}
+
+function docIdOf(url) {
+  const m = /\/d\/([\w-]+)/.exec(url || '');
+  return m ? m[1] : null;
+}
+
+// Where a group's name links: its agenda doc, or else its Drive folder.
+function groupUrl(g) {
+  return g.agendaUrl || g.folderUrl || null;
+}
+
+// ── The doc ──────────────────────────────────────────────────────────────────
+
+// Rewrites the doc if what it shows has changed since it was last written
+// (or it's never been).
+function writeStructureDocIfChanged(ctx) {
+  const props = PropertiesService.getScriptProperties();
+  const docId = props.getProperty(STRUCTURE_DOC_KEY);
+  if (!docId) return;
+  const {placed, unplaced} = outline(ctx.tree);
+  const entry = ({id, depth}) => ({depth, runs: structureDocRuns(ctx.byId[id])});
+  const content = {placed: placed.map(entry), unplaced: unplaced.map(entry)};
+  const hash = shortHash(JSON.stringify(content));
+  if (props.getProperty(STRUCTURE_DOC_HASH_KEY) === hash) return;
+
+  const doc = DocumentApp.openById(docId);
+  const body = doc.getBody();
+  body.clear();
+  body.getChild(0).asParagraph().setText(STRUCTURE_DOC_NAME)
+    .setHeading(DocumentApp.ParagraphHeading.TITLE);
+  writeRuns(body.appendParagraph('').setHeading(DocumentApp.ParagraphHeading.NORMAL), [['The circles and working groups, each under the circle ' +
+    '(or working group) it\'s part of. It\'s kept up to date automatically; to move a group, ' +
+    'ask the Coordinating Circle. Each name links to the group\'s agenda doc (or its Drive ' +
+    'folder, if it has none). Last changed ' +
+    Utilities.formatDate(new Date(), TIME_ZONE, 'MMMM d, yyyy') + '.', MUTED]]);
+  const list = items => {
+    for (const item of items) {
+      const li = body.appendListItem('');
+      writeRuns(li, item.runs);
+      li.setNestingLevel(item.depth).setGlyphType(DocumentApp.GlyphType.BULLET);
+    }
+  };
+  if (!content.placed.length) {
+    writeRuns(body.appendParagraph('').setHeading(DocumentApp.ParagraphHeading.NORMAL),
+      [['Nothing is placed yet.', MUTED]]);
+  }
+  list(content.placed);
+  if (content.unplaced.length) {
+    body.appendParagraph('Not yet placed').setHeading(DocumentApp.ParagraphHeading.HEADING2);
+    list(content.unplaced);
+  }
+  doc.saveAndClose();
+  props.setProperty(STRUCTURE_DOC_HASH_KEY, hash);
+}
+
+// A group's line in the doc: its name (linked; see groupUrl), its type if a
+// working group, and links to its members, documents, and email list.
+function structureDocRuns(g) {
+  const runs = [[g.name, Object.assign({}, BOLD, groupUrl(g) ? {[A.LINK_URL]: groupUrl(g)} : {})]];
+  if (g.type === TYPE_WORKING_GROUP) runs.push([' · working group', MUTED]);
+  const links = [];
+  if (g.gatherUrl) links.push(['Members', g.gatherUrl]);
+  if (g.folderUrl) links.push(['Documents', g.folderUrl]);
+  if (g.email) links.push([g.email, 'mailto:' + g.email]);
+  links.forEach(([text, url], i) => {
+    runs.push([i ? ' · ' : '    ', MUTED]);
+    runs.push([text, {[A.LINK_URL]: url, [A.FOREGROUND_COLOR]: COLOR.muted}]);
+  });
+  return runs;
+}
+
+// ── A circle's place, in its agenda doc ──────────────────────────────────────
+
+// What structureRows needs to write a group's rows (see there); without
+// meetings and roles if bare (for telling whether its place has changed).
+function placeOf(ctx, g, bare) {
+  const item = id => ({name: ctx.byId[id].name, url: groupUrl(ctx.byId[id])});
+  let status = 'placed';
+  if (!g || !inStructure(g)) status = 'out';
+  else if (ctx.parentOf[g.id] === TOP) status = 'top';
+  else if (!ctx.tree.placed[g.id]) status = 'unplaced';
+  const place = {status, ancestors: [], children: [], parentNext: null, leader: '',
+    feedbackLink: '', structureUrl: ctx.structureUrl};
+  if (status === 'out') return place;
+  if (status === 'placed') place.ancestors = ancestorsOf(g.id, ctx.parentOf).map(item);
+  place.children = (ctx.tree.children[g.id] || []).map(id => Object.assign(item(id),
+    {type: ctx.byId[id].type, next: bare ? null : nextMeetingOf(ctx, ctx.byId[id])}));
+  if (!bare && status === 'placed') place.parentNext = nextMeetingOf(ctx, ctx.byId[ctx.parentOf[g.id]]);
+  return place;
+}
+
+// A group's next meeting, from its calendar: {text, url}, or null.
+function nextMeetingOf(ctx, g) {
+  if (!g) return null;
+  if (g.id in ctx.meetings) return ctx.meetings[g.id];
+  let meeting = null;
+  const circle = ctx.circles[g.email];
+  if (circle && circle.calendarId) {
+    try {
+      const event = nextEvents(circle, new Date(), 1)[0];
+      if (event) {
+        meeting = {text: Utilities.formatDate(new Date(event.start.dateTime), TIME_ZONE, 'EEE, MMM d'),
+          url: event.htmlLink || null};
+      }
+    } catch (e) {
+      console.warn('Couldn\'t read ' + g.name + '\'s calendar: ' + e.message);
+    }
+  }
+  ctx.meetings[g.id] = meeting;
+  return meeting;
+}
+
+// The group a circle agenda doc belongs to: by the doc linked in the sheet,
+// or else its labelled address, or else the Drive item it's in; or null.
+function groupOfDoc(ctx, docId, email) {
+  const url = g => docIdOf(g.agendaUrl) === docId;
+  let g = ctx.groups.find(url);
+  if (!g && email) g = ctx.groups.find(x => x.email === email.toLowerCase());
+  if (!g) {
+    const ids = driveAncestors(docId);
+    g = ctx.groups.find(x => ids.includes((/folders\/([\w-]+)/.exec(x.folderUrl) || [])[1]));
+  }
+  return g || null;
+}
+
+// Writes a circle agenda doc's Parent Circle and Sub-Circles rows (label
+// and value) from the structure (see structureRows), each only if it
+// doesn't already say that. g: the doc's group (null if it has none).
+// Returns whether it wrote anything. Does nothing to a doc without the rows.
+function refreshStructureRows(docId, ctx, g) {
+  const place = placeOf(ctx, g, false);
+  if (place.status === 'placed') {
+    const roles = roleHolders(docId);
+    place.leader = roles.Leader || '';
+    place.feedbackLink = roles['Feedback Link'] || '';
+  }
+  const want = structureRows(place);
+  const doc = DocumentApp.openById(docId);
+  const found = findRow(firstTabBody(doc), text => text === 'Circle email address');
+  if (!found) return false;
+  const table = found.table;
+  let wrote = false;
+  let bullets = false;
+  for (let r = 0; r < table.getNumRows(); r++) {
+    const label = aboutLabel(table.getCell(r, 0).getText());
+    const parts = label === 'Parent Circle' ? [want.parentLabel, want.parentValue]
+      : label === 'Sub-Circles' ? [want.subLabel, want.subValue] : null;
+    if (!parts) continue;
+    parts.forEach((paragraphs, c) => {
+      const cell = table.getCell(r, c);
+      if (paragraphsSignature(cellParagraphs(cell)) === paragraphsSignature(paragraphs)) return;
+      resetCell(cell);
+      writeCell(cell, paragraphs.map(p => docRuns(p)));
+      if (c === 0) alignCell(cell, DocumentApp.HorizontalAlignment.RIGHT);
+      if (paragraphs.some(p => p.bullet)) bullets = true;
+      wrote = true;
+    });
+  }
+  doc.saveAndClose();
+  if (bullets) replaceTokens(docId);
+  return wrote;
+}
+
+// A paragraph of structureRows as runs for writeCell: a bullet's paragraph
+// starts with the token replaceTokens makes a bullet.
+function docRuns(p) {
+  const runs = p.runs.map(([text, style]) => {
+    const attrs = {};
+    if (style.bold) attrs[A.BOLD] = true;
+    if (style.muted) attrs[A.FOREGROUND_COLOR] = COLOR.muted;
+    if (style.link) attrs[A.LINK_URL] = style.link;
+    return [text, Object.keys(attrs).length ? attrs : null];
+  });
+  return p.bullet ? [[token('bullet')], ...runs] : runs;
+}
+
+// A table cell's paragraphs as structureRows gives them ({runs}, each run
+// [text, {link}]), for paragraphsSignature.
+function cellParagraphs(cell) {
+  const paragraphs = [];
+  for (let i = 0; i < cell.getNumChildren(); i++) {
+    const child = cell.getChild(i);
+    const type = child.getType();
+    if (type !== DocumentApp.ElementType.PARAGRAPH && type !== DocumentApp.ElementType.LIST_ITEM) continue;
+    const text = child.editAsText();
+    const s = text.getText();
+    const starts = text.getTextAttributeIndices();
+    const runs = starts.map((start, k) => {
+      const end = k + 1 < starts.length ? starts[k + 1] : s.length;
+      return [s.slice(start, end), {link: start < s.length ? text.getLinkUrl(start) : null}];
+    });
+    paragraphs.push({runs});
+  }
+  return paragraphs;
+}
+
+// Who holds each role in a doc's Roles table: {role: name}, the role being
+// the first words of its cell, before its description in brackets.
+function roleHolders(docId) {
+  const holders = {};
+  const table = apiTab(docId).content.find(se => se.table &&
+    apiCellText(se.table.tableRows[0].tableCells[0]).trim().startsWith('Circle Roles'));
+  if (!table) return holders;
+  for (const row of table.table.tableRows.slice(1)) {
+    if (row.tableCells.length < 2) continue;
+    const role = apiCellText(row.tableCells[0]).replace(/\(.*$/s, '').trim();
+    holders[role] = apiCellValue(row.tableCells[1]);
+  }
+  return holders;
+}
+
+// Writes the rows (see refreshStructureRows) in every built circle doc that
+// doesn't say what it should: run daily, for the next meetings they list.
+function refreshStructureInAllCircleDocs() {
+  const ctx = loadStructureContext();
+  if (!ctx) return;
+  for (const file of builtCircleDocs()) refreshStructureRowsOf(file, ctx);
+}
+
+// refreshStructureRows for a doc ({id, name, properties}), logging what it
+// did.
+function refreshStructureRowsOf(file, ctx) {
+  try {
+    const g = groupOfDoc(ctx, file.id, (file.properties || {})[AGENDA_KEYS.group]);
+    if (refreshStructureRows(file.id, ctx, g)) console.log('Updated the place in ' + file.name + '.');
+  } catch (e) {
+    console.error('Couldn\'t update the place in ' + file.name + ': ' + e.message);
+  }
+}
