@@ -229,7 +229,7 @@ class TestAnnounceUrl:
             "Hello Technology Circle,\n\n"
             "The agenda for our Fri Dec 4 meeting is ready:\n"
             "https://docs.google.com/document/d/D/edit?tab=t.abc\n\n"
-            "Please review it, and send any change requests as soon as possible.\n\n"
+            "Please review it, and let me know of any change requests as soon as possible.\n\n"
             "Thank you!\n\n"
             "Zoom: https://us02web.zoom.us/j/123")
 
@@ -240,7 +240,7 @@ class TestAnnounceUrl:
             "Hello Technology Circle,\n\n"
             "The agenda for our meeting is ready:\n"
             "https://docs.google.com/document/d/D/edit?tab=t.abc\n\n"
-            "Please review it, and send any change requests as soon as possible.\n\n"
+            "Please review it, and let me know of any change requests as soon as possible.\n\n"
             "Thank you!")
 
     def test_other_links_are_not_announce_links(self):

@@ -116,7 +116,7 @@ function announceUrl({to, circleName, date, zoomUrl, agendaUrl}) {
   const lines = [
     'Hello ' + circleName + ',', '',
     'The agenda for our ' + (bodyDate ? bodyDate + ' ' : '') + 'meeting is ready:', agendaUrl, '',
-    'Please review it, and send any change requests as soon as possible.', '',
+    'Please review it, and let me know of any change requests as soon as possible.', '',
     'Thank you!',
   ];
   if (zoomUrl) lines.push('', 'Zoom: ' + zoomUrl);
