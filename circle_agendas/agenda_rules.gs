@@ -79,6 +79,51 @@ function meetingIdFromUrl(url) {
   return m ? m[1] : null;
 }
 
+// ── Announcing a meeting's agenda ────────────────────────────────────────────
+
+// The address of Gmail's compose window, which an agenda's "✉ Announce
+// agenda" link opens, filled in (see announceUrl).
+const GMAIL_COMPOSE_URL = 'https://mail.google.com/mail/?view=cm&fs=1';
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov',
+  'Dec'];
+
+// Whether a link's address is an "✉ Announce agenda" link's.
+function isAnnounceUrl(url) {
+  return String(url || '').startsWith(GMAIL_COMPOSE_URL);
+}
+
+// "Dec 4" (or, with the weekday, "Fri Dec 4") from '2026-12-04'; '' if it
+// isn't such a date.
+function formatShortDate(date, withWeekday) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date || '');
+  if (!m) return '';
+  const day = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+  return (withWeekday ? WEEKDAYS[day.getUTCDay()] + ' ' : '') +
+    MONTH_NAMES[day.getUTCMonth()] + ' ' + day.getUTCDate();
+}
+
+// The address of an "✉ Announce agenda" link: Gmail's compose window,
+// addressed to the circle's email list (to), saying to the circle
+// (circleName) that the agenda of its meeting on date ('yyyy-MM-dd'; left
+// out if it can't be read) is ready, with a link to it (agendaUrl, the
+// meeting's tab), and its Zoom room (zoomUrl), if it has one. The time is
+// left out, as it may change after the link is written.
+function announceUrl({to, circleName, date, zoomUrl, agendaUrl}) {
+  const subjectDate = formatShortDate(date, false);
+  const bodyDate = formatShortDate(date, true);
+  const subject = 'Agenda ready: ' + (subjectDate ? subjectDate + ' ' : '') + circleName + ' meeting';
+  const lines = [
+    'Hello ' + circleName + ',', '',
+    'The agenda for our ' + (bodyDate ? bodyDate + ' ' : '') + 'meeting is ready:', agendaUrl, '',
+    'Please review it, and let me know of any change requests as soon as possible.', '',
+    'Thank you!',
+  ];
+  if (zoomUrl) lines.push('', 'Zoom: ' + zoomUrl);
+  return GMAIL_COMPOSE_URL + '&to=' + encodeURIComponent(to) +
+    '&su=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(lines.join('\n'));
+}
+
 // "1.5" from 90 minutes, "2" from 120: a meeting's length as written after
 // its "Duration".
 function formatHours(minutes) {

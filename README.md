@@ -41,7 +41,9 @@ Python scripts:
 A fourth, **`circle_agendas`**, will run the circle agenda docs (see
 `circle-agendas-plan.md`): it builds each circle's agenda doc from a blank
 doc, and runs the web app that the links in an agenda doc open (so far, to add
-a meeting, add an agenda item, and update a meeting's times).
+a meeting, add an agenda item, and update a meeting's times); a meeting's
+"✉ Announce agenda" link opens an email to the circle's list in Gmail,
+announcing that its agenda is ready.
 
 The repo also keeps, in `archive/`, the one-off scripts that were used to
 migrate the community into Gather (members, households, groups, photos) and
@@ -400,8 +402,11 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
     members as an attendance checklist, a link to the previous meeting,
     and the previous meeting's action items); updating a meeting's times
     (each item's start, the closing round's share of what's left, and the
-    end, flagging durations it can't read); and adding an agenda item just
-    above the links, which sit above Action Items Recap.
+    end, flagging durations it can't read), which also rewrites the
+    meeting's "✉ Announce agenda" link (a Gmail compose link, not a web app
+    action, addressed to the circle's list, announcing the agenda, with a
+    link to it and its Zoom room) from the meeting's date, or adds one to a meeting that lacks it; and adding an
+    agenda item just above the links, which sit above Action Items Recap.
   - **`circle_agendas/circles.gs`** finds the circle a doc belongs to: the
     Google Group whose footer links the Drive folder (or shared drive) the
     doc is in. It reads the circle's calendar events, and its members'

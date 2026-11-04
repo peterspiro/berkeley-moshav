@@ -27,7 +27,8 @@ const NEW_ITEM_MINUTES = 5;
 const PENDING_MEETING_SECONDS = 600;
 
 // Updates a meeting's times, and its tab's title, if its date chip has been
-// changed, and lines up its table's lists (see alignListIndents).
+// changed; lines up its table's lists (see alignListIndents); and brings
+// its "✉ Announce agenda" link up to date (see refreshAnnounceLink).
 function updateTimes(docId, meetingId) {
   const doc = DocumentApp.openById(docId);
   const found = findMeeting(doc, meetingId);
@@ -37,7 +38,68 @@ function updateTimes(docId, meetingId) {
   alignListIndents(docId, meetingId, found.tabId);
   const retitled = matchTabTitleToDate(docId, found.tabId);
   if (retitled) messages.push('The meeting\'s tab is now titled ' + retitled + ', its new date.');
+  try {
+    refreshAnnounceLink(docId, meetingId, found.tabId);
+  } catch (e) {
+    messages.push('Couldn\'t update the "' + ANNOUNCE_LABEL + '" link: ' + e.message);
+  }
   return {done: true, title: 'Times updated', messages};
+}
+
+// Rewrites a meeting's "✉ Announce agenda" link (see announceUrl) from its
+// tab's title (its date), the Zoom room linked in its "Time … Duration …
+// Place …" line, and the circle's email address; or, in a meeting added
+// before there was such a link, adds one after its other links. Does
+// nothing to a doc that isn't in a circle's folder.
+function refreshAnnounceLink(docId, meetingId, tabId) {
+  const circle = circleForDoc(docId);
+  if (!circle) return;
+  const tab = Docs.Documents.get(docId, {includeTabsContent: true}).tabs
+    .find(t => t.tabProperties.tabId === tabId);
+  if (!tab) return;
+  const content = tab.documentTab.body.content;
+  let zoomUrl = null;
+  const timeLine = content.find(se => se.paragraph && /^\s*Time\b/.test(paraText(se.paragraph)));
+  if (timeLine) {
+    for (const pe of timeLine.paragraph.elements || []) {
+      const link = pe.textRun && pe.textRun.textStyle.link;
+      if (!zoomUrl && link && /zoom\.us\//.test(link.url || '')) zoomUrl = link.url;
+    }
+  }
+  const url = announceUrl({
+    to: circle.email, circleName: circle.name, date: tab.tabProperties.title, zoomUrl,
+    agendaUrl: tabUrl(docId, tabId),
+  });
+
+  const table = content.find(se => se.table && apiMeetingId(se) === meetingId);
+  if (!table) return;
+  // The paragraph of the meeting's links, and the runs of its announce link.
+  let links = null;
+  let announce = [];
+  walkParagraphs([table], para => {
+    const runs = (para.elements || []).filter(pe => pe.textRun);
+    const linkOf = pe => (pe.textRun.textStyle.link || {}).url;
+    if (links || !runs.some(pe => meetingIdFromUrl(linkOf(pe)) === meetingId)) return;
+    links = para;
+    announce = runs.filter(pe => isAnnounceUrl(linkOf(pe)));
+  });
+  if (!links) return;
+  const linkStyle = (start, end, link) => ({updateTextStyle: {
+    range: {startIndex: start, endIndex: end, tabId},
+    textStyle: link ? {link: {url: link}} : {}, fields: 'link'}});
+  let requests;
+  if (announce.length) {
+    requests = [linkStyle(announce[0].startIndex, announce[announce.length - 1].endIndex, url)];
+  } else {
+    const elements = links.elements;
+    const at = elements[elements.length - 1].endIndex - 1;  // before the paragraph's newline
+    requests = [
+      {insertText: {location: {index: at, tabId}, text: LINK_GAP + ANNOUNCE_LABEL}},
+      linkStyle(at, at + LINK_GAP.length, null),
+      linkStyle(at + LINK_GAP.length, at + LINK_GAP.length + ANNOUNCE_LABEL.length, url),
+    ];
+  }
+  Docs.Documents.batchUpdate({requests}, docId);
 }
 
 // Gives each bulleted or numbered paragraph in a meeting's table the
@@ -176,6 +238,8 @@ function startNewMeeting(docId) {
     start: Utilities.formatDate(start, TIME_ZONE, 'h:mm a'),
     hours: formatHours((end - start) / 60000),
     place: circle.zoomUrl,
+    circleEmail: circle.email,
+    circleName: circle.name,
     attendees: circleMemberNames(circle),
     next: following ? Utilities.formatDate(new Date(following.start.dateTime), TIME_ZONE,
       'EEE yyyy-MM-dd, h:mm a') : 'not on the calendar yet',

@@ -131,9 +131,27 @@ so they stay just below where new items go.
 - **+ Add item** gives the new topic a Presenter dropdown (defaulting to
   "Presenter") of the meeting's attendees, and bulleted lists under it and
   in Notes.
+- **✉ Announce agenda** opens Gmail's compose window (in a new tab, signed
+  in to Gmail), with an email to the circle's list that's ready to send:
+  "Agenda ready: Dec 4 Technology Circle meeting", greeting the circle
+  ("Hello Technology Circle,"), linking the meeting's tab ("The agenda for
+  our Fri Dec 4 meeting is ready:"), asking for a review and any change
+  requests as soon as possible, thanking them, and giving its Zoom room. It leaves out the time, which
+  may change after the link is written. It's sent
+  from the clicker's own Gmail, and can be changed before it's sent. It
+  doesn't go through the web app, so it's one click, but the email is
+  written into the link: the link is written when the meeting is added, and
+  **↻ Update times** rewrites it, from the tab's date and the Zoom room
+  linked in the Time and Duration line. So after changing the meeting's
+  date, click **↻ Update times** before announcing.
+  Meetings added before this link existed get it the first time
+  **↻ Update times** is clicked. The email links to the agenda rather than
+  listing its items, so it never goes out of date as items are changed.
+  Someone whose mail isn't Gmail can copy the agenda tab's link (the
+  address bar, with that tab open) into an email of their own.
 
-Each opens a tab that says what it did, and to close it to return to the
-agenda, which already shows the change.
+Each but **✉ Announce agenda** opens a tab that says what it did, and to
+close it to return to the agenda, which already shows the change.
 For anyone who can edit the doc, clicking a link shows a small box with its
 address, and clicking that opens it (or Ctrl-click, ⌘-click on a Mac, opens
 it directly).
