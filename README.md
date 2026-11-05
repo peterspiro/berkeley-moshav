@@ -449,8 +449,9 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
     sheet's rows up to date with the Google Groups' footers (new groups,
     renames, links, types, groups that are gone, and the parents waiting in
     "Circle structure placements.json"), with a row for each circle and
-    working group (none for clubs or everybody groups), and who holds each
-    role in its agenda doc's Roles table. On each edit, and every 10
+    working group (everybody groups only if named as circles; no clubs),
+    who holds each role in its agenda doc's Roles table, and its guests
+    (members of its Google Group who aren't in Full Community's). On each edit, and every 10
     minutes, it refuses a parent the rules don't allow (putting back the one
     from before, with a note on the cell saying why), updates the dropdowns
     and the Problems column, and rewrites the doc and the Parent Circle and

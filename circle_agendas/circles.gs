@@ -104,18 +104,9 @@ function readGroupFooters() {
 // groups_drive_sync keeps in step with the group), or else their email
 // address.
 function circleMemberNames(circle) {
-  const emails = [];
-  let pageToken;
-  do {
-    const resp = AdminDirectory.Members.list(circle.email, {maxResults: 200, pageToken});
-    for (const m of resp.members || []) {
-      if (m.type === 'USER' && m.email) emails.push(m.email.toLowerCase());
-    }
-    pageToken = resp.nextPageToken;
-  } while (pageToken);
-
+  const emails = groupMemberEmails(circle.email);
   const names = {};
-  pageToken = undefined;
+  let pageToken;
   do {
     const resp = Drive.Permissions.list(circle.driveItemId, {
       supportsAllDrives: true, pageSize: 100, pageToken,
@@ -130,6 +121,21 @@ function circleMemberNames(circle) {
   const gatherNames = memberNames();
   return emails.map(e => gatherNames[e] || (names[e] || e).split(/\s+/)[0])
     .sort((a, b) => a.localeCompare(b));
+}
+
+// The (lowercase) addresses of a Google Group's members that are people
+// (not groups).
+function groupMemberEmails(groupEmail) {
+  const emails = [];
+  let pageToken;
+  do {
+    const resp = AdminDirectory.Members.list(groupEmail, {maxResults: 200, pageToken});
+    for (const m of resp.members || []) {
+      if (m.type === 'USER' && m.email) emails.push(m.email.toLowerCase());
+    }
+    pageToken = resp.nextPageToken;
+  } while (pageToken);
+  return emails;
 }
 
 // MEMBER_NAMES_FILE's names by (lowercase) email address, or {} if there's

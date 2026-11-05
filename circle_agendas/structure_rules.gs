@@ -55,9 +55,6 @@ function guessGroupType(name, item) {
   if (!item) {
     return {type: TYPE_OUT, reason: 'its Drive folder couldn\'t be read, to tell its type'};
   }
-  if (item.isSharedDrive) {
-    return {type: TYPE_OUT, reason: 'it\'s linked to a shared drive, as everybody groups are'};
-  }
   const endsWith = (text, words) => new RegExp('\\b(?:' +
     words.map(w => w.replace(/ /g, '\\s+')).join('|') + ')\\s*(?:\\([^()]*\\)\\s*)?$', 'i')
     .test(text || '');
@@ -68,9 +65,12 @@ function guessGroupType(name, item) {
     if (endsWith(text, WORKING_GROUP_WORDS)) return {type: TYPE_WORKING_GROUP, reason: ''};
     if (endsWith(text, ['Circle'])) return {type: TYPE_CIRCLE, reason: ''};
   }
-  return {type: TYPE_OUT, reason: 'its Drive folder\'s name, "' + item.name + '", doesn\'t end ' +
+  // An everybody group (linked to a shared drive) is in the structure only
+  // if it's named as a circle (or working group).
+  const what = item.isSharedDrive ? 'its shared drive\'s name' : 'its Drive folder\'s name';
+  return {type: TYPE_OUT, reason: what + ', "' + item.name + '", doesn\'t end ' +
     'with "Circle", "' + WORKING_GROUP_WORDS.join('", "') + '" (perhaps followed by something ' +
-    'in brackets), to tell its type (rename the folder to fix this)'};
+    'in brackets), to tell its type (rename the ' + (item.isSharedDrive ? 'shared drive' : 'folder') + ' to fix this)'};
 }
 
 // Whether a group of type childType may be under one of parentType: a
@@ -275,11 +275,15 @@ function parentCellText(parent, groupsById) {
 // of paragraphs, {bullet, runs}, a run [text, {bold, muted, small, link}].
 // place: {status: 'placed' | 'top' | 'unplaced' | 'out', parent: {name,
 // url} (for 'placed'), children: [{name, url}], structureUrl (the sheet,
-// where it's set)}.
-const STRUCTURE_HINT = '(Set in the Circle Structure)';
+// where it's set), structureDocUrl (the doc, where it's shown)}.
+// The hint under each label: "(Managed here. See Circle Structure.)", "here"
+// linking the sheet (place.structureUrl) and "Circle Structure" the doc
+// (place.structureDocUrl).
 function structureRows(place) {
-  const hint = label => [{runs: [[label, {bold: true}]]},
-    {runs: [[STRUCTURE_HINT, {muted: true, small: true, link: place.structureUrl || null}]]}];
+  const small = link => ({muted: true, small: true, link: link || null});
+  const hint = label => [{runs: [[label, {bold: true}]]}, {runs: [
+    ['(Managed ', small()], ['here', small(place.structureUrl)], ['. See ', small()],
+    ['Circle Structure', small(place.structureDocUrl)], ['.)', small()]]}];
   const note = text => [{runs: [[text, {muted: true}]]}];
   // A group's name, linked.
   const line = item => [[item.name, item.url ? {link: item.url} : {}]];
@@ -341,4 +345,19 @@ function columnsByHeading(row, headings) {
   const texts = (row || []).map(v => String(v || '').trim().toLowerCase());
   for (const h of headings) cols[h] = texts.indexOf(h.toLowerCase()) + 1;
   return cols;
+}
+
+// A group's guests: its Google Group's members (members, addresses) who
+// aren't in the root group's (everyone, addresses) nor in leaveOut (such
+// as the script's own account, which groups_drive_sync never removes),
+// sorted. (Guests are added to a group's Drive folder by hand, and so
+// groups_drive_sync puts them in its Google Group.)
+function guestsOf(members, everyone, leaveOut) {
+  const skip = new Set([...(everyone || []), ...(leaveOut || [])].map(e => String(e).trim().toLowerCase()));
+  const guests = [];
+  for (const m of members || []) {
+    const e = String(m).trim().toLowerCase();
+    if (e && !skip.has(e) && !guests.includes(e)) guests.push(e);
+  }
+  return guests.sort();
 }

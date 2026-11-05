@@ -74,6 +74,7 @@ class TestGuessGroupType:
         ("Chess", {"name": "Chess Club"}, "Not in the structure"),
         ("Chess", {"name": "Chess", "inClubs": True}, "Not in the structure"),
         ("Everyone", {"name": "Everyone", "isSharedDrive": True}, "Not in the structure"),
+        ("Residents", {"name": "Residents Circle", "isSharedDrive": True}, "Circle"),
         ("Full Community", {"name": "Moshav", "isSharedDrive": True}, "Circle"),
         ("Odd", {"name": "Odd stuff"}, "Not in the structure"),
         ("Odd", None, "Not in the structure"),
@@ -233,7 +234,8 @@ class TestStructureRows:
         "status": "placed",
         "parent": {"name": "Land", "url": "u2"},
         "children": [{"name": "Compost", "url": "u4"}, {"name": "Seeds", "url": None}],
-        "structureUrl": "doc",
+        "structureUrl": "sheet",
+        "structureDocUrl": "doc",
     }
 
     def text(self, paragraphs):
@@ -241,9 +243,12 @@ class TestStructureRows:
 
     def test_placed(self):
         rows = js("structureRows(place)", place=self.PLACE)
-        assert self.text(rows["parentLabel"]) == ["Parent Circle", "(Set in the Circle Structure)"]
-        hint = rows["parentLabel"][1]["runs"][0][1]
-        assert hint["link"] == "doc" and hint["small"]
+        assert self.text(rows["parentLabel"]) == [
+            "Parent Circle", "(Managed here. See Circle Structure.)"]
+        links = {text: style["link"] for text, style in rows["parentLabel"][1]["runs"]}
+        assert links["here"] == "sheet" and links["Circle Structure"] == "doc"
+        assert links["(Managed "] is None
+        assert all(style["small"] for _, style in rows["parentLabel"][1]["runs"])
         assert self.text(rows["parentValue"]) == ["Land"]
         assert rows["parentValue"][0]["runs"][0][1]["link"] == "u2"
         assert self.text(rows["subValue"]) == ["Compost", "Seeds"]
@@ -299,3 +304,9 @@ def test_columns_by_heading():
     row = ["Group", "Type", "Parent", " email list ", "", "Gather ID"]
     assert js("columnsByHeading(row, ['Group', 'Parent', 'Email list', 'Gather ID', 'Leader'])",
               row=row) == {"Group": 1, "Parent": 3, "Email list": 4, "Gather ID": 6, "Leader": 0}
+
+
+def test_guests():
+    assert js("guestsOf(m, everyone, ['admin@x.org'])",
+              m=["Bo@Gmail.com", "ann@x.org", "admin@x.org", "zed@y.org", "bo@gmail.com"],
+              everyone=["ANN@x.org"]) == ["bo@gmail.com", "zed@y.org"]

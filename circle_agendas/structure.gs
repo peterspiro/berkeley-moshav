@@ -71,7 +71,7 @@ const STRUCTURE_ROLES = ['Leader', 'Feedback Link', 'Facilitator', 'Secretary'];
 // changed is still read, and then laid out afresh (see layOutSheet).
 const STRUCTURE_LAYOUT = [
   ['group', 'Group'], ['parent', 'Parent'], ['email', 'Email list'], ['gather', 'Gather group'],
-  ['folder', 'Drive folder'], ['agenda', 'Agenda doc'],
+  ['guests', 'Guests'], ['folder', 'Drive folder'], ['agenda', 'Agenda doc'],
   ...STRUCTURE_ROLES.map((role, i) => ['role' + i, role]),
   ['type', 'Type'], ['problems', 'Problems'], ['id', 'Gather ID'], ['address', 'Address'],
 ];
@@ -315,6 +315,7 @@ function readGroups(sheet) {
       listAddress: value(r, 'email').toLowerCase(),
       gatherUrl: link(r, 'gather'), folderUrl: link(r, 'folder'), agendaUrl: link(r, 'agenda'),
       roles: STRUCTURE_ROLES.map(role => value(r, null, role)),
+      guests: value(r, 'guests').split(/\s+/).filter(Boolean),
     });
   });
   return groups;
@@ -364,6 +365,7 @@ function syncGroups() {
       folderUrl: 'https://drive.google.com/drive/folders/' + f.driveItemId,
       agendaUrl: doc ? 'https://docs.google.com/document/d/' + doc + '/edit' : '',
       roles: doc ? roleHolders(doc, old) : STRUCTURE_ROLES.map(() => ''),
+      guests: old ? old.guests : [],
     });
   }
   for (const g of existing) {
@@ -378,6 +380,7 @@ function syncGroups() {
     for (const [from, to] of renames) if (sameName(r.parent, from)) r.parent = to;
   }
   rows.sort((a, b) => a.name.localeCompare(b.name));
+  findGuests(rows);
 
   // A sheet laid out before is emptied and laid out afresh, and every cell
   // written.
@@ -400,9 +403,11 @@ function syncGroups() {
   sheet.getRange(2, SCOL.group, n, 1).setValues(rows.map(r => [r.name]));
   sheet.getRange(2, SCOL.email, n, 1).setRichTextValues(rows.map(r => [
     text(r.listAddress, r.listAddress ? 'mailto:' + r.listAddress : null)]));
-  sheet.getRange(2, SCOL.gather, n, 3).setRichTextValues(rows.map(r => [
-    text(r.gatherUrl ? 'Members' : '', r.gatherUrl), text('Documents', r.folderUrl),
-    text(r.agendaUrl ? 'Agenda' : '', r.agendaUrl)]));
+  sheet.getRange(2, SCOL.gather, n, 1).setRichTextValues(rows.map(r => [
+    text(r.gatherUrl ? 'Members' : '', r.gatherUrl)]));
+  sheet.getRange(2, SCOL.guests, n, 1).setValues(rows.map(r => [(r.guests || []).join('\n')]));
+  sheet.getRange(2, SCOL.folder, n, 2).setRichTextValues(rows.map(r => [
+    text('Documents', r.folderUrl), text(r.agendaUrl ? 'Agenda' : '', r.agendaUrl)]));
   sheet.getRange(2, SCOL.role0, n, STRUCTURE_ROLES.length).setNumberFormat('@')
     .setValues(rows.map(r => STRUCTURE_ROLES.map((_, i) => (r.roles || [])[i] || '')));
   sheet.getRange(2, SCOL.type, n, 2).setValues(rows.map(r => [r.type, r.problems]));
@@ -417,6 +422,34 @@ function syncGroups() {
   fitColumns(sheet);
   const added = rows.filter(r => r.isNew).map(r => r.name);
   if (added.length) console.log('Circle Structure: added ' + added.join(', ') + '.');
+}
+
+// Gives each row (but the root group's) its guests (see guestsOf): the
+// members of its Google Group who aren't in the root group's (Full
+// Community's), whose members are everyone in the community. So the root
+// group itself shows none. A group whose members can't be read keeps the
+// guests it had; if the root group's can't be, every group does.
+function findGuests(rows) {
+  const root = rows.find(isRootGroup);
+  let everyone = null;
+  try {
+    everyone = root ? groupMemberEmails(root.email) : null;
+  } catch (e) {
+    console.warn('Couldn\'t read ' + root.name + '\'s members, to find guests: ' + e.message);
+  }
+  const me = Session.getEffectiveUser().getEmail();
+  for (const r of rows) {
+    if (!everyone || r === root) {
+      r.guests = everyone ? [] : r.guests || [];
+      continue;
+    }
+    try {
+      r.guests = guestsOf(groupMemberEmails(r.email), everyone, [me]);
+    } catch (e) {
+      console.warn('Couldn\'t read ' + r.name + '\'s members, to find guests: ' + e.message);
+      r.guests = r.guests || [];
+    }
+  }
 }
 
 // Who holds each of STRUCTURE_ROLES, in order, from the Roles table of an
@@ -635,7 +668,8 @@ function applyPlacements(sheet, groups) {
 function structureContext(groups, parentOf, tree) {
   const byId = {};
   for (const g of groups) byId[g.id] = g;
-  return {groups, byId, parentOf, tree, structureUrl: structureSheetUrl()};
+  return {groups, byId, parentOf, tree, structureUrl: structureSheetUrl(),
+    structureDocUrl: structureDocUrl()};
 }
 
 // The sheet's groups and parents, for refreshing agenda docs outside
@@ -795,7 +829,8 @@ function placeOf(ctx, g) {
   if (!g || !inStructure(g)) status = 'out';
   else if (ctx.parentOf[g.id] === TOP) status = 'top';
   else if (!ctx.tree.placed[g.id]) status = 'unplaced';
-  const place = {status, parent: null, children: [], structureUrl: ctx.structureUrl};
+  const place = {status, parent: null, children: [], structureUrl: ctx.structureUrl,
+    structureDocUrl: ctx.structureDocUrl};
   if (status === 'out') return place;
   if (status === 'placed') place.parent = item(ctx.parentOf[g.id]);
   place.children = (ctx.tree.children[g.id] || []).map(item);
@@ -873,7 +908,8 @@ function writeStructureCell(cell, paragraphs) {
   if (paragraphs.length && paragraphs[0].bullet) placeholder.removeFromParent();
 }
 
-// The point size of the label cells' "(Set in the Circle Structure)".
+// The point size of the label cells' "(Managed here. See Circle
+// Structure.)".
 const STRUCTURE_HINT_SIZE = 8;
 
 // A paragraph of structureRows as runs for writeRuns.

@@ -327,8 +327,8 @@ and only its managers can move or delete them: the Coordinating Circle are
 the sheet's editors, which in a shared drive can't. It has three parts:
 
 - **The sheet**, "Circle Structure (editing)": a
-  row per circle and working group (clubs, everybody groups, and groups
-  whose type can't be told have none), keyed by its Gather group ID (in a
+  row per circle and working group (clubs, and groups whose type can't be
+  told, have none), keyed by its Gather group ID (in a
   hidden column, so a rename keeps the row). The Coordinating Circle
   (`coordinating-circle@berkeleymoshav.org`, `STRUCTURE_EDITORS`) can edit
   only its **Parent** column: everything else is protected, editable only by
@@ -341,7 +341,8 @@ the sheet's editors, which in a shared drive can't. It has three parts:
   order (`STRUCTURE_LAYOUT`): **Group**, **Parent**, **Email list** (a
   mailto link to the group's shortest address, a shorter alias if it has
   one; only as wide as its heading, cutting the address off), **Gather
-  group**, **Drive folder**, and **Agenda doc** (links), one column for
+  group** (a link), **Guests** (see below), **Drive folder** and **Agenda
+  doc** (links), one column for
   each role in the agenda doc's Roles table (**Leader**, **Feedback Link**,
   **Facilitator**, **Secretary**: who its Name dropdown shows, read
   hourly), **Type** (Circle or Working Group, from the name of the group's
@@ -349,8 +350,17 @@ the sheet's editors, which in a shared drive can't. It has three parts:
   and one ending in "Working Group", "Work Group", "Team", or "Pod" a
   working group's, perhaps followed by something in brackets, such as the
   group's acronym, as in "Development, Finance, & Legal Circle (DF&L)"; a
-  club, a group linked to a shared drive, and a group whose names don't
-  say are left out), and **Problems** (why a group isn't placed yet). The
+  club, and a group whose names don't say, are left out; an everybody
+  group, linked to a shared drive, goes by its shared drive's name), and
+  **Problems** (why a group isn't placed yet).
+  **Guests** lists, one to a line, the members of the group's Google
+  Group who aren't in Full Community's, read hourly. Guests are given
+  access by adding them to the group's Drive folder (as Content managers)
+  by hand, and `groups_drive_sync` puts them in the Google Group; Full
+  Community's members are everyone in the community, so anyone else in a
+  group is a guest. (Full Community's own row shows none; `admin@`, which
+  `groups_drive_sync` never removes, is left out; and a community member
+  who has left Full Community shows as a guest.) The
   columns but Email list are fitted to their text whenever it changes.
   Rows are read by their columns' headings, so when the columns change, the
   next run reads the sheet as it was and lays it out afresh (losing only
@@ -368,7 +378,8 @@ the sheet's editors, which in a shared drive can't. It has three parts:
 - **Each agenda doc's Parent Circle and Sub-Circles rows**, in About this
   circle. Parent Circle: the parent; Sub-Circles: each sub-circle and
   working group. Each is linked to its agenda doc. Each label cell has a small grey
-  "(Set in the Circle Structure)" line linking the sheet. The bullets are
+  "(Managed here. See Circle Structure.)" line, "here" linking the sheet
+  and "Circle Structure" the doc. The bullets are
   written with DocumentApp, not the Docs API, so nothing depends on reading
   the doc's positions just after writing it (see below). A doc can't lock
   part of itself, so the script puts the rows back when they're edited:

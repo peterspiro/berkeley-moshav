@@ -255,8 +255,7 @@ yet; `fillAboutForCircleDocs`, `rewriteStructureRowsInCircleDocs`, and
   decide (see below).
 
 **Circle Structure sheet: a Meeting times column** (not built)
-- Where: after Email list and Gather group, before Drive folder (and after
-  Guests, if that column is built).
+- Where: after Guests, before Drive folder.
 - Source: the group's calendar, the one its footer links (`calendarId`, as
   `parseCircleFooter` reads it), which `group_meetings` already treats as
   the place a group's meetings live. Groups without a calendar get a blank.
@@ -269,9 +268,13 @@ yet; `fillAboutForCircleDocs`, `rewriteStructureRowsInCircleDocs`, and
   (tested under Node), from each series' rule and start and end times, in
   `TIME_ZONE`:
   - weekly: "Tue 7:30–9 pm" (every other week: "Every other Tue …");
-  - monthly by weekday: "2nd & 4th Tue 7:30–9 pm", "Last Sun 4–5:30 pm";
+  - monthly by weekday: "2nd & 4th Tue 7:30–9 pm", "Last Sun of month
+    4–5:30 pm" (the month's last Sunday; spelled out so it isn't read as
+    the latest meeting);
   - several series: each on a line of its own, in the cell;
   - no series, only one-off meetings: "Next: Nov 12, 7–8:30 pm";
+  - past meetings never show: only series still running and meetings
+    still to come count;
   - a rule it can't put in words (by month day, yearly, `EXDATE`-heavy):
     the next date, as for a one-off.
   The cell links the group's calendar (the same link as the footer's).
