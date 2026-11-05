@@ -588,7 +588,10 @@ function writeStructureDocIfChanged(ctx) {
   const {placed, unplaced} = outline(ctx.tree);
   const entry = ({id, depth}) => ({depth, runs: structureDocRuns(ctx.byId[id])});
   const content = {placed: placed.map(entry), unplaced: unplaced.map(entry)};
-  const hash = shortHash(JSON.stringify({layout: STRUCTURE_DOC_LAYOUT, content}));
+  // The layout's settings count as what it shows, so changing one rewrites it.
+  const layout = [STRUCTURE_DOC_LAYOUT, STRUCTURE_TEXT_SIZE, STRUCTURE_LINKS_SIZE,
+    STRUCTURE_ITEM_SPACING];
+  const hash = shortHash(JSON.stringify({layout, content}));
   if (props.getProperty(STRUCTURE_DOC_HASH_KEY) === hash) return;
 
   const doc = DocumentApp.openById(docId);
