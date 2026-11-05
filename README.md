@@ -450,8 +450,10 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
     renames, links, types, groups that are gone, and the parents waiting in
     "Circle structure placements.json"), with a row for each circle and
     working group (everybody groups only if named as circles; no clubs),
-    who holds each role in its agenda doc's Roles table, and its guests
-    (members of its Google Group who aren't in Full Community's). On each edit, and every 10
+    who holds each role in its agenda doc's Roles table, its guests
+    (members of its Google Group who aren't in Full Community's), and when
+    its meetings are, from its calendar's repeating meetings ("2nd & 4th Tue
+    7–8:30 pm"). On each edit, and every 10
     minutes, it refuses a parent the rules don't allow (putting back the one
     from before, with a note on the cell saying why), updates the dropdowns
     and the Problems column, and rewrites the doc and the Parent Circle and
@@ -461,7 +463,8 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
   - **`circle_agendas/structure_rules.gs`** holds the Circle Structure's
     rules (a circle only under a circle, a working group under a circle or
     working group, no loops; a group's type from its Drive folder's name: "Circle", or "Working Group", "Work Group", "Team", or "Pod" for a working group),
-    the tree, and what an agenda doc's rows say, tested under Node.
+    the tree, what an agenda doc's rows say, and how the sheet words a
+    group's meeting times, tested under Node.
   - **`circle_agendas/build_template.gs`** builds an agenda doc from a
     blank doc, entirely from code (so it depends on no other document):
     each circle's doc, and a preview, rebuilt in place, for trying changes.

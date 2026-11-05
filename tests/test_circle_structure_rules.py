@@ -310,3 +310,52 @@ def test_guests():
     assert js("guestsOf(m, everyone, ['admin@x.org'])",
               m=["Bo@Gmail.com", "ann@x.org", "admin@x.org", "zed@y.org", "bo@gmail.com"],
               everyone=["ANN@x.org"]) == ["bo@gmail.com", "zed@y.org"]
+
+
+class TestMeetingTimes:
+    @pytest.mark.parametrize("rule, days", [
+        ("RRULE:FREQ=WEEKLY;BYDAY=TU", "Tue"),
+        ("RRULE:FREQ=WEEKLY", "Wed"),
+        ("RRULE:FREQ=WEEKLY;WKST=SU;BYDAY=TH,MO", "Mon & Thu"),
+        ("RRULE:FREQ=WEEKLY;BYDAY=MO,WE,FR;UNTIL=20270101T000000Z", "Mon, Wed & Fri"),
+        ("RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=TU", "Every other Tue"),
+        ("RRULE:FREQ=WEEKLY;INTERVAL=3;BYDAY=TU", "Every 3 weeks, Tue"),
+        ("RRULE:FREQ=MONTHLY;BYDAY=2TU,4TU", "2nd & 4th Tue"),
+        ("RRULE:FREQ=MONTHLY;BYDAY=-1SU", "Last Sun of month"),
+        ("RRULE:FREQ=MONTHLY;BYDAY=-1SU,1SU", "1st & last Sun of month"),
+        ("RRULE:FREQ=MONTHLY;BYDAY=TU;BYSETPOS=3", "3rd Tue"),
+        ("RRULE:FREQ=MONTHLY;BYMONTHDAY=15", "15th of month"),
+        ("RRULE:FREQ=DAILY", "Daily"),
+        ("RRULE:FREQ=MONTHLY;BYDAY=2TU,4WE", None),
+        ("RRULE:FREQ=MONTHLY;INTERVAL=2;BYDAY=2TU", None),
+        ("RRULE:FREQ=YEARLY", None),
+        ("RRULE:FREQ=WEEKLY;BYMONTH=6;BYDAY=TU", None),
+        (None, None),
+    ])
+    def test_rule_days(self, rule, days):
+        assert js("ruleDays(rule, 3)", rule=rule) == days
+
+    @pytest.mark.parametrize("start, end, text", [
+        (1170, 1260, "7:30–9 pm"), (660, 750, "11 am–12:30 pm"), (1140, 1200, "7–8 pm"),
+        (540, 600, "9–10 am"), (720, 780, "12–1 pm")])
+    def test_clock_range(self, start, end, text):
+        assert js("clockRange(s, e)", s=start, e=end) == text
+
+    def test_series_in_order_and_fallback(self):
+        series = [
+            {"rule": "RRULE:FREQ=MONTHLY;BYDAY=-1SU", "weekday": 0, "start": 960, "end": 1050,
+             "next": {"date": "2026-11-29", "start": 960, "end": 1050}},
+            {"rule": "RRULE:FREQ=WEEKLY;BYDAY=TU", "weekday": 2, "start": 1170, "end": 1260,
+             "next": {"date": "2026-11-10", "start": 1170, "end": 1260}},
+            {"rule": "RRULE:FREQ=YEARLY", "weekday": 4, "start": 1140, "end": 1230,
+             "next": {"date": "2026-11-12", "start": 1140, "end": 1230}},
+        ]
+        assert js("meetingTimesText(s, o)", s=series, o=[{"date": "2026-11-06", "start": 600,
+                                                          "end": 660}]) == (
+            "Tue 7:30–9 pm\nNext: Nov 12, 7–8:30 pm\nLast Sun of month 4–5:30 pm")
+
+    def test_one_offs_only_when_no_series(self):
+        o = [{"date": "2026-12-01", "start": 1140, "end": 1200},
+             {"date": "2026-11-12", "start": 1140, "end": 1230}]
+        assert js("meetingTimesText([], o)", o=o) == "Next: Nov 12, 7–8:30 pm"
+        assert js("meetingTimesText([], [])") == ""

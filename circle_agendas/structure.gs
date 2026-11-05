@@ -71,7 +71,7 @@ const STRUCTURE_ROLES = ['Leader', 'Feedback Link', 'Facilitator', 'Secretary'];
 // changed is still read, and then laid out afresh (see layOutSheet).
 const STRUCTURE_LAYOUT = [
   ['group', 'Group'], ['parent', 'Parent'], ['email', 'Email list'], ['gather', 'Gather group'],
-  ['guests', 'Guests'], ['folder', 'Drive folder'], ['agenda', 'Agenda doc'],
+  ['guests', 'Guests'], ['meetings', 'Meeting times'], ['folder', 'Drive folder'], ['agenda', 'Agenda doc'],
   ...STRUCTURE_ROLES.map((role, i) => ['role' + i, role]),
   ['type', 'Type'], ['problems', 'Problems'], ['id', 'Gather ID'], ['address', 'Address'],
 ];
@@ -316,6 +316,7 @@ function readGroups(sheet) {
       gatherUrl: link(r, 'gather'), folderUrl: link(r, 'folder'), agendaUrl: link(r, 'agenda'),
       roles: STRUCTURE_ROLES.map(role => value(r, null, role)),
       guests: value(r, 'guests').split(/\s+/).filter(Boolean),
+      meetings: value(r, 'meetings'), calendarUrl: link(r, 'meetings'),
     });
   });
   return groups;
@@ -366,6 +367,7 @@ function syncGroups() {
       agendaUrl: doc ? 'https://docs.google.com/document/d/' + doc + '/edit' : '',
       roles: doc ? roleHolders(doc, old) : STRUCTURE_ROLES.map(() => ''),
       guests: old ? old.guests : [],
+      ...meetingTimesCell(f.calendarId, old),
     });
   }
   for (const g of existing) {
@@ -406,6 +408,8 @@ function syncGroups() {
   sheet.getRange(2, SCOL.gather, n, 1).setRichTextValues(rows.map(r => [
     text(r.gatherUrl ? 'Members' : '', r.gatherUrl)]));
   sheet.getRange(2, SCOL.guests, n, 1).setValues(rows.map(r => [(r.guests || []).join('\n')]));
+  sheet.getRange(2, SCOL.meetings, n, 1).setRichTextValues(rows.map(r => [
+    text(r.meetings, r.calendarUrl)]));
   sheet.getRange(2, SCOL.folder, n, 2).setRichTextValues(rows.map(r => [
     text('Documents', r.folderUrl), text(r.agendaUrl ? 'Agenda' : '', r.agendaUrl)]));
   sheet.getRange(2, SCOL.role0, n, STRUCTURE_ROLES.length).setNumberFormat('@')
@@ -422,6 +426,67 @@ function syncGroups() {
   fitColumns(sheet);
   const added = rows.filter(r => r.isNew).map(r => r.name);
   if (added.length) console.log('Circle Structure: added ' + added.join(', ') + '.');
+}
+
+// How many weeks ahead the Meeting times column looks for meetings: far
+// enough for a monthly one.
+const MEETING_TIMES_WEEKS = 8;
+
+// A row's Meeting times cell, from the group's calendar (calendarId, from
+// its footer; or none): {meetings, its text (see meetingTimesText, "None
+// scheduled" if there's nothing to come), calendarUrl, which it links}. If
+// the calendar can't be read, what the row (old, or none) said before.
+function meetingTimesCell(calendarId, old) {
+  if (!calendarId) return {meetings: '', calendarUrl: ''};
+  try {
+    return {meetings: meetingTimesOf(calendarId) || 'None scheduled',
+      calendarUrl: calendarUrl(calendarId)};
+  } catch (e) {
+    console.warn('Couldn\'t read calendar ' + calendarId + ', for its meeting times: ' + e.message);
+    return old ? {meetings: old.meetings, calendarUrl: old.calendarUrl} : {meetings: '', calendarUrl: ''};
+  }
+}
+
+// meetingTimesText for a calendar's timed meetings in the next
+// MEETING_TIMES_WEEKS: a repeating one described by its series' rule and
+// usual times (so a meeting moved for one week changes nothing), each
+// other one by its own.
+function meetingTimesOf(calendarId) {
+  const now = new Date();
+  const resp = Calendar.Events.list(calendarId, {
+    timeMin: now.toISOString(),
+    timeMax: new Date(now.getTime() + MEETING_TIMES_WEEKS * 7 * 86400000).toISOString(),
+    singleEvents: true, orderBy: 'startTime', maxResults: 250,
+  });
+  const nextOf = {};
+  const oneOffs = [];
+  for (const e of resp.items || []) {
+    if (e.status === 'cancelled' || !e.start || !e.start.dateTime) continue;
+    if (!e.recurringEventId) oneOffs.push(localTimes(e));
+    else if (!nextOf[e.recurringEventId]) nextOf[e.recurringEventId] = e;
+  }
+  const series = Object.keys(nextOf).map(id => {
+    const next = localTimes(nextOf[id]);
+    let master = null;
+    try {
+      master = Calendar.Events.get(calendarId, id);
+    } catch (e) {
+      // Described by its next meeting alone.
+    }
+    const rule = master && (master.recurrence || []).find(r => /^RRULE:/i.test(r));
+    const usual = rule && master.start && master.start.dateTime ? localTimes(master) : next;
+    return {rule: rule || null, weekday: usual.weekday, start: usual.start, end: usual.end, next};
+  });
+  return meetingTimesText(series, oneOffs);
+}
+
+// An event's {date, weekday, start, end}, as meetingTimesText takes them,
+// in TIME_ZONE.
+function localTimes(event) {
+  const at = (when, pattern) => Utilities.formatDate(new Date(when.dateTime), TIME_ZONE, pattern);
+  const minutes = when => Number(at(when, 'H')) * 60 + Number(at(when, 'm'));
+  return {date: at(event.start, 'yyyy-MM-dd'), weekday: Number(at(event.start, 'u')) % 7,
+    start: minutes(event.start), end: minutes(event.end)};
 }
 
 // Gives each row (but the root group's) its guests (see guestsOf): the

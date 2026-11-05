@@ -361,3 +361,122 @@ function guestsOf(members, everyone, leaveOut) {
   }
   return guests.sort();
 }
+
+// ── Meeting times ────────────────────────────────────────────────────────────
+
+const WEEKDAY_CODES = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
+// (WEEKDAYS and MONTH_NAMES are agenda_rules.gs'.)
+
+// What the sheet's Meeting times cell says about a group's meetings still
+// to come (none past): a line for each repeating meeting, in the order of
+// their next occurrences, saying when it usually is ("Tue 7:30–9 pm",
+// "2nd & 4th Tue 7–8:30 pm", "Last Sun of month 4–5:30 pm"), or, for a
+// rule it can't put in words, when it next is ("Next: Nov 12, 7–8:30 pm");
+// or, with no repeating meetings, when the next one-off is; or '' if
+// there's nothing to come. series: [{rule (its RRULE line, or null),
+// weekday, start, end (its usual times), next}]; oneOffs: [{date, start,
+// end}]; next the same, for its next occurrence. A date is 'yyyy-MM-dd',
+// a weekday 0 (Sunday) to 6, a time minutes since midnight, all in the
+// community's time zone.
+function meetingTimesText(series, oneOffs) {
+  const byDate = (a, b) => (a.date + clockKey(a.start)).localeCompare(b.date + clockKey(b.start));
+  const lines = [];
+  const sorted = (series || []).slice().sort((a, b) => byDate(a.next, b.next));
+  for (const s of sorted) {
+    const days = ruleDays(s.rule, s.weekday);
+    const line = days ? days + ' ' + clockRange(s.start, s.end) : nextMeetingText(s.next);
+    if (!lines.includes(line)) lines.push(line);
+  }
+  if (!lines.length && (oneOffs || []).length) {
+    lines.push(nextMeetingText((oneOffs || []).slice().sort(byDate)[0]));
+  }
+  return lines.join('\n');
+}
+
+function clockKey(minutes) {
+  return String(minutes).padStart(4, '0');
+}
+
+// "Next: Nov 12, 7–8:30 pm".
+function nextMeetingText(m) {
+  const [, month, day] = m.date.split('-').map(Number);
+  return 'Next: ' + MONTH_NAMES[month - 1] + ' ' + day + ', ' + clockRange(m.start, m.end);
+}
+
+// "7:30–9 pm", "11 am–12:30 pm", "7–8 pm", from minutes since midnight.
+function clockRange(start, end) {
+  const part = minutes => {
+    const m = ((minutes % 1440) + 1440) % 1440;
+    const h = (Math.floor(m / 60) + 11) % 12 + 1;
+    return {text: m % 60 ? h + ':' + String(m % 60).padStart(2, '0') : String(h),
+      meridiem: m < 720 ? 'am' : 'pm'};
+  };
+  const s = part(start);
+  const e = part(end);
+  return s.meridiem === e.meridiem ? s.text + '–' + e.text + ' ' + e.meridiem
+    : s.text + ' ' + s.meridiem + '–' + e.text + ' ' + e.meridiem;
+}
+
+// The days a repeating meeting's rule (an RRULE line) is on, in words
+// ("Tue", "Mon & Thu", "Every other Tue", "2nd & 4th Tue", "Last Sun of
+// month", "15th of month", "Daily"), weekday being its first meeting's;
+// or null for a rule this can't put in words.
+function ruleDays(rule, weekday) {
+  if (!rule) return null;
+  const parts = {};
+  for (const p of String(rule).replace(/^RRULE:/i, '').split(';')) {
+    const [k, v] = p.split('=');
+    if (k) parts[k.trim().toUpperCase()] = String(v || '').trim().toUpperCase();
+  }
+  const known = ['FREQ', 'INTERVAL', 'BYDAY', 'BYSETPOS', 'BYMONTHDAY', 'UNTIL', 'COUNT', 'WKST'];
+  if (Object.keys(parts).some(k => !known.includes(k))) return null;
+  const interval = Number(parts.INTERVAL || 1);
+  const list = words => words.length < 3 ? words.join(' & ')
+    : words.slice(0, -1).join(', ') + ' & ' + words[words.length - 1];
+  const byDay = parts.BYDAY ? parts.BYDAY.split(',') : [];
+  if (parts.FREQ === 'DAILY' && !byDay.length && !parts.BYMONTHDAY && !parts.BYSETPOS) {
+    return interval === 1 ? 'Daily' : interval === 2 ? 'Every other day' : null;
+  }
+  if (parts.FREQ === 'WEEKLY' && !parts.BYMONTHDAY && !parts.BYSETPOS) {
+    const codes = byDay.length ? byDay : [WEEKDAY_CODES[weekday]];
+    const idx = codes.map(c => WEEKDAY_CODES.indexOf(c));
+    if (idx.some(i => i < 0)) return null;
+    const days = list(idx.sort((a, b) => a - b).map(i => WEEKDAYS[i]));
+    if (interval === 1) return days;
+    if (interval === 2) return 'Every other ' + days;
+    return 'Every ' + interval + ' weeks, ' + days;
+  }
+  if (parts.FREQ !== 'MONTHLY' || interval !== 1) return null;
+  if (parts.BYMONTHDAY && !byDay.length && !parts.BYSETPOS) {
+    const days = parts.BYMONTHDAY.split(',').map(Number);
+    if (days.some(d => !(d >= 1 && d <= 31))) return null;
+    return list(days.map(ordinal)) + ' of month';
+  }
+  if (parts.BYMONTHDAY || !byDay.length) return null;
+  // "2TU,4TU", or "TU" with BYSETPOS=2 (or 2,4).
+  let ords = [];
+  let code = null;
+  for (const d of byDay) {
+    const m = /^([+-]?\d)?(SU|MO|TU|WE|TH|FR|SA)$/.exec(d);
+    if (!m || (code && code !== m[2])) return null;
+    code = m[2];
+    if (m[1]) ords.push(Number(m[1]));
+  }
+  if (parts.BYSETPOS) {
+    if (ords.length || byDay.length !== 1) return null;
+    ords = parts.BYSETPOS.split(',').map(Number);
+  }
+  if (!ords.length || ords.some(n => !(n >= 1 && n <= 5) && n !== -1)) return null;
+  ords = ords.filter((n, i) => ords.indexOf(n) === i)
+    .sort((a, b) => (a === -1 ? 9 : a) - (b === -1 ? 9 : b));
+  const words = ords.map(n => n === -1 ? 'last' : ordinal(n));
+  const text = list(words) + ' ' + WEEKDAYS[WEEKDAY_CODES.indexOf(code)];
+  return text.charAt(0).toUpperCase() + text.slice(1) + (ords.includes(-1) ? ' of month' : '');
+}
+
+// "1st", "2nd", "3rd", "4th", "21st".
+function ordinal(n) {
+  const tens = n % 100;
+  const suffix = tens >= 11 && tens <= 13 ? 'th' : ({1: 'st', 2: 'nd', 3: 'rd'})[n % 10] || 'th';
+  return n + suffix;
+}
