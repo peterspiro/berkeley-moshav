@@ -615,8 +615,7 @@ function writeStructureDocIfChanged(ctx) {
   // to, which bulletStructureDoc makes a bulleted list.
   const list = items => {
     for (const item of items) {
-      const para = body.appendParagraph('').setHeading(DocumentApp.ParagraphHeading.NORMAL)
-        .setSpacingAfter(STRUCTURE_ITEM_SPACING);
+      const para = body.appendParagraph('').setHeading(DocumentApp.ParagraphHeading.NORMAL);
       writeRuns(para, [['\t'.repeat(item.depth), null], ...item.runs]);
     }
   };
@@ -634,7 +633,8 @@ function writeStructureDocIfChanged(ctx) {
 // Makes each run of plain paragraphs in the doc (its lists' items, each
 // starting with a tab per level it's nested to) a bulleted list, with
 // bullets at every level (DocumentApp can only number nested levels), and
-// gives each item its level's narrow indents (listIndents).
+// gives each item its level's narrow indents (listIndents) and
+// STRUCTURE_ITEM_SPACING below it.
 function bulletStructureDoc(docId) {
   const paragraphs = () => Docs.Documents.get(docId).body.content.filter(se => se.paragraph);
   const runs = [];
@@ -653,9 +653,15 @@ function bulletStructureDoc(docId) {
   // Each request removes its items' tabs, so the last run goes first.
   Docs.Documents.batchUpdate({requests: runs.reverse().map(range => ({createParagraphBullets: {
     range, bulletPreset: 'BULLET_DISC_CIRCLE_SQUARE'}}))}, docId);
-  const indents = paragraphs().filter(se => se.paragraph.bullet).map(se =>
-    listIndentRequest({startIndex: se.startIndex, endIndex: se.endIndex},
-      se.paragraph.bullet.nestingLevel || 0));
+  // Bulleting resets a paragraph's spacing, so it's set here, after.
+  const indents = paragraphs().filter(se => se.paragraph.bullet).map(se => {
+    const request = listIndentRequest({startIndex: se.startIndex, endIndex: se.endIndex},
+      se.paragraph.bullet.nestingLevel || 0);
+    const style = request.updateParagraphStyle;
+    style.paragraphStyle.spaceBelow = {magnitude: STRUCTURE_ITEM_SPACING, unit: 'PT'};
+    style.fields += ',spaceBelow';
+    return request;
+  });
   if (indents.length) Docs.Documents.batchUpdate({requests: indents}, docId);
 }
 
