@@ -275,7 +275,8 @@ function parentCellText(parent, groupsById) {
 // of paragraphs, {bullet, runs}, a run [text, {bold, muted, small, link}].
 // place: {status: 'placed' | 'top' | 'unplaced' | 'out', parent: {name,
 // url, next} (for 'placed'), children: [{name, url, next}],
-// structureUrl}, next a group's next meeting, {text, url}, or null.
+// structureUrl (the sheet, where it's set)}, next a group's next meeting,
+// {text, url}, or null.
 const STRUCTURE_HINT = '(Set in the Circle Structure)';
 function structureRows(place) {
   const hint = label => [{runs: [[label, {bold: true}]]},

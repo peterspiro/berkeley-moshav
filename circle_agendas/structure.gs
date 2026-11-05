@@ -192,6 +192,13 @@ function structureSheet() {
   return sheet;
 }
 
+// The sheet, where a group's parent is set: what an agenda doc's "(Set in
+// the Circle Structure)" links.
+function structureSheetUrl() {
+  const id = PropertiesService.getScriptProperties().getProperty(STRUCTURE_SHEET_KEY);
+  return id ? 'https://docs.google.com/spreadsheets/d/' + id + '/edit' : null;
+}
+
 function structureDocUrl() {
   const id = PropertiesService.getScriptProperties().getProperty(STRUCTURE_DOC_KEY);
   return id ? 'https://docs.google.com/document/d/' + id + '/edit' : null;
@@ -315,7 +322,9 @@ function syncGroups() {
   const old = existing.slice();
   const text = (t, url) => SpreadsheetApp.newRichTextValue().setText(t || '').setLinkUrl(url || null).build();
   sheet.getRange(2, SCOL.group, n, 2).setValues(rows.map(r => [r.name, r.type]));
-  sheet.getRange(2, SCOL.problems, n, 2).setValues(rows.map(r => [r.problems, r.email]));
+  sheet.getRange(2, SCOL.problems, n, 1).setValues(rows.map(r => [r.problems]));
+  sheet.getRange(2, SCOL.email, n, 1).setRichTextValues(rows.map(r => [
+    text(r.email, r.email ? 'mailto:' + r.email : null)]));
   sheet.getRange(2, SCOL.gather, n, 3).setRichTextValues(rows.map(r => [
     text(r.gatherUrl ? 'Members' : '', r.gatherUrl), text('Documents', r.folderUrl),
     text(r.agendaUrl ? 'Agenda' : '', r.agendaUrl)]));
@@ -520,7 +529,7 @@ function structureContext(groups, parentOf, tree) {
   for (const g of groups) byId[g.id] = g;
   const circles = {};
   for (const c of loadCircles()) circles[c.email] = c;
-  return {groups, byId, parentOf, tree, circles, structureUrl: structureDocUrl(), meetings: {}};
+  return {groups, byId, parentOf, tree, circles, structureUrl: structureSheetUrl(), meetings: {}};
 }
 
 // The sheet's groups and parents, for refreshing agenda docs outside
@@ -721,7 +730,6 @@ function refreshStructureRows(docId, ctx, g) {
   if (!found) return false;
   const table = found.table;
   let wrote = false;
-  let bullets = false;
   for (let r = 0; r < table.getNumRows(); r++) {
     const label = aboutLabel(table.getCell(r, 0).getText());
     const parts = label === 'Parent Circle' ? [want.parentLabel, want.parentValue]
@@ -730,23 +738,43 @@ function refreshStructureRows(docId, ctx, g) {
     parts.forEach((paragraphs, c) => {
       const cell = table.getCell(r, c);
       if (paragraphsSignature(cellParagraphs(cell)) === paragraphsSignature(paragraphs)) return;
-      resetCell(cell);
-      writeCell(cell, paragraphs.map(p => docRuns(p)));
+      writeStructureCell(cell, paragraphs);
       if (c === 0) alignCell(cell, DocumentApp.HorizontalAlignment.RIGHT);
-      if (paragraphs.some(p => p.bullet)) bullets = true;
       wrote = true;
     });
   }
   doc.saveAndClose();
-  if (bullets) replaceTokens(docId);
   return wrote;
+}
+
+// Writes structureRows' paragraphs into a cell, a bullet's as a bulleted
+// list item with the outer level's indents (listIndents), all with
+// DocumentApp: making bullets with the Docs API (replaceTokens) once
+// mangled other parts of a doc, when it read the doc's positions from a
+// version older than the one DocumentApp had just saved.
+function writeStructureCell(cell, paragraphs) {
+  resetCell(cell);
+  const placeholder = cell.getChild(0).asParagraph();
+  paragraphs.forEach((p, i) => {
+    let para;
+    if (p.bullet) {
+      para = cell.appendListItem('');
+      para.setGlyphType(DocumentApp.GlyphType.BULLET);
+      const {firstLine, start} = listIndents(0);
+      para.setIndentFirstLine(firstLine).setIndentStart(start);
+    } else {
+      para = i === 0 ? placeholder : cell.appendParagraph('');
+    }
+    writeRuns(para, docRuns(p));
+  });
+  // A cell starting with a list keeps no empty paragraph above it.
+  if (paragraphs.length && paragraphs[0].bullet) placeholder.removeFromParent();
 }
 
 // The point size of the label cells' "(Set in the Circle Structure)".
 const STRUCTURE_HINT_SIZE = 8;
 
-// A paragraph of structureRows as runs for writeCell: a bullet's paragraph
-// starts with the token replaceTokens makes a bullet.
+// A paragraph of structureRows as runs for writeRuns.
 function docRuns(p) {
   const runs = p.runs.map(([text, style]) => {
     const attrs = {};
@@ -756,7 +784,7 @@ function docRuns(p) {
     if (style.link) attrs[A.LINK_URL] = style.link;
     return [text, Object.keys(attrs).length ? attrs : null];
   });
-  return p.bullet ? [[token('bullet')], ...runs] : runs;
+  return runs;
 }
 
 // A table cell's paragraphs as structureRows gives them ({runs}, each run

@@ -736,3 +736,45 @@ function setAgendaState(docId, state) {
   Drive.Files.update({properties: {[AGENDA_KEYS.state]: state}}, docId, null,
     {supportsAllDrives: true});
 }
+
+// Run from the editor: puts back the Roles table's role labels (column 1)
+// in every built doc where a bulleted list has got into one. (An earlier
+// version, making the Circle Structure's Sub-Circles bullets with the Docs
+// API from an out-of-date read of the doc, deleted 8 characters of some of
+// those cells and bulleted them.) Logs each doc it changed.
+function repairRoleLabelsInCircleDocs() {
+  for (const file of builtCircleDocs()) {
+    try {
+      const fixed = repairRoleLabels(file.id);
+      if (fixed.length) {
+        logLink('Put back ' + fixed.join(', ') + ' in the Roles of ' + file.name + ':',
+          'https://docs.google.com/document/d/' + file.id + '/edit');
+      }
+    } catch (e) {
+      console.error('Couldn\'t check the Roles of ' + file.name + ': ' + e.message);
+    }
+  }
+}
+
+// Rewrites each role label cell of a doc's Roles table that holds a list
+// item, as rolesTable writes it (the table's rows are ROLE_LABELS, in
+// order). Returns the names of the roles put back.
+function repairRoleLabels(docId) {
+  const doc = DocumentApp.openById(docId);
+  const found = findRow(firstTabBody(doc), text => text.startsWith('Circle Roles'));
+  if (!found || found.table.getNumRows() !== ROLE_LABELS.length + 1) return [];
+  const fixed = [];
+  ROLE_LABELS.forEach(([name, what], i) => {
+    const cell = found.table.getCell(i + 1, 0);
+    let listed = false;
+    for (let k = 0; k < cell.getNumChildren(); k++) {
+      if (cell.getChild(k).getType() === DocumentApp.ElementType.LIST_ITEM) listed = true;
+    }
+    if (!listed) return;
+    resetCell(cell);
+    writeCell(cell, [roleLabelRuns(name, what)]);
+    fixed.push(name);
+  });
+  doc.saveAndClose();
+  return fixed;
+}

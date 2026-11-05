@@ -291,6 +291,16 @@ unlabelled copy of one such doc, in your My Drive, and logs its link
 (delete the copy after). It can also be run by hand, to build waiting docs at once; the
 log links each doc it built.
 
+The Docs API part of building (`replaceTokens`) reads the doc's positions
+and changes the doc at them. A read just after DocumentApp has saved the doc
+can return an older version, whose positions are wrong for the new one, so
+the changes are made only to the version read, and if the doc has moved on,
+it's read again. (Before that, writing the Circle Structure's Sub-Circles
+bullets this way deleted 8 characters of some docs' Roles labels, and
+bulleted them. **`repairRoleLabelsInCircleDocs`**, run in the editor, puts
+back each role label that has a bullet in it, in every built doc, and logs
+the docs it changed.)
+
 Building only ever adds to a doc, so it's done only to one that's still
 empty: if someone has written in a doc before it's built, it's labelled
 "not empty" and left as it is, and the log says so. A doc is labelled
@@ -334,7 +344,7 @@ the sheet's editors, which in a shared drive can't. It has three parts:
   group's acronym, as in "Development, Finance, & Legal Circle (DF&L)"; a
   club, a group linked to a shared drive, and a group whose names don't
   say are "Not in the structure"), **Problems** (why a group isn't in the structure, or isn't
-  placed yet), the email list, and links to the Gather group, Drive
+  placed yet), the email list (a mailto link), and links to the Gather group, Drive
   folder, and agenda doc.
 - **The doc**, "Circle Structure", which anyone
   with the link can view (or, if the domain doesn't allow that, anyone in
@@ -351,7 +361,9 @@ the sheet's editors, which in a shared drive can't. It has three parts:
   whose link opens it on the all-events calendar (as each group's own
   calendar may not be shared with the reader; the link is to the event's
   copy there, which has the same ID). Each label cell has a small grey
-  "(Set in the Circle Structure)" line linking the doc. A doc can't lock
+  "(Set in the Circle Structure)" line linking the sheet. The bullets are
+  written with DocumentApp, not the Docs API, so nothing depends on reading
+  the doc's positions just after writing it (see below). A doc can't lock
   part of itself, so the script puts the rows back when they're edited:
   every 10 minutes, in each doc changed since (as for the Term ends dates),
   it writes them if they don't say what they should.
