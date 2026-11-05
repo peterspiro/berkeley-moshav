@@ -268,7 +268,7 @@ function readGroups(sheet) {
 function syncGroups() {
   const sheet = structureSheet();
   const {groups: footers, complete} = readGroupFooters();
-  const docs = agendaDocsByFolder();
+  const docs = agendaDocsByGroup(footers);
   const existing = readGroups(sheet);
   const byId = {};
   for (const g of existing) byId[g.id] = g;
@@ -281,7 +281,7 @@ function syncGroups() {
     const {type, reason} = guessGroupType(f.name, driveItemInfo(f.driveItemId));
     const old = byId[f.gatherId];
     if (old && old.name !== f.name) renames.push([old.name, f.name]);
-    const doc = docs[f.driveItemId] || docs[f.email];
+    const doc = docs[f.gatherId];
     rows.push({
       id: f.gatherId, name: f.name, type, problems: type === TYPE_OUT ? 'Not in the structure: ' + reason
         : (old ? old.problems : ''),
@@ -358,16 +358,36 @@ function driveItemInfo(id) {
   }
 }
 
-// The circle agenda docs (built, or waiting to be), by the ID of the
-// Drive item they're in and by their labelled address: {key: doc ID}.
-function agendaDocsByFolder() {
+// The circle agenda docs (built, or waiting to be), by their groups' Gather
+// group IDs: {id: doc ID}. A doc's group is the one with its labelled
+// address, or else the one whose Drive folder holds it most closely (see
+// nearestGroupFolder).
+function agendaDocsByGroup(footers) {
+  const byEmail = {};
+  for (const f of footers) if (f.gatherId && f.driveItemId) byEmail[f.email] = f;
+  const folders = Object.values(byEmail).map(f => f.driveItemId);
   const docs = {};
   for (const file of agendaDocFiles()) {
-    for (const p of file.parents || []) docs[p] = docs[p] || file.id;
     const email = ((file.properties || {})[AGENDA_KEYS.group] || '').toLowerCase();
-    if (email) docs[email] = docs[email] || file.id;
+    let f = byEmail[email];
+    if (!f) {
+      const folder = nearestGroupFolder(file.id, folders);
+      f = folder ? Object.values(byEmail).find(x => x.driveItemId === folder) : null;
+    }
+    if (f && !docs[f.gatherId]) docs[f.gatherId] = file.id;
   }
   return docs;
+}
+
+// Of the folders (groups' Drive items), the one holding a doc most closely,
+// or null. The Shared Drive itself (which an everybody group, such as Full
+// Community, is linked to) never counts, as it holds every group's folder.
+function nearestGroupFolder(docId, folders) {
+  for (const id of driveAncestors(docId)) {
+    if (id === SHARED_DRIVE_ID) continue;
+    if (folders.includes(id)) return id;
+  }
+  return null;
 }
 
 function agendaDocFiles() {
@@ -637,14 +657,16 @@ function nextMeetingOf(ctx, g) {
 }
 
 // The group a circle agenda doc belongs to: by the doc linked in the sheet,
-// or else its labelled address, or else the Drive item it's in; or null.
+// or else its labelled address, or else the group whose Drive folder holds
+// it most closely (see nearestGroupFolder); or null.
 function groupOfDoc(ctx, docId, email) {
   const url = g => docIdOf(g.agendaUrl) === docId;
   let g = ctx.groups.find(url);
   if (!g && email) g = ctx.groups.find(x => x.email === email.toLowerCase());
   if (!g) {
-    const ids = driveAncestors(docId);
-    g = ctx.groups.find(x => ids.includes((/folders\/([\w-]+)/.exec(x.folderUrl) || [])[1]));
+    const folderOf = x => (/folders\/([\w-]+)/.exec(x.folderUrl) || [])[1];
+    const folder = nearestGroupFolder(docId, ctx.groups.map(folderOf).filter(Boolean));
+    g = folder ? ctx.groups.find(x => folderOf(x) === folder) : null;
   }
   return g || null;
 }
