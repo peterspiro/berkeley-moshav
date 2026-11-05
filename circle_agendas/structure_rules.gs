@@ -283,7 +283,8 @@ function structureRows(place) {
   const small = link => ({muted: true, small: true, link: link || null});
   const hint = label => [{runs: [[label, {bold: true}]]}, {runs: [
     ['(Managed ', small()], ['here', small(place.structureUrl)], ['. See ', small()],
-    ['Circle Structure', small(place.structureDocUrl)], ['.)', small()]]}];
+    // (A no-break space, so the doc's name isn't split across lines.)
+    ['Circle\u00a0Structure', small(place.structureDocUrl)], ['.)', small()]]}];
   const note = text => [{runs: [[text, {muted: true}]]}];
   // A group's name, linked.
   const line = item => [[item.name, item.url ? {link: item.url} : {}]];
@@ -368,8 +369,9 @@ const WEEKDAY_CODES = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
 // (WEEKDAYS and MONTH_NAMES are agenda_rules.gs'.)
 
 // What the sheet's Meeting times cell says about a group's meetings still
-// to come (none past): a line for each repeating meeting, in the order of
-// their next occurrences, saying when it usually is ("Tue 7:30–9 pm",
+// to come (none past): a line for each repeating meeting, in alphabetical
+// order (numbers by value, so "1st Mon" comes before "3rd Mon", and before
+// "Next: ..." lines, which are in date order), saying when it usually is ("Tue 7:30–9 pm",
 // "2nd & 4th Tue 7–8:30 pm", "Last Sun of month 4–5:30 pm"), or, for a
 // rule it can't put in words, when it next is ("Next: Nov 12, 7–8:30 pm");
 // or, with no repeating meetings, when the next one-off is; or '' if
@@ -380,13 +382,16 @@ const WEEKDAY_CODES = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
 // community's time zone.
 function meetingTimesText(series, oneOffs) {
   const byDate = (a, b) => (a.date + clockKey(a.start)).localeCompare(b.date + clockKey(b.start));
-  const lines = [];
-  const sorted = (series || []).slice().sort((a, b) => byDate(a.next, b.next));
-  for (const s of sorted) {
+  const described = [];
+  const next = [];
+  for (const s of (series || []).slice().sort((a, b) => byDate(a.next, b.next))) {
     const days = ruleDays(s.rule, s.weekday);
-    const line = days ? days + ' ' + clockRange(s.start, s.end) : nextMeetingText(s.next);
-    if (!lines.includes(line)) lines.push(line);
+    const [list, line] = days ? [described, days + ' ' + clockRange(s.start, s.end)]
+      : [next, nextMeetingText(s.next)];
+    if (!list.includes(line)) list.push(line);
   }
+  described.sort((a, b) => a.localeCompare(b, 'en', {numeric: true, sensitivity: 'base'}));
+  const lines = [...described, ...next];
   if (!lines.length && (oneOffs || []).length) {
     lines.push(nextMeetingText((oneOffs || []).slice().sort(byDate)[0]));
   }
@@ -479,4 +484,21 @@ function ordinal(n) {
   const tens = n % 100;
   const suffix = tens >= 11 && tens <= 13 ? 'th' : ({1: 'st', 2: 'nd', 3: 'rd'})[n % 10] || 'th';
   return n + suffix;
+}
+
+// About how many pixels wide a column must be to show a heading (bold
+// Arial 10, Sheets' default, with the cell's padding), from Arial Bold's
+// glyph widths (per 1000 of the font size; 600 for a character not
+// listed).
+const ARIAL_BOLD_WIDTHS = Object.assign({' ': 278, '.': 278, '-': 333, '&': 722},
+  ...'abcdefghijklmnopqrstuvwxyz'.split('').map((ch, i) => ({[ch]: [556, 611, 556, 611, 556,
+    333, 611, 611, 278, 278, 556, 278, 889, 611, 611, 611, 611, 389, 556, 333, 611, 556, 778,
+    556, 556, 500][i]})),
+  ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map((ch, i) => ({[ch]: [722, 722, 722, 722, 667,
+    611, 778, 722, 278, 556, 722, 611, 833, 722, 778, 667, 778, 722, 667, 611, 722, 667, 944,
+    667, 667, 611][i]})));
+function headingWidth(text) {
+  const units = String(text || '').split('').reduce((sum, ch) => sum + (ARIAL_BOLD_WIDTHS[ch] || 600), 0);
+  // 10 pt is 13.33 px; and the cell's padding.
+  return Math.ceil(units / 1000 * 13.33) + 16;
 }

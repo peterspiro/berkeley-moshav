@@ -244,9 +244,9 @@ class TestStructureRows:
     def test_placed(self):
         rows = js("structureRows(place)", place=self.PLACE)
         assert self.text(rows["parentLabel"]) == [
-            "Parent Circle", "(Managed here. See Circle Structure.)"]
+            "Parent Circle", "(Managed here. See Circle\u00a0Structure.)"]
         links = {text: style["link"] for text, style in rows["parentLabel"][1]["runs"]}
-        assert links["here"] == "sheet" and links["Circle Structure"] == "doc"
+        assert links["here"] == "sheet" and links["Circle\u00a0Structure"] == "doc"
         assert links["(Managed "] is None
         assert all(style["small"] for _, style in rows["parentLabel"][1]["runs"])
         assert self.text(rows["parentValue"]) == ["Land"]
@@ -352,10 +352,33 @@ class TestMeetingTimes:
         ]
         assert js("meetingTimesText(s, o)", s=series, o=[{"date": "2026-11-06", "start": 600,
                                                           "end": 660}]) == (
-            "Tue 7:30–9 pm\nNext: Nov 12, 7–8:30 pm\nLast Sun of month 4–5:30 pm")
+            "Last Sun of month 4–5:30 pm\nTue 7:30–9 pm\nNext: Nov 12, 7–8:30 pm")
+
+    def test_sorted_by_text_numbers_by_value(self):
+        def s(rule, date):
+            return {"rule": rule, "weekday": 1, "start": 990, "end": 1080,
+                    "next": {"date": date, "start": 990, "end": 1080}}
+        series = [s("RRULE:FREQ=MONTHLY;BYDAY=3MO", "2026-11-16"),
+                  s("RRULE:FREQ=MONTHLY;BYDAY=10MO", "2026-11-01"),
+                  s("RRULE:FREQ=MONTHLY;BYDAY=1MO", "2026-12-07")]
+        series[1]["rule"] = "RRULE:FREQ=WEEKLY;BYDAY=MO"
+        assert js("meetingTimesText(s, [])", s=series) == (
+            "1st Mon 4:30–6 pm\n3rd Mon 4:30–6 pm\nMon 4:30–6 pm")
 
     def test_one_offs_only_when_no_series(self):
         o = [{"date": "2026-12-01", "start": 1140, "end": 1200},
              {"date": "2026-11-12", "start": 1140, "end": 1230}]
         assert js("meetingTimesText([], o)", o=o) == "Next: Nov 12, 7–8:30 pm"
         assert js("meetingTimesText([], [])") == ""
+
+
+def test_heading_width_grows_with_text():
+    widths = js("['Guests', 'Email list', 'Feedback Link', 'Drive folder'].map(headingWidth)")
+    assert widths[0] < widths[1] < widths[3] < widths[2]
+    assert 95 <= widths[2] <= 125
+
+
+def test_all_events_calendar_matches_python():
+    from util.meeting_rooms import ALL_EVENTS_CALENDAR_ID
+    text = (PROJECT / "structure.gs").read_text()
+    assert f"'{ALL_EVENTS_CALENDAR_ID}'" in text

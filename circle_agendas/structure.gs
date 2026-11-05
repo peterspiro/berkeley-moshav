@@ -80,10 +80,19 @@ const SCOL = {};
 STRUCTURE_LAYOUT.forEach(([key], i) => { SCOL[key] = i + 1; });
 const STRUCTURE_HEADINGS = STRUCTURE_LAYOUT.map(([, heading]) => heading);
 const STRUCTURE_COLUMNS = STRUCTURE_HEADINGS.length;
-// The Email list column is only as wide as its heading (the addresses are
-// cut off at its edge; each is a link); the others fit their text (see
-// fitColumns).
-const EMAIL_LIST_WIDTH = 75;
+// The columns only as wide as their headings, their text cut off at their
+// edge (an Email list address is a link); the others fit their text and
+// heading (see fitColumns).
+const HEADING_WIDE_COLUMNS = ['email', 'guests'];
+// The community's calendar of every group's meetings (ALL_EVENTS_CALENDAR_ID
+// in util/meeting_rooms.py, and in group_meetings), which the Meeting times
+// cells link.
+const ALL_EVENTS_CALENDAR_ID =
+  'c_301c808f640b3a04f5344b1bbf266955d51fecaabd7835936b7591f9cff09222@group.calendar.google.com';
+function allEventsUrl() {
+  return 'https://calendar.google.com/calendar/embed?src=' +
+    encodeURIComponent(ALL_EVENTS_CALENDAR_ID) + '&ctz=' + encodeURIComponent(TIME_ZONE);
+}
 const PARENT_HELP = 'The circle it\'s under (for a working group, the circle or working group).';
 
 // ── Setting up ───────────────────────────────────────────────────────────────
@@ -171,7 +180,6 @@ function layOutSheet(sheet) {
   sheet.showColumns(1, sheet.getMaxColumns());
   sheet.getRange(1, 1, 1, STRUCTURE_COLUMNS).setValues([STRUCTURE_HEADINGS]).setFontWeight('bold');
   sheet.getRange(1, SCOL.parent).setNote(PARENT_HELP);
-  sheet.getRange(1, SCOL.email, rows, 1).setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP);
   sheet.hideColumns(SCOL.id, 2);
   protectStructureSheet(sheet);
   console.log('Circle Structure: laid the sheet\'s columns out afresh.');
@@ -401,6 +409,9 @@ function syncGroups() {
       .setDataValidation(null);
   }
   if (!n) return;
+  // Plain formatting, so no cell keeps a look (a link's blue, say) from
+  // what was there before.
+  sheet.getRange(2, 1, n, STRUCTURE_COLUMNS).clearFormat();
   const text = (t, url) => SpreadsheetApp.newRichTextValue().setText(t || '').setLinkUrl(url || null).build();
   sheet.getRange(2, SCOL.group, n, 1).setValues(rows.map(r => [r.name]));
   sheet.getRange(2, SCOL.email, n, 1).setRichTextValues(rows.map(r => [
@@ -434,13 +445,15 @@ const MEETING_TIMES_WEEKS = 8;
 
 // A row's Meeting times cell, from the group's calendar (calendarId, from
 // its footer; or none): {meetings, its text (see meetingTimesText, "None
-// scheduled" if there's nothing to come), calendarUrl, which it links}. If
+// scheduled", unlinked, if there's nothing to come), calendarUrl, which it
+// links: the all-events calendar (allEventsUrl)}. If
 // the calendar can't be read, what the row (old, or none) said before.
 function meetingTimesCell(calendarId, old) {
   if (!calendarId) return {meetings: '', calendarUrl: ''};
   try {
-    return {meetings: meetingTimesOf(calendarId) || 'None scheduled',
-      calendarUrl: calendarUrl(calendarId)};
+    const meetings = meetingTimesOf(calendarId);
+    return meetings ? {meetings, calendarUrl: allEventsUrl()}
+      : {meetings: 'None scheduled', calendarUrl: ''};
   } catch (e) {
     console.warn('Couldn\'t read calendar ' + calendarId + ', for its meeting times: ' + e.message);
     return old ? {meetings: old.meetings, calendarUrl: old.calendarUrl} : {meetings: '', calendarUrl: ''};
@@ -531,12 +544,27 @@ function roleHolders(docId, old) {
   }
 }
 
-// Fits each shown column's width to its text, but for the Email list
-// column, which is only as wide as its heading (EMAIL_LIST_WIDTH).
+// Fits each shown column's width to its text and its heading, but for
+// HEADING_WIDE_COLUMNS, which are only as wide as their headings, cutting
+// their text off. (Sheets has no lasting "fit to data" setting: its own
+// resizing, which this uses, sets a width once, and it leaves bold
+// headings cut off, so each column is made at least as wide as
+// headingWidth says its heading needs.)
 function fitColumns(sheet) {
-  sheet.autoResizeColumns(1, SCOL.email - 1);
-  sheet.autoResizeColumns(SCOL.email + 1, SCOL.id - SCOL.email - 1);
-  sheet.setColumnWidth(SCOL.email, EMAIL_LIST_WIDTH);
+  const narrow = HEADING_WIDE_COLUMNS.map(k => SCOL[k]);
+  for (let c = 1; c < SCOL.id; c++) {
+    if (!narrow.includes(c)) sheet.autoResizeColumn(c);
+  }
+  SpreadsheetApp.flush();
+  for (let c = 1; c < SCOL.id; c++) {
+    const heading = headingWidth(STRUCTURE_HEADINGS[c - 1]);
+    if (narrow.includes(c)) {
+      sheet.setColumnWidth(c, heading);
+      sheet.getRange(1, c, sheet.getMaxRows(), 1).setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP);
+    } else if (sheet.getColumnWidth(c) < heading) {
+      sheet.setColumnWidth(c, heading);
+    }
+  }
 }
 
 // What guessGroupType needs to know of a Drive item: {name, isSharedDrive,

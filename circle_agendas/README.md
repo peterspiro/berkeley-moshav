@@ -340,7 +340,7 @@ the sheet's editors, which in a shared drive can't. It has three parts:
   Full Community (`ROOT_GROUP_NAME`) is always at the top. The columns, in
   order (`STRUCTURE_LAYOUT`): **Group**, **Parent**, **Email list** (a
   mailto link to the group's shortest address, a shorter alias if it has
-  one; only as wide as its heading, cutting the address off), **Gather
+  one), **Gather
   group** (a link), **Guests** and **Meeting times** (see below), **Drive
   folder** and **Agenda doc** (links), one column for
   each role in the agenda doc's Roles table (**Leader**, **Feedback Link**,
@@ -363,17 +363,24 @@ the sheet's editors, which in a shared drive can't. It has three parts:
   who has left Full Community shows as a guest.)
   **Meeting times** says, read hourly from the group's calendar (the one its
   footer links), when its meetings in the next 8 weeks are, linking the
-  calendar: a line for each repeating meeting, in the order of their next
-  meetings, from its series' repeat rule and usual times (so a meeting
+  all-events calendar: a line for each repeating meeting, in alphabetical
+  order (numbers by value, so "1st Mon" comes before "3rd Mon"), from its
+  series' repeat rule and usual times (so a meeting
   moved for one week changes nothing): "Tue 7:30–9 pm", "Mon & Thu 7–8 pm",
   "Every other Tue 7–8 pm", "2nd & 4th Tue 7–8:30 pm", "Last Sun of month
   4–5:30 pm" (the month's last Sunday), "15th of month 6–7 pm"; for a rule
-  it can't put in words, "Next: Nov 12, 7–8:30 pm". With no repeating
-  meetings, it gives the next one-off that way; with nothing to come,
-  "None scheduled"; with no calendar, nothing. Past meetings, cancelled
+  it can't put in words, "Next: Nov 12, 7–8:30 pm", after the others. With
+  no repeating meetings, it gives the next one-off that way; with nothing
+  to come, "None scheduled", unlinked; with no calendar, nothing. Past meetings, cancelled
   ones, and all-day events never count. (`meetingTimesText`, in
-  `structure_rules.gs`, words it, tested under Node.) The
-  columns but Email list are fitted to their text whenever it changes.
+  `structure_rules.gs`, words it, tested under Node.) Email list and Guests
+  are only as wide as their headings, cutting their text off; the other
+  columns are fitted to their text and headings whenever it changes.
+  (Sheets has no lasting "fit to data" setting, so the script resizes them
+  each time; Sheets' own resizing leaves bold headings cut off, so each is
+  made at least as wide as its heading needs, by `headingWidth`.) The
+  data cells' formatting is cleared on each run, so none keeps the look of
+  what was in them before.
   Rows are read by their columns' headings, so when the columns change, the
   next run reads the sheet as it was and lays it out afresh (losing only
   the notes on Parent cells).
