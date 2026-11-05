@@ -2,7 +2,8 @@
  * Circle Structure
  *
  * The tree of circles and working groups. Its one source is the Circle
- * Structure sheet, in admin@'s My Drive, whose rows are the groups: the
+ * Structure sheet, in the Circle Structure folder at the top of the Shared
+ * Drive, whose rows are the groups: the
  * Coordinating Circle (STRUCTURE_EDITORS) can change only each group's
  * Parent, a dropdown of the groups it may be under (structure_rules.gs has
  * the rules), and the script fills in everything else from the Google
@@ -31,6 +32,12 @@
 
 // Who can change the structure: they can edit the sheet's Parent column.
 const STRUCTURE_EDITORS = 'coordinating-circle@berkeleymoshav.org';
+// The community's Shared Drive (DEFAULT_DRIVE_ID in util/gdrive_config.py),
+// and the folder at its top that holds the sheet and the doc: outside any
+// group's folder, so its files can be deleted or moved only by the Shared
+// Drive's own managers, not by a circle's members.
+const SHARED_DRIVE_ID = '0AFqC2xo9aTgPUk9PVA';
+const STRUCTURE_FOLDER_NAME = 'Circle Structure';
 const STRUCTURE_SHEET_NAME = 'Circle Structure (editing)';
 const STRUCTURE_DOC_NAME = 'Circle Structure';
 const STRUCTURE_TAB_NAME = 'Groups';
@@ -63,24 +70,21 @@ const PARENT_HELP = 'The circle it\'s under (for a working group, the circle or 
 
 // ── Setting up ───────────────────────────────────────────────────────────────
 
-// Run once, in the editor: makes the sheet (shared with STRUCTURE_EDITORS,
-// who can change only the Parent column) and the doc (anyone with the link
-// can view it), fills the sheet in, installs the triggers, and logs both
-// links. Safe to run again: it keeps the sheet and doc it made, and
-// protects and shares them again.
+// Run once, in the editor: makes the STRUCTURE_FOLDER_NAME folder at the top
+// of the Shared Drive, and in it the sheet (which STRUCTURE_EDITORS can edit,
+// but only its Parent column) and the doc (anyone with the link can view
+// it); fills the sheet in, installs the triggers, and logs both links. The
+// folder's other access is the Shared Drive's: its members can see both.
+// Safe to run again: it keeps the folder, sheet, and doc it made (moving
+// either file into the folder if it's elsewhere), and protects and shares
+// them again.
 function setupCircleStructure() {
   const props = PropertiesService.getScriptProperties();
-  let sheetId = liveFileId(props.getProperty(STRUCTURE_SHEET_KEY));
-  if (!sheetId) {
-    sheetId = SpreadsheetApp.create(STRUCTURE_SHEET_NAME).getId();
-    props.setProperty(STRUCTURE_SHEET_KEY, sheetId);
-  }
-  let docId = liveFileId(props.getProperty(STRUCTURE_DOC_KEY));
-  if (!docId) {
-    docId = DocumentApp.create(STRUCTURE_DOC_NAME).getId();
-    props.setProperty(STRUCTURE_DOC_KEY, docId);
-    props.deleteProperty(STRUCTURE_DOC_HASH_KEY);
-  }
+  const folderId = structureFolderId();
+  const sheetId = structureFile(STRUCTURE_SHEET_KEY, STRUCTURE_SHEET_NAME,
+    'application/vnd.google-apps.spreadsheet', folderId);
+  const docId = structureFile(STRUCTURE_DOC_KEY, STRUCTURE_DOC_NAME,
+    'application/vnd.google-apps.document', folderId);
 
   const sheet = structureSheet();
   sheet.getRange(1, 1, 1, STRUCTURE_COLUMNS).setValues([STRUCTURE_HEADINGS]).setFontWeight('bold');
@@ -95,13 +99,19 @@ function setupCircleStructure() {
   for (const p of sheet.getProtections(SpreadsheetApp.ProtectionType.SHEET)) p.remove();
   const protection = sheet.protect().setDescription('Filled in by the Circle Structure script');
   protection.setUnprotectedRanges([sheet.getRange('C2:C')]);
-  protection.removeEditors(protection.getEditors());
+  // Only the script's account (admin@) can edit the rest. (A file in a
+  // shared drive has no owner, whom protection always lets edit, so it
+  // names admin@ itself.)
+  const me = Session.getEffectiveUser().getEmail();
+  protection.addEditor(me);
+  protection.removeEditors(protection.getEditors().map(u => u.getEmail())
+    .filter(e => e.toLowerCase() !== me.toLowerCase()));
   if (protection.canDomainEdit()) protection.setDomainEdit(false);
 
+  // Editors of a file in a shared drive (unlike its managers) can't delete
+  // or move it.
   Drive.Permissions.create({role: 'writer', type: 'group', emailAddress: STRUCTURE_EDITORS},
-    sheetId, {sendNotificationEmail: false});
-  // Only admin@ shares it further.
-  Drive.Files.update({writersCanShare: false}, sheetId);
+    sheetId, {sendNotificationEmail: false, supportsAllDrives: true});
   try {
     DriveApp.getFileById(docId).setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
   } catch (e) {
@@ -119,9 +129,47 @@ function setupCircleStructure() {
   } finally {
     lock.releaseLock();
   }
+  logLink('The folder, at the top of the Shared Drive:',
+    'https://drive.google.com/drive/folders/' + folderId);
   logLink('The sheet, which ' + STRUCTURE_EDITORS + ' can edit (send them the link):',
     'https://docs.google.com/spreadsheets/d/' + sheetId + '/edit');
   logLink('The doc, which anyone with the link can view:', structureDocUrl());
+}
+
+// The STRUCTURE_FOLDER_NAME folder at the top of the Shared Drive, made if
+// there's none.
+function structureFolderId() {
+  const resp = Drive.Files.list({
+    q: '\'' + SHARED_DRIVE_ID + '\' in parents and name = \'' + STRUCTURE_FOLDER_NAME +
+      '\' and mimeType = \'application/vnd.google-apps.folder\' and trashed = false',
+    corpora: 'drive', driveId: SHARED_DRIVE_ID, includeItemsFromAllDrives: true,
+    supportsAllDrives: true, fields: 'files(id)',
+  });
+  if ((resp.files || []).length) return resp.files[0].id;
+  return Drive.Files.create({name: STRUCTURE_FOLDER_NAME, mimeType: 'application/vnd.google-apps.folder',
+    parents: [SHARED_DRIVE_ID]}, null, {supportsAllDrives: true, fields: 'id'}).id;
+}
+
+// The ID (kept in the script property key) of the sheet or doc, made in the
+// folder if there's none (or it's in the trash), or moved into it if it's
+// elsewhere (such as admin@'s My Drive, where an earlier version made it).
+function structureFile(key, name, mimeType, folderId) {
+  const props = PropertiesService.getScriptProperties();
+  const id = liveFileId(props.getProperty(key));
+  if (!id) {
+    const made = Drive.Files.create({name, mimeType, parents: [folderId]}, null,
+      {supportsAllDrives: true, fields: 'id'}).id;
+    props.setProperty(key, made);
+    if (key === STRUCTURE_DOC_KEY) props.deleteProperty(STRUCTURE_DOC_HASH_KEY);
+    return made;
+  }
+  const parents = Drive.Files.get(id, {fields: 'parents', supportsAllDrives: true}).parents || [];
+  if (!parents.includes(folderId)) {
+    Drive.Files.update({}, id, null, {addParents: folderId, removeParents: parents.join(','),
+      supportsAllDrives: true});
+    console.log('Moved ' + name + ' into the ' + STRUCTURE_FOLDER_NAME + ' folder.');
+  }
+  return id;
 }
 
 // The file's ID, if it's there and not in the trash; else null.

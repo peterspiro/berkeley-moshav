@@ -281,3 +281,9 @@ class TestSignature:
         a = [{"runs": [["Land", {}]]}]
         b = [{"runs": [["Lands", {}]]}]
         assert not js("paragraphsSignature(a) === paragraphsSignature(b)", a=a, b=b)
+
+
+def test_shared_drive_id_matches_python():
+    from util.gdrive_config import DEFAULT_DRIVE_ID
+    text = (PROJECT / "structure.gs").read_text()
+    assert f"const SHARED_DRIVE_ID = '{DEFAULT_DRIVE_ID}';" in text

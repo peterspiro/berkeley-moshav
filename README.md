@@ -13,13 +13,14 @@ Their main job is keeping these things linked together and consistent:
 - **[Google Groups](https://groups.google.com/all-groups)** in the
   `berkeleymoshav.org` Workspace, which serve as each Gather group's email list
 - The **Circle Structure**, the tree of the circles and working groups: a
-  Google Sheet in `admin@`'s My Drive where the Coordinating Circle
+  Google Sheet where the Coordinating Circle
   (`coordinating-circle@berkeleymoshav.org`) changes a group's parent and
   nothing else, and a Google Doc, which anyone with the link can view, that
   shows the tree with links to each group's agenda doc, members, documents,
   and email list. The `circle_agendas` Apps Script fills in both from the
   Google Groups' footers, and writes each circle's place (its parents,
-  sub-circles, and links to its parent) into its agenda doc. (It replaced the
+  sub-circles, and links to its parent) into its agenda doc. Both are in a
+  "Circle Structure" folder at the top of the Shared Drive. (It replaced the
   [Circle Structure](https://berkeley-moshav.gather.coop/wiki/circle-structure)
   wiki page in Gather.)
 - Each group's **Google calendar**, owned by `admin@berkeleymoshav.org` and

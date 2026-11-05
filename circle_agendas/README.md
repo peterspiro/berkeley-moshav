@@ -310,14 +310,20 @@ already made (see the plan).
 
 The tree of circles and working groups (`structure.gs`, with its rules in
 `structure_rules.gs`, tested under Node by
-`tests/test_circle_structure_rules.py`). It has three parts:
+`tests/test_circle_structure_rules.py`). Its sheet and doc are in a
+"Circle Structure" folder at the top of the Shared Drive (`SHARED_DRIVE_ID`),
+outside every group's folder, so the Shared Drive's members can see them,
+and only its managers can move or delete them: the Coordinating Circle are
+the sheet's editors, which in a shared drive can't. It has three parts:
 
-- **The sheet**, "Circle Structure (editing)", in `admin@`'s My Drive: a
+- **The sheet**, "Circle Structure (editing)": a
   row per group, keyed by its Gather group ID (in a hidden column, so a
-  rename keeps the row). Only the Coordinating Circle
+  rename keeps the row). The Coordinating Circle
   (`coordinating-circle@berkeleymoshav.org`, `STRUCTURE_EDITORS`) can edit
-  it, and only its **Parent** column: everything else is protected, and
-  filled in by the script. Each Parent cell is a dropdown of the groups the
+  only its **Parent** column: everything else is protected, editable only by
+  `admin@`, which the script runs as. (So can anyone with edit access to the
+  whole Shared Drive, its members with a Contributor role or above, as only
+  the Parent column isn't protected.) Each Parent cell is a dropdown of the groups the
   row may be under: a circle under a circle, a working group under a circle
   or working group, leaving out the group itself and the groups beneath it.
   Full Community (`ROOT_GROUP_NAME`) is always at the top. The other
@@ -330,7 +336,7 @@ The tree of circles and working groups (`structure.gs`, with its rules in
   say are "Not in the structure"), **Problems** (why a group isn't in the structure, or isn't
   placed yet), the email list, and links to the Gather group, Drive
   folder, and agenda doc.
-- **The doc**, "Circle Structure", in `admin@`'s My Drive, which anyone
+- **The doc**, "Circle Structure", which anyone
   with the link can view (or, if the domain doesn't allow that, anyone in
   it): the tree as a nested list, each name linked to its agenda doc (or
   Drive folder), with links to its members, documents, and email list,
@@ -384,13 +390,14 @@ How it stays up to date:
    would write), to bring over the parents from the old wiki page: it
    writes them to "Circle structure placements.json", to wait for the
    sheet.
-3. Run **`setupCircleStructure`**. It makes the sheet and the doc (or keeps
-   the ones it made before), protects the sheet, shares it with
-   `coordinating-circle@` (without an email; they can't share it further)
-   and the doc with anyone with the link, installs the triggers
+3. Run **`setupCircleStructure`**. It makes the Circle Structure folder and,
+   in it, the sheet and the doc (or keeps the ones it made before, moving
+   them into the folder if they're elsewhere), protects the sheet, shares
+   it with `coordinating-circle@` as editors (without an email) and the doc
+   with anyone with the link, installs the triggers
    (`installTriggers`), fills in the sheet, gives the groups their parents
    from the placements, writes the doc, rewrites every agenda doc's
-   Parent Circle and Sub-Circles rows, and logs both links. Check the
+   Parent Circle and Sub-Circles rows, and logs the three links. Check the
    sheet's Problems column, and the notes on its Parent cells, for anything
    left to place by hand.
 4. Send the sheet's link to the Coordinating Circle, and put the doc's link
