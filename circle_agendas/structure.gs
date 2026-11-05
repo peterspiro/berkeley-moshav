@@ -574,40 +574,66 @@ function writeStructureDocIfChanged(ctx) {
   // (Paragraph.setText returns nothing, so it can't be chained.)
   title.setText(STRUCTURE_DOC_NAME);
   title.setHeading(DocumentApp.ParagraphHeading.TITLE);
-  writeRuns(body.appendParagraph('').setHeading(DocumentApp.ParagraphHeading.NORMAL), [['The circles and working groups, each under the circle ' +
-    '(or working group) it\'s part of. It\'s kept up to date automatically; to move a group, ' +
-    'ask the Coordinating Circle. Each name links to the group\'s agenda doc (or its Drive ' +
-    'folder, if it has none). Last changed ' +
-    Utilities.formatDate(new Date(), TIME_ZONE, 'MMMM d, yyyy') + '.', MUTED]]);
+  // The intro, and the note when nothing's placed, are subtitles, so the
+  // list's paragraphs are the only plain ones (see bulletStructureDoc).
+  const subtitle = text => writeRuns(
+    body.appendParagraph('').setHeading(DocumentApp.ParagraphHeading.SUBTITLE), [[text, MUTED]]);
+  subtitle('Kept up to date automatically. To move a group, ask the Coordinating Circle.');
+  // Each item is a plain paragraph, with a tab for each level it's nested
+  // to, which bulletStructureDoc makes a bulleted list.
   const list = items => {
     for (const item of items) {
-      const li = body.appendListItem('');
-      writeRuns(li, item.runs);
-      li.setNestingLevel(item.depth).setGlyphType(DocumentApp.GlyphType.BULLET);
+      const para = body.appendParagraph('').setHeading(DocumentApp.ParagraphHeading.NORMAL);
+      writeRuns(para, [['\t'.repeat(item.depth), null], ...item.runs]);
     }
   };
-  if (!content.placed.length) {
-    writeRuns(body.appendParagraph('').setHeading(DocumentApp.ParagraphHeading.NORMAL),
-      [['Nothing is placed yet.', MUTED]]);
-  }
+  if (!content.placed.length) subtitle('Nothing is placed yet.');
   list(content.placed);
   if (content.unplaced.length) {
     body.appendParagraph('Not yet placed').setHeading(DocumentApp.ParagraphHeading.HEADING2);
     list(content.unplaced);
   }
   doc.saveAndClose();
+  bulletStructureDoc(docId);
   props.setProperty(STRUCTURE_DOC_HASH_KEY, hash);
 }
 
-// A group's line in the doc: its name (linked; see groupUrl), its type if a
-// working group, and links to its members, documents, and email list.
+// Makes each run of plain paragraphs in the doc (its lists' items, each
+// starting with a tab per level it's nested to) a bulleted list, with
+// bullets at every level (DocumentApp can only number nested levels), and
+// gives each item its level's narrow indents (listIndents).
+function bulletStructureDoc(docId) {
+  const paragraphs = () => Docs.Documents.get(docId).body.content.filter(se => se.paragraph);
+  const runs = [];
+  let run = null;
+  for (const se of paragraphs()) {
+    const plain = (se.paragraph.paragraphStyle || {}).namedStyleType === 'NORMAL_TEXT' &&
+      paraText(se.paragraph).trim();
+    if (plain) {
+      if (!run) runs.push(run = {startIndex: se.startIndex, endIndex: se.endIndex});
+      run.endIndex = se.endIndex;
+    } else {
+      run = null;
+    }
+  }
+  if (!runs.length) return;
+  // Each request removes its items' tabs, so the last run goes first.
+  Docs.Documents.batchUpdate({requests: runs.reverse().map(range => ({createParagraphBullets: {
+    range, bulletPreset: 'BULLET_DISC_CIRCLE_SQUARE'}}))}, docId);
+  const indents = paragraphs().filter(se => se.paragraph.bullet).map(se =>
+    listIndentRequest({startIndex: se.startIndex, endIndex: se.endIndex},
+      se.paragraph.bullet.nestingLevel || 0));
+  if (indents.length) Docs.Documents.batchUpdate({requests: indents}, docId);
+}
+
+// A group's line in the doc: its name (linked; see groupUrl), and links to
+// its members, documents, and email list.
 function structureDocRuns(g) {
   const runs = [[g.name, Object.assign({}, BOLD, groupUrl(g) ? {[A.LINK_URL]: groupUrl(g)} : {})]];
-  if (g.type === TYPE_WORKING_GROUP) runs.push([' · working group', MUTED]);
   const links = [];
   if (g.gatherUrl) links.push(['Members', g.gatherUrl]);
   if (g.folderUrl) links.push(['Documents', g.folderUrl]);
-  if (g.email) links.push([g.email, 'mailto:' + g.email]);
+  if (g.email) links.push(['Email', 'mailto:' + g.email]);
   links.forEach(([text, url], i) => {
     runs.push([i ? ' · ' : '    ', MUTED]);
     runs.push([text, {[A.LINK_URL]: url, [A.FOREGROUND_COLOR]: COLOR.muted}]);
@@ -618,24 +644,36 @@ function structureDocRuns(g) {
 // ── A circle's place, in its agenda doc ──────────────────────────────────────
 
 // What structureRows needs to write a group's rows (see there); without
-// meetings and roles if bare (for telling whether its place has changed).
+// meetings if bare (for telling whether its place has changed).
 function placeOf(ctx, g, bare) {
-  const item = id => ({name: ctx.byId[id].name, url: groupUrl(ctx.byId[id])});
+  const item = id => ({name: ctx.byId[id].name, url: groupUrl(ctx.byId[id]),
+    next: bare ? null : nextMeetingOf(ctx, ctx.byId[id])});
   let status = 'placed';
   if (!g || !inStructure(g)) status = 'out';
   else if (ctx.parentOf[g.id] === TOP) status = 'top';
   else if (!ctx.tree.placed[g.id]) status = 'unplaced';
-  const place = {status, ancestors: [], children: [], parentNext: null, leader: '',
-    feedbackLink: '', structureUrl: ctx.structureUrl};
+  const place = {status, parent: null, children: [], structureUrl: ctx.structureUrl};
   if (status === 'out') return place;
-  if (status === 'placed') place.ancestors = ancestorsOf(g.id, ctx.parentOf).map(item);
-  place.children = (ctx.tree.children[g.id] || []).map(id => Object.assign(item(id),
-    {type: ctx.byId[id].type, next: bare ? null : nextMeetingOf(ctx, ctx.byId[id])}));
-  if (!bare && status === 'placed') place.parentNext = nextMeetingOf(ctx, ctx.byId[ctx.parentOf[g.id]]);
+  if (status === 'placed') place.parent = item(ctx.parentOf[g.id]);
+  place.children = (ctx.tree.children[g.id] || []).map(item);
   return place;
 }
 
-// A group's next meeting, from its calendar: {text, url}, or null.
+// The calendar every group's meetings are invited to (as
+// ALL_EVENTS_CALENDAR_ID in util/meeting_rooms.py and group_meetings.gs),
+// which everyone can view, unlike most groups' own calendars.
+const ALL_EVENTS_CALENDAR_ID =
+  'c_301c808f640b3a04f5344b1bbf266955d51fecaabd7835936b7591f9cff09222@group.calendar.google.com';
+
+// A link to an event's copy on the all-events calendar, which shares its
+// ID: an eid, as an event's htmlLink has, of its ID and that calendar's.
+function allEventsEventUrl(eventId) {
+  const eid = Utilities.base64EncodeWebSafe(eventId + ' ' + ALL_EVENTS_CALENDAR_ID).replace(/=+$/, '');
+  return 'https://www.google.com/calendar/event?eid=' + eid;
+}
+
+// A group's next meeting, from its calendar: {text, url}, or null; the url
+// opens it on the all-events calendar (see allEventsEventUrl).
 function nextMeetingOf(ctx, g) {
   if (!g) return null;
   if (g.id in ctx.meetings) return ctx.meetings[g.id];
@@ -646,7 +684,7 @@ function nextMeetingOf(ctx, g) {
       const event = nextEvents(circle, new Date(), 1)[0];
       if (event) {
         meeting = {text: Utilities.formatDate(new Date(event.start.dateTime), TIME_ZONE, 'EEE, MMM d'),
-          url: event.htmlLink || null};
+          url: allEventsEventUrl(event.id)};
       }
     } catch (e) {
       console.warn('Couldn\'t read ' + g.name + '\'s calendar: ' + e.message);
@@ -677,11 +715,6 @@ function groupOfDoc(ctx, docId, email) {
 // Returns whether it wrote anything. Does nothing to a doc without the rows.
 function refreshStructureRows(docId, ctx, g) {
   const place = placeOf(ctx, g, false);
-  if (place.status === 'placed') {
-    const roles = roleHolders(docId);
-    place.leader = roles.Leader || '';
-    place.feedbackLink = roles['Feedback Link'] || '';
-  }
   const want = structureRows(place);
   const doc = DocumentApp.openById(docId);
   const found = findRow(firstTabBody(doc), text => text === 'Circle email address');
@@ -709,6 +742,9 @@ function refreshStructureRows(docId, ctx, g) {
   return wrote;
 }
 
+// The point size of the label cells' "(Set in the Circle Structure)".
+const STRUCTURE_HINT_SIZE = 8;
+
 // A paragraph of structureRows as runs for writeCell: a bullet's paragraph
 // starts with the token replaceTokens makes a bullet.
 function docRuns(p) {
@@ -716,6 +752,7 @@ function docRuns(p) {
     const attrs = {};
     if (style.bold) attrs[A.BOLD] = true;
     if (style.muted) attrs[A.FOREGROUND_COLOR] = COLOR.muted;
+    if (style.small) attrs[A.FONT_SIZE] = STRUCTURE_HINT_SIZE;
     if (style.link) attrs[A.LINK_URL] = style.link;
     return [text, Object.keys(attrs).length ? attrs : null];
   });
@@ -740,21 +777,6 @@ function cellParagraphs(cell) {
     paragraphs.push({runs});
   }
   return paragraphs;
-}
-
-// Who holds each role in a doc's Roles table: {role: name}, the role being
-// the first words of its cell, before its description in brackets.
-function roleHolders(docId) {
-  const holders = {};
-  const table = apiTab(docId).content.find(se => se.table &&
-    apiCellText(se.table.tableRows[0].tableCells[0]).trim().startsWith('Circle Roles'));
-  if (!table) return holders;
-  for (const row of table.table.tableRows.slice(1)) {
-    if (row.tableCells.length < 2) continue;
-    const role = apiCellText(row.tableCells[0]).replace(/\(.*$/s, '').trim();
-    holders[role] = apiCellValue(row.tableCells[1]);
-  }
-  return holders;
 }
 
 // Writes the rows (see refreshStructureRows) in every built circle doc that

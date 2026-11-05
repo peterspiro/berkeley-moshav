@@ -338,22 +338,23 @@ the sheet's editors, which in a shared drive can't. It has three parts:
   folder, and agenda doc.
 - **The doc**, "Circle Structure", which anyone
   with the link can view (or, if the domain doesn't allow that, anyone in
-  it): the tree as a nested list, each name linked to its agenda doc (or
-  Drive folder), with links to its members, documents, and email list,
-  and then the groups not yet placed. It's rewritten whenever what it shows
+  it): under a line saying it's kept up to date automatically, and to ask
+  the Coordinating Circle to move a group, the tree as a bulleted list
+  (bullets at every level, each level 0.25" further in), each name linked
+  to its agenda doc (or Drive folder), with Members, Documents, and Email
+  links, and then the groups not yet placed. It's rewritten whenever what it shows
   changes, so edits to it don't last. (Zoom rooms are left out, since
   anyone with the link can view it.)
 - **Each agenda doc's Parent Circle and Sub-Circles rows**, in About this
-  circle. Parent Circle: the path from the top down to the parent, each
-  linked to its agenda doc; the parent's next meeting; and "Our links to
-  it", the circle's Leader and Feedback Link, from its Roles table.
-  Sub-Circles: each sub-circle and working group, linked to its agenda
-  doc, with its next meeting. Each label cell has a grey "Set in the
-  Circle Structure" line linking the doc. A doc can't lock part of itself,
-  so the script puts the rows back when they're edited: every 10 minutes,
-  in each doc changed since (as for the Term ends dates), it writes them if
-  they don't say what they should (which also picks up a new Leader or
-  Feedback Link).
+  circle. Parent Circle: the parent; Sub-Circles: each sub-circle and
+  working group. Each is linked to its agenda doc, with its next meeting,
+  whose link opens it on the all-events calendar (as each group's own
+  calendar may not be shared with the reader; the link is to the event's
+  copy there, which has the same ID). Each label cell has a small grey
+  "(Set in the Circle Structure)" line linking the doc. A doc can't lock
+  part of itself, so the script puts the rows back when they're edited:
+  every 10 minutes, in each doc changed since (as for the Term ends dates),
+  it writes them if they don't say what they should.
 
 How it stays up to date:
 

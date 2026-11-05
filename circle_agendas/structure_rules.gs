@@ -272,18 +272,24 @@ function parentCellText(parent, groupsById) {
 
 // The Parent Circle and Sub-Circles rows of a circle's agenda doc's About
 // this circle: {parentLabel, parentValue, subLabel, subValue}, each a list
-// of paragraphs, {bullet, runs}, a run [text, {bold, muted, link}]. place:
-// {status: 'placed' | 'top' | 'unplaced' | 'out', ancestors: [{name,
-// url}], children: [{name, url, type, next}], parentNext, leader,
-// feedbackLink, structureUrl}, next and parentNext {text, url} (a
-// meeting) or null, leader and feedbackLink the names the doc's Roles
-// show ('' or ROLE_PLACEHOLDER if none).
-const STRUCTURE_HINT = 'Set in the Circle Structure';
+// of paragraphs, {bullet, runs}, a run [text, {bold, muted, small, link}].
+// place: {status: 'placed' | 'top' | 'unplaced' | 'out', parent: {name,
+// url, next} (for 'placed'), children: [{name, url, next}],
+// structureUrl}, next a group's next meeting, {text, url}, or null.
+const STRUCTURE_HINT = '(Set in the Circle Structure)';
 function structureRows(place) {
   const hint = label => [{runs: [[label, {bold: true}]]},
-    {runs: [[STRUCTURE_HINT, {muted: true, link: place.structureUrl || null}]]}];
+    {runs: [[STRUCTURE_HINT, {muted: true, small: true, link: place.structureUrl || null}]]}];
   const note = text => [{runs: [[text, {muted: true}]]}];
-  const linked = item => [item.name, item.url ? {link: item.url} : {}];
+  // A group's name, linked, and its next meeting.
+  const line = item => {
+    const runs = [[item.name, item.url ? {link: item.url} : {}]];
+    if (item.next) {
+      runs.push([' · next meeting ', {muted: true}]);
+      runs.push([item.next.text, item.next.url ? {link: item.next.url, muted: true} : {muted: true}]);
+    }
+    return runs;
+  };
   let parentValue;
   if (place.status === 'top') {
     parentValue = note('None: this is the top circle.');
@@ -292,32 +298,11 @@ function structureRows(place) {
   } else if (place.status === 'out') {
     parentValue = note('Not in the Circle Structure.');
   } else {
-    const path = [];
-    place.ancestors.forEach((a, i) => {
-      if (i) path.push([' › ', {muted: true}]);
-      path.push(linked(a));
-    });
-    parentValue = [{runs: path}];
-    if (place.parentNext) {
-      parentValue.push({runs: [['Its next meeting: ', {muted: true}],
-        [place.parentNext.text, place.parentNext.url ? {link: place.parentNext.url} : {}]]});
-    }
-    const holder = name => (name && name !== ROLE_PLACEHOLDER ? name : 'not chosen yet');
-    parentValue.push({runs: [['Our links to it: ', {muted: true}], ['Leader ', {muted: true}],
-      [holder(place.leader), {}], [' · Feedback Link ', {muted: true}],
-      [holder(place.feedbackLink), {}]]});
+    parentValue = [{runs: line(place.parent)}];
   }
   const children = place.children || [];
   const subValue = children.length && place.status !== 'out'
-    ? children.map(c => {
-      const runs = [linked(c)];
-      if (c.type === TYPE_WORKING_GROUP) runs.push([' · working group', {muted: true}]);
-      if (c.next) {
-        runs.push([' · next meeting ', {muted: true}]);
-        runs.push([c.next.text, c.next.url ? {link: c.next.url, muted: true} : {muted: true}]);
-      }
-      return {bullet: true, runs};
-    })
+    ? children.map(c => ({bullet: true, runs: line(c)}))
     : note('None');
   return {parentLabel: hint('Parent Circle'), parentValue, subLabel: hint('Sub-Circles'), subValue};
 }
