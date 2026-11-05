@@ -352,8 +352,8 @@ the sheet's editors, which in a shared drive can't. It has three parts:
   it): under a line saying it's kept up to date automatically, and to ask
   the Coordinating Circle to move a group, the tree as a bulleted list
   (bullets at every level, each level 0.25" further in), each name linked
-  to its agenda doc (or Drive folder), with Members, Documents, and Email
-  links, and then the groups not yet placed. It's rewritten whenever what it shows
+  to its agenda doc (or Drive folder), with smaller (8 pt) Members, Documents,
+  and Email links, and then the groups not yet placed. It's rewritten whenever what it shows
   changes, so edits to it don't last. (Zoom rooms are left out, since
   anyone with the link can view it.)
 - **Each agenda doc's Parent Circle and Sub-Circles rows**, in About this

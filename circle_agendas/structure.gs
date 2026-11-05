@@ -641,20 +641,24 @@ function bulletStructureDoc(docId) {
   if (indents.length) Docs.Documents.batchUpdate({requests: indents}, docId);
 }
 
-// A group's line in the doc: its name (linked; see groupUrl), and links to
-// its members, documents, and email list.
+// A group's line in the doc: its name (linked; see groupUrl), and smaller
+// links to its members, documents, and email list.
 function structureDocRuns(g) {
   const runs = [[g.name, Object.assign({}, BOLD, groupUrl(g) ? {[A.LINK_URL]: groupUrl(g)} : {})]];
   const links = [];
   if (g.gatherUrl) links.push(['Members', g.gatherUrl]);
   if (g.folderUrl) links.push(['Documents', g.folderUrl]);
   if (g.email) links.push(['Email', 'mailto:' + g.email]);
+  const small = {[A.FOREGROUND_COLOR]: COLOR.muted, [A.FONT_SIZE]: STRUCTURE_LINKS_SIZE};
   links.forEach(([text, url], i) => {
-    runs.push([i ? ' · ' : '    ', MUTED]);
-    runs.push([text, {[A.LINK_URL]: url, [A.FOREGROUND_COLOR]: COLOR.muted}]);
+    runs.push([i ? ' · ' : '    ', small]);
+    runs.push([text, Object.assign({[A.LINK_URL]: url}, small)]);
   });
   return runs;
 }
+
+// The point size of the doc's Members · Documents · Email links.
+const STRUCTURE_LINKS_SIZE = 8;
 
 // ── A circle's place, in its agenda doc ──────────────────────────────────────
 
