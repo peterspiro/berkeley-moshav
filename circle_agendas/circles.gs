@@ -71,7 +71,7 @@ function refreshCircles() {
 }
 
 // Every Google Group in the domain, with its footer's links (see
-// parseCircleFooter): {groups: [{email, name, ...links}], complete}, complete
+// parseCircleFooter): {groups: [{email, aliases, name, ...links}], complete}, complete
 // false if a footer couldn't be read (that group is left out).
 function readGroupFooters() {
   const groups = [];
@@ -89,7 +89,8 @@ function readGroupFooters() {
         continue;
       }
       const links = parseCircleFooter(footer);
-      groups.push({...links, email: g.email.toLowerCase(), name: links.name || g.name});
+      groups.push({...links, email: g.email.toLowerCase(), name: links.name || g.name,
+        aliases: (g.aliases || []).map(x => x.toLowerCase())});
     }
     pageToken = resp.nextPageToken;
   } while (pageToken);

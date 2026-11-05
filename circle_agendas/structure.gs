@@ -59,12 +59,14 @@ const PLACEMENTS_FILE = 'Circle structure placements.json';
 const CLUBS_FOLDER_NAME = 'Clubs';
 const SYNC_EVERY_HOURS = 1;
 
-// The sheet's columns (1-based); ID, the Gather group's, is the row's key,
-// and hidden.
+// The sheet's columns (1-based). Email list shows the group's shortest
+// address (see listAddress); Address, its Google Group's primary address,
+// which the script matches on. ID, the Gather group's, is the row's key.
+// The last two are hidden.
 const SCOL = {group: 1, type: 2, parent: 3, problems: 4, email: 5, gather: 6, folder: 7,
-  agenda: 8, id: 9};
+  agenda: 8, id: 9, address: 10};
 const STRUCTURE_HEADINGS = ['Group', 'Type', 'Parent', 'Problems', 'Email list', 'Gather group',
-  'Drive folder', 'Agenda doc', 'Gather ID'];
+  'Drive folder', 'Agenda doc', 'Gather ID', 'Address'];
 const STRUCTURE_COLUMNS = STRUCTURE_HEADINGS.length;
 const PARENT_HELP = 'The circle it\'s under (for a working group, the circle or working group).';
 
@@ -94,7 +96,7 @@ function setupCircleStructure() {
   sheet.setColumnWidth(SCOL.group, 220);
   sheet.setColumnWidth(SCOL.type, 140);
   sheet.setColumnWidth(SCOL.parent, 220);
-  sheet.hideColumns(SCOL.id);
+  sheet.hideColumns(SCOL.id, 2);
   for (const p of sheet.getProtections(SpreadsheetApp.ProtectionType.SHEET)) p.remove();
   const protection = sheet.protect().setDescription('Filled in by the Circle Structure script');
   protection.setUnprotectedRanges([sheet.getRange('C2:C')]);
@@ -240,8 +242,9 @@ function refreshCircleStructureEverywhere() {
 
 // ── The sheet's rows ─────────────────────────────────────────────────────────
 
-// The sheet's rows: [{row, id, name, type, parent, problems, email,
-// gatherUrl, folderUrl, agendaUrl}], row the sheet's row number.
+// The sheet's rows: [{row, id, name, type, parent, problems, email (the
+// Google Group's primary address), listAddress (the one shown), gatherUrl,
+// folderUrl, agendaUrl}], row the sheet's row number.
 function readGroups(sheet) {
   const n = sheet.getLastRow() - 1;
   if (n < 1) return [];
@@ -256,7 +259,8 @@ function readGroups(sheet) {
     groups.push({
       row: r + 2, id, name: String(v[SCOL.group - 1]).trim(), type: String(v[SCOL.type - 1]).trim(),
       parent: String(v[SCOL.parent - 1]).trim(), problems: String(v[SCOL.problems - 1]),
-      email: String(v[SCOL.email - 1]).trim().toLowerCase(),
+      email: String(v[SCOL.address - 1] || v[SCOL.email - 1]).trim().toLowerCase(),
+      listAddress: String(v[SCOL.email - 1]).trim().toLowerCase(),
       gatherUrl: link(r, SCOL.gather), folderUrl: link(r, SCOL.folder),
       agendaUrl: link(r, SCOL.agenda),
     });
@@ -291,7 +295,8 @@ function syncGroups() {
     rows.push({
       id: f.gatherId, name: f.name, type, problems: type === TYPE_OUT ? 'Not in the structure: ' + reason
         : (old ? old.problems : ''),
-      parent: old ? old.parent : '', isNew: !old, email: f.email, gatherUrl: f.gatherUrl,
+      parent: old ? old.parent : '', isNew: !old, email: f.email, listAddress: shortestAddress(f.email, f.aliases, DOMAIN),
+      gatherUrl: f.gatherUrl,
       folderUrl: 'https://drive.google.com/drive/folders/' + f.driveItemId,
       agendaUrl: doc ? 'https://docs.google.com/document/d/' + doc + '/edit' : '',
     });
@@ -309,6 +314,11 @@ function syncGroups() {
   }
   rows.sort((a, b) => a.name.localeCompare(b.name));
 
+  // The headings, and hidden columns, of the current layout (in a sheet made
+  // before a column was added, say).
+  sheet.getRange(1, 1, 1, STRUCTURE_COLUMNS).setValues([STRUCTURE_HEADINGS]).setFontWeight('bold');
+  sheet.hideColumns(SCOL.id, 2);
+
   // Rewrite the rows, all but the Parent cells that haven't changed (so an
   // edit made meanwhile isn't lost).
   const n = rows.length;
@@ -323,12 +333,12 @@ function syncGroups() {
   sheet.getRange(2, SCOL.group, n, 2).setValues(rows.map(r => [r.name, r.type]));
   sheet.getRange(2, SCOL.problems, n, 1).setValues(rows.map(r => [r.problems]));
   sheet.getRange(2, SCOL.email, n, 1).setRichTextValues(rows.map(r => [
-    text(r.email, r.email ? 'mailto:' + r.email : null)]));
+    text(r.listAddress, r.listAddress ? 'mailto:' + r.listAddress : null)]));
   fitTextColumns(sheet);
   sheet.getRange(2, SCOL.gather, n, 3).setRichTextValues(rows.map(r => [
     text(r.gatherUrl ? 'Members' : '', r.gatherUrl), text('Documents', r.folderUrl),
     text(r.agendaUrl ? 'Agenda' : '', r.agendaUrl)]));
-  sheet.getRange(2, SCOL.id, n, 1).setNumberFormat('@').setValues(rows.map(r => [r.id]));
+  sheet.getRange(2, SCOL.id, n, 2).setNumberFormat('@').setValues(rows.map(r => [r.id, r.email]));
   rows.forEach((r, i) => {
     const before = old[i];
     if (!before || before.id !== r.id || before.parent !== r.parent) {
@@ -378,7 +388,10 @@ function driveItemInfo(id) {
 // nearestGroupFolder).
 function agendaDocsByGroup(footers) {
   const byEmail = {};
-  for (const f of footers) if (f.gatherId && f.driveItemId) byEmail[f.email] = f;
+  for (const f of footers) {
+    if (!f.gatherId || !f.driveItemId) continue;
+    for (const a of [f.email, ...(f.aliases || [])]) byEmail[a] = f;
+  }
   const folders = Object.values(byEmail).map(f => f.driveItemId);
   const docs = {};
   for (const file of agendaDocFiles()) {
@@ -650,7 +663,8 @@ function structureDocRuns(g) {
   const links = [];
   if (g.gatherUrl) links.push(['Members', g.gatherUrl]);
   if (g.folderUrl) links.push(['Documents', g.folderUrl]);
-  if (g.email) links.push(['Email', 'mailto:' + g.email]);
+  const address = g.listAddress || g.email;
+  if (address) links.push(['Email', 'mailto:' + address]);
   // Last, as some groups have none.
   if (g.agendaUrl) links.push(['Agenda', g.agendaUrl]);
   const small = {[A.FOREGROUND_COLOR]: COLOR.muted, [A.FONT_SIZE]: STRUCTURE_LINKS_SIZE};
@@ -666,10 +680,10 @@ function structureDocRuns(g) {
 // space after each group's line, in points.
 const STRUCTURE_TEXT_SIZE = 11;
 const STRUCTURE_LINKS_SIZE = 8;
-const STRUCTURE_ITEM_SPACING = 4;
+const STRUCTURE_ITEM_SPACING = 6;
 // Bump when the doc's layout changes, so it's rewritten even if the
 // structure hasn't.
-const STRUCTURE_DOC_LAYOUT = 2;
+const STRUCTURE_DOC_LAYOUT = 3;
 
 // ── A circle's place, in its agenda doc ──────────────────────────────────────
 
@@ -730,7 +744,10 @@ function nextMeetingOf(ctx, g) {
 function groupOfDoc(ctx, docId, email) {
   const url = g => docIdOf(g.agendaUrl) === docId;
   let g = ctx.groups.find(url);
-  if (!g && email) g = ctx.groups.find(x => x.email === email.toLowerCase());
+  if (!g && email) {
+    const e = email.toLowerCase();
+    g = ctx.groups.find(x => x.email === e || x.listAddress === e);
+  }
   if (!g) {
     const folderOf = x => (/folders\/([\w-]+)/.exec(x.folderUrl) || [])[1];
     const folder = nearestGroupFolder(docId, ctx.groups.map(folderOf).filter(Boolean));

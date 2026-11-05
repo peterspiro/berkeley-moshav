@@ -291,3 +291,13 @@ def test_all_events_calendar_id_matches_python():
     from util.meeting_rooms import ALL_EVENTS_CALENDAR_ID
     text = (PROJECT / "structure.gs").read_text()
     assert f"'{ALL_EVENTS_CALENDAR_ID}'" in text
+
+
+@pytest.mark.parametrize("aliases, address", [
+    ([], "garden-working-group@x.org"),
+    (["garden@x.org"], "garden@x.org"),
+    (["garden@x.org.test-google-a.com", "g@other.org"], "garden-working-group@x.org"),
+    (["longer-than-the-primary-address@x.org"], "garden-working-group@x.org")])
+def test_shortest_address(aliases, address):
+    assert js("shortestAddress('garden-working-group@x.org', aliases, 'x.org')",
+              aliases=aliases) == address

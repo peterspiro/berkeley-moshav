@@ -330,3 +330,12 @@ function paragraphsSignature(paragraphs) {
   }
   return JSON.stringify({text: text.replace(/\s+/g, ' ').trim(), links});
 }
+
+// A group's shortest address in the domain, of its primary address and its
+// aliases (such as the shorter one change_group_email_alias.py adds); the
+// primary if none is shorter. (Aliases outside the domain, such as Google's
+// own test-domain ones, are left out.)
+function shortestAddress(primary, aliases, domain) {
+  return [primary, ...(aliases || []).filter(a => a.endsWith('@' + domain))]
+    .reduce((best, a) => (a.length < best.length ? a : best));
+}
