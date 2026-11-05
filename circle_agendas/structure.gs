@@ -704,16 +704,19 @@ const STRUCTURE_DOC_LAYOUT = 3;
 // What structureRows needs to write a group's rows (see there); without
 // meetings if bare (for telling whether its place has changed).
 function placeOf(ctx, g, bare) {
-  const item = id => ({name: ctx.byId[id].name, url: groupUrl(ctx.byId[id]),
-    next: bare ? null : nextMeetingOf(ctx, ctx.byId[id])});
+  const item = id => ({name: ctx.byId[id].name, url: groupUrl(ctx.byId[id]), next: null});
   let status = 'placed';
   if (!g || !inStructure(g)) status = 'out';
   else if (ctx.parentOf[g.id] === TOP) status = 'top';
   else if (!ctx.tree.placed[g.id]) status = 'unplaced';
   const place = {status, parent: null, children: [], structureUrl: ctx.structureUrl};
   if (status === 'out') return place;
-  if (status === 'placed') place.parent = item(ctx.parentOf[g.id]);
-  place.children = (ctx.tree.children[g.id] || []).map(item);
+  if (status === 'placed') {
+    place.parent = item(ctx.parentOf[g.id]);
+    if (!bare) place.parent.next = nextMeetingOf(ctx, ctx.byId[ctx.parentOf[g.id]]);
+  }
+  // The sub-circles without their next meetings: only the parent's is shown.
+  place.children = (ctx.tree.children[g.id] || []).map(id => Object.assign(item(id), {next: null}));
   return place;
 }
 

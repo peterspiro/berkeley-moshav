@@ -359,9 +359,9 @@ the sheet's editors, which in a shared drive can't. It has three parts:
   changes, so edits to it don't last. (Zoom rooms are left out, since
   anyone with the link can view it.)
 - **Each agenda doc's Parent Circle and Sub-Circles rows**, in About this
-  circle. Parent Circle: the parent; Sub-Circles: each sub-circle and
-  working group. Each is linked to its agenda doc, with its next meeting,
-  whose link opens it on the all-events calendar (as each group's own
+  circle. Parent Circle: the parent, with its next meeting; Sub-Circles:
+  each sub-circle and working group. Each is linked to its agenda doc; the
+  parent's next meeting's link opens it on the all-events calendar (as each group's own
   calendar may not be shared with the reader; the link is to the event's
   copy there, which has the same ID). Each label cell has a small grey
   "(Set in the Circle Structure)" line linking the sheet. The bullets are
