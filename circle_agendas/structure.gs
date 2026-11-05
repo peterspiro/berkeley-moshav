@@ -16,9 +16,10 @@
  *   doc, shares them, and installs the triggers (see installTriggers,
  *   circle_docs.gs).
  * - syncCircleStructureGroups, hourly, brings the sheet's rows up to date
- *   with the groups: adds new groups (not yet placed, unless
- *   PLACEMENTS_FILE gives them a parent), renames, relinks, retypes, and
- *   removes groups that are gone.
+ *   with the circles and working groups (clubs and other groups have no
+ *   rows): adds new groups (not yet placed, unless PLACEMENTS_FILE gives
+ *   them a parent), renames, relinks, retypes, reads who holds each role
+ *   from the groups' agenda docs, and removes groups that are gone.
  * - applyStructure, on each edit of the sheet (onCircleStructureEdit)
  *   and every BUILD_EVERY_MINUTES (from buildNewCircleDocs), refuses
  *   parents that break the rules (putting back the one from before, with a
@@ -59,15 +60,30 @@ const PLACEMENTS_FILE = 'Circle structure placements.json';
 const CLUBS_FOLDER_NAME = 'Clubs';
 const SYNC_EVERY_HOURS = 1;
 
-// The sheet's columns (1-based). Email list shows the group's shortest
-// address (see listAddress); Address, its Google Group's primary address,
-// which the script matches on. ID, the Gather group's, is the row's key.
-// The last two are hidden.
-const SCOL = {group: 1, type: 2, parent: 3, problems: 4, email: 5, gather: 6, folder: 7,
-  agenda: 8, id: 9, address: 10};
-const STRUCTURE_HEADINGS = ['Group', 'Type', 'Parent', 'Problems', 'Email list', 'Gather group',
-  'Drive folder', 'Agenda doc', 'Gather ID', 'Address'];
+// The roles in an agenda doc's Roles table, each of which has a column
+// showing who holds it (the names in ROLE_LABELS, build_template.gs).
+const STRUCTURE_ROLES = ['Leader', 'Feedback Link', 'Facilitator', 'Secretary'];
+// The sheet's columns, in order: [key, heading]. Email list shows the
+// group's shortest address (see listAddress); Address, its Google Group's
+// primary address, which the script matches on. Gather ID, the Gather
+// group's, is the row's key. The last two are hidden. Rows are read by
+// heading (see readGroups), so a sheet laid out before the columns last
+// changed is still read, and then laid out afresh (see layOutSheet).
+const STRUCTURE_LAYOUT = [
+  ['group', 'Group'], ['parent', 'Parent'], ['email', 'Email list'], ['gather', 'Gather group'],
+  ['folder', 'Drive folder'], ['agenda', 'Agenda doc'],
+  ...STRUCTURE_ROLES.map((role, i) => ['role' + i, role]),
+  ['type', 'Type'], ['problems', 'Problems'], ['id', 'Gather ID'], ['address', 'Address'],
+];
+// Each column's number (1-based), by key.
+const SCOL = {};
+STRUCTURE_LAYOUT.forEach(([key], i) => { SCOL[key] = i + 1; });
+const STRUCTURE_HEADINGS = STRUCTURE_LAYOUT.map(([, heading]) => heading);
 const STRUCTURE_COLUMNS = STRUCTURE_HEADINGS.length;
+// The Email list column is only as wide as its heading (the addresses are
+// cut off at its edge; each is a link); the others fit their text (see
+// fitColumns).
+const EMAIL_LIST_WIDTH = 75;
 const PARENT_HELP = 'The circle it\'s under (for a working group, the circle or working group).';
 
 // ── Setting up ───────────────────────────────────────────────────────────────
@@ -89,25 +105,10 @@ function setupCircleStructure() {
     'application/vnd.google-apps.document', folderId);
 
   const sheet = structureSheet();
-  sheet.getRange(1, 1, 1, STRUCTURE_COLUMNS).setValues([STRUCTURE_HEADINGS]).setFontWeight('bold');
-  sheet.getRange(1, SCOL.parent).setNote(PARENT_HELP);
   sheet.setFrozenRows(1);
   sheet.setFrozenColumns(1);
-  sheet.setColumnWidth(SCOL.group, 220);
-  sheet.setColumnWidth(SCOL.type, 140);
-  sheet.setColumnWidth(SCOL.parent, 220);
-  sheet.hideColumns(SCOL.id, 2);
-  for (const p of sheet.getProtections(SpreadsheetApp.ProtectionType.SHEET)) p.remove();
-  const protection = sheet.protect().setDescription('Filled in by the Circle Structure script');
-  protection.setUnprotectedRanges([sheet.getRange('C2:C')]);
-  // Only the script's account (admin@) can edit the rest. (A file in a
-  // shared drive has no owner, whom protection always lets edit, so it
-  // names admin@ itself.)
-  const me = Session.getEffectiveUser().getEmail();
-  protection.addEditor(me);
-  protection.removeEditors(protection.getEditors().map(u => u.getEmail())
-    .filter(e => e.toLowerCase() !== me.toLowerCase()));
-  if (protection.canDomainEdit()) protection.setDomainEdit(false);
+  // (syncGroups, below, lays out the columns, if they aren't already.)
+  protectStructureSheet(sheet);
 
   // Editors of a file in a shared drive (unlike its managers) can't delete
   // or move it.
@@ -135,6 +136,45 @@ function setupCircleStructure() {
   logLink('The sheet, which ' + STRUCTURE_EDITORS + ' can edit (send them the link):',
     'https://docs.google.com/spreadsheets/d/' + sheetId + '/edit');
   logLink('The doc, which anyone with the link can view:', structureDocUrl());
+}
+
+// Protects the sheet: only the script's account (admin@) can edit it, but
+// for its Parent column. (A file in a shared drive has no owner, whom
+// protection always lets edit, so it names admin@ itself.)
+function protectStructureSheet(sheet) {
+  for (const p of sheet.getProtections(SpreadsheetApp.ProtectionType.SHEET)) p.remove();
+  const protection = sheet.protect().setDescription('Filled in by the Circle Structure script');
+  protection.setUnprotectedRanges([sheet.getRange(2, SCOL.parent, sheet.getMaxRows() - 1, 1)]);
+  const me = Session.getEffectiveUser().getEmail();
+  protection.addEditor(me);
+  protection.removeEditors(protection.getEditors().map(u => u.getEmail())
+    .filter(e => e.toLowerCase() !== me.toLowerCase()));
+  if (protection.canDomainEdit()) protection.setDomainEdit(false);
+}
+
+// Whether the sheet's heading row is STRUCTURE_HEADINGS, and nothing more.
+function sheetLaidOut(sheet) {
+  const width = Math.max(sheet.getLastColumn(), STRUCTURE_COLUMNS);
+  const row = sheet.getRange(1, 1, 1, width).getValues()[0].map(v => String(v).trim());
+  return row.every((v, i) => v === (STRUCTURE_HEADINGS[i] || ''));
+}
+
+// Lays the sheet out in STRUCTURE_LAYOUT, emptying it first: its rows have
+// to be read (readGroups) before, and written after. Moves the Parent
+// column's heading note and its protection's gap with it.
+function layOutSheet(sheet) {
+  const rows = sheet.getMaxRows();
+  const cols = sheet.getMaxColumns();
+  if (cols < STRUCTURE_COLUMNS) sheet.insertColumnsAfter(cols, STRUCTURE_COLUMNS - cols);
+  const all = sheet.getRange(1, 1, rows, sheet.getMaxColumns());
+  all.clearContent().clearNote().setDataValidation(null);
+  sheet.showColumns(1, sheet.getMaxColumns());
+  sheet.getRange(1, 1, 1, STRUCTURE_COLUMNS).setValues([STRUCTURE_HEADINGS]).setFontWeight('bold');
+  sheet.getRange(1, SCOL.parent).setNote(PARENT_HELP);
+  sheet.getRange(1, SCOL.email, rows, 1).setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP);
+  sheet.hideColumns(SCOL.id, 2);
+  protectStructureSheet(sheet);
+  console.log('Circle Structure: laid the sheet\'s columns out afresh.');
 }
 
 // The STRUCTURE_FOLDER_NAME folder at the top of the Shared Drive, made if
@@ -244,37 +284,51 @@ function refreshCircleStructureEverywhere() {
 
 // The sheet's rows: [{row, id, name, type, parent, problems, email (the
 // Google Group's primary address), listAddress (the one shown), gatherUrl,
-// folderUrl, agendaUrl}], row the sheet's row number.
+// folderUrl, agendaUrl, roles (who holds each of STRUCTURE_ROLES, in
+// order)}], row the sheet's row number. Each column is found by its heading
+// (see columnsByHeading), so this reads a sheet laid out before too.
 function readGroups(sheet) {
   const n = sheet.getLastRow() - 1;
-  if (n < 1) return [];
-  const range = sheet.getRange(2, 1, n, STRUCTURE_COLUMNS);
+  const width = sheet.getLastColumn();
+  if (n < 1 || width < 1) return [];
+  const col = columnsByHeading(sheet.getRange(1, 1, 1, width).getValues()[0], STRUCTURE_HEADINGS);
+  const range = sheet.getRange(2, 1, n, width);
   const values = range.getValues();
   const rich = range.getRichTextValues();
-  const link = (r, c) => (rich[r][c - 1] && rich[r][c - 1].getLinkUrl()) || '';
+  const at = (key, heading) => col[heading || STRUCTURE_HEADINGS[SCOL[key] - 1]];
+  const value = (r, key, heading) => {
+    const c = at(key, heading);
+    return c ? String(values[r][c - 1] || '').trim() : '';
+  };
+  const link = (r, key) => {
+    const c = at(key);
+    return (c && rich[r][c - 1] && rich[r][c - 1].getLinkUrl()) || '';
+  };
   const groups = [];
   values.forEach((v, r) => {
-    const id = String(v[SCOL.id - 1] || '').trim();
+    const id = value(r, 'id');
     if (!id) return;
     groups.push({
-      row: r + 2, id, name: String(v[SCOL.group - 1]).trim(), type: String(v[SCOL.type - 1]).trim(),
-      parent: String(v[SCOL.parent - 1]).trim(), problems: String(v[SCOL.problems - 1]),
-      email: String(v[SCOL.address - 1] || v[SCOL.email - 1]).trim().toLowerCase(),
-      listAddress: String(v[SCOL.email - 1]).trim().toLowerCase(),
-      gatherUrl: link(r, SCOL.gather), folderUrl: link(r, SCOL.folder),
-      agendaUrl: link(r, SCOL.agenda),
+      row: r + 2, id, name: value(r, 'group'), type: value(r, 'type'),
+      parent: value(r, 'parent'), problems: value(r, 'problems'),
+      email: (value(r, 'address') || value(r, 'email')).toLowerCase(),
+      listAddress: value(r, 'email').toLowerCase(),
+      gatherUrl: link(r, 'gather'), folderUrl: link(r, 'folder'), agendaUrl: link(r, 'agenda'),
+      roles: STRUCTURE_ROLES.map(role => value(r, null, role)),
     });
   });
   return groups;
 }
 
 // Brings the rows up to date with the Google Groups whose footers link a
-// Gather group and a Drive item: each group's name (renaming it in the
-// Parent cells that name it), type (see guessGroupType), email address,
-// and links, and, for a group not in the structure, why, in Problems. A
-// new group gets a row of its own, with an empty Parent; a group that's
-// gone (only if every footer could be read) loses its row. The rows are
-// kept in order by name.
+// Gather group and a Drive item, and are circles or working groups (see
+// guessGroupType): each group's name (renaming it in the Parent cells that
+// name it), type, email address, links, and role holders (from its agenda
+// doc's Roles table). A new group gets a row of its own, with an empty
+// Parent; a group that's gone (only if every footer could be read), or
+// isn't a circle or working group any more, loses its row. The rows are
+// kept in order by name. A sheet laid out before the columns last changed
+// is laid out afresh (see layOutSheet).
 function syncGroups() {
   const sheet = structureSheet();
   const {groups: footers, complete} = readGroupFooters();
@@ -288,17 +342,28 @@ function syncGroups() {
   for (const f of footers) {
     if (!f.gatherId || !f.driveItemId || seen[f.gatherId]) continue;
     seen[f.gatherId] = true;
-    const {type, reason} = guessGroupType(f.name, driveItemInfo(f.driveItemId));
     const old = byId[f.gatherId];
+    const item = driveItemInfo(f.driveItemId);
+    const {type, reason} = guessGroupType(f.name, item);
+    if (type === TYPE_OUT) {
+      // A Drive item that couldn't be read this time keeps its row as it was.
+      if (!item && old) rows.push(Object.assign({}, old, {isNew: false}));
+      else if (old) console.log('Circle Structure: removed ' + old.name + ', as ' + reason + '.');
+      // A circle whose folder is misnamed would be missed without a word.
+      else if (item && !item.isSharedDrive && !/\bclub\b/i.test(reason)) {
+        console.warn('Circle Structure: left out ' + f.name + ', as ' + reason + '.');
+      }
+      continue;
+    }
     if (old && old.name !== f.name) renames.push([old.name, f.name]);
     const doc = docs[f.gatherId];
     rows.push({
-      id: f.gatherId, name: f.name, type, problems: type === TYPE_OUT ? 'Not in the structure: ' + reason
-        : (old ? old.problems : ''),
+      id: f.gatherId, name: f.name, type, problems: old ? old.problems : '',
       parent: old ? old.parent : '', isNew: !old, email: f.email, listAddress: shortestAddress(f.email, f.aliases, DOMAIN),
       gatherUrl: f.gatherUrl,
       folderUrl: 'https://drive.google.com/drive/folders/' + f.driveItemId,
       agendaUrl: doc ? 'https://docs.google.com/document/d/' + doc + '/edit' : '',
+      roles: doc ? roleHolders(doc, old) : STRUCTURE_ROLES.map(() => ''),
     });
   }
   for (const g of existing) {
@@ -314,10 +379,13 @@ function syncGroups() {
   }
   rows.sort((a, b) => a.name.localeCompare(b.name));
 
-  // The headings, and hidden columns, of the current layout (in a sheet made
-  // before a column was added, say).
-  sheet.getRange(1, 1, 1, STRUCTURE_COLUMNS).setValues([STRUCTURE_HEADINGS]).setFontWeight('bold');
-  sheet.hideColumns(SCOL.id, 2);
+  // A sheet laid out before is emptied and laid out afresh, and every cell
+  // written.
+  let old = existing.slice();
+  if (!sheetLaidOut(sheet)) {
+    layOutSheet(sheet);
+    old = [];
+  }
 
   // Rewrite the rows, all but the Parent cells that haven't changed (so an
   // edit made meanwhile isn't lost).
@@ -328,16 +396,16 @@ function syncGroups() {
       .setDataValidation(null);
   }
   if (!n) return;
-  const old = existing.slice();
   const text = (t, url) => SpreadsheetApp.newRichTextValue().setText(t || '').setLinkUrl(url || null).build();
-  sheet.getRange(2, SCOL.group, n, 2).setValues(rows.map(r => [r.name, r.type]));
-  sheet.getRange(2, SCOL.problems, n, 1).setValues(rows.map(r => [r.problems]));
+  sheet.getRange(2, SCOL.group, n, 1).setValues(rows.map(r => [r.name]));
   sheet.getRange(2, SCOL.email, n, 1).setRichTextValues(rows.map(r => [
     text(r.listAddress, r.listAddress ? 'mailto:' + r.listAddress : null)]));
-  fitTextColumns(sheet);
   sheet.getRange(2, SCOL.gather, n, 3).setRichTextValues(rows.map(r => [
     text(r.gatherUrl ? 'Members' : '', r.gatherUrl), text('Documents', r.folderUrl),
     text(r.agendaUrl ? 'Agenda' : '', r.agendaUrl)]));
+  sheet.getRange(2, SCOL.role0, n, STRUCTURE_ROLES.length).setNumberFormat('@')
+    .setValues(rows.map(r => STRUCTURE_ROLES.map((_, i) => (r.roles || [])[i] || '')));
+  sheet.getRange(2, SCOL.type, n, 2).setValues(rows.map(r => [r.type, r.problems]));
   sheet.getRange(2, SCOL.id, n, 2).setNumberFormat('@').setValues(rows.map(r => [r.id, r.email]));
   rows.forEach((r, i) => {
     const before = old[i];
@@ -346,13 +414,31 @@ function syncGroups() {
       cell.setDataValidation(null).setValue(r.parent);
     }
   });
+  fitColumns(sheet);
   const added = rows.filter(r => r.isNew).map(r => r.name);
   if (added.length) console.log('Circle Structure: added ' + added.join(', ') + '.');
 }
 
-// Fits the Problems and Email list columns' widths to their text.
-function fitTextColumns(sheet) {
-  sheet.autoResizeColumns(SCOL.problems, 2);
+// Who holds each of STRUCTURE_ROLES, in order, from the Roles table of an
+// agenda doc (in its first tab; '' for a role no one holds, or a doc not
+// built yet). If the doc can't be read, what the group's row (old, or
+// none) said before.
+function roleHolders(docId, old) {
+  try {
+    const content = (Docs.Documents.get(docId).body || {}).content || [];
+    return STRUCTURE_ROLES.map(role => roleHolderIn(content, role));
+  } catch (e) {
+    console.warn('Couldn\'t read the roles in agenda doc ' + docId + ': ' + e.message);
+    return old && old.roles ? old.roles : STRUCTURE_ROLES.map(() => '');
+  }
+}
+
+// Fits each shown column's width to its text, but for the Email list
+// column, which is only as wide as its heading (EMAIL_LIST_WIDTH).
+function fitColumns(sheet) {
+  sheet.autoResizeColumns(1, SCOL.email - 1);
+  sheet.autoResizeColumns(SCOL.email + 1, SCOL.id - SCOL.email - 1);
+  sheet.setColumnWidth(SCOL.email, EMAIL_LIST_WIDTH);
 }
 
 // What guessGroupType needs to know of a Drive item: {name, isSharedDrive,
@@ -439,6 +525,9 @@ function agendaDocFiles() {
 function applyStructure() {
   const sheet = structureSheet();
   if (!sheet) return;
+  // The columns below are where they are now; a sheet laid out before
+  // waits for syncGroups to lay it out afresh.
+  if (!sheetLaidOut(sheet)) syncGroups();
   const props = PropertiesService.getScriptProperties();
   const lastApplied = JSON.parse(props.getProperty(STRUCTURE_APPLIED_KEY) || '{}');
   const groups = readGroups(sheet);
@@ -478,7 +567,7 @@ function applyStructure() {
       const current = groups.map(g => [g.problems]);
       if (JSON.stringify(current) !== JSON.stringify(problems)) {
         sheet.getRange(2, SCOL.problems, rows, 1).setValues(problems);
-        fitTextColumns(sheet);
+        fitColumns(sheet);
       }
       sheet.getRange(2, SCOL.parent, rows, 1).setDataValidations(groups.map(g => {
         const choices = parentChoices(g, groups, tree.children);

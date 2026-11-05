@@ -337,7 +337,12 @@ function meetingEnd(title, body) {
 // its Name dropdown (or, in docs built before it had one, the cell's text),
 // or '' if none has been chosen.
 function roleHolder(docId, role) {
-  for (const se of apiTab(docId).content) {
+  return roleHolderIn(apiTab(docId).content, role);
+}
+
+// roleHolder, from the Circle Info tab's Docs API content.
+function roleHolderIn(content, role) {
+  for (const se of content) {
     if (!se.table) continue;
     for (const row of se.table.tableRows) {
       const cells = row.tableCells;

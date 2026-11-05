@@ -331,3 +331,14 @@ function shortestAddress(primary, aliases, domain) {
   return [primary, ...(aliases || []).filter(a => a.endsWith('@' + domain))]
     .reduce((best, a) => (a.length < best.length ? a : best));
 }
+
+// Where each of headings is in a sheet's heading row (row, its cells'
+// values): {heading: its 1-based column, or 0 if it isn't there}. Lets the
+// rows be read from a sheet laid out before its columns were last
+// changed.
+function columnsByHeading(row, headings) {
+  const cols = {};
+  const texts = (row || []).map(v => String(v || '').trim().toLowerCase());
+  for (const h of headings) cols[h] = texts.indexOf(h.toLowerCase()) + 1;
+  return cols;
+}

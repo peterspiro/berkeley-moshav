@@ -293,3 +293,9 @@ def test_shared_drive_id_matches_python():
 def test_shortest_address(aliases, address):
     assert js("shortestAddress('garden-working-group@x.org', aliases, 'x.org')",
               aliases=aliases) == address
+
+
+def test_columns_by_heading():
+    row = ["Group", "Type", "Parent", " email list ", "", "Gather ID"]
+    assert js("columnsByHeading(row, ['Group', 'Parent', 'Email list', 'Gather ID', 'Leader'])",
+              row=row) == {"Group": 1, "Parent": 3, "Email list": 4, "Gather ID": 6, "Leader": 0}

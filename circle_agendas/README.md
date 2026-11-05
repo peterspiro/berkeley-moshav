@@ -327,8 +327,9 @@ and only its managers can move or delete them: the Coordinating Circle are
 the sheet's editors, which in a shared drive can't. It has three parts:
 
 - **The sheet**, "Circle Structure (editing)": a
-  row per group, keyed by its Gather group ID (in a hidden column, so a
-  rename keeps the row). The Coordinating Circle
+  row per circle and working group (clubs, everybody groups, and groups
+  whose type can't be told have none), keyed by its Gather group ID (in a
+  hidden column, so a rename keeps the row). The Coordinating Circle
   (`coordinating-circle@berkeleymoshav.org`, `STRUCTURE_EDITORS`) can edit
   only its **Parent** column: everything else is protected, editable only by
   `admin@`, which the script runs as. (So can anyone with edit access to the
@@ -336,18 +337,24 @@ the sheet's editors, which in a shared drive can't. It has three parts:
   the Parent column isn't protected.) Each Parent cell is a dropdown of the groups the
   row may be under: a circle under a circle, a working group under a circle
   or working group, leaving out the group itself and the groups beneath it.
-  Full Community (`ROOT_GROUP_NAME`) is always at the top. The other
-  columns: **Type** (Circle or Working Group, from the name of the group's
+  Full Community (`ROOT_GROUP_NAME`) is always at the top. The columns, in
+  order (`STRUCTURE_LAYOUT`): **Group**, **Parent**, **Email list** (a
+  mailto link to the group's shortest address, a shorter alias if it has
+  one; only as wide as its heading, cutting the address off), **Gather
+  group**, **Drive folder**, and **Agenda doc** (links), one column for
+  each role in the agenda doc's Roles table (**Leader**, **Feedback Link**,
+  **Facilitator**, **Secretary**: who its Name dropdown shows, read
+  hourly), **Type** (Circle or Working Group, from the name of the group's
   Drive folder, or else of the group: one ending in "Circle" is a circle's,
   and one ending in "Working Group", "Work Group", "Team", or "Pod" a
   working group's, perhaps followed by something in brackets, such as the
   group's acronym, as in "Development, Finance, & Legal Circle (DF&L)"; a
   club, a group linked to a shared drive, and a group whose names don't
-  say are "Not in the structure"), **Problems** (why a group isn't in the structure, or isn't
-  placed yet), the email list (a mailto link to the group's shortest
-  address, a shorter alias if it has one; these two columns are fitted
-  to their text whenever it changes), and links to the Gather group, Drive
-  folder, and agenda doc.
+  say are left out), and **Problems** (why a group isn't placed yet). The
+  columns but Email list are fitted to their text whenever it changes.
+  Rows are read by their columns' headings, so when the columns change, the
+  next run reads the sheet as it was and lays it out afresh (losing only
+  the notes on Parent cells).
 - **The doc**, "Circle Structure", which anyone
   with the link can view (or, if the domain doesn't allow that, anyone in
   it): under a grey line saying it's kept up to date automatically, and
@@ -372,9 +379,11 @@ How it stays up to date:
 
 - **`syncCircleStructureGroups`**, hourly, brings the rows up to date with
   the Google Groups whose footers link a Gather group and a Drive item:
-  adds a row for a new group (with an empty Parent), renames (in the Parent
-  cells too), relinks, and retypes, and removes the row of a group that's
-  gone (only when every footer could be read). The rows stay in order by
+  adds a row for a new circle or working group (with an empty Parent),
+  renames (in the Parent cells too), relinks, retypes, and reads each
+  agenda doc's role holders, and removes the row of a group that's gone
+  (only when every footer could be read) or is no longer a circle or
+  working group (not when its Drive folder just couldn't be read). The rows stay in order by
   name.
 - **`applyStructure`** runs on each edit
   of the sheet (`onCircleStructureEdit`, as `admin@`, whoever made the
@@ -412,7 +421,8 @@ How it stays up to date:
    from the placements, writes the doc, rewrites every agenda doc's
    Parent Circle and Sub-Circles rows, and logs the three links. Check the
    sheet's Problems column, and the notes on its Parent cells, for anything
-   left to place by hand.
+   left to place by hand, and the execution log for groups left out because
+   their type couldn't be told.
 4. Send the sheet's link to the Coordinating Circle, and put the doc's link
    where people look for the structure (in place of the old wiki page's
    tree, say).

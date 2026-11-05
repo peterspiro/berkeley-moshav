@@ -254,6 +254,33 @@ yet; `fillAboutForCircleDocs`, `rewriteStructureRowsInCircleDocs`, and
 - Where a circle's own standing agenda items would live is still to
   decide (see below).
 
+**Circle Structure sheet: a Meeting times column** (not built)
+- Where: after Email list and Gather group, before Drive folder (and after
+  Guests, if that column is built).
+- Source: the group's calendar, the one its footer links (`calendarId`, as
+  `parseCircleFooter` reads it), which `group_meetings` already treats as
+  the place a group's meetings live. Groups without a calendar get a blank.
+- Read hourly in `syncGroups`, one `Calendar.Events.list` per group,
+  without `singleEvents`, so a repeating meeting comes back once, as its
+  series with its `RRULE`, over the next 12 weeks. Leave out cancelled
+  events, all-day events, and series that have ended (an `UNTIL` before
+  today).
+- What it says, worked out by a pure function in `structure_rules.gs`
+  (tested under Node), from each series' rule and start and end times, in
+  `TIME_ZONE`:
+  - weekly: "Tue 7:30–9 pm" (every other week: "Every other Tue …");
+  - monthly by weekday: "2nd & 4th Tue 7:30–9 pm", "Last Sun 4–5:30 pm";
+  - several series: each on a line of its own, in the cell;
+  - no series, only one-off meetings: "Next: Nov 12, 7–8:30 pm";
+  - a rule it can't put in words (by month day, yearly, `EXDATE`-heavy):
+    the next date, as for a one-off.
+  The cell links the group's calendar (the same link as the footer's).
+- A meeting moved for one week (an exception to the series) doesn't change
+  the column; it says what usually happens.
+- Cost: about 40 calendar reads an hour, well inside Apps Script's quota.
+- Optional later: the agenda doc's About this circle could show the same
+  text, from the same function.
+
 ## The probes
 
 `archive/circle_agendas/agenda_probe.gs` tested, on a copy of Sociocracy
