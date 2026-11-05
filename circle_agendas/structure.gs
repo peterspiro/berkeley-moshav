@@ -643,15 +643,16 @@ function bulletStructureDoc(docId) {
   if (indents.length) Docs.Documents.batchUpdate({requests: indents}, docId);
 }
 
-// A group's line in the doc: its name, and smaller links to its agenda doc
-// (if it has one), members, documents, and email list.
+// A group's line in the doc: its name, and smaller links to its members,
+// documents, email list, and agenda doc (if it has one).
 function structureDocRuns(g) {
   const runs = [[g.name, null]];
   const links = [];
-  if (g.agendaUrl) links.push(['Agenda', g.agendaUrl]);
   if (g.gatherUrl) links.push(['Members', g.gatherUrl]);
   if (g.folderUrl) links.push(['Documents', g.folderUrl]);
   if (g.email) links.push(['Email', 'mailto:' + g.email]);
+  // Last, as some groups have none.
+  if (g.agendaUrl) links.push(['Agenda', g.agendaUrl]);
   const small = {[A.FOREGROUND_COLOR]: COLOR.muted, [A.FONT_SIZE]: STRUCTURE_LINKS_SIZE};
   links.forEach(([text, url], i) => {
     runs.push([i ? ' · ' : '    ', small]);
@@ -661,7 +662,7 @@ function structureDocRuns(g) {
 }
 
 // The point sizes of the doc's group names and intro (Docs' default text
-// size), and of its Agenda · Members · Documents · Email links; and the
+// size), and of its Members · Documents · Email · Agenda links; and the
 // space after each group's line, in points.
 const STRUCTURE_TEXT_SIZE = 11;
 const STRUCTURE_LINKS_SIZE = 8;
