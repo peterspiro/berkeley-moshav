@@ -6,7 +6,7 @@ addresses) in each new meeting's attendance and closing round. Google
 gives it names only for accounts that share them, and often just the part
 of the address before the @, so it looks names up in MEMBER_NAMES_FILE, a
 JSON object of email address -> short name in the signed-in account's
-(admin@'s) My Drive, which update_groups_in_google_and_hierarchy.py writes
+(admin@'s) My Drive, which update_groups.py writes
 on each run. Both a member's Gather email and their Google Email (the
 address Gather shares Drive items with) are listed.
 

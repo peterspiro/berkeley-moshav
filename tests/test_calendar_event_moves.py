@@ -9,7 +9,7 @@ import datetime
 
 import pytest
 
-import update_groups_in_google_and_hierarchy as m
+import update_groups as m
 import util.calendar_event_moves as cem
 import util.meeting_rooms as mr
 from tests.fakes_meeting_rooms import OWNER, FakeCalendarService, FakeZoom, room

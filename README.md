@@ -94,7 +94,7 @@ passcode exposes nothing more. Passcodes are six digits, to be easy to type
 and read out.
 
 The footer is the only record of which calendar and Zoom room belong to a
-group; `update_groups_in_google_and_hierarchy.py` and `add_new_group.py`
+group; `update_groups.py` and `add_new_group.py`
 create them and write the links. A new calendar is shared with the group's
 Google Group as "Make changes to events", so membership of the Google Group
 (kept in step with Drive above) decides who can use it. The scripts only set
@@ -200,7 +200,7 @@ share a calendar with its group when it isn't shared with the group at all).
    they can change who edits without asking the Technology Circle.
 
 Members who can't edit still get every meeting's invitation.
-`update_groups_in_google_and_hierarchy.py` shows a restricted calendar in its
+`update_groups.py` shows a restricted calendar in its
 status line as "calendar (members can view, not edit)".
 
 ## Directories
@@ -236,12 +236,13 @@ status line as "calendar (members can view, not edit)".
   `--agenda-doc`, for a circle or working group, creates its agenda doc,
   for the `circle_agendas` Apps Script to build; and opens a welcome email to the new list as a draft in
   your mail program.
-- **`update_groups_in_google_and_hierarchy.py`** brings every group (or one,
+- **`update_groups.py`** brings every group (or one,
   with `-g`) into line: offers to find or create a missing Drive folder or
   email list, enforces the Google Group settings, gives each group a calendar
-  and Zoom room, and writes the footer links. (Despite its name, it no
-  longer touches the Circle Structure: the `circle_agendas` Apps Script
-  keeps that up to date from the footers.) Its first run also creates the
+  and Zoom room, and writes the footer links. (It was
+  `update_groups_in_google_and_hierarchy` while it also kept the Circle
+  Structure wiki page; the `circle_agendas` Apps Script now keeps the Circle
+  Structure, from the footers.) Its first run also creates the
   "All Berkeley Moshav Events" calendar, which it shares view-only with the
   everybody groups (with `-g`, only if `--share-all-events` is given, since
   finding them means reading every group from Gather). When it creates a group's calendar, it emails the
@@ -458,7 +459,7 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
     gone out of date.
   - **`circle_agendas/structure_rules.gs`** holds the Circle Structure's
     rules (a circle only under a circle, a working group under a circle or
-    working group, no loops; a group's type from its Drive folder's name),
+    working group, no loops; a group's type from its Drive folder's name: "Circle", or "Working Group", "Work Group", "Team", or "Pod" for a working group),
     the tree, and what an agenda doc's rows say, tested under Node.
   - **`circle_agendas/build_template.gs`** builds an agenda doc from a
     blank doc, entirely from code (so it depends on no other document):

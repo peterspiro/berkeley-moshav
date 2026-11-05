@@ -20,7 +20,7 @@ const TYPE_WORKING_GROUP = 'Working Group';
 const TYPE_OUT = 'Not in the structure';
 const GROUP_TYPES = [TYPE_CIRCLE, TYPE_WORKING_GROUP, TYPE_OUT];
 // The group at the top of the structure, the everybody group (as
-// FULL_COMMUNITY_GROUP_NAME in update_groups_in_google_and_hierarchy.py).
+// FULL_COMMUNITY_GROUP_NAME in update_groups.py).
 const ROOT_GROUP_NAME = 'Full Community';
 // What the top group's Parent cell says, and its resolved parent.
 const PARENT_TOP = 'Top of the structure';
@@ -44,7 +44,12 @@ function isRootGroup(group) {
 // folder)}, or null if it couldn't be read. Circles' and working groups'
 // folders are named with their type ("Technology Circle", "Garden Working
 // Group"; see folder_name_for_group_type in util/gdrive_config.py), as
-// their Gather names often aren't.
+// their Gather names often aren't: a name ending in one of
+// WORKING_GROUP_WORDS is a working group's, one ending in "Circle" a
+// circle's, and one ending in "Club" a club's, each word perhaps followed
+// by something in brackets, often the group's acronym ("Development,
+// Finance, & Legal Circle (DF&L)").
+const WORKING_GROUP_WORDS = ['Working Group', 'Work Group', 'Team', 'Pod'];
 function guessGroupType(name, item) {
   if (sameName(name, ROOT_GROUP_NAME)) return {type: TYPE_CIRCLE, reason: ''};
   if (!item) {
@@ -53,16 +58,19 @@ function guessGroupType(name, item) {
   if (item.isSharedDrive) {
     return {type: TYPE_OUT, reason: 'it\'s linked to a shared drive, as everybody groups are'};
   }
-  const endsWith = (text, word) => new RegExp('\\b' + word + '\\s*$', 'i').test(text || '');
-  if (item.inClubs || endsWith(item.name, 'Club') || endsWith(name, 'Club')) {
+  const endsWith = (text, words) => new RegExp('\\b(?:' +
+    words.map(w => w.replace(/ /g, '\\s+')).join('|') + ')\\s*(?:\\([^()]*\\)\\s*)?$', 'i')
+    .test(text || '');
+  if (item.inClubs || endsWith(item.name, ['Club']) || endsWith(name, ['Club'])) {
     return {type: TYPE_OUT, reason: 'it\'s a club'};
   }
   for (const text of [item.name, name]) {
-    if (endsWith(text, 'Working Group')) return {type: TYPE_WORKING_GROUP, reason: ''};
-    if (endsWith(text, 'Circle')) return {type: TYPE_CIRCLE, reason: ''};
+    if (endsWith(text, WORKING_GROUP_WORDS)) return {type: TYPE_WORKING_GROUP, reason: ''};
+    if (endsWith(text, ['Circle'])) return {type: TYPE_CIRCLE, reason: ''};
   }
   return {type: TYPE_OUT, reason: 'its Drive folder\'s name, "' + item.name + '", doesn\'t end ' +
-    'with "Circle" or "Working Group", to tell its type (rename the folder to fix this)'};
+    'with "Circle", "' + WORKING_GROUP_WORDS.join('", "') + '" (perhaps followed by something ' +
+    'in brackets), to tell its type (rename the folder to fix this)'};
 }
 
 // Whether a group of type childType may be under one of parentType: a

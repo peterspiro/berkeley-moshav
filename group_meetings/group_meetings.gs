@@ -36,7 +36,7 @@
  * which meeting moves (see overlapMessage in event_rules.gs).
  *
  * Which calendar and room are a group's comes from the group's own email
- * footer (written by update_groups_in_google_and_hierarchy.py), read hourly,
+ * footer (written by update_groups.py), read hourly,
  * so new groups are picked up without redeploying.
  *
  * Setup: see README.md in this folder.

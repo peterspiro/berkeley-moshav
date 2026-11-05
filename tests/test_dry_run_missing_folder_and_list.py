@@ -6,7 +6,7 @@ a dry run links none).
 All names and IDs are fictional.
 """
 
-import update_groups_in_google_and_hierarchy as m
+import update_groups as m
 
 
 def _run(capsys, list_name):

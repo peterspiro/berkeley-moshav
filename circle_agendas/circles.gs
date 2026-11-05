@@ -3,7 +3,7 @@
  *
  * Which circle an agenda doc belongs to, and that circle's calendar, Zoom
  * room, and members. A circle is a Google Group whose footer (written by
- * update_groups_in_google_and_hierarchy.py; see parseCircleFooter in
+ * update_groups.py; see parseCircleFooter in
  * agenda_rules.gs) links its Drive folder or shared drive, calendar, and
  * Zoom room; a doc belongs to the circle whose Drive item it's in, at any
  * depth. The groups' footers are cached for CIRCLES_CACHE_SECONDS, and
@@ -12,7 +12,7 @@
 
 const DOMAIN = 'berkeleymoshav.org';
 // Members' names by email address, from the Gather directory, written to
-// admin@'s My Drive by update_groups_in_google_and_hierarchy.py (see
+// admin@'s My Drive by update_groups.py (see
 // util/member_names.py, whose MEMBER_NAMES_FILE this must match).
 const MEMBER_NAMES_FILE = 'Circle agenda member names.json';
 const MEMBER_NAMES_CACHE_SECONDS = 10 * 60;
@@ -140,7 +140,7 @@ function memberNames() {
   const files = DriveApp.getRootFolder().getFilesByName(MEMBER_NAMES_FILE);
   if (!files.hasNext()) {
     console.warn('No ' + MEMBER_NAMES_FILE + ' in My Drive; run ' +
-      'update_groups_in_google_and_hierarchy.py to write it.');
+      'update_groups.py to write it.');
     return {};
   }
   const text = files.next().getBlob().getDataAsString('UTF-8');
@@ -166,7 +166,7 @@ function nextEvents(circle, after, count) {
 // Run from the editor: forgets the cached names and circles, so the next
 // meeting reads them afresh, and logs what MEMBER_NAMES_FILE holds (how many
 // names, how many are more than a first name, and a few of them), to check
-// that update_groups_in_google_and_hierarchy.py has written short names.
+// that update_groups.py has written short names.
 function checkMemberNames() {
   CacheService.getScriptCache().removeAll([MEMBER_NAMES_FILE, CIRCLES_CACHE_KEY]);
   const files = DriveApp.getRootFolder().getFilesByName(MEMBER_NAMES_FILE);

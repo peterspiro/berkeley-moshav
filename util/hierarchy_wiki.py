@@ -26,7 +26,7 @@ from util.gather_utils import _check_submit_errors, _codemirror_get, _codemirror
 WIKI_TITLE = "Circle Structure"
 WIKI_SLUG = "circle-structure"
 # The root line's full name is managed by ensure_root_node() in
-# an earlier update_groups_in_google_and_hierarchy.py and may change over time, but it
+# an earlier update_groups.py and may change over time, but it
 # always contains this substring — used below to locate the block
 # regardless of exactly how the rest of the root's name is worded.
 HIERARCHY_ROOT = "Top Circle / HOA"

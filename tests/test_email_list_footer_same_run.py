@@ -10,7 +10,7 @@ gather_group_email() rejected the new address and the footer was skipped.
 All names, emails, and IDs are fictional.
 """
 
-import update_groups_in_google_and_hierarchy as m
+import update_groups as m
 
 
 def test_selected_existing_group_has_email_in_same_run(monkeypatch):

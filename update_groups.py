@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """
 Syncs Google (Drive folders, Groups, calendars, Zoom rooms, and agenda
-docs) with the current /groups list. (Despite its name, it no longer
-touches the Circle Structure, which is now a Google Sheet that the
-circle_agendas Apps Script keeps up to date with the groups; see
-circle_agendas/structure.gs.)
+docs) with the current /groups list. (It doesn't touch the Circle
+Structure, a Google Sheet that the circle_agendas Apps Script keeps up to
+date with the groups' footers; see circle_agendas/structure.gs. Until that
+replaced the Circle Structure wiki page, this script was
+update_groups_in_google_and_hierarchy.py, and kept the page too.)
 
 For every circle/working group in Gather (kind "circle" or "committee"),
 excluding hidden groups:
@@ -96,9 +97,9 @@ Calendar):
 Also requires the Zoom app's credentials in zoom_credentials (see README.md).
 
 Usage:
-    python update_groups_in_google_and_hierarchy.py -e admin@example.com -p secret
-    python update_groups_in_google_and_hierarchy.py -u https://example.gather.coop -n
-    python update_groups_in_google_and_hierarchy.py -g landscape
+    python update_groups.py -e admin@example.com -p secret
+    python update_groups.py -u https://example.gather.coop -n
+    python update_groups.py -g landscape
 """
 
 import argparse
@@ -188,8 +189,8 @@ from util.meeting_rooms import (
     list_owned_calendars,
 )
 from util.zoom_utils import ZoomClient
-_LOG_FILE = Path("debug/update_groups_in_google_and_hierarchy_log.csv")
-_SCREENSHOT_DIR = Path("debug/update_groups_in_google_and_hierarchy_screenshots")
+_LOG_FILE = Path("debug/update_groups_log.csv")
+_SCREENSHOT_DIR = Path("debug/update_groups_screenshots")
 
 configure(_LOG_FILE, _SCREENSHOT_DIR)
 

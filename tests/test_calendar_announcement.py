@@ -10,7 +10,7 @@ import email
 
 import pytest
 
-import update_groups_in_google_and_hierarchy as m
+import update_groups as m
 import util.calendar_announcement as ca
 from util.calendar_announcement import (
     ALERT_EMAIL,

@@ -99,7 +99,7 @@ The links:
   Secretary (dropdowns of the members, set to the holders chosen in the
   Circle Info tab's Roles) and Guests (named as in the Gather directory,
   from "Circle agenda member names.json" in `admin@`'s My Drive, which
-  `update_groups_in_google_and_hierarchy.py` writes on each run, or else
+  `update_groups.py` writes on each run, or else
   as Google names them); its agenda has one 5-minute topic; its
   Administrative matters list gives the next event as the next meeting
   and links "Minutes of last meeting" to the previous meeting's tab; and
@@ -202,7 +202,7 @@ web app read it (and the groups' footers) afresh.
 ## Circles' docs
 
 Each circle and working group gets an agenda doc, "<Group> Agenda", in its
-Drive folder. `update_groups_in_google_and_hierarchy.py --agenda-docs`
+Drive folder. `update_groups.py --agenda-docs`
 (with `-g`, for one group) and `add_new_group.py --agenda-doc` create it
 empty and label it in Drive with the group's
 address and "new" (`util/circle_agenda_docs.py`).
@@ -301,7 +301,7 @@ change a doc's contents, only create an empty one when a group has none.
 
 A group's doc is found by its label, so a group never gets a second one;
 if its doc is deleted or moved to the trash, the next run of
-`update_groups_in_google_and_hierarchy.py --agenda-docs` makes a new one.
+`update_groups.py --agenda-docs` makes a new one.
 The flags keep docs from being made for every group before their layout
 is settled: changes to the Circle Info and Backlog tabs don't reach docs
 already made (see the plan).
@@ -322,9 +322,12 @@ The tree of circles and working groups (`structure.gs`, with its rules in
   or working group, leaving out the group itself and the groups beneath it.
   Full Community (`ROOT_GROUP_NAME`) is always at the top. The other
   columns: **Type** (Circle or Working Group, from the name of the group's
-  Drive folder, which ends in its type; a club, a group linked to a shared
-  drive, and a group whose folder's name doesn't say are "Not in the
-  structure"), **Problems** (why a group isn't in the structure, or isn't
+  Drive folder, or else of the group: one ending in "Circle" is a circle's,
+  and one ending in "Working Group", "Work Group", "Team", or "Pod" a
+  working group's, perhaps followed by something in brackets, such as the
+  group's acronym, as in "Development, Finance, & Legal Circle (DF&L)"; a
+  club, a group linked to a shared drive, and a group whose names don't
+  say are "Not in the structure"), **Problems** (why a group isn't in the structure, or isn't
   placed yet), the email list, and links to the Gather group, Drive
   folder, and agenda doc.
 - **The doc**, "Circle Structure", in `admin@`'s My Drive, which anyone

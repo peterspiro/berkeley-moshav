@@ -50,7 +50,7 @@ Steps:
 
 Requires Google API access (Drive, Admin Directory, Groups Settings,
 Calendar), signed in as the calendars' owner, and the Zoom app's
-credentials in zoom_credentials — see update_groups_in_google_and_hierarchy.py's
+credentials in zoom_credentials — see update_groups.py's
 docstring and README.md for setup.
 
 The group type (circle / working group / club) is inferred from a name
@@ -554,7 +554,7 @@ def main(
         except QuitRequested:
             log("INFO", "quit", "User quit during the calendar/Zoom room step")
             print(f"Skipped the rest of the calendar/Zoom room setup. Run "
-                  f"'python update_groups_in_google_and_hierarchy.py -g \"{gdisplay}\"' "
+                  f"'python update_groups.py -g \"{gdisplay}\"' "
                   "later to finish it.")
 
         # ── Write the Google Group's footer link block ───────────────────────

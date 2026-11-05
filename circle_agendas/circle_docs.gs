@@ -2,7 +2,7 @@
  * Circle Docs
  *
  * Builds each circle's and working group's agenda doc. The Python scripts
- * (util/circle_agenda_docs.py, run by update_groups_in_google_and_hierarchy.py
+ * (util/circle_agenda_docs.py, run by update_groups.py
  * and add_new_group.py) create the doc empty, in the group's Drive item,
  * labelled (Drive file properties, public ones: the Python scripts are a
  * different app, and can't share appProperties) with the group's address
