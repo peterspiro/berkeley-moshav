@@ -280,12 +280,23 @@ function onCircleStructureEdit() {
   }
 }
 
-// Run from the editor: rewrites the doc and every agenda doc's rows that
-// don't say what they should.
+// Run from the editor: does at once what the timers do, bringing the
+// sheet's rows up to date with the groups (as the hourly
+// syncCircleStructureGroups does: names, links, roles, guests, meeting
+// times, column widths), and rewriting the doc and every agenda doc's rows
+// that don't say what they should.
 function refreshCircleStructureEverywhere() {
-  PropertiesService.getScriptProperties().deleteProperty(STRUCTURE_DOC_HASH_KEY);
-  applyStructure();
-  refreshStructureInAllCircleDocs();
+  const lock = LockService.getScriptLock();
+  lock.waitLock(60000);
+  try {
+    if (!structureSheet()) return;
+    syncGroups();
+    PropertiesService.getScriptProperties().deleteProperty(STRUCTURE_DOC_HASH_KEY);
+    applyStructure();
+    refreshStructureInAllCircleDocs();
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 // ── The sheet's rows ─────────────────────────────────────────────────────────

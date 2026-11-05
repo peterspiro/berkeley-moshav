@@ -278,6 +278,11 @@ class TestSignature:
         b = [{"runs": [["Land", {"link": "u3"}]]}]
         assert not js("paragraphsSignature(a) === paragraphsSignature(b)", a=a, b=b)
 
+    def test_no_break_space_differs(self):
+        a = [{"runs": [["Circle Structure", {}]]}]
+        b = [{"runs": [["Circle\u00a0Structure", {}]]}]
+        assert not js("paragraphsSignature(a) === paragraphsSignature(b)", a=a, b=b)
+
     def test_changed_text(self):
         a = [{"runs": [["Land", {}]]}]
         b = [{"runs": [["Lands", {}]]}]

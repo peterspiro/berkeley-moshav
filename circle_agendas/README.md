@@ -457,5 +457,8 @@ How it stays up to date:
    where people look for the structure (in place of the old wiki page's
    tree, say).
 
-**`refreshCircleStructureEverywhere`**, run in the editor, rewrites the doc
-and every agenda doc's rows that don't say what they should, at once.
+**`refreshCircleStructureEverywhere`**, run in the editor, does at once
+what the timers do: brings the sheet's rows up to date with the groups (as
+the hourly sync does: names, links, roles, guests, meeting times, and
+column widths), and rewrites the doc and every agenda doc's rows that
+don't say what they should.

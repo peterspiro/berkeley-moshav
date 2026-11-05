@@ -325,7 +325,9 @@ function paragraphsSignature(paragraphs) {
     text += ' ';
     last = null;
   }
-  return JSON.stringify({text: text.replace(/\s+/g, ' ').trim(), links});
+  // (A no-break space counts as itself, so a change to or from one is
+  // seen.)
+  return JSON.stringify({text: text.replace(/[^\S\u00a0]+/g, ' ').trim(), links});
 }
 
 // A group's shortest address in the domain, of its primary address and its
