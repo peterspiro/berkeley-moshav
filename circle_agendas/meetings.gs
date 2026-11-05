@@ -337,11 +337,22 @@ function meetingEnd(title, body) {
 // its Name dropdown (or, in docs built before it had one, the cell's text),
 // or '' if none has been chosen.
 function roleHolder(docId, role) {
-  return roleHolderIn(apiTab(docId).content, role);
+  const tab = firstApiTab(docId);
+  return roleHolderIn(tab.content, role, tab.dropdownDefinitions);
+}
+
+// A doc's first tab, from the Docs API: {content, dropdownDefinitions}.
+function firstApiTab(docId) {
+  const tab = Docs.Documents.get(docId, {includeTabsContent: true}).tabs[0].documentTab;
+  return {content: tab.body.content || [], dropdownDefinitions: tab.dropdownDefinitions || {}};
 }
 
 // roleHolder, from the Circle Info tab's Docs API content.
-function roleHolderIn(content, role) {
+// A dropdown's choice is read from its list (definitions, the tab's
+// dropdownDefinitions), which has its current name: the chip's own copy of
+// the name can be out of date after the list's choices are renamed (as
+// updatedRoleChoices renames "Ada L." to "Ada L").
+function roleHolderIn(content, role, definitions) {
   for (const se of content) {
     if (!se.table) continue;
     for (const row of se.table.tableRows) {
@@ -352,7 +363,11 @@ function roleHolderIn(content, role) {
         for (const pe of para.elements || []) {
           const props = pe.dropdown && pe.dropdown.dropdownProperties;
           if (chosen === null && props) {
-            chosen = props.selectedOptionId === ROLE_PLACEHOLDER_ID ? '' : props.displayValue || '';
+            const list = (definitions || {})[props.dropdownDefinitionId];
+            const option = list && ((list.dropdownDefinitionProperties || {}).options || [])
+              .find(o => o.optionId === props.selectedOptionId);
+            chosen = props.selectedOptionId === ROLE_PLACEHOLDER_ID ? ''
+              : (option ? option.displayValue : props.displayValue) || '';
           }
         }
       });

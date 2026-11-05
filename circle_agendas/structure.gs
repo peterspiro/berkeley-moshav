@@ -592,8 +592,8 @@ function findGuests(rows) {
 // none) said before.
 function roleHolders(docId, old) {
   try {
-    const content = (Docs.Documents.get(docId).body || {}).content || [];
-    return STRUCTURE_ROLES.map(role => roleHolderIn(content, role));
+    const tab = firstApiTab(docId);
+    return STRUCTURE_ROLES.map(role => roleHolderIn(tab.content, role, tab.dropdownDefinitions));
   } catch (e) {
     console.warn('Couldn\'t read the roles in agenda doc ' + docId + ': ' + e.message);
     return old && old.roles ? old.roles : STRUCTURE_ROLES.map(() => '');
