@@ -546,8 +546,10 @@ function writeStructureDocIfChanged(ctx) {
   const doc = DocumentApp.openById(docId);
   const body = doc.getBody();
   body.clear();
-  body.getChild(0).asParagraph().setText(STRUCTURE_DOC_NAME)
-    .setHeading(DocumentApp.ParagraphHeading.TITLE);
+  // (Paragraph.setText returns nothing, so it can't be chained.)
+  const title = body.getChild(0).asParagraph();
+  title.setText(STRUCTURE_DOC_NAME);
+  title.setHeading(DocumentApp.ParagraphHeading.TITLE);
   writeRuns(body.appendParagraph('').setHeading(DocumentApp.ParagraphHeading.NORMAL), [['The circles and working groups, each under the circle ' +
     '(or working group) it\'s part of. It\'s kept up to date automatically; to move a group, ' +
     'ask the Coordinating Circle. Each name links to the group\'s agenda doc (or its Drive ' +
