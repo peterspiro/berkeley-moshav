@@ -47,7 +47,6 @@ const COLOR = {
   followUpReportRow: '#f9ecc6',
 };
 
-
 // The first tab's title; each meeting has a tab of its own, titled with its
 // date, after it.
 const MAIN_TAB_TITLE = 'Circle Info';
@@ -97,52 +96,215 @@ const PROBLEM_COLOR = '#cc0000';
 const MEETING_HEADER_ROWS = 1;
 const MEETING_PINNED_ROWS = 1;
 
-// ── Entry points ─────────────────────────────────────────────────────────────
+const A = DocumentApp.Attribute;
+const BOLD = {[A.BOLD]: true};
+// Table text is all Docs' default size; secondary text is grey.
+const MUTED = {[A.FOREGROUND_COLOR]: COLOR.muted};
+const HINT = {[A.FOREGROUND_COLOR]: COLOR.hint};
+// The point size of the small grey hints under About this circle's labels:
+// Remind before meetings' how to write it, and the Parent Circle and
+// Sub-Circles rows' "(Managed here. See Circle Structure.)".
+const LABEL_HINT_SIZE = 8;
 
-// Rebuilds the preview doc in place, wherever it's been moved to, or makes
-// one if there's none (or it's been trashed).
-function previewTemplate() {
-  const props = PropertiesService.getScriptProperties();
-  let docId = props.getProperty('previewDocId');
-  try {
-    if (docId && DriveApp.getFileById(docId).isTrashed()) docId = null;
-  } catch (e) {
-    docId = null; // Deleted.
+// The Roles table's roles, in order: [name, what it does]. (Docs built
+// before layout ROLE_ORDER_LAYOUT have them in OLD_ROLE_ORDER.)
+const ROLE_LABELS = [
+  ['Leader', 'supports circle operations'],
+  ['Secretary', 'minutes and circle docs'],
+  ['Facilitator', 'facilitates meetings'],
+  ['Feedback Link', 'second voice in parent circle'],
+];
+const OLD_ROLE_ORDER = ['Leader', 'Feedback Link', 'Facilitator', 'Secretary'];
+
+// The most attendees in one column of the attendance checklist.
+const ATTENDEES_PER_COLUMN = 4;
+
+// The ID of the list of choices of the Roles table's Name dropdowns, in the
+// first tab.
+const ROLES_DROPDOWN_ID = 'kix.roles';
+
+const ANNOUNCE_LABEL = '✉ Announce agenda';
+// The space between a meeting's links.
+const LINK_GAP = '    ';
+
+// The Backlog tab's paragraphs: headings, notes, and a list under each list
+// heading, starting with one empty item. style: a named paragraph style;
+// list: 'bullet' or 'numbered'.
+const BACKLOG = [
+  {text: 'Backlog', style: 'HEADING_1'},
+  {text: 'Requested for prioritization (any member can add)', style: 'HEADING_2'},
+  {text: 'Please include your name and the date.', muted: true},
+  {text: 'Policy item requests', style: 'HEADING_3'},
+  {text: '', list: 'bullet'},
+  {text: 'Task requests', style: 'HEADING_3'},
+  {text: '', list: 'bullet'},
+  {text: 'Prioritized backlog (lists managed by secretary / op. lead)', style: 'HEADING_2'},
+  {text: 'Discussion underway', style: 'HEADING_3'},
+  {text: '', list: 'bullet'},
+  {text: 'Prioritized for initial discussion', style: 'HEADING_3'},
+  {text: '', list: 'numbered'},
+  {text: 'Assigned tasks', style: 'HEADING_3'},
+  {text: '', list: 'bullet'},
+  {text: 'Tasks to assign', style: 'HEADING_3'},
+  {text: '', list: 'bullet'},
+];
+
+// Replaces each token in a tab (by default, the first) with its chip or
+// list, last first so the earlier ones' positions don't move.
+//
+// The positions come from reading the doc, which can return a version older
+// than the one DocumentApp just saved; applied to the newer one, they'd land
+// in the wrong places. So the changes are made only to the version read
+// (requiredRevisionId), and if the doc has moved on, it's read again.
+const TOKEN_ATTEMPTS = 5;
+
+function aboutTable(body) {
+  const rows = [
+    [['Aims & Domain'], [['Paste a link to circle\'s aims and domain document', HINT]]],
+    [['Policies folder'], [['Paste a link to the circle\'s policies folder', HINT]]],
+    [['Zoom room'], []],
+    [[CALENDAR_ROW_LABEL], []],
+    [[REMINDER_ROW_LABEL, REMINDER_HINT], [[REMINDER_DEFAULT_TEXT]]],
+    [['Circle email address'], []],
+    [['Other Key Links'], []],
+    [['Google Drive Folder'], []],
+    [['Parent Circle'], []],
+    [['Sub-Circles'], []],
+  ];
+  // Must match ABOUT_LABELS (agenda_rules.gs).
+  if (rows.map(row => row[0][0]).join('|') !== ABOUT_LABELS.join('|')) {
+    throw new Error('aboutTable\'s rows don\'t match ABOUT_LABELS');
   }
-  if (docId) {
-    clearDoc(docId);
-  } else {
-    docId = DocumentApp.create('Template preview').getId();
-    props.setProperty('previewDocId', docId);
-  }
-  // In a circle's folder, the preview gets that circle's members and
-  // details, as a circle's own doc does (without its parent or sub-circles,
-  // which come from the Circle Structure).
-  const circle = circleForDoc(docId);
-  build(docId, circle ? circleMemberNames(circle) : []);
-  if (circle) fillAbout(docId, 'Circle Agenda', circle.email, circle);
-  logLink('Preview:', DocumentApp.openById(docId).getUrl());
+  const table = newTable(body, rows.length, 2);
+  rows.forEach(([label, ...value], r) => writeAboutRow(table.getRow(r), label, value));
+  table.setColumnWidth(0, 150);
 }
 
-function describePreview() {
-  const docId = PropertiesService.getScriptProperties().getProperty('previewDocId');
-  if (!docId) throw new Error('No preview; run previewTemplate first.');
-  Logger.log(describeStructure(docId).join('\n'));
-  const links = [];
-  const body = firstTabBody(DocumentApp.openById(docId));
-  let search = body.findElement(DocumentApp.ElementType.TEXT);
-  while (search) {
-    const text = search.getElement().asText();
-    for (const i of text.getTextAttributeIndices()) {
-      const url = text.getLinkUrl(i);
-      if (url) links.push('"' + snippet(text.getText().slice(i), 20) + '" → ' + url);
+// The Administrative matters item's description: its title and a bulleted
+// list, with the next meeting's date and time, and a link to the previous
+// meeting's minutes, when there are any.
+function adminLines(details) {
+  const bullet = runs => [[token('bullet')], ...runs];
+  return [
+    [['Administrative matters', BOLD]],
+    bullet([['Announcements']]),
+    bullet([['Brief Reports']]),
+    bullet([['Next meeting date & time: '], ...(details.next ? [[details.next]] : [])]),
+    bullet([details.previousUrl
+      ? ['Minutes of last meeting', {[A.LINK_URL]: details.previousUrl}]
+      : ['Minutes of last meeting'], [' - consented by default within 48 hrs']]),
+    bullet([['Modifications if any and consent to agenda for this meeting']]),
+  ];
+}
+
+function alignCell(cell, alignment) {
+  for (let i = 0; i < cell.getNumChildren(); i++) {
+    const child = cell.getChild(i);
+    if (child.getType() === DocumentApp.ElementType.PARAGRAPH) child.asParagraph().setAlignment(alignment);
+  }
+}
+
+function apiColor(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  return {color: {rgbColor: {red: (n >> 16) / 255, green: ((n >> 8) & 255) / 255, blue: (n & 255) / 255}}};
+}
+
+// The meeting ID in the links in a Docs API table element, or null.
+function apiMeetingId(se) {
+  let id = null;
+  walkParagraphs([se], para => {
+    for (const pe of para.elements || []) {
+      const link = pe.textRun && pe.textRun.textStyle.link;
+      if (!id && link) id = meetingIdFromUrl(link.url);
     }
-    search = body.findElement(DocumentApp.ElementType.TEXT, search);
-  }
-  Logger.log('Links:\n' + (links.join('\n') || '(none)'));
+  });
+  return id;
 }
 
-// ── Building ─────────────────────────────────────────────────────────────────
+// A tab's Docs API content, and its ID for requests (undefined for the
+// first tab, which requests without one apply to).
+function apiTab(docId, tabId) {
+  const tabs = Docs.Documents.get(docId, {includeTabsContent: true}).tabs;
+  const tab = tabId ? tabs.find(t => t.tabProperties.tabId === tabId) : tabs[0];
+  if (!tab) throw new Error('No tab ' + tabId);
+  return {content: tab.documentTab.body.content, tabId: tabId || undefined};
+}
+
+// The meeting's attendance, above its table: a line saying to check anyone
+// who is absent, then, side by side and closely spaced, the attendees as
+// a checklist in columns of up to ATTENDEES_PER_COLUMN, and the meeting's
+// Facilitator, Secretary (dropdowns, set to details' holders), and Guests;
+// then a little space before the agenda table.
+function attendance(body, details, meetingId) {
+  const attendees = details.attendees || [];
+  writeRuns(body.appendParagraph(''), [['Attendance', BOLD],
+    ['   Check the box next to anyone who '], ['is absent', {...BOLD, [A.ITALIC]: true}],
+    ['.']]);
+  const holder = name => details.roleOptions
+    ? [[token('dropdown', meetingRolesDropdownId(meetingId),
+      roleOptionId(details.roleOptions, name))]]
+    : name ? [[name]] : [];
+
+  // As few columns as hold everyone, as evenly filled as can be (5 names
+  // make columns of 3 and 2, not 4 and 1).
+  const columns = [];
+  const count = Math.ceil(Math.max(attendees.length, 1) / ATTENDEES_PER_COLUMN);
+  const perColumn = Math.ceil(attendees.length / count);
+  for (let c = 0; c < count; c++) {
+    columns.push(attendees.length
+      ? attendees.slice(c * perColumn, (c + 1) * perColumn).map(name => [[token('checkbox')], [name]])
+      : [[[token('checkbox')]]]);
+  }
+  columns.push([
+    [['Facilitator: ', BOLD], ...holder(details.facilitator)],
+    [['Secretary: ', BOLD], ...holder(details.secretary)],
+    [['Guests: ', BOLD]],
+  ]);
+  const table = body.appendTable([columns.map(() => '')]);
+  table.setBorderWidth(0);
+  columns.forEach((paragraphs, c) => {
+    const cell = table.getCell(0, c);
+    writeCell(cell, paragraphs);
+    for (let i = 0; i < cell.getNumChildren(); i++) {
+      cell.getChild(i).asParagraph().setSpacingBefore(0).setSpacingAfter(0).setLineSpacing(1);
+    }
+    if (c < columns.length - 1) table.setColumnWidth(c, 130);
+  });
+  // Docs needs a paragraph between two tables (Apps Script can't delete it,
+  // though a person can); meetingTable makes it as small as it can be.
+  return body.appendParagraph('').setSpacingBefore(0).setSpacingAfter(0);
+}
+
+// The Backlog tab, after the first. DocumentApp can't see a tab added in the
+// same run, so it's built with the Docs API.
+function backlogTab(docId) {
+  const reply = Docs.Documents.batchUpdate({requests: [{addDocumentTab: {
+    tabProperties: {title: BACKLOG_TAB_TITLE, index: 1},
+  }}]}, docId);
+  const tabId = reply.replies[0].addDocumentTab.tabProperties.tabId;
+
+  // All the text at once, then each paragraph's style or list, by its
+  // position in that text.
+  const text = BACKLOG.map(p => p.text + '\n').join('');
+  const requests = [{insertText: {location: {index: 1, tabId}, text}}];
+  let at = 1;
+  for (const p of BACKLOG) {
+    const range = {startIndex: at, endIndex: at + p.text.length + 1, tabId};
+    requests.push({updateParagraphStyle: {range,
+      paragraphStyle: {namedStyleType: p.style || 'NORMAL_TEXT'}, fields: 'namedStyleType'}});
+    if (p.muted) {
+      requests.push({updateTextStyle: {range: {...range, endIndex: range.endIndex - 1},
+        textStyle: {foregroundColor: apiColor(COLOR.muted)}, fields: 'foregroundColor'}});
+    }
+    if (p.list) {
+      requests.push({createParagraphBullets: {range, bulletPreset: p.list === 'numbered'
+        ? 'NUMBERED_DECIMAL_ALPHA_ROMAN' : 'BULLET_DISC_CIRCLE_SQUARE'}});
+      requests.push(listIndentRequest(range));
+    }
+    at = range.endIndex;
+  }
+  Docs.Documents.batchUpdate({requests}, docId);
+}
 
 // members: the circle's members' names, the choices of the Roles table's
 // Name dropdowns.
@@ -174,17 +336,87 @@ function clearDoc(docId) {
   if (requests.length) Docs.Documents.batchUpdate({requests}, docId);
 }
 
-// ── Pass 1: layout, with DocumentApp ─────────────────────────────────────────
+// A date chip's properties, for a date ('yyyy-MM-dd', or a timestamp), in
+// Docs' default format ("Nov 3, 2026"), which, unlike others, Docs keeps
+// when someone picks a new date. A chip without a time is shown in UTC, so
+// a date is given noon UTC, which is that date everywhere.
+function dateChip(date) {
+  return {
+    timestamp: /^\d{4}-\d{2}-\d{2}$/.test(date) ? date + 'T12:00:00Z' : date,
+    timeFormat: 'TIME_FORMAT_DISABLED',
+  };
+}
 
-const A = DocumentApp.Attribute;
-const BOLD = {[A.BOLD]: true};
-// Table text is all Docs' default size; secondary text is grey.
-const MUTED = {[A.FOREGROUND_COLOR]: COLOR.muted};
-const HINT = {[A.FOREGROUND_COLOR]: COLOR.hint};
-// The point size of the small grey hints under About this circle's labels:
-// Remind before meetings' how to write it, and the Parent Circle and
-// Sub-Circles rows' "(Managed here. See Circle Structure.)".
-const LABEL_HINT_SIZE = 8;
+function describePreview() {
+  const docId = PropertiesService.getScriptProperties().getProperty('previewDocId');
+  if (!docId) throw new Error('No preview; run previewTemplate first.');
+  Logger.log(describeStructure(docId).join('\n'));
+  const links = [];
+  const body = firstTabBody(DocumentApp.openById(docId));
+  let search = body.findElement(DocumentApp.ElementType.TEXT);
+  while (search) {
+    const text = search.getElement().asText();
+    for (const i of text.getTextAttributeIndices()) {
+      const url = text.getLinkUrl(i);
+      if (url) links.push('"' + snippet(text.getText().slice(i), 20) + '" → ' + url);
+    }
+    search = body.findElement(DocumentApp.ElementType.TEXT, search);
+  }
+  Logger.log('Links:\n' + (links.join('\n') || '(none)'));
+}
+
+// Every token in Docs API content, last first, with its start and end
+// indices.
+function findTokens(content) {
+  const found = [];
+  walkParagraphs(content, para => {
+    let text = '';
+    const pieces = [];
+    for (const pe of para.elements || []) {
+      if (!pe.textRun) continue;
+      pieces.push({offset: text.length, index: pe.startIndex});
+      text += pe.textRun.content;
+    }
+    const re = /⟦([^⟧]*)⟧/g;
+    let m;
+    while ((m = re.exec(text))) {
+      const piece = pieces.filter(p => p.offset <= m.index).pop();
+      const start = piece.index + m.index - piece.offset;
+      found.push({text: m[0], parts: m[1].split(' '), start, end: start + m[0].length});
+    }
+  });
+  return found.sort((a, b) => b.start - a.start);
+}
+
+// The Docs API's part of making a meeting table, in its tab: its column
+// headings pinned, so they stay in view, and the empty paragraph between it
+// and the attendance table above it made a point high, to leave no gap.
+function finishMeeting(docId, meetingId, tabId) {
+  const content = apiTab(docId, tabId).content;
+  const at = content.findIndex(se => se.table && apiMeetingId(se) === meetingId);
+  const meeting = content[at];
+  const requests = [{pinTableHeaderRows: {
+    tableStartLocation: {index: meeting.startIndex, tabId}, pinnedHeaderRowsCount: MEETING_PINNED_ROWS,
+  }}];
+  Docs.Documents.batchUpdate({requests}, docId);
+
+}
+
+function finishWithApi(docId, members) {
+  const firstTabId = Docs.Documents.get(docId, {includeTabsContent: true}).tabs[0].tabProperties.tabId;
+  Docs.Documents.batchUpdate({requests: [
+    roleDropdownRequest(ROLES_DROPDOWN_ID, roleChoices(members, []), firstTabId),
+    {updateDocumentStyle: {
+      documentStyle: {documentFormat: {documentMode: 'PAGELESS'}},
+      fields: 'documentFormat.documentMode',
+    }},
+    {updateDocumentTabProperties: {
+      tabProperties: {tabId: firstTabId, title: MAIN_TAB_TITLE}, fields: 'title',
+    }},
+  ]}, docId);
+  replaceTokens(docId);
+  backlogTab(docId);
+}
 
 // Lays out the template's first tab. It has no meetings: each gets a tab of
 // its own, added by "+ New meeting".
@@ -214,83 +446,36 @@ function layOut(body, docId) {
   leftover.removeFromParent();
 }
 
-function section(body, text) {
-  body.appendParagraph(text).setHeading(DocumentApp.ParagraphHeading.HEADING2)
-    .editAsText().setBold(true);
+// The row of links that add an item, update the times, and (if details
+// give the circle's email address and the meeting's tab) open an email to
+// the circle announcing the agenda (see announceUrl).
+function linksRow(row, docId, meetingId, details) {
+  for (let c = 0; c < row.getNumCells(); c++) writeCell(row.getCell(c), [[]]);
+  const announce = details && details.circleEmail && details.tabId
+    ? [[LINK_GAP], [ANNOUNCE_LABEL, {[A.LINK_URL]: announceUrl({
+      to: details.circleEmail, circleName: details.circleName, date: details.date,
+      zoomUrl: details.place,
+      agendaUrl: tabUrl(docId, details.tabId)})}]]
+    : [];
+  writeCell(row.getCell(COL.description), [[
+    ['+ Add item', {[A.LINK_URL]: actionUrl('item', docId, meetingId)}], [LINK_GAP],
+    ['↻ Update times', {[A.LINK_URL]: actionUrl('times', docId, meetingId)}], ...announce]]);
 }
 
-function aboutTable(body) {
-  const rows = [
-    [['Aims & Domain'], [['Paste a link to circle\'s aims and domain document', HINT]]],
-    [['Policies folder'], [['Paste a link to the circle\'s policies folder', HINT]]],
-    [['Zoom room'], []],
-    [[CALENDAR_ROW_LABEL], []],
-    [[REMINDER_ROW_LABEL, REMINDER_HINT], [[REMINDER_DEFAULT_TEXT]]],
-    [['Circle email address'], []],
-    [['Other Key Links'], []],
-    [['Google Drive Folder'], []],
-    [['Parent Circle'], []],
-    [['Sub-Circles'], []],
-  ];
-  // Must match ABOUT_LABELS (agenda_rules.gs).
-  if (rows.map(row => row[0][0]).join('|') !== ABOUT_LABELS.join('|')) {
-    throw new Error('aboutTable\'s rows don\'t match ABOUT_LABELS');
-  }
-  const table = newTable(body, rows.length, 2);
-  rows.forEach(([label, ...value], r) => writeAboutRow(table.getRow(r), label, value));
-  table.setColumnWidth(0, 150);
+// The request that gives a range's paragraphs the outer level's list
+// indents (see listIndents), or another level's.
+function listIndentRequest(range, level) {
+  const {firstLine, start} = listIndents(level);
+  return {updateParagraphStyle: {range, paragraphStyle: {
+    indentFirstLine: {magnitude: firstLine, unit: 'PT'},
+    indentStart: {magnitude: start, unit: 'PT'},
+  }, fields: 'indentFirstLine,indentStart'}};
 }
 
-// Writes one About this circle row: its label cell (label: the label, and
-// a second, grey line, if any) and its value (paragraphs, each a list of
-// runs, or none).
-function writeAboutRow(row, label, paragraphs) {
-  const labelCell = row.getCell(0);
-  const small = {[A.FOREGROUND_COLOR]: COLOR.muted, [A.FONT_SIZE]: LABEL_HINT_SIZE};
-  writeCell(labelCell, [[[label[0], BOLD]], ...(label[1] ? [[[label[1], small]]] : [])]);
-  alignCell(labelCell, DocumentApp.HorizontalAlignment.RIGHT);
-  labelCell.setBackgroundColor(COLOR.aboutLabel);
-  writeCell(row.getCell(1), paragraphs.length ? paragraphs : [[]]);
-  row.getCell(1).setBackgroundColor(COLOR.aboutValue);
-}
-
-// The Roles table's roles, in order: [name, what it does]. (Docs built
-// before layout ROLE_ORDER_LAYOUT have them in OLD_ROLE_ORDER.)
-const ROLE_LABELS = [
-  ['Leader', 'supports circle operations'],
-  ['Secretary', 'minutes and circle docs'],
-  ['Facilitator', 'facilitates meetings'],
-  ['Feedback Link', 'second voice in parent circle'],
-];
-const OLD_ROLE_ORDER = ['Leader', 'Feedback Link', 'Facilitator', 'Secretary'];
-
-// A role's label cell's runs: its name, and what it does, in grey.
-function roleLabelRuns(name, what) {
-  return [[name, BOLD], [' (' + what + ')', MUTED]];
-}
-
-// The Roles table: each role's holder is a dropdown of the circle's members
-// (ROLES_DROPDOWN_ID; see finishWithApi), and its term's end a date chip,
-// starting at today, which markPastTermEnds (circle_docs.gs) colors red
-// once it's past.
-function rolesTable(body) {
-  const header = label => [[[label, BOLD]], [['Name', BOLD]], [['Term ends', BOLD]]];
-  const today = Utilities.formatDate(new Date(), TIME_ZONE, 'yyyy-MM-dd');
-  const role = ([name, what]) => [roleLabelRuns(name, what),
-    [[token('dropdown', ROLES_DROPDOWN_ID, ROLE_PLACEHOLDER_ID)]],
-    [[token('date', today + 'T12:00:00Z')]]];
-  const rows = [header('Circle Roles'), ...ROLE_LABELS.map(role)];
-  const table = newTable(body, rows.length, 3);
-  rows.forEach((cells, r) => {
-    const isHeader = r === 0;
-    cells.forEach((runs, c) => {
-      const cell = table.getCell(r, c);
-      writeCell(cell, [runs]);
-      cell.setBackgroundColor(isHeader ? COLOR.rolesHeader : COLOR.rolesBody);
-      if (c === 2) alignCell(cell, DocumentApp.HorizontalAlignment.CENTER);
-    });
-  });
-  table.setColumnWidth(2, 90);
+// The ID of the list of choices of a meeting's Facilitator and Secretary
+// dropdowns (see roleDropdownRequest), in its tab.
+function meetingRolesDropdownId(meetingId) {
+  return 'kix.r' + meetingId;
 }
 
 // Appends a meeting to a tab's body, and returns its ID. Above its table:
@@ -386,127 +571,6 @@ function meetingTable(body, docId, details) {
   return meetingId;
 }
 
-// Narrow left and right padding in a meeting table's row, so its narrow
-// columns hold their text.
-function padRow(row) {
-  for (let c = 0; c < row.getNumCells(); c++) {
-    row.getCell(c).setPaddingLeft(CELL_PADDING).setPaddingRight(CELL_PADDING);
-  }
-}
-
-// The most attendees in one column of the attendance checklist.
-const ATTENDEES_PER_COLUMN = 4;
-
-// The meeting's attendance, above its table: a line saying to check anyone
-// who is absent, then, side by side and closely spaced, the attendees as
-// a checklist in columns of up to ATTENDEES_PER_COLUMN, and the meeting's
-// Facilitator, Secretary (dropdowns, set to details' holders), and Guests;
-// then a little space before the agenda table.
-function attendance(body, details, meetingId) {
-  const attendees = details.attendees || [];
-  writeRuns(body.appendParagraph(''), [['Attendance', BOLD],
-    ['   Check the box next to anyone who '], ['is absent', {...BOLD, [A.ITALIC]: true}],
-    ['.']]);
-  const holder = name => details.roleOptions
-    ? [[token('dropdown', meetingRolesDropdownId(meetingId),
-      roleOptionId(details.roleOptions, name))]]
-    : name ? [[name]] : [];
-
-  // As few columns as hold everyone, as evenly filled as can be (5 names
-  // make columns of 3 and 2, not 4 and 1).
-  const columns = [];
-  const count = Math.ceil(Math.max(attendees.length, 1) / ATTENDEES_PER_COLUMN);
-  const perColumn = Math.ceil(attendees.length / count);
-  for (let c = 0; c < count; c++) {
-    columns.push(attendees.length
-      ? attendees.slice(c * perColumn, (c + 1) * perColumn).map(name => [[token('checkbox')], [name]])
-      : [[[token('checkbox')]]]);
-  }
-  columns.push([
-    [['Facilitator: ', BOLD], ...holder(details.facilitator)],
-    [['Secretary: ', BOLD], ...holder(details.secretary)],
-    [['Guests: ', BOLD]],
-  ]);
-  const table = body.appendTable([columns.map(() => '')]);
-  table.setBorderWidth(0);
-  columns.forEach((paragraphs, c) => {
-    const cell = table.getCell(0, c);
-    writeCell(cell, paragraphs);
-    for (let i = 0; i < cell.getNumChildren(); i++) {
-      cell.getChild(i).asParagraph().setSpacingBefore(0).setSpacingAfter(0).setLineSpacing(1);
-    }
-    if (c < columns.length - 1) table.setColumnWidth(c, 130);
-  });
-  // Docs needs a paragraph between two tables (Apps Script can't delete it,
-  // though a person can); meetingTable makes it as small as it can be.
-  return body.appendParagraph('').setSpacingBefore(0).setSpacingAfter(0);
-}
-
-// A topic's description: its title, a Presenter dropdown (if presenters,
-// its list of choices, is given), and a bulleted list.
-function topicLines(presenters) {
-  return [
-    [['Topic', BOLD]],
-    ...(presenters ? [[[token('presenter', presenters)]]] : []),
-    [[token('bullet')]],
-  ];
-}
-
-// The ID of a meeting's Presenter dropdown's list of choices (see
-// presenterDropdownRequest), in its tab.
-function presenterDropdownId(meetingId) {
-  return 'kix.p' + meetingId;
-}
-
-// The ID of the list of choices of a meeting's Facilitator and Secretary
-// dropdowns (see roleDropdownRequest), in its tab.
-function meetingRolesDropdownId(meetingId) {
-  return 'kix.r' + meetingId;
-}
-
-// The ID of the list of choices of the Roles table's Name dropdowns, in the
-// first tab.
-const ROLES_DROPDOWN_ID = 'kix.roles';
-
-const ANNOUNCE_LABEL = '✉ Announce agenda';
-// The space between a meeting's links.
-const LINK_GAP = '    ';
-
-// The row of links that add an item, update the times, and (if details
-// give the circle's email address and the meeting's tab) open an email to
-// the circle announcing the agenda (see announceUrl).
-function linksRow(row, docId, meetingId, details) {
-  for (let c = 0; c < row.getNumCells(); c++) writeCell(row.getCell(c), [[]]);
-  const announce = details && details.circleEmail && details.tabId
-    ? [[LINK_GAP], [ANNOUNCE_LABEL, {[A.LINK_URL]: announceUrl({
-      to: details.circleEmail, circleName: details.circleName, date: details.date,
-      zoomUrl: details.place,
-      agendaUrl: tabUrl(docId, details.tabId)})}]]
-    : [];
-  writeCell(row.getCell(COL.description), [[
-    ['+ Add item', {[A.LINK_URL]: actionUrl('item', docId, meetingId)}], [LINK_GAP],
-    ['↻ Update times', {[A.LINK_URL]: actionUrl('times', docId, meetingId)}], ...announce]]);
-}
-
-// The Administrative matters item's description: its title and a bulleted
-// list, with the next meeting's date and time, and a link to the previous
-// meeting's minutes, when there are any.
-function adminLines(details) {
-  const bullet = runs => [[token('bullet')], ...runs];
-  return [
-    [['Administrative matters', BOLD]],
-    bullet([['Announcements']]),
-    bullet([['Brief Reports']]),
-    bullet([['Next meeting date & time: '], ...(details.next ? [[details.next]] : [])]),
-    bullet([details.previousUrl
-      ? ['Minutes of last meeting', {[A.LINK_URL]: details.previousUrl}]
-      : ['Minutes of last meeting'], [' - consented by default within 48 hrs']]),
-    bullet([['Modifications if any and consent to agenda for this meeting']]),
-  ];
-}
-
-// ── Layout helpers ───────────────────────────────────────────────────────────
-
 // A new table, appended to the body, or inserted at position at.
 function newTable(body, rows, columns, at) {
   const cells = [];
@@ -516,167 +580,59 @@ function newTable(body, rows, columns, at) {
   return table;
 }
 
-// Sets a cell's paragraphs. Each is a list of runs, [text, attributes];
-// an empty list is an empty paragraph.
-function writeCell(cell, paragraphs) {
-  cell.setText('');
-  paragraphs.forEach((runs, i) => {
-    const p = i === 0 ? cell.getChild(0).asParagraph() : cell.appendParagraph('');
-    writeRuns(p, runs);
-  });
-}
-
-function writeRuns(paragraph, runs) {
-  const text = runs.map(run => run[0]).join('');
-  // Paragraphs here start empty, and setText('') is refused.
-  if (!text) return;
-  paragraph.setText(text);
-  const edit = paragraph.editAsText();
-  let at = 0;
-  for (const [t, attrs] of runs) {
-    if (t && attrs) edit.setAttributes(at, at + t.length - 1, attrs);
-    at += t.length;
+// Narrow left and right padding in a meeting table's row, so its narrow
+// columns hold their text.
+function padRow(row) {
+  for (let c = 0; c < row.getNumCells(); c++) {
+    row.getCell(c).setPaddingLeft(CELL_PADDING).setPaddingRight(CELL_PADDING);
   }
 }
 
-function alignCell(cell, alignment) {
-  for (let i = 0; i < cell.getNumChildren(); i++) {
-    const child = cell.getChild(i);
-    if (child.getType() === DocumentApp.ElementType.PARAGRAPH) child.asParagraph().setAlignment(alignment);
+// The ID of a meeting's Presenter dropdown's list of choices (see
+// presenterDropdownRequest), in its tab.
+function presenterDropdownId(meetingId) {
+  return 'kix.p' + meetingId;
+}
+
+// The request that creates a meeting's Presenter dropdown's choices, in its
+// tab (each tab has its own): "Presenter", the default, then each attendee
+// (up to Docs' limit of 50 choices).
+function presenterDropdownRequest(meetingId, attendees, tabId) {
+  return {createDropdownDefinition: {tabId, dropdownDefinition: {
+    dropdownDefinitionId: presenterDropdownId(meetingId),
+    dropdownDefinitionProperties: {title: 'Presenter', options: [
+      {optionId: 'dropdownItem.presenter', displayValue: 'Presenter'},
+      ...attendees.slice(0, 49).map((name, i) =>
+        ({optionId: 'dropdownItem.p' + i, displayValue: name})),
+    ]},
+  }}};
+}
+
+// Rebuilds the preview doc in place, wherever it's been moved to, or makes
+// one if there's none (or it's been trashed).
+function previewTemplate() {
+  const props = PropertiesService.getScriptProperties();
+  let docId = props.getProperty('previewDocId');
+  try {
+    if (docId && DriveApp.getFileById(docId).isTrashed()) docId = null;
+  } catch (e) {
+    docId = null; // Deleted.
   }
-}
-
-function shadeRow(table, r, kind) {
-  const color = kind === 'round' ? COLOR.roundRow : kind === 'report' ? COLOR.reportRow : null;
-  if (!color) return;
-  for (let c = 0; c < table.getRow(r).getNumCells(); c++) table.getCell(r, c).setBackgroundColor(color);
-}
-
-// Shades a meeting table row's Follow-up cell, if the table has that
-// column, blending it with the row's own shade (kind, as for shadeRow).
-function shadeFollowUp(table, r, kind) {
-  if (table.getRow(r).getNumCells() <= COL.followUp) return;
-  const color = kind === 'round' ? COLOR.followUpRoundRow
-    : kind === 'report' ? COLOR.followUpReportRow : COLOR.followUp;
-  table.getCell(r, COL.followUp).setBackgroundColor(color);
-}
-
-// A placeholder for something only the Docs API can add; see finishWithApi.
-function token(kind, ...args) {
-  return '⟦' + [kind, ...args].join(' ') + '⟧';
-}
-
-// ── Pass 2: the Docs API ─────────────────────────────────────────────────────
-
-function finishWithApi(docId, members) {
-  const firstTabId = Docs.Documents.get(docId, {includeTabsContent: true}).tabs[0].tabProperties.tabId;
-  Docs.Documents.batchUpdate({requests: [
-    roleDropdownRequest(ROLES_DROPDOWN_ID, roleChoices(members, []), firstTabId),
-    {updateDocumentStyle: {
-      documentStyle: {documentFormat: {documentMode: 'PAGELESS'}},
-      fields: 'documentFormat.documentMode',
-    }},
-    {updateDocumentTabProperties: {
-      tabProperties: {tabId: firstTabId, title: MAIN_TAB_TITLE}, fields: 'title',
-    }},
-  ]}, docId);
-  replaceTokens(docId);
-  backlogTab(docId);
-}
-
-// ── The Backlog tab, with the Docs API ───────────────────────────────────────
-
-// The Backlog tab's paragraphs: headings, notes, and a list under each list
-// heading, starting with one empty item. style: a named paragraph style;
-// list: 'bullet' or 'numbered'.
-const BACKLOG = [
-  {text: 'Backlog', style: 'HEADING_1'},
-  {text: 'Requested for prioritization (any member can add)', style: 'HEADING_2'},
-  {text: 'Please include your name and the date.', muted: true},
-  {text: 'Policy item requests', style: 'HEADING_3'},
-  {text: '', list: 'bullet'},
-  {text: 'Task requests', style: 'HEADING_3'},
-  {text: '', list: 'bullet'},
-  {text: 'Prioritized backlog (lists managed by secretary / op. lead)', style: 'HEADING_2'},
-  {text: 'Discussion underway', style: 'HEADING_3'},
-  {text: '', list: 'bullet'},
-  {text: 'Prioritized for initial discussion', style: 'HEADING_3'},
-  {text: '', list: 'numbered'},
-  {text: 'Assigned tasks', style: 'HEADING_3'},
-  {text: '', list: 'bullet'},
-  {text: 'Tasks to assign', style: 'HEADING_3'},
-  {text: '', list: 'bullet'},
-];
-
-// The Backlog tab, after the first. DocumentApp can't see a tab added in the
-// same run, so it's built with the Docs API.
-function backlogTab(docId) {
-  const reply = Docs.Documents.batchUpdate({requests: [{addDocumentTab: {
-    tabProperties: {title: BACKLOG_TAB_TITLE, index: 1},
-  }}]}, docId);
-  const tabId = reply.replies[0].addDocumentTab.tabProperties.tabId;
-
-  // All the text at once, then each paragraph's style or list, by its
-  // position in that text.
-  const text = BACKLOG.map(p => p.text + '\n').join('');
-  const requests = [{insertText: {location: {index: 1, tabId}, text}}];
-  let at = 1;
-  for (const p of BACKLOG) {
-    const range = {startIndex: at, endIndex: at + p.text.length + 1, tabId};
-    requests.push({updateParagraphStyle: {range,
-      paragraphStyle: {namedStyleType: p.style || 'NORMAL_TEXT'}, fields: 'namedStyleType'}});
-    if (p.muted) {
-      requests.push({updateTextStyle: {range: {...range, endIndex: range.endIndex - 1},
-        textStyle: {foregroundColor: apiColor(COLOR.muted)}, fields: 'foregroundColor'}});
-    }
-    if (p.list) {
-      requests.push({createParagraphBullets: {range, bulletPreset: p.list === 'numbered'
-        ? 'NUMBERED_DECIMAL_ALPHA_ROMAN' : 'BULLET_DISC_CIRCLE_SQUARE'}});
-      requests.push(listIndentRequest(range));
-    }
-    at = range.endIndex;
+  if (docId) {
+    clearDoc(docId);
+  } else {
+    docId = DocumentApp.create('Template preview').getId();
+    props.setProperty('previewDocId', docId);
   }
-  Docs.Documents.batchUpdate({requests}, docId);
+  // In a circle's folder, the preview gets that circle's members and
+  // details, as a circle's own doc does (without its parent or sub-circles,
+  // which come from the Circle Structure).
+  const circle = circleForDoc(docId);
+  build(docId, circle ? circleMemberNames(circle) : []);
+  if (circle) fillAbout(docId, 'Circle Agenda', circle.email, circle);
+  logLink('Preview:', DocumentApp.openById(docId).getUrl());
 }
 
-// A tab's Docs API content, and its ID for requests (undefined for the
-// first tab, which requests without one apply to).
-function apiTab(docId, tabId) {
-  const tabs = Docs.Documents.get(docId, {includeTabsContent: true}).tabs;
-  const tab = tabId ? tabs.find(t => t.tabProperties.tabId === tabId) : tabs[0];
-  if (!tab) throw new Error('No tab ' + tabId);
-  return {content: tab.documentTab.body.content, tabId: tabId || undefined};
-}
-
-// The Docs API's part of making a meeting table, in its tab: its column
-// headings pinned, so they stay in view, and the empty paragraph between it
-// and the attendance table above it made a point high, to leave no gap.
-function finishMeeting(docId, meetingId, tabId) {
-  const content = apiTab(docId, tabId).content;
-  const at = content.findIndex(se => se.table && apiMeetingId(se) === meetingId);
-  const meeting = content[at];
-  const requests = [{pinTableHeaderRows: {
-    tableStartLocation: {index: meeting.startIndex, tabId}, pinnedHeaderRowsCount: MEETING_PINNED_ROWS,
-  }}];
-  Docs.Documents.batchUpdate({requests}, docId);
-
-}
-
-// The empty paragraph Docs needs between the attendance and agenda tables,
-// made as small as it can be: a 1-point font, at half line spacing.
-function shrinkSpacer(paragraph) {
-  paragraph.setAttributes({[A.FONT_SIZE]: 1});
-  paragraph.setLineSpacing(0.5).setSpacingBefore(0).setSpacingAfter(0);
-}
-
-// Replaces each token in a tab (by default, the first) with its chip or
-// list, last first so the earlier ones' positions don't move.
-//
-// The positions come from reading the doc, which can return a version older
-// than the one DocumentApp just saved; applied to the newer one, they'd land
-// in the wrong places. So the changes are made only to the version read
-// (requiredRevisionId), and if the doc has moved on, it's read again.
-const TOKEN_ATTEMPTS = 5;
 function replaceTokens(docId, tabId) {
   for (let attempt = 1; ; attempt++) {
     const doc = Docs.Documents.get(docId, {includeTabsContent: true});
@@ -702,6 +658,76 @@ function replaceTokens(docId, tabId) {
   }
 }
 
+// The request that creates a list of role holders' choices (options, from
+// roleChoices), in a tab.
+function roleDropdownRequest(id, options, tabId) {
+  return {createDropdownDefinition: {tabId, dropdownDefinition: {
+    dropdownDefinitionId: id,
+    dropdownDefinitionProperties: {title: 'Name', options},
+  }}};
+}
+
+// A role's label cell's runs: its name, and what it does, in grey.
+function roleLabelRuns(name, what) {
+  return [[name, BOLD], [' (' + what + ')', MUTED]];
+}
+
+// The Roles table: each role's holder is a dropdown of the circle's members
+// (ROLES_DROPDOWN_ID; see finishWithApi), and its term's end a date chip,
+// starting at today, which markPastTermEnds (circle_docs.gs) colors red
+// once it's past.
+function rolesTable(body) {
+  const header = label => [[[label, BOLD]], [['Name', BOLD]], [['Term ends', BOLD]]];
+  const today = Utilities.formatDate(new Date(), TIME_ZONE, 'yyyy-MM-dd');
+  const role = ([name, what]) => [roleLabelRuns(name, what),
+    [[token('dropdown', ROLES_DROPDOWN_ID, ROLE_PLACEHOLDER_ID)]],
+    [[token('date', today + 'T12:00:00Z')]]];
+  const rows = [header('Circle Roles'), ...ROLE_LABELS.map(role)];
+  const table = newTable(body, rows.length, 3);
+  rows.forEach((cells, r) => {
+    const isHeader = r === 0;
+    cells.forEach((runs, c) => {
+      const cell = table.getCell(r, c);
+      writeCell(cell, [runs]);
+      cell.setBackgroundColor(isHeader ? COLOR.rolesHeader : COLOR.rolesBody);
+      if (c === 2) alignCell(cell, DocumentApp.HorizontalAlignment.CENTER);
+    });
+  });
+  table.setColumnWidth(2, 90);
+}
+
+function section(body, text) {
+  body.appendParagraph(text).setHeading(DocumentApp.ParagraphHeading.HEADING2)
+    .editAsText().setBold(true);
+}
+
+// Shades a meeting table row's Follow-up cell, if the table has that
+// column, blending it with the row's own shade (kind, as for shadeRow).
+function shadeFollowUp(table, r, kind) {
+  if (table.getRow(r).getNumCells() <= COL.followUp) return;
+  const color = kind === 'round' ? COLOR.followUpRoundRow
+    : kind === 'report' ? COLOR.followUpReportRow : COLOR.followUp;
+  table.getCell(r, COL.followUp).setBackgroundColor(color);
+}
+
+function shadeRow(table, r, kind) {
+  const color = kind === 'round' ? COLOR.roundRow : kind === 'report' ? COLOR.reportRow : null;
+  if (!color) return;
+  for (let c = 0; c < table.getRow(r).getNumCells(); c++) table.getCell(r, c).setBackgroundColor(color);
+}
+
+// The empty paragraph Docs needs between the attendance and agenda tables,
+// made as small as it can be: a 1-point font, at half line spacing.
+function shrinkSpacer(paragraph) {
+  paragraph.setAttributes({[A.FONT_SIZE]: 1});
+  paragraph.setLineSpacing(0.5).setSpacingBefore(0).setSpacingAfter(0);
+}
+
+// A placeholder for something only the Docs API can add; see finishWithApi.
+function token(kind, ...args) {
+  return '⟦' + [kind, ...args].join(' ') + '⟧';
+}
+
 // The request that puts a token's chip or list at its place.
 function tokenRequest(t, tabId) {
   const location = {index: t.start, tabId};
@@ -723,86 +749,48 @@ function tokenRequest(t, tabId) {
   throw new Error('Unknown token ' + t.text);
 }
 
-// Every token in Docs API content, last first, with its start and end
-// indices.
-function findTokens(content) {
-  const found = [];
-  walkParagraphs(content, para => {
-    let text = '';
-    const pieces = [];
-    for (const pe of para.elements || []) {
-      if (!pe.textRun) continue;
-      pieces.push({offset: text.length, index: pe.startIndex});
-      text += pe.textRun.content;
-    }
-    const re = /⟦([^⟧]*)⟧/g;
-    let m;
-    while ((m = re.exec(text))) {
-      const piece = pieces.filter(p => p.offset <= m.index).pop();
-      const start = piece.index + m.index - piece.offset;
-      found.push({text: m[0], parts: m[1].split(' '), start, end: start + m[0].length});
-    }
+// A topic's description: its title, a Presenter dropdown (if presenters,
+// its list of choices, is given), and a bulleted list.
+function topicLines(presenters) {
+  return [
+    [['Topic', BOLD]],
+    ...(presenters ? [[[token('presenter', presenters)]]] : []),
+    [[token('bullet')]],
+  ];
+}
+
+// Writes one About this circle row: its label cell (label: the label, and
+// a second, grey line, if any) and its value (paragraphs, each a list of
+// runs, or none).
+function writeAboutRow(row, label, paragraphs) {
+  const labelCell = row.getCell(0);
+  const small = {[A.FOREGROUND_COLOR]: COLOR.muted, [A.FONT_SIZE]: LABEL_HINT_SIZE};
+  writeCell(labelCell, [[[label[0], BOLD]], ...(label[1] ? [[[label[1], small]]] : [])]);
+  alignCell(labelCell, DocumentApp.HorizontalAlignment.RIGHT);
+  labelCell.setBackgroundColor(COLOR.aboutLabel);
+  writeCell(row.getCell(1), paragraphs.length ? paragraphs : [[]]);
+  row.getCell(1).setBackgroundColor(COLOR.aboutValue);
+}
+
+// Sets a cell's paragraphs. Each is a list of runs, [text, attributes];
+// an empty list is an empty paragraph.
+function writeCell(cell, paragraphs) {
+  cell.setText('');
+  paragraphs.forEach((runs, i) => {
+    const p = i === 0 ? cell.getChild(0).asParagraph() : cell.appendParagraph('');
+    writeRuns(p, runs);
   });
-  return found.sort((a, b) => b.start - a.start);
 }
 
-// A date chip's properties, for a date ('yyyy-MM-dd', or a timestamp), in
-// Docs' default format ("Nov 3, 2026"), which, unlike others, Docs keeps
-// when someone picks a new date. A chip without a time is shown in UTC, so
-// a date is given noon UTC, which is that date everywhere.
-function dateChip(date) {
-  return {
-    timestamp: /^\d{4}-\d{2}-\d{2}$/.test(date) ? date + 'T12:00:00Z' : date,
-    timeFormat: 'TIME_FORMAT_DISABLED',
-  };
-}
-
-// The meeting ID in the links in a Docs API table element, or null.
-function apiMeetingId(se) {
-  let id = null;
-  walkParagraphs([se], para => {
-    for (const pe of para.elements || []) {
-      const link = pe.textRun && pe.textRun.textStyle.link;
-      if (!id && link) id = meetingIdFromUrl(link.url);
-    }
-  });
-  return id;
-}
-
-// The request that creates a meeting's Presenter dropdown's choices, in its
-// tab (each tab has its own): "Presenter", the default, then each attendee
-// (up to Docs' limit of 50 choices).
-function presenterDropdownRequest(meetingId, attendees, tabId) {
-  return {createDropdownDefinition: {tabId, dropdownDefinition: {
-    dropdownDefinitionId: presenterDropdownId(meetingId),
-    dropdownDefinitionProperties: {title: 'Presenter', options: [
-      {optionId: 'dropdownItem.presenter', displayValue: 'Presenter'},
-      ...attendees.slice(0, 49).map((name, i) =>
-        ({optionId: 'dropdownItem.p' + i, displayValue: name})),
-    ]},
-  }}};
-}
-
-// The request that creates a list of role holders' choices (options, from
-// roleChoices), in a tab.
-function roleDropdownRequest(id, options, tabId) {
-  return {createDropdownDefinition: {tabId, dropdownDefinition: {
-    dropdownDefinitionId: id,
-    dropdownDefinitionProperties: {title: 'Name', options},
-  }}};
-}
-
-// The request that gives a range's paragraphs the outer level's list
-// indents (see listIndents), or another level's.
-function listIndentRequest(range, level) {
-  const {firstLine, start} = listIndents(level);
-  return {updateParagraphStyle: {range, paragraphStyle: {
-    indentFirstLine: {magnitude: firstLine, unit: 'PT'},
-    indentStart: {magnitude: start, unit: 'PT'},
-  }, fields: 'indentFirstLine,indentStart'}};
-}
-
-function apiColor(hex) {
-  const n = parseInt(hex.slice(1), 16);
-  return {color: {rgbColor: {red: (n >> 16) / 255, green: ((n >> 8) & 255) / 255, blue: (n & 255) / 255}}};
+function writeRuns(paragraph, runs) {
+  const text = runs.map(run => run[0]).join('');
+  // Paragraphs here start empty, and setText('') is refused.
+  if (!text) return;
+  paragraph.setText(text);
+  const edit = paragraph.editAsText();
+  let at = 0;
+  for (const [t, attrs] of runs) {
+    if (t && attrs) edit.setAttributes(at, at + t.length - 1, attrs);
+    at += t.length;
+  }
 }

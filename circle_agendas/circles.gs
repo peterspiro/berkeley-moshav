@@ -19,6 +19,21 @@ const MEMBER_NAMES_CACHE_SECONDS = 10 * 60;
 const CIRCLES_CACHE_KEY = 'circles';
 const CIRCLES_CACHE_SECONDS = 6 * 60 * 60;
 
+// Run from the editor: forgets the cached names and circles, so the next
+// meeting reads them afresh, and logs what MEMBER_NAMES_FILE holds (how many
+// names, how many are more than a first name, and a few of them), to check
+// that update_groups.py has written short names.
+function checkMemberNames() {
+  CacheService.getScriptCache().removeAll([MEMBER_NAMES_FILE, CIRCLES_CACHE_KEY]);
+  const files = DriveApp.getRootFolder().getFilesByName(MEMBER_NAMES_FILE);
+  if (!files.hasNext()) return Logger.log('No ' + MEMBER_NAMES_FILE + ' in My Drive.');
+  const file = files.next();
+  const names = Object.values(JSON.parse(file.getBlob().getDataAsString('UTF-8')));
+  Logger.log(MEMBER_NAMES_FILE + ', last changed ' + file.getLastUpdated() + ': ' +
+    names.length + ' entries, ' + names.filter(n => /\s/.test(n)).length +
+    ' with more than a first name. For example: ' + names.slice(0, 8).join(', '));
+}
+
 // The circle whose Drive item holds the doc most closely: {email, name,
 // driveItemId, calendarId, zoomUrl}, or null. Nearest first matters: a doc
 // in a circle's folder is also in the shared drive that holds it, which an
@@ -36,65 +51,6 @@ function circleForDoc(docId) {
   // Matching only the outermost item (such as the shared drive) may mean a
   // circle newer than the cache owns a nearer folder, so look again.
   return cached && cached.driveItemId !== ids[ids.length - 1] ? cached : find(refreshCircles());
-}
-
-// The IDs of the folders holding a file, nearest first, and of its shared
-// drive, if it's in one.
-function driveAncestors(fileId) {
-  const file = Drive.Files.get(fileId, {fields: 'parents,driveId', supportsAllDrives: true});
-  const ids = [];
-  let parents = file.parents || [];
-  while (parents.length && ids.length < 20) {
-    const id = parents[0];
-    ids.push(id);
-    if (id === file.driveId) break;
-    try {
-      parents = Drive.Files.get(id, {fields: 'parents', supportsAllDrives: true}).parents || [];
-    } catch (e) {
-      break; // A folder the script can't see.
-    }
-  }
-  if (file.driveId && !ids.includes(file.driveId)) ids.push(file.driveId);
-  return ids;
-}
-
-function loadCircles() {
-  const cached = CacheService.getScriptCache().get(CIRCLES_CACHE_KEY);
-  return cached ? JSON.parse(cached) : refreshCircles();
-}
-
-// Every Google Group whose footer links a Drive item.
-function refreshCircles() {
-  const circles = readGroupFooters().groups.filter(g => g.driveItemId);
-  CacheService.getScriptCache().put(CIRCLES_CACHE_KEY, JSON.stringify(circles), CIRCLES_CACHE_SECONDS);
-  return circles;
-}
-
-// Every Google Group in the domain, with its footer's links (see
-// parseCircleFooter): {groups: [{email, aliases, name, ...links}], complete}, complete
-// false if a footer couldn't be read (that group is left out).
-function readGroupFooters() {
-  const groups = [];
-  let complete = true;
-  let pageToken;
-  do {
-    const resp = AdminDirectory.Groups.list({domain: DOMAIN, maxResults: 200, pageToken});
-    for (const g of resp.groups || []) {
-      let footer;
-      try {
-        footer = GroupsSettings.Groups.get(g.email).customFooterText;
-      } catch (e) {
-        console.error('Couldn\'t read ' + g.email + '\'s footer: ' + e.message);
-        complete = false;
-        continue;
-      }
-      const links = parseCircleFooter(footer);
-      groups.push({...links, email: g.email.toLowerCase(), name: links.name || g.name,
-        aliases: (g.aliases || []).map(x => x.toLowerCase())});
-    }
-    pageToken = resp.nextPageToken;
-  } while (pageToken);
-  return {groups, complete};
 }
 
 // The circle's members' short names, sorted: each member of its Google
@@ -123,6 +79,26 @@ function circleMemberNames(circle) {
     .sort((a, b) => a.localeCompare(b));
 }
 
+// The IDs of the folders holding a file, nearest first, and of its shared
+// drive, if it's in one.
+function driveAncestors(fileId) {
+  const file = Drive.Files.get(fileId, {fields: 'parents,driveId', supportsAllDrives: true});
+  const ids = [];
+  let parents = file.parents || [];
+  while (parents.length && ids.length < 20) {
+    const id = parents[0];
+    ids.push(id);
+    if (id === file.driveId) break;
+    try {
+      parents = Drive.Files.get(id, {fields: 'parents', supportsAllDrives: true}).parents || [];
+    } catch (e) {
+      break; // A folder the script can't see.
+    }
+  }
+  if (file.driveId && !ids.includes(file.driveId)) ids.push(file.driveId);
+  return ids;
+}
+
 // The (lowercase) addresses of a Google Group's members that are people
 // (not groups).
 function groupMemberEmails(groupEmail) {
@@ -136,6 +112,11 @@ function groupMemberEmails(groupEmail) {
     pageToken = resp.nextPageToken;
   } while (pageToken);
   return emails;
+}
+
+function loadCircles() {
+  const cached = CacheService.getScriptCache().get(CIRCLES_CACHE_KEY);
+  return cached ? JSON.parse(cached) : refreshCircles();
 }
 
 // MEMBER_NAMES_FILE's names by (lowercase) email address, or {} if there's
@@ -170,17 +151,36 @@ function nextEvents(circle, after, count) {
     .slice(0, count);
 }
 
-// Run from the editor: forgets the cached names and circles, so the next
-// meeting reads them afresh, and logs what MEMBER_NAMES_FILE holds (how many
-// names, how many are more than a first name, and a few of them), to check
-// that update_groups.py has written short names.
-function checkMemberNames() {
-  CacheService.getScriptCache().removeAll([MEMBER_NAMES_FILE, CIRCLES_CACHE_KEY]);
-  const files = DriveApp.getRootFolder().getFilesByName(MEMBER_NAMES_FILE);
-  if (!files.hasNext()) return Logger.log('No ' + MEMBER_NAMES_FILE + ' in My Drive.');
-  const file = files.next();
-  const names = Object.values(JSON.parse(file.getBlob().getDataAsString('UTF-8')));
-  Logger.log(MEMBER_NAMES_FILE + ', last changed ' + file.getLastUpdated() + ': ' +
-    names.length + ' entries, ' + names.filter(n => /\s/.test(n)).length +
-    ' with more than a first name. For example: ' + names.slice(0, 8).join(', '));
+// Every Google Group in the domain, with its footer's links (see
+// parseCircleFooter): {groups: [{email, aliases, name, ...links}], complete}, complete
+// false if a footer couldn't be read (that group is left out).
+function readGroupFooters() {
+  const groups = [];
+  let complete = true;
+  let pageToken;
+  do {
+    const resp = AdminDirectory.Groups.list({domain: DOMAIN, maxResults: 200, pageToken});
+    for (const g of resp.groups || []) {
+      let footer;
+      try {
+        footer = GroupsSettings.Groups.get(g.email).customFooterText;
+      } catch (e) {
+        console.error('Couldn\'t read ' + g.email + '\'s footer: ' + e.message);
+        complete = false;
+        continue;
+      }
+      const links = parseCircleFooter(footer);
+      groups.push({...links, email: g.email.toLowerCase(), name: links.name || g.name,
+        aliases: (g.aliases || []).map(x => x.toLowerCase())});
+    }
+    pageToken = resp.nextPageToken;
+  } while (pageToken);
+  return {groups, complete};
+}
+
+// Every Google Group whose footer links a Drive item.
+function refreshCircles() {
+  const circles = readGroupFooters().groups.filter(g => g.driveItemId);
+  CacheService.getScriptCache().put(CIRCLES_CACHE_KEY, JSON.stringify(circles), CIRCLES_CACHE_SECONDS);
+  return circles;
 }

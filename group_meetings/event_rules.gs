@@ -12,8 +12,6 @@
  *     one is due, and writing the email.
  */
 
-// ── Footer ───────────────────────────────────────────────────────────────────
-
 // Must match util/google_group_footer.py.
 const FOOTER_MARKER = '--- Auto-managed links ---';
 const CALENDAR_LINK_RE =
@@ -26,55 +24,6 @@ const OTHER_MEETING_LINK_RE = /(?:[\w.-]*zoom\.us\/j\/\d+|meet\.google\.com\/[a-
 
 const BASE64_ALPHABET =
   'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-
-/** Decode base64 (standard or URL-safe, padding optional) to a string, or null. */
-function base64ToString(text) {
-  const s = text.replace(/-/g, '+').replace(/_/g, '/').replace(/=+$/, '');
-  let bits = 0, value = 0, out = '';
-  for (const ch of s) {
-    const v = BASE64_ALPHABET.indexOf(ch);
-    if (v < 0) return null;
-    value = (value << 6) | v;
-    bits += 6;
-    if (bits >= 8) {
-      bits -= 8;
-      out += String.fromCharCode((value >> bits) & 0xff);
-    }
-  }
-  return out;
-}
-
-/**
- * The managed links in a group's footer: { calendarId, zoomUrl, passcode },
- * each null if absent. Only the auto-managed block is read.
- */
-function parseFooter(footerText) {
-  const text = footerText || '';
-  const idx = text.indexOf(FOOTER_MARKER);
-  const block = idx >= 0 ? text.slice(idx) : text;
-  const cal = block.match(CALENDAR_LINK_RE);
-  const zoom = block.match(ZOOM_LINK_RE);
-  const details = block.match(ZOOM_DETAILS_RE);
-  return {
-    calendarId: cal ? base64ToString(decodeURIComponent(cal[1])) : null,
-    zoomUrl: zoom ? zoom[1] : null,
-    passcode: details ? details[1] : null,
-  };
-}
-
-function meetingIdFromUrl(url) {
-  const m = (url || '').match(MEETING_ID_IN_URL_RE);
-  return m ? m[1] : null;
-}
-
-/** "81234567890" -> "812 3456 7890", as Zoom shows IDs (and the footer does). */
-function formatMeetingId(id) {
-  if (id.length === 11) return `${id.slice(0, 3)} ${id.slice(3, 7)} ${id.slice(7)}`;
-  if (id.length === 10) return `${id.slice(0, 3)} ${id.slice(3, 6)} ${id.slice(6)}`;
-  return id;
-}
-
-// ── Event changes ────────────────────────────────────────────────────────────
 
 const NO_ZOOM_MARKER = '[no zoom]';
 const ZOOM_BLOCK_END = '(Added automatically from the group\'s Zoom room.)';
@@ -108,25 +57,41 @@ const TO_FOLLOW_FIRST_LINE_RE = new RegExp(`^${TAGS}${TO_FOLLOW}${TAGS}(?:${LINE
 // The words as the whole text of an HTML element, as in <p>Zoom link to follow</p>.
 const TO_FOLLOW_ELEMENT_RE = new RegExp(`>(?:\s|&nbsp;)*${TO_FOLLOW}(?:\s|&nbsp;)*<`, 'gi');
 
-function lower(s) { return (s || '').toLowerCase(); }
+// The About this circle row in a group's agenda doc that says when the
+// group's meetings get reminders (see circle_agendas/agenda_rules.gs).
+const REMINDER_ROW_LABEL = 'Remind before meetings';
+const DEFAULT_REMINDER_LEADS = [24 * 60 * 60 * 1000];
+// Longer lead times aren't read: reminders are looked for this far ahead.
+const MAX_REMINDER_LEAD_MS = 14 * 24 * 60 * 60 * 1000;
+// "[remind 2 hours]", "[reminders: 2 days, 1 hour]", "[no reminder]" in an
+// event's title or description.
+const REMINDER_TAG_RE = /\[\s*(no\s+reminders?|remind(?:ers?)?\b\s*:?([^\]]*))\]/i;
 
-/** "2 (Jane Doe)": how an event description names the Zoom user with this
- * email, by its number and its name in Zoom (numbers and names map email
- * to each), whichever are known, else by email. */
-function zoomUserLabel(email, numbers, names) {
-  const number = numbers[email], name = names[email];
-  if (number && name) return `${number} (${name})`;
-  return number || name || email;
-}
+const NUMBER_WORDS = {
+  a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7,
+  eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12,
+};
+const UNIT_MS = { minute: 60 * 1000, hour: 60 * 60 * 1000, day: 24 * 60 * 60 * 1000,
+                  week: 7 * 24 * 60 * 60 * 1000 };
+const DURATION_PART_RE = new RegExp(
+  String.raw`\s*(\d+(?:\.\d+)?|half an?|${Object.keys(NUMBER_WORDS).join('|')})\s*` +
+  String.raw`(minutes?|mins?|m|hours?|hrs?|h|days?|d|weeks?|wks?|w)(?![a-z])\s*`, 'y');
 
-/** The Zoom details block for an event description. */
-function zoomBlock(room, br) {
-  const lines = [`Join Zoom meeting: ${room.zoomUrl}`];
-  const id = meetingIdFromUrl(room.zoomUrl);
-  if (id && room.passcode) lines.push(`Meeting ID ${formatMeetingId(id)}, passcode ${room.passcode}`);
-  if (room.zoomUser) lines.push(`Zoom user: ${room.zoomUser} ${ZOOM_USER_NOTE}`);
-  lines.push(ZOOM_BLOCK_END);
-  return lines.join(br);
+/** Decode base64 (standard or URL-safe, padding optional) to a string, or null. */
+function base64ToString(text) {
+  const s = text.replace(/-/g, '+').replace(/_/g, '/').replace(/=+$/, '');
+  let bits = 0, value = 0, out = '';
+  for (const ch of s) {
+    const v = BASE64_ALPHABET.indexOf(ch);
+    if (v < 0) return null;
+    value = (value << 6) | v;
+    bits += 6;
+    if (bits >= 8) {
+      bits -= 8;
+      out += String.fromCharCode((value >> bits) & 0xff);
+    }
+  }
+  return out;
 }
 
 /**
@@ -225,104 +190,49 @@ function computeEventPatch(event, ctx) {
   return { patch, sendUpdates: invitesGroup ? 'all' : 'none' };
 }
 
-/** text without its "Zoom link to follow" lines. */
-function removeToFollowLines(text) {
-  return text
-    .replace(TO_FOLLOW_FIRST_LINE_RE, '$1$2')
-    .replace(TO_FOLLOW_LINE_RE, '$1$2')
-    .replace(TO_FOLLOW_ELEMENT_RE, '><');
+function conflictFingerprint(c) {
+  return [c.a.start, c.a.end, c.b.start, c.b.end].join(',');
 }
 
-/** text with every doc linked on its "Agenda and minutes:" lines replaced
- * by agendaUrl, so a group whose agenda doc is replaced has its events'
- * line point at the new doc rather than gain a second line. */
-function relinkAgendaLines(text, agendaUrl) {
-  return (text || '').replace(AGENDA_LINE_RE, (line, label, rest) =>
-    label + rest.replace(GOOGLE_DOC_URL_RE, agendaUrl));
+/** Stable ID for a conflict, and a fingerprint that changes with its times. */
+function conflictId(c) {
+  return [c.a.key, c.b.key].sort().join(' | ');
 }
 
-/** text without the links to the doc at docUrl on its "Agenda and
- * minutes:" lines, and their label. A line left with nothing else on it is
- * removed, with the line breaks before it (or, for a line at the start,
- * after it); anything else typed on the line, such as "[no zoom]", is kept. */
-function removeAgendaLines(text, docUrl) {
-  let atStart = false;
-  const out = (text || '').replace(AGENDA_LINE_WITH_BREAKS_RE, (line, breaks, label, rest, offset) => {
-    if (!linksDocument(rest, docUrl)) return line;
-    const left = rest
-      .replace(HTML_LINK_RE, a => (linksDocument(a, docUrl) ? '' : a))
-      .replace(GOOGLE_DOC_URL_RE, url => (linksDocument(url, docUrl) ? '' : url))
-      .replace(/^(?:\s|&nbsp;)+/, '');
-    if (left.replace(/&nbsp;|<[^>]*>/g, '').trim()) return breaks + left;
-    if (offset === 0) atStart = true;
-    return '';
-  });
-  return atStart ? out.replace(LEADING_BREAKS_RE, '') : out;
-}
-
-/** True if text links the Google Doc at docUrl, in any form (a section
- * link, an /edit link, inside formatted text): it contains the doc's ID. */
-function linksDocument(text, docUrl) {
-  const m = docUrl.match(GOOGLE_DOC_ID_RE);
-  return (text || '').includes(m ? m[1] : docUrl);
-}
-
-function hasNoZoomMarker(event) {
-  return (lower(event.summary) + ' ' + lower(event.description)).includes(NO_ZOOM_MARKER);
-}
-
-/** True if the event's location or description links some meeting
- * other than the group's room. */
-function hasOtherMeetingLink(event, zoomUrl, stamped) {
-  const ours = new Set([meetingIdFromUrl(zoomUrl), meetingIdFromUrl(stamped)].filter(Boolean));
-  const text = `${event.location || ''} ${(event.description || '').replace(ZOOM_BLOCK_RE, '')}`;
-  for (const link of text.match(OTHER_MEETING_LINK_RE) || []) {
-    const id = meetingIdFromUrl(link);
-    if (!id || !ours.has(id)) return true;
+/**
+ * The text of the row labelled label (its first line, ignoring case) in
+ * the first table holding one, in a Docs API document (Docs.Documents.get),
+ * as the text of its second cell, its lines joined by commas (so lead
+ * times on separate lines read as separate reminders); '' if that cell is
+ * empty, null if there's no such row.
+ */
+function docRowValue(doc, label) {
+  const cellText = cell => (cell.content || []).map(se => se.paragraph
+    ? (se.paragraph.elements || []).map(pe => (pe.textRun ? pe.textRun.content : '')).join('')
+    : '').join('');
+  for (const se of ((doc || {}).body || {}).content || []) {
+    for (const row of (se.table || {}).tableRows || []) {
+      const cells = row.tableCells || [];
+      if (cells.length < 2) continue;
+      if (lower(cellText(cells[0]).split('\n')[0].trim()) !== lower(label)) continue;
+      return cellText(cells[1]).split('\n').map(l => l.trim()).filter(Boolean).join(', ');
+    }
   }
-  // A Meet conference Calendar attached on its own (hangoutLink /
-  // conferenceData) doesn't count: only links someone typed in.
-  return false;
+  return null;
 }
 
 /**
- * True if the event on calendarId is only a copy of an invitation from
- * someone else's calendar (so changes to it don't reach other guests), and
- * that someone isn't another of our managed calendars.
+ * The lead times (of leads) whose reminder for a meeting starting at
+ * startMs is due now: its time (startMs - lead) has come, at most graceMs
+ * ago (so a reminder missed for long, or one due before the event was
+ * created, when its invitation went out, isn't sent late), and the meeting
+ * hasn't started. createdMs is when the event was created (null if not
+ * known). Shortest first: the first is the one to send, the rest are
+ * marked sent with it.
  */
-function isInvitationCopy(event, calendarId, managedCalendarIds) {
-  const organizer = lower((event.organizer || {}).email);
-  if (!organizer || organizer === lower(calendarId)) return false;
-  return !managedCalendarIds.some(id => lower(id) === organizer);
-}
-
-/**
- * [{ id, name }] for the calendars in the account's calendar list
- * (Calendar.CalendarList.list items) that it owns, other than those in
- * skipIds (the group calendars and the all-events calendar): its primary
- * calendar and its other calendars. Another person's primary calendar
- * shared with it as an owner is left out, since its ID is that person's
- * address.
- */
-function otherOwnedCalendars(items, account, skipIds) {
-  const skip = new Set(skipIds.map(lower));
-  return items
-    .filter(c => c.accessRole === 'owner' && !skip.has(lower(c.id)) &&
-                 (c.primary || lower(c.id) === lower(account) ||
-                  lower(c.id).endsWith('@group.calendar.google.com')))
-    .map(c => ({ id: c.id, name: c.summaryOverride || c.summary || c.id }));
-}
-
-// ── Overlaps ─────────────────────────────────────────────────────────────────
-
-/** Zoom meeting IDs linked anywhere in an event's location or description. */
-function zoomIdsInEvent(event) {
-  const text = `${event.location || ''} ${event.description || ''}`;
-  const ids = new Set();
-  let m;
-  ANY_ZOOM_ID_RE.lastIndex = 0;
-  while ((m = ANY_ZOOM_ID_RE.exec(text)) !== null) ids.add(m[1]);
-  return [...ids];
+function dueReminderLeads(startMs, createdMs, leads, nowMs, graceMs) {
+  return leads.filter(lead => reminderTiming(startMs, createdMs, lead, nowMs, graceMs) === 'due')
+    .sort((x, y) => x - y);
 }
 
 /**
@@ -360,11 +270,50 @@ function findOverlaps(meetings, minGapMs = 0) {
   return conflicts;
 }
 
-/** Combine two sightings of the same meeting, keeping every group named. */
-function mergeMeetings(x, y) {
-  const groups = [...new Set([...(x.groups || []), ...(y.groups || [])])];
-  const names = [...new Set([...(x.names || []), ...(y.names || [])])];
-  return Object.assign({}, x, { groups, names, title: x.title || y.title });
+/** "24 hours", "2 days", "1 hour 30 minutes", "15 minutes". */
+function formatLead(ms) {
+  const plural = (n, unit) => `${n} ${unit}${n === 1 ? '' : 's'}`;
+  if (ms >= 2 * UNIT_MS.day && ms % UNIT_MS.day === 0) return plural(ms / UNIT_MS.day, 'day');
+  const hours = Math.floor(ms / UNIT_MS.hour);
+  const minutes = Math.round((ms % UNIT_MS.hour) / UNIT_MS.minute);
+  return [hours ? plural(hours, 'hour') : '', minutes ? plural(minutes, 'minute') : '']
+    .filter(Boolean).join(' ') || plural(0, 'minute');
+}
+
+/** "81234567890" -> "812 3456 7890", as Zoom shows IDs (and the footer does). */
+function formatMeetingId(id) {
+  if (id.length === 11) return `${id.slice(0, 3)} ${id.slice(3, 7)} ${id.slice(7)}`;
+  if (id.length === 10) return `${id.slice(0, 3)} ${id.slice(3, 6)} ${id.slice(6)}`;
+  return id;
+}
+
+function hasNoZoomMarker(event) {
+  return (lower(event.summary) + ' ' + lower(event.description)).includes(NO_ZOOM_MARKER);
+}
+
+/** True if the event's location or description links some meeting
+ * other than the group's room. */
+function hasOtherMeetingLink(event, zoomUrl, stamped) {
+  const ours = new Set([meetingIdFromUrl(zoomUrl), meetingIdFromUrl(stamped)].filter(Boolean));
+  const text = `${event.location || ''} ${(event.description || '').replace(ZOOM_BLOCK_RE, '')}`;
+  for (const link of text.match(OTHER_MEETING_LINK_RE) || []) {
+    const id = meetingIdFromUrl(link);
+    if (!id || !ours.has(id)) return true;
+  }
+  // A Meet conference Calendar attached on its own (hangoutLink /
+  // conferenceData) doesn't count: only links someone typed in.
+  return false;
+}
+
+/**
+ * True if the event on calendarId is only a copy of an invitation from
+ * someone else's calendar (so changes to it don't reach other guests), and
+ * that someone isn't another of our managed calendars.
+ */
+function isInvitationCopy(event, calendarId, managedCalendarIds) {
+  const organizer = lower((event.organizer || {}).email);
+  if (!organizer || organizer === lower(calendarId)) return false;
+  return !managedCalendarIds.some(id => lower(id) === organizer);
 }
 
 /** "A", "A and B", "A, B and C". */
@@ -372,6 +321,44 @@ function joinNames(names) {
   return names.length < 3
     ? names.join(' and ')
     : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+}
+
+/** True if text links the Google Doc at docUrl, in any form (a section
+ * link, an /edit link, inside formatted text): it contains the doc's ID. */
+function linksDocument(text, docUrl) {
+  const m = docUrl.match(GOOGLE_DOC_ID_RE);
+  return (text || '').includes(m ? m[1] : docUrl);
+}
+
+function lower(s) { return (s || '').toLowerCase(); }
+
+function meetingIdFromUrl(url) {
+  const m = (url || '').match(MEETING_ID_IN_URL_RE);
+  return m ? m[1] : null;
+}
+
+/** Combine two sightings of the same meeting, keeping every group named. */
+function mergeMeetings(x, y) {
+  const groups = [...new Set([...(x.groups || []), ...(y.groups || [])])];
+  const names = [...new Set([...(x.names || []), ...(y.names || [])])];
+  return Object.assign({}, x, { groups, names, title: x.title || y.title });
+}
+
+/**
+ * [{ id, name }] for the calendars in the account's calendar list
+ * (Calendar.CalendarList.list items) that it owns, other than those in
+ * skipIds (the group calendars and the all-events calendar): its primary
+ * calendar and its other calendars. Another person's primary calendar
+ * shared with it as an owner is left out, since its ID is that person's
+ * address.
+ */
+function otherOwnedCalendars(items, account, skipIds) {
+  const skip = new Set(skipIds.map(lower));
+  return items
+    .filter(c => c.accessRole === 'owner' && !skip.has(lower(c.id)) &&
+                 (c.primary || lower(c.id) === lower(account) ||
+                  lower(c.id).endsWith('@group.calendar.google.com')))
+    .map(c => ({ id: c.id, name: c.summaryOverride || c.summary || c.id }));
 }
 
 /**
@@ -477,64 +464,21 @@ function overlapMessage(c, opts) {
 }
 
 /**
- * An email's plain text as HTML, so mail programs reflow it to fit rather
- * than showing the line breaks plain text gets on the way: blank-line-
- * separated paragraphs, lines starting "- " as a bulleted list (a line
- * after one continuing that item), and web links clickable.
+ * The managed links in a group's footer: { calendarId, zoomUrl, passcode },
+ * each null if absent. Only the auto-managed block is read.
  */
-function textToHtml(text) {
-  const escape = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-  const linked = s => escape(s).replace(/https?:\/\/[^\s<]+/g, url => `<a href="${url}">${url}</a>`);
-  return text.trim().split(/\n{2,}/).map(block => {
-    const lines = [];
-    let items = null;
-    for (const line of block.split('\n')) {
-      const item = line.match(/^\s*- (.*)$/);
-      if (item) (items = items || []).push(linked(item[1]));
-      else if (items) items[items.length - 1] += `<br>${linked(line)}`;
-      else lines.push(linked(line));
-    }
-    return (lines.length ? `<p>${lines.join('<br>')}</p>` : '') +
-      (items ? `<ul>${items.map(i => `<li>${i}</li>`).join('')}</ul>` : '');
-  }).join('\n');
-}
-
-/** Stable ID for a conflict, and a fingerprint that changes with its times. */
-function conflictId(c) {
-  return [c.a.key, c.b.key].sort().join(' | ');
-}
-
-function conflictFingerprint(c) {
-  return [c.a.start, c.a.end, c.b.start, c.b.end].join(',');
-}
-
-// ── Reminders ────────────────────────────────────────────────────────────────
-
-// The About this circle row in a group's agenda doc that says when the
-// group's meetings get reminders (see circle_agendas/agenda_rules.gs).
-const REMINDER_ROW_LABEL = 'Remind before meetings';
-const DEFAULT_REMINDER_LEADS = [24 * 60 * 60 * 1000];
-// Longer lead times aren't read: reminders are looked for this far ahead.
-const MAX_REMINDER_LEAD_MS = 14 * 24 * 60 * 60 * 1000;
-// "[remind 2 hours]", "[reminders: 2 days, 1 hour]", "[no reminder]" in an
-// event's title or description.
-const REMINDER_TAG_RE = /\[\s*(no\s+reminders?|remind(?:ers?)?\b\s*:?([^\]]*))\]/i;
-
-const NUMBER_WORDS = {
-  a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7,
-  eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12,
-};
-const UNIT_MS = { minute: 60 * 1000, hour: 60 * 60 * 1000, day: 24 * 60 * 60 * 1000,
-                  week: 7 * 24 * 60 * 60 * 1000 };
-const DURATION_PART_RE = new RegExp(
-  String.raw`\s*(\d+(?:\.\d+)?|half an?|${Object.keys(NUMBER_WORDS).join('|')})\s*` +
-  String.raw`(minutes?|mins?|m|hours?|hrs?|h|days?|d|weeks?|wks?|w)(?![a-z])\s*`, 'y');
-
-function unitMs(unit) {
-  const u = unit[0];
-  return u === 'm' ? UNIT_MS.minute : u === 'h' ? UNIT_MS.hour
-    : u === 'd' ? UNIT_MS.day : UNIT_MS.week;
+function parseFooter(footerText) {
+  const text = footerText || '';
+  const idx = text.indexOf(FOOTER_MARKER);
+  const block = idx >= 0 ? text.slice(idx) : text;
+  const cal = block.match(CALENDAR_LINK_RE);
+  const zoom = block.match(ZOOM_LINK_RE);
+  const details = block.match(ZOOM_DETAILS_RE);
+  return {
+    calendarId: cal ? base64ToString(decodeURIComponent(cal[1])) : null,
+    zoomUrl: zoom ? zoom[1] : null,
+    passcode: details ? details[1] : null,
+  };
 }
 
 /**
@@ -568,38 +512,6 @@ function parseReminderLeads(text) {
   return { leads: [...new Set(leads)].sort((x, y) => y - x) };
 }
 
-/** "24 hours", "2 days", "1 hour 30 minutes", "15 minutes". */
-function formatLead(ms) {
-  const plural = (n, unit) => `${n} ${unit}${n === 1 ? '' : 's'}`;
-  if (ms >= 2 * UNIT_MS.day && ms % UNIT_MS.day === 0) return plural(ms / UNIT_MS.day, 'day');
-  const hours = Math.floor(ms / UNIT_MS.hour);
-  const minutes = Math.round((ms % UNIT_MS.hour) / UNIT_MS.minute);
-  return [hours ? plural(hours, 'hour') : '', minutes ? plural(minutes, 'minute') : '']
-    .filter(Boolean).join(' ') || plural(0, 'minute');
-}
-
-/**
- * The text of the row labelled label (its first line, ignoring case) in
- * the first table holding one, in a Docs API document (Docs.Documents.get),
- * as the text of its second cell, its lines joined by commas (so lead
- * times on separate lines read as separate reminders); '' if that cell is
- * empty, null if there's no such row.
- */
-function docRowValue(doc, label) {
-  const cellText = cell => (cell.content || []).map(se => se.paragraph
-    ? (se.paragraph.elements || []).map(pe => (pe.textRun ? pe.textRun.content : '')).join('')
-    : '').join('');
-  for (const se of ((doc || {}).body || {}).content || []) {
-    for (const row of (se.table || {}).tableRows || []) {
-      const cells = row.tableCells || [];
-      if (cells.length < 2) continue;
-      if (lower(cellText(cells[0]).split('\n')[0].trim()) !== lower(label)) continue;
-      return cellText(cells[1]).split('\n').map(l => l.trim()).filter(Boolean).join(', ');
-    }
-  }
-  return null;
-}
-
 /** An event description's text without its HTML: tags removed (a line
  * break kept as one), and the entities Calendar writes (such as the
  * &nbsp; its editor puts between words) decoded. */
@@ -607,6 +519,20 @@ function plainText(html) {
   return (html || '').replace(/<br\s*\/?>|<\/(?:p|div|li)>/gi, '\n').replace(/<[^>]*>/g, '')
     .replace(/&nbsp;|&#160;/gi, ' ').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>')
     .replace(/&quot;/gi, '"').replace(/&#39;|&apos;/gi, "'").replace(/&amp;/gi, '&');
+}
+
+/** text with every doc linked on its "Agenda and minutes:" lines replaced
+ * by agendaUrl, so a group whose agenda doc is replaced has its events'
+ * line point at the new doc rather than gain a second line. */
+function relinkAgendaLines(text, agendaUrl) {
+  return (text || '').replace(AGENDA_LINE_RE, (line, label, rest) =>
+    label + rest.replace(GOOGLE_DOC_URL_RE, agendaUrl));
+}
+
+/** Stable key for one reminder of one meeting (an instance of a recurring
+ * event has its own ID); a meeting moved to another time gets new ones. */
+function reminderKey(calendarId, event, startMs, lead) {
+  return [calendarId, event.id, startMs, lead].join('|');
 }
 
 /**
@@ -635,35 +561,6 @@ function reminderLeads(event, groupSetting) {
   }
   return Object.assign({ leads: DEFAULT_REMINDER_LEADS, source: 'default' },
                        errors.length ? { error: errors.join('; ') } : {});
-}
-
-/**
- * The lead times (of leads) whose reminder for a meeting starting at
- * startMs is due now: its time (startMs - lead) has come, at most graceMs
- * ago (so a reminder missed for long, or one due before the event was
- * created, when its invitation went out, isn't sent late), and the meeting
- * hasn't started. createdMs is when the event was created (null if not
- * known). Shortest first: the first is the one to send, the rest are
- * marked sent with it.
- */
-function dueReminderLeads(startMs, createdMs, leads, nowMs, graceMs) {
-  return leads.filter(lead => reminderTiming(startMs, createdMs, lead, nowMs, graceMs) === 'due')
-    .sort((x, y) => x - y);
-}
-
-/**
- * Where one reminder (lead ms before a meeting starting at startMs) stands
- * now: 'due' (send it), 'upcoming' (its time hasn't come), 'missed' (due
- * more than graceMs ago), 'created after due' (the event was created after
- * its time, so its invitation went out instead), or 'started' (the
- * meeting has begun). See dueReminderLeads.
- */
-function reminderTiming(startMs, createdMs, lead, nowMs, graceMs) {
-  const due = startMs - lead;
-  if (nowMs >= startMs) return 'started';
-  if (createdMs !== null && createdMs >= due) return 'created after due';
-  if (nowMs < due) return 'upcoming';
-  return nowMs < due + graceMs ? 'due' : 'missed';
 }
 
 /**
@@ -712,8 +609,103 @@ function reminderMessage(event, opts) {
   };
 }
 
-/** Stable key for one reminder of one meeting (an instance of a recurring
- * event has its own ID); a meeting moved to another time gets new ones. */
-function reminderKey(calendarId, event, startMs, lead) {
-  return [calendarId, event.id, startMs, lead].join('|');
+/**
+ * Where one reminder (lead ms before a meeting starting at startMs) stands
+ * now: 'due' (send it), 'upcoming' (its time hasn't come), 'missed' (due
+ * more than graceMs ago), 'created after due' (the event was created after
+ * its time, so its invitation went out instead), or 'started' (the
+ * meeting has begun). See dueReminderLeads.
+ */
+function reminderTiming(startMs, createdMs, lead, nowMs, graceMs) {
+  const due = startMs - lead;
+  if (nowMs >= startMs) return 'started';
+  if (createdMs !== null && createdMs >= due) return 'created after due';
+  if (nowMs < due) return 'upcoming';
+  return nowMs < due + graceMs ? 'due' : 'missed';
+}
+
+/** text without the links to the doc at docUrl on its "Agenda and
+ * minutes:" lines, and their label. A line left with nothing else on it is
+ * removed, with the line breaks before it (or, for a line at the start,
+ * after it); anything else typed on the line, such as "[no zoom]", is kept. */
+function removeAgendaLines(text, docUrl) {
+  let atStart = false;
+  const out = (text || '').replace(AGENDA_LINE_WITH_BREAKS_RE, (line, breaks, label, rest, offset) => {
+    if (!linksDocument(rest, docUrl)) return line;
+    const left = rest
+      .replace(HTML_LINK_RE, a => (linksDocument(a, docUrl) ? '' : a))
+      .replace(GOOGLE_DOC_URL_RE, url => (linksDocument(url, docUrl) ? '' : url))
+      .replace(/^(?:\s|&nbsp;)+/, '');
+    if (left.replace(/&nbsp;|<[^>]*>/g, '').trim()) return breaks + left;
+    if (offset === 0) atStart = true;
+    return '';
+  });
+  return atStart ? out.replace(LEADING_BREAKS_RE, '') : out;
+}
+
+/** text without its "Zoom link to follow" lines. */
+function removeToFollowLines(text) {
+  return text
+    .replace(TO_FOLLOW_FIRST_LINE_RE, '$1$2')
+    .replace(TO_FOLLOW_LINE_RE, '$1$2')
+    .replace(TO_FOLLOW_ELEMENT_RE, '><');
+}
+
+/**
+ * An email's plain text as HTML, so mail programs reflow it to fit rather
+ * than showing the line breaks plain text gets on the way: blank-line-
+ * separated paragraphs, lines starting "- " as a bulleted list (a line
+ * after one continuing that item), and web links clickable.
+ */
+function textToHtml(text) {
+  const escape = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const linked = s => escape(s).replace(/https?:\/\/[^\s<]+/g, url => `<a href="${url}">${url}</a>`);
+  return text.trim().split(/\n{2,}/).map(block => {
+    const lines = [];
+    let items = null;
+    for (const line of block.split('\n')) {
+      const item = line.match(/^\s*- (.*)$/);
+      if (item) (items = items || []).push(linked(item[1]));
+      else if (items) items[items.length - 1] += `<br>${linked(line)}`;
+      else lines.push(linked(line));
+    }
+    return (lines.length ? `<p>${lines.join('<br>')}</p>` : '') +
+      (items ? `<ul>${items.map(i => `<li>${i}</li>`).join('')}</ul>` : '');
+  }).join('\n');
+}
+
+function unitMs(unit) {
+  const u = unit[0];
+  return u === 'm' ? UNIT_MS.minute : u === 'h' ? UNIT_MS.hour
+    : u === 'd' ? UNIT_MS.day : UNIT_MS.week;
+}
+
+/** The Zoom details block for an event description. */
+function zoomBlock(room, br) {
+  const lines = [`Join Zoom meeting: ${room.zoomUrl}`];
+  const id = meetingIdFromUrl(room.zoomUrl);
+  if (id && room.passcode) lines.push(`Meeting ID ${formatMeetingId(id)}, passcode ${room.passcode}`);
+  if (room.zoomUser) lines.push(`Zoom user: ${room.zoomUser} ${ZOOM_USER_NOTE}`);
+  lines.push(ZOOM_BLOCK_END);
+  return lines.join(br);
+}
+
+/** Zoom meeting IDs linked anywhere in an event's location or description. */
+function zoomIdsInEvent(event) {
+  const text = `${event.location || ''} ${event.description || ''}`;
+  const ids = new Set();
+  let m;
+  ANY_ZOOM_ID_RE.lastIndex = 0;
+  while ((m = ANY_ZOOM_ID_RE.exec(text)) !== null) ids.add(m[1]);
+  return [...ids];
+}
+
+/** "2 (Jane Doe)": how an event description names the Zoom user with this
+ * email, by its number and its name in Zoom (numbers and names map email
+ * to each), whichever are known, else by email. */
+function zoomUserLabel(email, numbers, names) {
+  const number = numbers[email], name = names[email];
+  if (number && name) return `${number} (${name})`;
+  return number || name || email;
 }

@@ -28,8 +28,6 @@
  * test account.
  */
 
-// ── Configuration ────────────────────────────────────────────────────────────
-
 const DOMAIN = 'berkeleymoshav.org';
 
 // The admin's primary calendar. The script runs as the admin, so this is also
@@ -51,11 +49,209 @@ const DECLINE_IF_DELETE_FAILS = true;
 const PROP_SYNC_TOKEN = 'calendarSyncToken';
 const PROP_NOTIFIED = 'notifiedEvents';
 
-// ── Trigger handler & main loop ──────────────────────────────────────────────
+/**
+ * Read the calendar's ACL and build:
+ *   notifyGroups   [{ email, members:Set }]  — reader groups
+ *   allowedEmails  Set                        — may keep events
+ *   allowedDomains Set                        — may keep events (domain rule)
+ */
+function classifyAcl(calendarId) {
+  const notifyGroups = [];
+  const allowedEmails = new Set(SELF_ALLOWLIST);
+  const allowedDomains = new Set();
+
+  const rules = listAcl(calendarId);
+  for (const rule of rules) {
+    const scope = rule.scope || {};
+    const type = scope.type;
+    const value = (scope.value || '').toLowerCase();
+    const role = rule.role;
+    const modifies = role === 'writer' || role === 'owner';
+
+    if (type === 'group' && role === 'reader') {
+      const members = listMemberSet(value);
+      notifyGroups.push({ email: value, members });
+      // Reader-group members may also keep events.
+      members.forEach(m => allowedEmails.add(m));
+    } else if (type === 'group' && modifies) {
+      listMemberSet(value).forEach(m => allowedEmails.add(m));
+    } else if (type === 'user' && modifies) {
+      allowedEmails.add(value);
+    } else if (type === 'domain' && modifies) {
+      allowedDomains.add(value);
+    }
+    // role === 'none' / 'freeBusyReader' → intentionally ignored.
+  }
+
+  console.log(
+    `ACL: ${notifyGroups.length} reader group(s), ` +
+    `${allowedEmails.size} allowed email(s), ${allowedDomains.size} allowed domain(s).`);
+  return { notifyGroups, allowedEmails, allowedDomains };
+}
+
+function eventEndMs(event) {
+  const e = event.end || {};
+  return new Date(e.dateTime || e.date).getTime();
+}
+
+/** Salient-field hash to detect meaningful updates (used only if NOTIFY_UPDATES). */
+function eventHash(event) {
+  return [event.summary, event.location, event.description,
+          (event.start || {}).dateTime || (event.start || {}).date,
+          (event.end || {}).dateTime || (event.end || {}).date].join('|');
+}
+
+function eventStartMs(event) {
+  const s = event.start || {};
+  return new Date(s.dateTime || s.date).getTime();
+}
+
+function eventTitle(event) { return event.summary || '(untitled event)'; }
+
+/** Human date/time in the calendar's timezone; handles all-day events. */
+function formatWhen(event) {
+  const tz = Session.getScriptTimeZone();
+  const s = event.start || {}, e = event.end || {};
+  if (s.date) { // all-day
+    return Utilities.formatDate(new Date(s.date + 'T00:00:00'), tz, 'EEEE, MMMM d, yyyy') + ' · All day';
+  }
+  const start = new Date(s.dateTime), end = new Date(e.dateTime);
+  const day = Utilities.formatDate(start, tz, 'EEEE, MMMM d, yyyy');
+  const t1 = Utilities.formatDate(start, tz, 'h:mm a');
+  const t2 = Utilities.formatDate(end, tz, 'h:mm a');
+  return `${day} · ${t1}–${t2}`;
+}
+
+/**
+ * Returns 'kept', 'removed', 'emailed', or 'skipped'.
+ * ('emailed' implies kept; counted separately by the caller.)
+ */
+function handleEvent(event, acl, notified) {
+  const id = event.id;
+  const organizer = organizerEmail(event);
+
+  // Cancellations / deletions.
+  if (event.status === 'cancelled') {
+    if (notified[id]) {
+      if (NOTIFY_CANCELLATIONS) sendCancellation(event, notified[id]);
+      delete notified[id];
+    }
+    return 'skipped';
+  }
+
+  if (!organizer) return 'skipped';
+
+  // Decision 1 — gatekeeper.
+  if (!isAllowed(organizer, acl)) {
+    removeInvitation(id, organizer);
+    return 'removed';
+  }
+
+  // Decision 2 — notification (reader-group members only).
+  const groups = readerGroupsFor(organizer, acl);
+  if (groups.length && NOTIFY_NEW && !notified[id]) {
+    for (const groupEmail of groups) sendNewEvent(event, groupEmail);
+    notified[id] = { at: Date.now(), endMs: eventEndMs(event), hash: eventHash(event) };
+    return 'emailed';
+  }
+
+  if (groups.length && NOTIFY_UPDATES && notified[id]) {
+    const h = eventHash(event);
+    if (notified[id].hash !== h) {
+      for (const groupEmail of groups) sendUpdate(event, groupEmail);
+      notified[id].hash = h;
+      return 'emailed';
+    }
+  }
+
+  return 'kept';
+}
+
+/**
+ * Run once from the GAS editor to authorize, seed the sync token (so existing
+ * events aren't retro-notified), and install the onEventUpdated trigger.
+ */
+function installTrigger() {
+  // Remove any existing handler triggers first to avoid duplicates.
+  ScriptApp.getProjectTriggers()
+    .filter(t => t.getHandlerFunction() === 'onCalendarUpdate')
+    .forEach(t => ScriptApp.deleteTrigger(t));
+
+  // Seed: establish a sync token without notifying on pre-existing events.
+  PropertiesService.getScriptProperties().deleteProperty(PROP_SYNC_TOKEN);
+  processChanges();
+
+  ScriptApp.newTrigger('onCalendarUpdate')
+    .forUserCalendar(CALENDAR_ID)
+    .onEventUpdated()
+    .create();
+
+  console.log('onEventUpdated trigger installed and sync token seeded.');
+}
+
+/** Allowed to keep an event: writer/owner principal, allowed domain, reader-group member, or self. */
+function isAllowed(organizer, acl) {
+  if (SELF_ALLOWLIST.indexOf(organizer) !== -1) return true;
+  if (acl.allowedEmails.has(organizer)) return true;
+  const domain = organizer.split('@')[1];
+  if (domain && acl.allowedDomains.has(domain)) return true;
+  return false;
+}
+
+function isExpiredSyncToken(err) {
+  const m = (err && err.message) || '';
+  return err && (err.details && err.details.code === 410) ||
+         /sync token|410|full sync/i.test(m);
+}
+
+function listAcl(calendarId) {
+  const rules = [];
+  let pageToken;
+  do {
+    const resp = Calendar.Acl.list(calendarId, { pageToken, maxResults: 250 });
+    if (resp.items) rules.push(...resp.items);
+    pageToken = resp.nextPageToken;
+  } while (pageToken);
+  return rules;
+}
+
+function listAllMembers(groupEmail) {
+  const members = [];
+  let pageToken;
+  do {
+    const response = AdminDirectory.Members.list(groupEmail, {
+      maxResults: 200,
+      includeDerivedMembership: true, // flatten nested groups
+      pageToken,
+    });
+    if (response.members) members.push(...response.members);
+    pageToken = response.nextPageToken;
+  } while (pageToken);
+  return members;
+}
+
+/** Lowercased Set of a group's member emails (external Gmail members included). */
+function listMemberSet(groupEmail) {
+  const emails = new Set();
+  for (const m of listAllMembers(groupEmail)) {
+    if (m.email) emails.add(m.email.toLowerCase());
+  }
+  return emails;
+}
 
 /** Installable onEventUpdated trigger target. */
 function onCalendarUpdate(e) {
   processChanges();
+}
+
+function organizerDisplay(event) {
+  const o = event.organizer || event.creator || {};
+  return o.displayName || o.email || 'a community member';
+}
+
+function organizerEmail(event) {
+  return (((event.organizer && event.organizer.email) ||
+           (event.creator && event.creator.email) || '')).toLowerCase();
 }
 
 /**
@@ -121,60 +317,12 @@ function processChanges(isRetry) {
       : `Done — kept ${kept}, removed ${removed}, emailed ${emailed}.`);
 }
 
-// ── Per-event logic ──────────────────────────────────────────────────────────
-
-/**
- * Returns 'kept', 'removed', 'emailed', or 'skipped'.
- * ('emailed' implies kept; counted separately by the caller.)
- */
-function handleEvent(event, acl, notified) {
-  const id = event.id;
-  const organizer = organizerEmail(event);
-
-  // Cancellations / deletions.
-  if (event.status === 'cancelled') {
-    if (notified[id]) {
-      if (NOTIFY_CANCELLATIONS) sendCancellation(event, notified[id]);
-      delete notified[id];
-    }
-    return 'skipped';
+function pruneNotified(notified) {
+  const cutoff = Date.now() - 24 * 60 * 60 * 1000; // 1 day past event end
+  for (const id of Object.keys(notified)) {
+    const endMs = notified[id] && notified[id].endMs;
+    if (endMs && endMs < cutoff) delete notified[id];
   }
-
-  if (!organizer) return 'skipped';
-
-  // Decision 1 — gatekeeper.
-  if (!isAllowed(organizer, acl)) {
-    removeInvitation(id, organizer);
-    return 'removed';
-  }
-
-  // Decision 2 — notification (reader-group members only).
-  const groups = readerGroupsFor(organizer, acl);
-  if (groups.length && NOTIFY_NEW && !notified[id]) {
-    for (const groupEmail of groups) sendNewEvent(event, groupEmail);
-    notified[id] = { at: Date.now(), endMs: eventEndMs(event), hash: eventHash(event) };
-    return 'emailed';
-  }
-
-  if (groups.length && NOTIFY_UPDATES && notified[id]) {
-    const h = eventHash(event);
-    if (notified[id].hash !== h) {
-      for (const groupEmail of groups) sendUpdate(event, groupEmail);
-      notified[id].hash = h;
-      return 'emailed';
-    }
-  }
-
-  return 'kept';
-}
-
-/** Allowed to keep an event: writer/owner principal, allowed domain, reader-group member, or self. */
-function isAllowed(organizer, acl) {
-  if (SELF_ALLOWLIST.indexOf(organizer) !== -1) return true;
-  if (acl.allowedEmails.has(organizer)) return true;
-  const domain = organizer.split('@')[1];
-  if (domain && acl.allowedDomains.has(domain)) return true;
-  return false;
 }
 
 /** Reader groups (by email) that this organizer is a member of. */
@@ -185,87 +333,6 @@ function readerGroupsFor(organizer, acl) {
   }
   return hits;
 }
-
-// ── ACL classification ───────────────────────────────────────────────────────
-
-/**
- * Read the calendar's ACL and build:
- *   notifyGroups   [{ email, members:Set }]  — reader groups
- *   allowedEmails  Set                        — may keep events
- *   allowedDomains Set                        — may keep events (domain rule)
- */
-function classifyAcl(calendarId) {
-  const notifyGroups = [];
-  const allowedEmails = new Set(SELF_ALLOWLIST);
-  const allowedDomains = new Set();
-
-  const rules = listAcl(calendarId);
-  for (const rule of rules) {
-    const scope = rule.scope || {};
-    const type = scope.type;
-    const value = (scope.value || '').toLowerCase();
-    const role = rule.role;
-    const modifies = role === 'writer' || role === 'owner';
-
-    if (type === 'group' && role === 'reader') {
-      const members = listMemberSet(value);
-      notifyGroups.push({ email: value, members });
-      // Reader-group members may also keep events.
-      members.forEach(m => allowedEmails.add(m));
-    } else if (type === 'group' && modifies) {
-      listMemberSet(value).forEach(m => allowedEmails.add(m));
-    } else if (type === 'user' && modifies) {
-      allowedEmails.add(value);
-    } else if (type === 'domain' && modifies) {
-      allowedDomains.add(value);
-    }
-    // role === 'none' / 'freeBusyReader' → intentionally ignored.
-  }
-
-  console.log(
-    `ACL: ${notifyGroups.length} reader group(s), ` +
-    `${allowedEmails.size} allowed email(s), ${allowedDomains.size} allowed domain(s).`);
-  return { notifyGroups, allowedEmails, allowedDomains };
-}
-
-function listAcl(calendarId) {
-  const rules = [];
-  let pageToken;
-  do {
-    const resp = Calendar.Acl.list(calendarId, { pageToken, maxResults: 250 });
-    if (resp.items) rules.push(...resp.items);
-    pageToken = resp.nextPageToken;
-  } while (pageToken);
-  return rules;
-}
-
-// ── Group helpers (reused from groups_drive_sync.gs) ─────────────────────────
-
-/** Lowercased Set of a group's member emails (external Gmail members included). */
-function listMemberSet(groupEmail) {
-  const emails = new Set();
-  for (const m of listAllMembers(groupEmail)) {
-    if (m.email) emails.add(m.email.toLowerCase());
-  }
-  return emails;
-}
-
-function listAllMembers(groupEmail) {
-  const members = [];
-  let pageToken;
-  do {
-    const response = AdminDirectory.Members.list(groupEmail, {
-      maxResults: 200,
-      includeDerivedMembership: true, // flatten nested groups
-      pageToken,
-    });
-    if (response.members) members.push(...response.members);
-    pageToken = response.nextPageToken;
-  } while (pageToken);
-  return members;
-}
-
-// ── Calendar write helpers ───────────────────────────────────────────────────
 
 function removeInvitation(eventId, organizer) {
   try {
@@ -288,33 +355,6 @@ function removeInvitation(eventId, organizer) {
       console.error(`Could not remove or decline ${eventId} (${organizer}): ${err2}`);
     }
   }
-}
-
-// ── Email ────────────────────────────────────────────────────────────────────
-
-function sendNewEvent(event, groupEmail) {
-  send_(groupEmail, `New community event: ${eventTitle(event)}`,
-        'A community member added a new event to the shared calendar.', event);
-}
-
-function sendUpdate(event, groupEmail) {
-  send_(groupEmail, `Updated community event: ${eventTitle(event)}`,
-        'A community event on the shared calendar was updated.', event);
-}
-
-function sendCancellation(event, _prev) {
-  // Cancellation events may be sparse; only title/id are reliable.
-  // Left as a stub wired to NOTIFY_CANCELLATIONS.
-}
-
-function send_(groupEmail, subject, lead, event) {
-  const { text, html } = renderEmail(lead, event, groupEmail);
-  const options = { body: text, htmlBody: html, name: 'Berkeley Moshav Calendar' };
-  // Replies go to the event's organizer, not the admin account.
-  const organizer = organizerEmail(event);
-  if (organizer) options.replyTo = organizer;
-  MailApp.sendEmail(Object.assign({ to: groupEmail, subject }, options));
-  console.log(`Emailed ${groupEmail} (reply-to ${organizer || 'default'}): ${subject}`);
 }
 
 function renderEmail(lead, event, groupEmail) {
@@ -349,85 +389,27 @@ function renderEmail(lead, event, groupEmail) {
   return { text: textLines.join('\n'), html };
 }
 
-// ── Small utilities ──────────────────────────────────────────────────────────
-
-function organizerEmail(event) {
-  return (((event.organizer && event.organizer.email) ||
-           (event.creator && event.creator.email) || '')).toLowerCase();
+function send_(groupEmail, subject, lead, event) {
+  const { text, html } = renderEmail(lead, event, groupEmail);
+  const options = { body: text, htmlBody: html, name: 'Berkeley Moshav Calendar' };
+  // Replies go to the event's organizer, not the admin account.
+  const organizer = organizerEmail(event);
+  if (organizer) options.replyTo = organizer;
+  MailApp.sendEmail(Object.assign({ to: groupEmail, subject }, options));
+  console.log(`Emailed ${groupEmail} (reply-to ${organizer || 'default'}): ${subject}`);
 }
 
-function organizerDisplay(event) {
-  const o = event.organizer || event.creator || {};
-  return o.displayName || o.email || 'a community member';
+function sendCancellation(event, _prev) {
+  // Cancellation events may be sparse; only title/id are reliable.
+  // Left as a stub wired to NOTIFY_CANCELLATIONS.
 }
 
-function eventTitle(event) { return event.summary || '(untitled event)'; }
-
-function eventStartMs(event) {
-  const s = event.start || {};
-  return new Date(s.dateTime || s.date).getTime();
+function sendNewEvent(event, groupEmail) {
+  send_(groupEmail, `New community event: ${eventTitle(event)}`,
+        'A community member added a new event to the shared calendar.', event);
 }
 
-function eventEndMs(event) {
-  const e = event.end || {};
-  return new Date(e.dateTime || e.date).getTime();
-}
-
-/** Human date/time in the calendar's timezone; handles all-day events. */
-function formatWhen(event) {
-  const tz = Session.getScriptTimeZone();
-  const s = event.start || {}, e = event.end || {};
-  if (s.date) { // all-day
-    return Utilities.formatDate(new Date(s.date + 'T00:00:00'), tz, 'EEEE, MMMM d, yyyy') + ' · All day';
-  }
-  const start = new Date(s.dateTime), end = new Date(e.dateTime);
-  const day = Utilities.formatDate(start, tz, 'EEEE, MMMM d, yyyy');
-  const t1 = Utilities.formatDate(start, tz, 'h:mm a');
-  const t2 = Utilities.formatDate(end, tz, 'h:mm a');
-  return `${day} · ${t1}–${t2}`;
-}
-
-/** Salient-field hash to detect meaningful updates (used only if NOTIFY_UPDATES). */
-function eventHash(event) {
-  return [event.summary, event.location, event.description,
-          (event.start || {}).dateTime || (event.start || {}).date,
-          (event.end || {}).dateTime || (event.end || {}).date].join('|');
-}
-
-function pruneNotified(notified) {
-  const cutoff = Date.now() - 24 * 60 * 60 * 1000; // 1 day past event end
-  for (const id of Object.keys(notified)) {
-    const endMs = notified[id] && notified[id].endMs;
-    if (endMs && endMs < cutoff) delete notified[id];
-  }
-}
-
-function isExpiredSyncToken(err) {
-  const m = (err && err.message) || '';
-  return err && (err.details && err.details.code === 410) ||
-         /sync token|410|full sync/i.test(m);
-}
-
-// ── Trigger setup (run once manually) ────────────────────────────────────────
-
-/**
- * Run once from the GAS editor to authorize, seed the sync token (so existing
- * events aren't retro-notified), and install the onEventUpdated trigger.
- */
-function installTrigger() {
-  // Remove any existing handler triggers first to avoid duplicates.
-  ScriptApp.getProjectTriggers()
-    .filter(t => t.getHandlerFunction() === 'onCalendarUpdate')
-    .forEach(t => ScriptApp.deleteTrigger(t));
-
-  // Seed: establish a sync token without notifying on pre-existing events.
-  PropertiesService.getScriptProperties().deleteProperty(PROP_SYNC_TOKEN);
-  processChanges();
-
-  ScriptApp.newTrigger('onCalendarUpdate')
-    .forUserCalendar(CALENDAR_ID)
-    .onEventUpdated()
-    .create();
-
-  console.log('onEventUpdated trigger installed and sync token seeded.');
+function sendUpdate(event, groupEmail) {
+  send_(groupEmail, `Updated community event: ${eventTitle(event)}`,
+        'A community event on the shared calendar was updated.', event);
 }

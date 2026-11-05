@@ -42,8 +42,6 @@
  * Setup: see README.md in this folder.
  */
 
-// ── Configuration ────────────────────────────────────────────────────────────
-
 const DOMAIN = 'berkeleymoshav.org';
 const ALL_EVENTS_CALENDAR_ID =
   'c_301c808f640b3a04f5344b1bbf266955d51fecaabd7835936b7591f9cff09222@group.calendar.google.com';
@@ -95,201 +93,9 @@ const REMINDER_GRACE_MS = 60 * 60 * 1000;
 // How far ahead explainReminders looks.
 const REMINDER_EXPLAIN_DAYS = 3;
 
-// ── Entry points ─────────────────────────────────────────────────────────────
-
-/** Every 5 minutes: fix changed events; check overlaps if anything changed. */
-function syncAll() {
-  withLock(() => {
-    recheckIfRulesChanged();
-    const groups = loadGroups();
-    let changed = 0;
-    for (const group of groups) {
-      try {
-        changed += syncCalendar(group.calendarId, group.email,
-                                event => handleEvent(event, group, groups));
-      } catch (err) {
-        console.error(`Error syncing ${group.email}: ${err}`);
-      }
-    }
-    for (const cal of loadOtherCalendars(groups)) {
-      try {
-        syncCalendar(cal.id, cal.name, event => handleOtherEvent(event, cal));
-      } catch (err) {
-        console.error(`Error syncing ${cal.name}: ${err}`);
-      }
-    }
-    sendDueReminders(groups);
-    if (changed) checkOverlaps(groups);
-  });
-}
-
-/**
- * If RULES_VERSION changed since the last run, drop every calendar's sync
- * token, so this run handles every upcoming event (adding whatever the new
- * rules add) rather than only changed ones. Those changes send no email:
- * the groups are already invited.
- */
-function recheckIfRulesChanged() {
-  const props = PropertiesService.getScriptProperties();
-  if (props.getProperty(PROP_RULES_VERSION) === String(RULES_VERSION)) return;
-  for (const key of props.getKeys()) {
-    if (key.startsWith(PROP_SYNC_PREFIX)) props.deleteProperty(key);
-  }
-  props.setProperty(PROP_RULES_VERSION, String(RULES_VERSION));
-  console.log(`Rules version ${RULES_VERSION}: rechecking every upcoming event.`);
-}
-
-/**
- * Every hour: re-read footers, the account's other calendars, and Zoom's
- * meetings (including which user owns each room, since a room can be
- * transferred to another Zoom user), then check overlaps.
- */
-function hourly() {
-  withLock(() => {
-    const groups = refreshGroups();
-    refreshOtherCalendars(groups);
-    recheckZoomUsers(groups);
-    refreshZoomMeetings();
-    checkOverlaps(groups);
-  });
-}
-
-/** Run once from the editor: authorize, then install both triggers. */
-function installTriggers() {
-  ScriptApp.getProjectTriggers()
-    .filter(t => ['syncAll', 'hourly'].includes(t.getHandlerFunction()))
-    .forEach(t => ScriptApp.deleteTrigger(t));
-  hourly();
-  syncAll();
-  ScriptApp.newTrigger('syncAll').timeBased().everyMinutes(5).create();
-  ScriptApp.newTrigger('hourly').timeBased().everyHours(1).create();
-  console.log('Triggers installed: syncAll every 5 minutes, hourly every hour.');
-}
-
-function withLock(fn) {
-  const lock = LockService.getScriptLock();
-  if (!lock.tryLock(30 * 1000)) {
-    console.warn('Another run is still going; skipping this one.');
-    return;
-  }
-  try {
-    fn();
-  } finally {
-    lock.releaseLock();
-  }
-}
-
-// ── Stored state ─────────────────────────────────────────────────────────────
-
 // A Script Property holds at most 9 KB, so larger JSON values are split
 // across "<key>#0", "<key>#1", ..., with the number of parts in "<key>#n".
 const PROPERTY_CHUNK = 8000;
-
-function getJson(key, fallback) {
-  const props = PropertiesService.getScriptProperties();
-  const n = Number(props.getProperty(key + '#n'));
-  if (!n) return fallback;
-  let text = '';
-  for (let i = 0; i < n; i++) text += props.getProperty(`${key}#${i}`) || '';
-  return JSON.parse(text);
-}
-
-function setJson(key, value) {
-  const props = PropertiesService.getScriptProperties();
-  const text = JSON.stringify(value);
-  const old = Number(props.getProperty(key + '#n')) || 0;
-  const parts = {};
-  let n = 0;
-  for (let i = 0; i < text.length || n === 0; i += PROPERTY_CHUNK) {
-    parts[`${key}#${n++}`] = text.slice(i, i + PROPERTY_CHUNK);
-  }
-  parts[key + '#n'] = String(n);
-  props.setProperties(parts);
-  for (let i = n; i < old; i++) props.deleteProperty(`${key}#${i}`);
-}
-
-// ── Groups, from their footers ───────────────────────────────────────────────
-
-function loadGroups() {
-  return getJson(PROP_GROUPS, null) || refreshGroups();
-}
-
-/**
- * Every Google Group whose footer links a calendar. A group whose Zoom link
- * or passcode changed (say, after reset_zoom_room.py) has its sync token
- * dropped, so the next syncAll rechecks all its upcoming events.
- */
-function refreshGroups() {
-  const previous = new Map((getJson(PROP_GROUPS, null) || []).map(g => [g.email, g]));
-  const agendaDocs = agendaDocsByAddress();
-  const groups = [];
-  let pageToken;
-  do {
-    const resp = AdminDirectory.Groups.list({ domain: DOMAIN, maxResults: 200, pageToken });
-    for (const g of resp.groups || []) {
-      let footer;
-      try {
-        footer = GroupsSettings.Groups.get(g.email).customFooterText;
-      } catch (err) {
-        // Keep what we knew, rather than forgetting the group's calendar.
-        console.error(`Couldn't read ${g.email}'s footer: ${err}`);
-        const old = previous.get(g.email.toLowerCase());
-        if (old) groups.push(old);
-        continue;
-      }
-      const links = parseFooter(footer);
-      if (links.calendarId) {
-        const addresses = [g.email, ...(g.aliases || [])].map(a => a.toLowerCase());
-        const docId = addresses.map(a => agendaDocs[a]).find(Boolean);
-        const email = g.email.toLowerCase();
-        const group = Object.assign({ email, name: g.name }, links);
-        if (docId) {
-          group.agendaUrl = `https://docs.google.com/document/d/${docId}/edit`;
-          group.reminders = reminderSetting(docId, previous.get(email));
-        } else {
-          Object.assign(group, staleAgendaDoc(previous.get(email)));
-        }
-        groups.push(group);
-      }
-    }
-    pageToken = resp.nextPageToken;
-  } while (pageToken);
-  for (const g of groups) {
-    const old = previous.get(g.email);
-    if (old && (old.zoomUrl !== g.zoomUrl || old.passcode !== g.passcode ||
-                old.calendarId !== g.calendarId || old.agendaUrl !== g.agendaUrl)) {
-      PropertiesService.getScriptProperties().deleteProperty(PROP_SYNC_PREFIX + old.calendarId);
-      console.log(`${g.email}: Zoom room, calendar, or agenda doc changed; rechecking its events.`);
-    }
-  }
-  setJson(PROP_GROUPS, groups);
-  console.log(`${groups.length} group calendar(s).`);
-  return groups;
-}
-
-/**
- * For a group found with no agenda doc: the doc it last had, which was
- * trashed or deleted (or {} if none), kept until it has a doc again, so
- * its events lose their lines linking that doc (see computeEventPatch).
- */
-function staleAgendaDoc(old) {
-  const url = old && (old.agendaUrl || old.staleAgendaUrl);
-  return url ? { staleAgendaUrl: url } : {};
-}
-
-/**
- * The text of the Remind before meetings row in About this circle in a group's
- * agenda doc (null if the doc has no such row, as docs built before it
- * don't). If the doc can't be read, what the group had before is kept.
- */
-function reminderSetting(docId, previous) {
-  try {
-    return docRowValue(Docs.Documents.get(docId), REMINDER_ROW_LABEL);
-  } catch (err) {
-    console.error(`Couldn't read the reminder setting in agenda doc ${docId}: ${err}`);
-    return previous && previous.reminders !== undefined ? previous.reminders : null;
-  }
-}
 
 /**
  * Each built circle agenda doc's ID, by the group address it's labelled
@@ -315,132 +121,98 @@ function agendaDocsByAddress() {
   return docs;
 }
 
-function loadOtherCalendars(groups) {
-  return getJson(PROP_OTHER_CALENDARS, null) || refreshOtherCalendars(groups);
-}
-
-/**
- * The calendars the account owns besides the group calendars and the
- * all-events calendar (see otherOwnedCalendars in event_rules.gs). A
- * calendar the account no longer has loses its sync token, so it's
- * rechecked in full if it comes back.
- */
-function refreshOtherCalendars(groups) {
-  const items = [];
-  let pageToken;
-  do {
-    const resp = Calendar.CalendarList.list({ minAccessRole: 'owner', maxResults: 250, pageToken });
-    items.push(...(resp.items || []));
-    pageToken = resp.nextPageToken;
-  } while (pageToken);
-  const calendars = otherOwnedCalendars(
-    items, Session.getEffectiveUser().getEmail(), managedCalendarIds(groups));
-  const props = PropertiesService.getScriptProperties();
-  const ids = new Set(calendars.map(c => c.id));
-  for (const c of getJson(PROP_OTHER_CALENDARS, [])) {
-    if (!ids.has(c.id)) props.deleteProperty(PROP_SYNC_PREFIX + c.id);
-  }
-  setJson(PROP_OTHER_CALENDARS, calendars);
-  console.log(`${calendars.length} other calendar(s): ${calendars.map(c => c.name).join(', ')}.`);
-  return calendars;
-}
-
-function managedCalendarIds(groups) {
-  return groups.map(g => g.calendarId).concat([ALL_EVENTS_CALENDAR_ID]);
-}
-
-// ── Calendar sync ────────────────────────────────────────────────────────────
-
-/**
- * Pass handle every event that changed on the calendar since the last run
- * (on the first run, every event that hasn't ended); label names the
- * calendar in the log. Returns how many events changed.
- */
-function syncCalendar(calendarId, label, handle) {
-  const props = PropertiesService.getScriptProperties();
-  const tokenKey = PROP_SYNC_PREFIX + calendarId;
-  const syncToken = props.getProperty(tokenKey);
+function alertInvitationCopy(event, group) {
+  const alerted = getJson(PROP_COPY_ALERTS, {});
   const now = Date.now();
-  let pageToken, nextSyncToken, changed = 0;
-  do {
-    const params = { maxResults: 250, singleEvents: false, showDeleted: true, pageToken };
-    if (syncToken) params.syncToken = syncToken;
-    else params.timeMin = new Date(now).toISOString();
-    let resp;
-    try {
-      resp = Calendar.Events.list(calendarId, params);
-    } catch (err) {
-      if (syncToken && isExpiredSyncToken(err)) {
-        props.deleteProperty(tokenKey);
-        console.warn(`Sync token for ${label} expired; starting over.`);
-        return syncCalendar(calendarId, label, handle);
-      }
-      throw err;
-    }
-    for (const event of resp.items || []) {
-      changed++;
-      if (event.status === 'cancelled' || eventEndMs(event) < now) continue;
-      handle(event);
-    }
-    pageToken = resp.nextPageToken;
-    if (resp.nextSyncToken) nextSyncToken = resp.nextSyncToken;
-  } while (pageToken);
-  if (nextSyncToken) props.setProperty(tokenKey, nextSyncToken);
-  return changed;
-}
-
-function handleEvent(event, group, groups) {
-  if (isInvitationCopy(event, group.calendarId, managedCalendarIds(groups))) {
-    alertInvitationCopy(event, group);
+  for (const uid of Object.keys(alerted)) if (alerted[uid] < now) delete alerted[uid];
+  const uid = event.iCalUID || event.id;
+  if (alerted[uid]) {
+    setJson(PROP_COPY_ALERTS, alerted);
     return;
   }
-  if (lower((event.organizer || {}).email) !== lower(group.calendarId)) return;
 
-  const change = computeEventPatch(event, {
-    zoomUrl: group.zoomUrl,
-    passcode: group.passcode,
-    zoomUser: groupZoomUser(group),
-    groupEmail: group.email,
-    allEventsCalendarId: ALL_EVENTS_CALENDAR_ID,
-    faqUrl: MEETINGS_FAQ_URL,
-    agendaUrl: group.agendaUrl || null,
-    staleAgendaUrl: group.staleAgendaUrl || null,
+  const organizer = event.organizer.email;
+  const when = formatWhen(event.start);
+  MailApp.sendEmail({
+    to: organizer,
+    cc: ALERT_EMAIL,
+    subject: `Your meeting "${event.summary || '(untitled)'}" on ${when} won't get ${group.name}'s Zoom room`,
+    body:
+      `Hi,\n\n` +
+      `You created "${event.summary || '(untitled)'}" (${when}) on your own calendar and ` +
+      `invited the ${group.name} calendar. The group's calendar only gets a copy of an ` +
+      `invitation like that, so its Zoom room link can't be added and the group isn't ` +
+      `invited.\n\n` +
+      `To fix it, create the meeting on the ${group.name} calendar itself (there's a link ` +
+      `to it at the bottom of every message to the group's email list), or, if you can't ` +
+      `add events to that calendar, ask someone who can to create it there. Then delete ` +
+      `your original or remove the group calendar from its guests.\n\n` +
+      `This message was sent automatically.\n`,
   });
-  if (!change) return;
-  Calendar.Events.patch(change.patch, group.calendarId, event.id,
-                        { sendUpdates: change.sendUpdates });
-  console.log(`${group.email}: updated "${event.summary}" (${Object.keys(change.patch).join(', ')})`);
+  console.log(`${group.email}: alerted ${organizer} about invitation copy "${event.summary}"`);
+  alerted[uid] = event.recurrence ? now + 365 * DAY_MS : eventEndMs(event);
+  setJson(PROP_COPY_ALERTS, alerted);
 }
 
-/**
- * An event on one of the account's other calendars: if the calendar
- * organizes it, invite the all-events calendar, sending no email.
- * Invitation copies are left alone (they're how events reach the
- * community calendar).
- */
-function handleOtherEvent(event, cal) {
-  if (lower((event.organizer || {}).email) !== lower(cal.id)) return;
-  const change = computeEventPatch(event, { allEventsCalendarId: ALL_EVENTS_CALENDAR_ID });
-  if (!change) return;
-  Calendar.Events.patch(change.patch, cal.id, event.id, { sendUpdates: change.sendUpdates });
-  console.log(`${cal.name}: invited the all-events calendar to "${event.summary}"`);
-}
-
-/**
- * How the description should name the Zoom user owning the group's room
- * (see zoomUserLabel): null if the room isn't in our Zoom account, or
- * undefined (keep what the description says) if Zoom can't be asked now.
- */
-function groupZoomUser(group) {
-  const id = meetingIdFromUrl(group.zoomUrl);
-  if (!id) return null;
-  try {
-    const room = roomOwner(id);
-    return room ? zoomUserLabel(room.owner, ZOOM_USER_NUMBERS, loadZoomUserNames()) : null;
-  } catch (err) {
-    console.error(`Couldn't look up the owner of ${group.email}'s room: ${err}`);
-    return undefined;
+function alertOverlaps(conflicts) {
+  const previous = getJson(PROP_OVERLAP_ALERTS, {});
+  const current = {};
+  for (const c of conflicts) {
+    const id = conflictId(c);
+    const fingerprint = conflictFingerprint(c);
+    current[id] = fingerprint;
+    if (previous[id] === fingerprint) continue;
+    sendOverlapAlert(c);
   }
+  // Resolved conflicts are dropped, so they're reported again if they recur.
+  setJson(PROP_OVERLAP_ALERTS, current);
+}
+
+/**
+ * Collect the next OVERLAP_WEEKS weeks of meetings — events on group
+ * calendars whose Zoom link is a room in our account, and meetings
+ * scheduled in Zoom at a fixed time — and alert about overlaps in rooms
+ * owned by the same Zoom user.
+ */
+function checkOverlaps(groups) {
+  const now = Date.now();
+  const until = now + OVERLAP_WEEKS * 7 * DAY_MS;
+  const meetings = [];
+
+  for (const group of groups) {
+    let pageToken;
+    do {
+      const resp = Calendar.Events.list(group.calendarId, {
+        singleEvents: true, timeMin: new Date(now).toISOString(),
+        timeMax: new Date(until).toISOString(), maxResults: 250, pageToken,
+      });
+      for (const event of resp.items || []) {
+        if (event.status === 'cancelled' || !(event.start || {}).dateTime) continue;
+        const start = new Date(event.start.dateTime).getTime();
+        const end = new Date(event.end.dateTime).getTime();
+        for (const id of zoomIdsInEvent(event)) {
+          const room = roomOwner(id);
+          if (!room) continue;  // not a meeting in our Zoom account
+          meetings.push({
+            // A fixed-time Zoom meeting is one meeting wherever it appears;
+            // a room hosts many, told apart by their calendar events.
+            key: room.type === 3 ? `${event.iCalUID}@${start}` : `zoom:${id}@${start}`,
+            owner: room.owner, start, end,
+            title: event.summary || '(untitled)',
+            groups: [group.email], names: [group.name],
+          });
+          break;
+        }
+      }
+      pageToken = resp.nextPageToken;
+    } while (pageToken);
+  }
+
+  for (const m of loadZoomMeetings()) {
+    if (m.end > now && m.start < until) meetings.push(Object.assign({ groups: [], names: [] }, m));
+  }
+
+  alertOverlaps(findOverlaps(meetings, MIN_GAP_MINUTES * 60 * 1000));
 }
 
 function eventEndMs(event) {
@@ -448,34 +220,6 @@ function eventEndMs(event) {
   if (event.recurrence) return Infinity;
   const end = event.end || {};
   return new Date(end.dateTime || end.date || 0).getTime();
-}
-
-function isExpiredSyncToken(err) {
-  const m = (err && err.message) || '';
-  return (err && err.details && err.details.code === 410) || /sync token|410|full sync/i.test(m);
-}
-
-// ── Reminders ────────────────────────────────────────────────────────────────
-
-/**
- * Email each group about its meetings whose reminder is due (see
- * dueReminderLeads in event_rules.gs): events the group calendar organizes
- * (not invitation copies, or all-day events) starting within
- * MAX_REMINDER_LEAD_MS. Each reminder is sent once; a meeting moved to
- * another time gets its reminders again.
- */
-function sendDueReminders(groups) {
-  const sent = getJson(PROP_REMINDERS_SENT, {});
-  const now = Date.now();
-  for (const key of Object.keys(sent)) if (sent[key] < now) delete sent[key];
-  for (const group of groups) {
-    try {
-      sendGroupReminders(group, sent, now);
-    } catch (err) {
-      console.error(`Error sending ${group.email}'s reminders: ${err}`);
-    }
-  }
-  setJson(PROP_REMINDERS_SENT, sent);
 }
 
 /**
@@ -538,163 +282,12 @@ function explainReminders(onlyGroup) {
   console.log(lines.join('\n') || `No group matches "${onlyGroup}".`);
 }
 
-function sendGroupReminders(group, sent, now) {
-  let pageToken;
-  do {
-    const resp = Calendar.Events.list(group.calendarId, {
-      singleEvents: true, timeMin: new Date(now).toISOString(),
-      timeMax: new Date(now + MAX_REMINDER_LEAD_MS).toISOString(), maxResults: 250, pageToken,
-    });
-    for (const event of resp.items || []) {
-      if (event.status === 'cancelled' || !(event.start || {}).dateTime) continue;
-      if (lower((event.organizer || {}).email) !== lower(group.calendarId)) continue;
-      const start = new Date(event.start.dateTime).getTime();
-      const setting = reminderLeads(event, group.reminders === undefined ? null : group.reminders);
-      const created = event.created ? new Date(event.created).getTime() : null;
-      const due = dueReminderLeads(start, created, setting.leads, now, REMINDER_GRACE_MS)
-        .filter(lead => !sent[reminderKey(group.calendarId, event, start, lead)]);
-      if (!due.length) continue;
-      const message = reminderMessage(event, {
-        groupEmail: group.email, groupName: group.name,
-        when: formatRange(start, new Date(event.end.dateTime).getTime()),
-        lead: due[0], agendaUrl: group.agendaUrl || null,
-        zoomUrl: group.zoomUrl, passcode: group.passcode,
-        source: setting.source, error: setting.error,
-      });
-      MailApp.sendEmail({
-        to: message.to, replyTo: group.email, subject: message.subject,
-        body: message.body, htmlBody: textToHtml(message.body),
-      });
-      for (const lead of due) sent[reminderKey(group.calendarId, event, start, lead)] = start;
-      console.log(`${group.email}: sent the ${formatLead(due[0])} reminder for "${event.summary}"` +
-                  (setting.error ? ` (couldn't read ${setting.error})` : ''));
-    }
-    pageToken = resp.nextPageToken;
-  } while (pageToken);
-}
-
-// ── Invitation-copy alerts ───────────────────────────────────────────────────
-
-function alertInvitationCopy(event, group) {
-  const alerted = getJson(PROP_COPY_ALERTS, {});
-  const now = Date.now();
-  for (const uid of Object.keys(alerted)) if (alerted[uid] < now) delete alerted[uid];
-  const uid = event.iCalUID || event.id;
-  if (alerted[uid]) {
-    setJson(PROP_COPY_ALERTS, alerted);
-    return;
+/** Drop the cached room owners, so roomOwner() asks Zoom again. */
+function forgetRoomOwners() {
+  const props = PropertiesService.getScriptProperties();
+  for (const key of props.getKeys()) {
+    if (key.startsWith(PROP_ROOM_OWNER_PREFIX)) props.deleteProperty(key);
   }
-
-  const organizer = event.organizer.email;
-  const when = formatWhen(event.start);
-  MailApp.sendEmail({
-    to: organizer,
-    cc: ALERT_EMAIL,
-    subject: `Your meeting "${event.summary || '(untitled)'}" on ${when} won't get ${group.name}'s Zoom room`,
-    body:
-      `Hi,\n\n` +
-      `You created "${event.summary || '(untitled)'}" (${when}) on your own calendar and ` +
-      `invited the ${group.name} calendar. The group's calendar only gets a copy of an ` +
-      `invitation like that, so its Zoom room link can't be added and the group isn't ` +
-      `invited.\n\n` +
-      `To fix it, create the meeting on the ${group.name} calendar itself (there's a link ` +
-      `to it at the bottom of every message to the group's email list), or, if you can't ` +
-      `add events to that calendar, ask someone who can to create it there. Then delete ` +
-      `your original or remove the group calendar from its guests.\n\n` +
-      `This message was sent automatically.\n`,
-  });
-  console.log(`${group.email}: alerted ${organizer} about invitation copy "${event.summary}"`);
-  alerted[uid] = event.recurrence ? now + 365 * DAY_MS : eventEndMs(event);
-  setJson(PROP_COPY_ALERTS, alerted);
-}
-
-function formatWhen(start) {
-  if (!start) return 'an unknown date';
-  if (start.date) return start.date;
-  return Utilities.formatDate(new Date(start.dateTime), TIME_ZONE, 'EEE MMM d, h:mm a');
-}
-
-// ── Overlaps ─────────────────────────────────────────────────────────────────
-
-/**
- * Collect the next OVERLAP_WEEKS weeks of meetings — events on group
- * calendars whose Zoom link is a room in our account, and meetings
- * scheduled in Zoom at a fixed time — and alert about overlaps in rooms
- * owned by the same Zoom user.
- */
-function checkOverlaps(groups) {
-  const now = Date.now();
-  const until = now + OVERLAP_WEEKS * 7 * DAY_MS;
-  const meetings = [];
-
-  for (const group of groups) {
-    let pageToken;
-    do {
-      const resp = Calendar.Events.list(group.calendarId, {
-        singleEvents: true, timeMin: new Date(now).toISOString(),
-        timeMax: new Date(until).toISOString(), maxResults: 250, pageToken,
-      });
-      for (const event of resp.items || []) {
-        if (event.status === 'cancelled' || !(event.start || {}).dateTime) continue;
-        const start = new Date(event.start.dateTime).getTime();
-        const end = new Date(event.end.dateTime).getTime();
-        for (const id of zoomIdsInEvent(event)) {
-          const room = roomOwner(id);
-          if (!room) continue;  // not a meeting in our Zoom account
-          meetings.push({
-            // A fixed-time Zoom meeting is one meeting wherever it appears;
-            // a room hosts many, told apart by their calendar events.
-            key: room.type === 3 ? `${event.iCalUID}@${start}` : `zoom:${id}@${start}`,
-            owner: room.owner, start, end,
-            title: event.summary || '(untitled)',
-            groups: [group.email], names: [group.name],
-          });
-          break;
-        }
-      }
-      pageToken = resp.nextPageToken;
-    } while (pageToken);
-  }
-
-  for (const m of loadZoomMeetings()) {
-    if (m.end > now && m.start < until) meetings.push(Object.assign({ groups: [], names: [] }, m));
-  }
-
-  alertOverlaps(findOverlaps(meetings, MIN_GAP_MINUTES * 60 * 1000));
-}
-
-function alertOverlaps(conflicts) {
-  const previous = getJson(PROP_OVERLAP_ALERTS, {});
-  const current = {};
-  for (const c of conflicts) {
-    const id = conflictId(c);
-    const fingerprint = conflictFingerprint(c);
-    current[id] = fingerprint;
-    if (previous[id] === fingerprint) continue;
-    sendOverlapAlert(c);
-  }
-  // Resolved conflicts are dropped, so they're reported again if they recur.
-  setJson(PROP_OVERLAP_ALERTS, current);
-}
-
-function sendOverlapAlert(c) {
-  const message = overlapMessage(c, {
-    alertEmail: ALERT_EMAIL,
-    techName: TECH_CIRCLE_NAME,
-    allEventsUrl: 'https://calendar.google.com/calendar/embed?src=' +
-      encodeURIComponent(ALL_EVENTS_CALENDAR_ID) + '&ctz=' + encodeURIComponent(TIME_ZONE),
-    minGapMinutes: MIN_GAP_MINUTES,
-    formatRange,
-  });
-  MailApp.sendEmail({
-    to: message.to.join(','),
-    cc: message.cc.join(',') || undefined,
-    replyTo: ALERT_EMAIL,
-    subject: message.subject,
-    body: message.body,
-    htmlBody: textToHtml(message.body),
-  });
-  console.log(`Overlap alert: ${conflictId(c)}`);
 }
 
 function formatRange(startMs, endMs) {
@@ -703,18 +296,142 @@ function formatRange(startMs, endMs) {
   return `${day}, ${t(startMs)}–${t(endMs)}`;
 }
 
-// ── Zoom ─────────────────────────────────────────────────────────────────────
+function formatWhen(start) {
+  if (!start) return 'an unknown date';
+  if (start.date) return start.date;
+  return Utilities.formatDate(new Date(start.dateTime), TIME_ZONE, 'EEE MMM d, h:mm a');
+}
 
-/** { owner, type } for a meeting in our Zoom account, or null; cached. */
-function roomOwner(meetingId) {
+function getJson(key, fallback) {
   const props = PropertiesService.getScriptProperties();
-  const key = PROP_ROOM_OWNER_PREFIX + meetingId;
-  const cached = props.getProperty(key);
-  if (cached !== null) return cached ? JSON.parse(cached) : null;
-  const meeting = zoomGet(`/meetings/${meetingId}`);
-  const value = meeting ? { owner: lower(meeting.host_email), type: meeting.type } : null;
-  props.setProperty(key, value ? JSON.stringify(value) : '');
-  return value;
+  const n = Number(props.getProperty(key + '#n'));
+  if (!n) return fallback;
+  let text = '';
+  for (let i = 0; i < n; i++) text += props.getProperty(`${key}#${i}`) || '';
+  return JSON.parse(text);
+}
+
+/**
+ * How the description should name the Zoom user owning the group's room
+ * (see zoomUserLabel): null if the room isn't in our Zoom account, or
+ * undefined (keep what the description says) if Zoom can't be asked now.
+ */
+function groupZoomUser(group) {
+  const id = meetingIdFromUrl(group.zoomUrl);
+  if (!id) return null;
+  try {
+    const room = roomOwner(id);
+    return room ? zoomUserLabel(room.owner, ZOOM_USER_NUMBERS, loadZoomUserNames()) : null;
+  } catch (err) {
+    console.error(`Couldn't look up the owner of ${group.email}'s room: ${err}`);
+    return undefined;
+  }
+}
+
+function handleEvent(event, group, groups) {
+  if (isInvitationCopy(event, group.calendarId, managedCalendarIds(groups))) {
+    alertInvitationCopy(event, group);
+    return;
+  }
+  if (lower((event.organizer || {}).email) !== lower(group.calendarId)) return;
+
+  const change = computeEventPatch(event, {
+    zoomUrl: group.zoomUrl,
+    passcode: group.passcode,
+    zoomUser: groupZoomUser(group),
+    groupEmail: group.email,
+    allEventsCalendarId: ALL_EVENTS_CALENDAR_ID,
+    faqUrl: MEETINGS_FAQ_URL,
+    agendaUrl: group.agendaUrl || null,
+    staleAgendaUrl: group.staleAgendaUrl || null,
+  });
+  if (!change) return;
+  Calendar.Events.patch(change.patch, group.calendarId, event.id,
+                        { sendUpdates: change.sendUpdates });
+  console.log(`${group.email}: updated "${event.summary}" (${Object.keys(change.patch).join(', ')})`);
+}
+
+/**
+ * An event on one of the account's other calendars: if the calendar
+ * organizes it, invite the all-events calendar, sending no email.
+ * Invitation copies are left alone (they're how events reach the
+ * community calendar).
+ */
+function handleOtherEvent(event, cal) {
+  if (lower((event.organizer || {}).email) !== lower(cal.id)) return;
+  const change = computeEventPatch(event, { allEventsCalendarId: ALL_EVENTS_CALENDAR_ID });
+  if (!change) return;
+  Calendar.Events.patch(change.patch, cal.id, event.id, { sendUpdates: change.sendUpdates });
+  console.log(`${cal.name}: invited the all-events calendar to "${event.summary}"`);
+}
+
+/**
+ * Every hour: re-read footers, the account's other calendars, and Zoom's
+ * meetings (including which user owns each room, since a room can be
+ * transferred to another Zoom user), then check overlaps.
+ */
+function hourly() {
+  withLock(() => {
+    const groups = refreshGroups();
+    refreshOtherCalendars(groups);
+    recheckZoomUsers(groups);
+    refreshZoomMeetings();
+    checkOverlaps(groups);
+  });
+}
+
+/** Run once from the editor: authorize, then install both triggers. */
+function installTriggers() {
+  ScriptApp.getProjectTriggers()
+    .filter(t => ['syncAll', 'hourly'].includes(t.getHandlerFunction()))
+    .forEach(t => ScriptApp.deleteTrigger(t));
+  hourly();
+  syncAll();
+  ScriptApp.newTrigger('syncAll').timeBased().everyMinutes(5).create();
+  ScriptApp.newTrigger('hourly').timeBased().everyHours(1).create();
+  console.log('Triggers installed: syncAll every 5 minutes, hourly every hour.');
+}
+
+function isExpiredSyncToken(err) {
+  const m = (err && err.message) || '';
+  return (err && err.details && err.details.code === 410) || /sync token|410|full sync/i.test(m);
+}
+
+function loadGroups() {
+  return getJson(PROP_GROUPS, null) || refreshGroups();
+}
+
+function loadOtherCalendars(groups) {
+  return getJson(PROP_OTHER_CALENDARS, null) || refreshOtherCalendars(groups);
+}
+
+function loadZoomMeetings() {
+  return getJson(PROP_ZOOM_MEETINGS, []);
+}
+
+/** { email: name } for every Zoom user, read from Zoom the first time. */
+function loadZoomUserNames() {
+  return getJson(PROP_ZOOM_USER_NAMES, null) || refreshZoomUserNames();
+}
+
+function managedCalendarIds(groups) {
+  return groups.map(g => g.calendarId).concat([ALL_EVENTS_CALENDAR_ID]);
+}
+
+/**
+ * If RULES_VERSION changed since the last run, drop every calendar's sync
+ * token, so this run handles every upcoming event (adding whatever the new
+ * rules add) rather than only changed ones. Those changes send no email:
+ * the groups are already invited.
+ */
+function recheckIfRulesChanged() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty(PROP_RULES_VERSION) === String(RULES_VERSION)) return;
+  for (const key of props.getKeys()) {
+    if (key.startsWith(PROP_SYNC_PREFIX)) props.deleteProperty(key);
+  }
+  props.setProperty(PROP_RULES_VERSION, String(RULES_VERSION));
+  console.log(`Rules version ${RULES_VERSION}: rechecking every upcoming event.`);
 }
 
 /**
@@ -756,32 +473,83 @@ function recheckZoomUsers(groups) {
   });
 }
 
-/** { email: name } for every Zoom user, read from Zoom the first time. */
-function loadZoomUserNames() {
-  return getJson(PROP_ZOOM_USER_NAMES, null) || refreshZoomUserNames();
-}
-
-/** Read every Zoom user's name (as Zoom shows it) and store them. */
-function refreshZoomUserNames() {
-  const names = {};
-  for (const user of zoomList('/users', 'users')) {
-    const name = user.display_name || [user.first_name, user.last_name].filter(Boolean).join(' ');
-    if (name) names[lower(user.email)] = name;
+/**
+ * Every Google Group whose footer links a calendar. A group whose Zoom link
+ * or passcode changed (say, after reset_zoom_room.py) has its sync token
+ * dropped, so the next syncAll rechecks all its upcoming events.
+ */
+function refreshGroups() {
+  const previous = new Map((getJson(PROP_GROUPS, null) || []).map(g => [g.email, g]));
+  const agendaDocs = agendaDocsByAddress();
+  const groups = [];
+  let pageToken;
+  do {
+    const resp = AdminDirectory.Groups.list({ domain: DOMAIN, maxResults: 200, pageToken });
+    for (const g of resp.groups || []) {
+      let footer;
+      try {
+        footer = GroupsSettings.Groups.get(g.email).customFooterText;
+      } catch (err) {
+        // Keep what we knew, rather than forgetting the group's calendar.
+        console.error(`Couldn't read ${g.email}'s footer: ${err}`);
+        const old = previous.get(g.email.toLowerCase());
+        if (old) groups.push(old);
+        continue;
+      }
+      const links = parseFooter(footer);
+      if (links.calendarId) {
+        const addresses = [g.email, ...(g.aliases || [])].map(a => a.toLowerCase());
+        const docId = addresses.map(a => agendaDocs[a]).find(Boolean);
+        const email = g.email.toLowerCase();
+        const group = Object.assign({ email, name: g.name }, links);
+        if (docId) {
+          group.agendaUrl = `https://docs.google.com/document/d/${docId}/edit`;
+          group.reminders = reminderSetting(docId, previous.get(email));
+        } else {
+          Object.assign(group, staleAgendaDoc(previous.get(email)));
+        }
+        groups.push(group);
+      }
+    }
+    pageToken = resp.nextPageToken;
+  } while (pageToken);
+  for (const g of groups) {
+    const old = previous.get(g.email);
+    if (old && (old.zoomUrl !== g.zoomUrl || old.passcode !== g.passcode ||
+                old.calendarId !== g.calendarId || old.agendaUrl !== g.agendaUrl)) {
+      PropertiesService.getScriptProperties().deleteProperty(PROP_SYNC_PREFIX + old.calendarId);
+      console.log(`${g.email}: Zoom room, calendar, or agenda doc changed; rechecking its events.`);
+    }
   }
-  setJson(PROP_ZOOM_USER_NAMES, names);
-  return names;
+  setJson(PROP_GROUPS, groups);
+  console.log(`${groups.length} group calendar(s).`);
+  return groups;
 }
 
-/** Drop the cached room owners, so roomOwner() asks Zoom again. */
-function forgetRoomOwners() {
+/**
+ * The calendars the account owns besides the group calendars and the
+ * all-events calendar (see otherOwnedCalendars in event_rules.gs). A
+ * calendar the account no longer has loses its sync token, so it's
+ * rechecked in full if it comes back.
+ */
+function refreshOtherCalendars(groups) {
+  const items = [];
+  let pageToken;
+  do {
+    const resp = Calendar.CalendarList.list({ minAccessRole: 'owner', maxResults: 250, pageToken });
+    items.push(...(resp.items || []));
+    pageToken = resp.nextPageToken;
+  } while (pageToken);
+  const calendars = otherOwnedCalendars(
+    items, Session.getEffectiveUser().getEmail(), managedCalendarIds(groups));
   const props = PropertiesService.getScriptProperties();
-  for (const key of props.getKeys()) {
-    if (key.startsWith(PROP_ROOM_OWNER_PREFIX)) props.deleteProperty(key);
+  const ids = new Set(calendars.map(c => c.id));
+  for (const c of getJson(PROP_OTHER_CALENDARS, [])) {
+    if (!ids.has(c.id)) props.deleteProperty(PROP_SYNC_PREFIX + c.id);
   }
-}
-
-function loadZoomMeetings() {
-  return getJson(PROP_ZOOM_MEETINGS, []);
+  setJson(PROP_OTHER_CALENDARS, calendars);
+  console.log(`${calendars.length} other calendar(s): ${calendars.map(c => c.name).join(', ')}.`);
+  return calendars;
 }
 
 /**
@@ -814,30 +582,218 @@ function refreshZoomMeetings() {
   console.log(`${meetings.length} fixed-time Zoom meeting(s) in the next ${OVERLAP_WEEKS} weeks.`);
 }
 
-function zoomToken() {
-  const cache = CacheService.getScriptCache();
-  const cached = cache.get('zoomToken');
-  if (cached) return cached;
-  const creds = zoomCredentials();
-  const resp = UrlFetchApp.fetch(
-    'https://zoom.us/oauth/token?grant_type=account_credentials&account_id=' +
-      encodeURIComponent(creds.accountId),
-    {
-      method: 'post',
-      headers: {
-        Authorization: 'Basic ' + Utilities.base64Encode(`${creds.clientId}:${creds.clientSecret}`),
-      },
-      muteHttpExceptions: true,
-    });
-  if (resp.getResponseCode() !== 200) {
-    throw new Error(
-      `Zoom sign-in failed (${resp.getResponseCode()}): ${resp.getContentText()}. Check the ` +
-      `${PROP_ZOOM_ACCOUNT_ID}, ${PROP_ZOOM_CLIENT_ID}, and ${PROP_ZOOM_CLIENT_SECRET} ` +
-      `Script Properties against the repo's zoom_credentials file.`);
+/** Read every Zoom user's name (as Zoom shows it) and store them. */
+function refreshZoomUserNames() {
+  const names = {};
+  for (const user of zoomList('/users', 'users')) {
+    const name = user.display_name || [user.first_name, user.last_name].filter(Boolean).join(' ');
+    if (name) names[lower(user.email)] = name;
   }
-  const token = JSON.parse(resp.getContentText()).access_token;
-  cache.put('zoomToken', token, 50 * 60);
-  return token;
+  setJson(PROP_ZOOM_USER_NAMES, names);
+  return names;
+}
+
+/**
+ * The text of the Remind before meetings row in About this circle in a group's
+ * agenda doc (null if the doc has no such row, as docs built before it
+ * don't). If the doc can't be read, what the group had before is kept.
+ */
+function reminderSetting(docId, previous) {
+  try {
+    return docRowValue(Docs.Documents.get(docId), REMINDER_ROW_LABEL);
+  } catch (err) {
+    console.error(`Couldn't read the reminder setting in agenda doc ${docId}: ${err}`);
+    return previous && previous.reminders !== undefined ? previous.reminders : null;
+  }
+}
+
+/** { owner, type } for a meeting in our Zoom account, or null; cached. */
+function roomOwner(meetingId) {
+  const props = PropertiesService.getScriptProperties();
+  const key = PROP_ROOM_OWNER_PREFIX + meetingId;
+  const cached = props.getProperty(key);
+  if (cached !== null) return cached ? JSON.parse(cached) : null;
+  const meeting = zoomGet(`/meetings/${meetingId}`);
+  const value = meeting ? { owner: lower(meeting.host_email), type: meeting.type } : null;
+  props.setProperty(key, value ? JSON.stringify(value) : '');
+  return value;
+}
+
+/**
+ * Email each group about its meetings whose reminder is due (see
+ * dueReminderLeads in event_rules.gs): events the group calendar organizes
+ * (not invitation copies, or all-day events) starting within
+ * MAX_REMINDER_LEAD_MS. Each reminder is sent once; a meeting moved to
+ * another time gets its reminders again.
+ */
+function sendDueReminders(groups) {
+  const sent = getJson(PROP_REMINDERS_SENT, {});
+  const now = Date.now();
+  for (const key of Object.keys(sent)) if (sent[key] < now) delete sent[key];
+  for (const group of groups) {
+    try {
+      sendGroupReminders(group, sent, now);
+    } catch (err) {
+      console.error(`Error sending ${group.email}'s reminders: ${err}`);
+    }
+  }
+  setJson(PROP_REMINDERS_SENT, sent);
+}
+
+function sendGroupReminders(group, sent, now) {
+  let pageToken;
+  do {
+    const resp = Calendar.Events.list(group.calendarId, {
+      singleEvents: true, timeMin: new Date(now).toISOString(),
+      timeMax: new Date(now + MAX_REMINDER_LEAD_MS).toISOString(), maxResults: 250, pageToken,
+    });
+    for (const event of resp.items || []) {
+      if (event.status === 'cancelled' || !(event.start || {}).dateTime) continue;
+      if (lower((event.organizer || {}).email) !== lower(group.calendarId)) continue;
+      const start = new Date(event.start.dateTime).getTime();
+      const setting = reminderLeads(event, group.reminders === undefined ? null : group.reminders);
+      const created = event.created ? new Date(event.created).getTime() : null;
+      const due = dueReminderLeads(start, created, setting.leads, now, REMINDER_GRACE_MS)
+        .filter(lead => !sent[reminderKey(group.calendarId, event, start, lead)]);
+      if (!due.length) continue;
+      const message = reminderMessage(event, {
+        groupEmail: group.email, groupName: group.name,
+        when: formatRange(start, new Date(event.end.dateTime).getTime()),
+        lead: due[0], agendaUrl: group.agendaUrl || null,
+        zoomUrl: group.zoomUrl, passcode: group.passcode,
+        source: setting.source, error: setting.error,
+      });
+      MailApp.sendEmail({
+        to: message.to, replyTo: group.email, subject: message.subject,
+        body: message.body, htmlBody: textToHtml(message.body),
+      });
+      for (const lead of due) sent[reminderKey(group.calendarId, event, start, lead)] = start;
+      console.log(`${group.email}: sent the ${formatLead(due[0])} reminder for "${event.summary}"` +
+                  (setting.error ? ` (couldn't read ${setting.error})` : ''));
+    }
+    pageToken = resp.nextPageToken;
+  } while (pageToken);
+}
+
+function sendOverlapAlert(c) {
+  const message = overlapMessage(c, {
+    alertEmail: ALERT_EMAIL,
+    techName: TECH_CIRCLE_NAME,
+    allEventsUrl: 'https://calendar.google.com/calendar/embed?src=' +
+      encodeURIComponent(ALL_EVENTS_CALENDAR_ID) + '&ctz=' + encodeURIComponent(TIME_ZONE),
+    minGapMinutes: MIN_GAP_MINUTES,
+    formatRange,
+  });
+  MailApp.sendEmail({
+    to: message.to.join(','),
+    cc: message.cc.join(',') || undefined,
+    replyTo: ALERT_EMAIL,
+    subject: message.subject,
+    body: message.body,
+    htmlBody: textToHtml(message.body),
+  });
+  console.log(`Overlap alert: ${conflictId(c)}`);
+}
+
+function setJson(key, value) {
+  const props = PropertiesService.getScriptProperties();
+  const text = JSON.stringify(value);
+  const old = Number(props.getProperty(key + '#n')) || 0;
+  const parts = {};
+  let n = 0;
+  for (let i = 0; i < text.length || n === 0; i += PROPERTY_CHUNK) {
+    parts[`${key}#${n++}`] = text.slice(i, i + PROPERTY_CHUNK);
+  }
+  parts[key + '#n'] = String(n);
+  props.setProperties(parts);
+  for (let i = n; i < old; i++) props.deleteProperty(`${key}#${i}`);
+}
+
+/**
+ * For a group found with no agenda doc: the doc it last had, which was
+ * trashed or deleted (or {} if none), kept until it has a doc again, so
+ * its events lose their lines linking that doc (see computeEventPatch).
+ */
+function staleAgendaDoc(old) {
+  const url = old && (old.agendaUrl || old.staleAgendaUrl);
+  return url ? { staleAgendaUrl: url } : {};
+}
+
+/** Every 5 minutes: fix changed events; check overlaps if anything changed. */
+function syncAll() {
+  withLock(() => {
+    recheckIfRulesChanged();
+    const groups = loadGroups();
+    let changed = 0;
+    for (const group of groups) {
+      try {
+        changed += syncCalendar(group.calendarId, group.email,
+                                event => handleEvent(event, group, groups));
+      } catch (err) {
+        console.error(`Error syncing ${group.email}: ${err}`);
+      }
+    }
+    for (const cal of loadOtherCalendars(groups)) {
+      try {
+        syncCalendar(cal.id, cal.name, event => handleOtherEvent(event, cal));
+      } catch (err) {
+        console.error(`Error syncing ${cal.name}: ${err}`);
+      }
+    }
+    sendDueReminders(groups);
+    if (changed) checkOverlaps(groups);
+  });
+}
+
+/**
+ * Pass handle every event that changed on the calendar since the last run
+ * (on the first run, every event that hasn't ended); label names the
+ * calendar in the log. Returns how many events changed.
+ */
+function syncCalendar(calendarId, label, handle) {
+  const props = PropertiesService.getScriptProperties();
+  const tokenKey = PROP_SYNC_PREFIX + calendarId;
+  const syncToken = props.getProperty(tokenKey);
+  const now = Date.now();
+  let pageToken, nextSyncToken, changed = 0;
+  do {
+    const params = { maxResults: 250, singleEvents: false, showDeleted: true, pageToken };
+    if (syncToken) params.syncToken = syncToken;
+    else params.timeMin = new Date(now).toISOString();
+    let resp;
+    try {
+      resp = Calendar.Events.list(calendarId, params);
+    } catch (err) {
+      if (syncToken && isExpiredSyncToken(err)) {
+        props.deleteProperty(tokenKey);
+        console.warn(`Sync token for ${label} expired; starting over.`);
+        return syncCalendar(calendarId, label, handle);
+      }
+      throw err;
+    }
+    for (const event of resp.items || []) {
+      changed++;
+      if (event.status === 'cancelled' || eventEndMs(event) < now) continue;
+      handle(event);
+    }
+    pageToken = resp.nextPageToken;
+    if (resp.nextSyncToken) nextSyncToken = resp.nextSyncToken;
+  } while (pageToken);
+  if (nextSyncToken) props.setProperty(tokenKey, nextSyncToken);
+  return changed;
+}
+
+function withLock(fn) {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30 * 1000)) {
+    console.warn('Another run is still going; skipping this one.');
+    return;
+  }
+  try {
+    fn();
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 /** The Zoom app's credentials from Script Properties, trimmed; throws
@@ -877,4 +833,30 @@ function zoomList(path, field) {
     pageToken = data.next_page_token || '';
   } while (pageToken);
   return items;
+}
+
+function zoomToken() {
+  const cache = CacheService.getScriptCache();
+  const cached = cache.get('zoomToken');
+  if (cached) return cached;
+  const creds = zoomCredentials();
+  const resp = UrlFetchApp.fetch(
+    'https://zoom.us/oauth/token?grant_type=account_credentials&account_id=' +
+      encodeURIComponent(creds.accountId),
+    {
+      method: 'post',
+      headers: {
+        Authorization: 'Basic ' + Utilities.base64Encode(`${creds.clientId}:${creds.clientSecret}`),
+      },
+      muteHttpExceptions: true,
+    });
+  if (resp.getResponseCode() !== 200) {
+    throw new Error(
+      `Zoom sign-in failed (${resp.getResponseCode()}): ${resp.getContentText()}. Check the ` +
+      `${PROP_ZOOM_ACCOUNT_ID}, ${PROP_ZOOM_CLIENT_ID}, and ${PROP_ZOOM_CLIENT_SECRET} ` +
+      `Script Properties against the repo's zoom_credentials file.`);
+  }
+  const token = JSON.parse(resp.getContentText()).access_token;
+  cache.put('zoomToken', token, 50 * 60);
+  return token;
 }

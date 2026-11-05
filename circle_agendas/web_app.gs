@@ -39,6 +39,13 @@ const ACTIONS = {
   meeting: {run: startNewMeeting, perMeeting: false},
 };
 
+// The address of a link that runs action on a doc (and, for most actions,
+// on one meeting in it).
+function actionUrl(action, docId, meetingId) {
+  return webAppUrl() + '?action=' + action + '&doc=' + docId +
+    (meetingId ? '&meeting=' + meetingId : '');
+}
+
 function doGet(e) {
   const p = e.parameter || {};
   const action = ACTIONS[p.action];
@@ -63,19 +70,6 @@ function doGet(e) {
   }
 }
 
-// Whether the app may change a doc: a circle agenda doc (labelled built;
-// see circle_docs.gs) or the latest preview. The app runs as admin, who can
-// edit many other docs, and a link's doc ID can be edited by hand.
-function isAgendaDoc(docId) {
-  if (docId === PropertiesService.getScriptProperties().getProperty('previewDocId')) return true;
-  try {
-    const file = Drive.Files.get(docId, {fields: 'properties,trashed', supportsAllDrives: true});
-    return !file.trashed && (file.properties || {})[AGENDA_KEYS.state] === AGENDA_STATE_BUILT;
-  } catch (e) {
-    return false;  // no such doc, or admin can't see it
-  }
-}
-
 // The second run of adding a meeting, called from pendingPage's script:
 // the HTML of the page saying how it went.
 function finishNewMeetingPage(key) {
@@ -90,18 +84,17 @@ function finishNewMeetingPage(key) {
   }
 }
 
-// A page saying the meeting is being added, which finishes adding it.
-function pendingPage(result) {
-  const html = '<div id="page" style="font-family: Arial, sans-serif; max-width: 40em; ' +
-    'margin: 2em auto;"><h2>Adding the meeting on ' + result.date + '…</h2>' +
-    '<p>This takes a few seconds. Please leave this tab open until it says it\'s done.</p></div>' +
-    '<script>google.script.run' +
-    '.withSuccessHandler(html => { document.getElementById("page").outerHTML = html; })' +
-    '.withFailureHandler(err => { document.getElementById("page").innerHTML = ' +
-    '"<h2>Something went wrong</h2><p>" + String(err.message || err).replace(/</g, "&lt;") + ' +
-    '"</p>"; })' +
-    '.finishNewMeetingPage(' + JSON.stringify(result.pending) + ');</script>';
-  return HtmlService.createHtmlOutput(html).setTitle('Circle agenda');
+// Whether the app may change a doc: a circle agenda doc (labelled built;
+// see circle_docs.gs) or the latest preview. The app runs as admin, who can
+// edit many other docs, and a link's doc ID can be edited by hand.
+function isAgendaDoc(docId) {
+  if (docId === PropertiesService.getScriptProperties().getProperty('previewDocId')) return true;
+  try {
+    const file = Drive.Files.get(docId, {fields: 'properties,trashed', supportsAllDrives: true});
+    return !file.trashed && (file.properties || {})[AGENDA_KEYS.state] === AGENDA_STATE_BUILT;
+  } catch (e) {
+    return false;  // no such doc, or admin can't see it
+  }
 }
 
 function page(result) {
@@ -120,26 +113,18 @@ function pageHtml(result) {
   return html;
 }
 
-// The address of a link that runs action on a doc (and, for most actions,
-// on one meeting in it).
-function actionUrl(action, docId, meetingId) {
-  return webAppUrl() + '?action=' + action + '&doc=' + docId +
-    (meetingId ? '&meeting=' + meetingId : '');
-}
-
-function webAppUrl() {
-  const url = PropertiesService.getScriptProperties().getProperty('WEB_APP_URL');
-  if (!url) {
-    throw new Error('Set the WEB_APP_URL script property to the web app\'s address ' +
-      '(see "Deploying the web app" in README.md).');
-  }
-  return url;
-}
-
-// ── Trying the actions from the editor ───────────────────────────────────────
-
-function tryUpdateTimes() {
-  tryOnPreview(updateTimes);
+// A page saying the meeting is being added, which finishes adding it.
+function pendingPage(result) {
+  const html = '<div id="page" style="font-family: Arial, sans-serif; max-width: 40em; ' +
+    'margin: 2em auto;"><h2>Adding the meeting on ' + result.date + '…</h2>' +
+    '<p>This takes a few seconds. Please leave this tab open until it says it\'s done.</p></div>' +
+    '<script>google.script.run' +
+    '.withSuccessHandler(html => { document.getElementById("page").outerHTML = html; })' +
+    '.withFailureHandler(err => { document.getElementById("page").innerHTML = ' +
+    '"<h2>Something went wrong</h2><p>" + String(err.message || err).replace(/</g, "&lt;") + ' +
+    '"</p>"; })' +
+    '.finishNewMeetingPage(' + JSON.stringify(result.pending) + ');</script>';
+  return HtmlService.createHtmlOutput(html).setTitle('Circle agenda');
 }
 
 function tryAddItem() {
@@ -165,6 +150,21 @@ function tryFinishMeeting() {
   Logger.log(JSON.stringify(finishNewMeeting(key), null, 2));
 }
 
+// Runs an action on the newest meeting with links in the latest preview,
+// and logs what it returned.
+function tryOnPreview(action) {
+  const docId = PropertiesService.getScriptProperties().getProperty('previewDocId');
+  if (!docId) throw new Error('No preview; run previewTemplate first.');
+  let meetingId = null;
+  for (const tab of allTabs(DocumentApp.openById(docId))) {
+    const table = meetingTableIn(tab.asDocumentTab().getBody());
+    if (table && !meetingId) meetingId = meetingIdOf(table);
+  }
+  if (!meetingId) throw new Error('The preview has no meeting with links; add one first.');
+  Logger.log(JSON.stringify(action(docId, meetingId), null, 2));
+  logLink('Preview:', DocumentApp.openById(docId).getUrl());
+}
+
 // Does to the latest preview what the daily run (updateRolesInCircleDocs)
 // does to each circle doc, and logs what changed.
 function tryUpdateRoles() {
@@ -180,17 +180,15 @@ function tryUpdateRoles() {
   logLink('Preview:', DocumentApp.openById(docId).getUrl());
 }
 
-// Runs an action on the newest meeting with links in the latest preview,
-// and logs what it returned.
-function tryOnPreview(action) {
-  const docId = PropertiesService.getScriptProperties().getProperty('previewDocId');
-  if (!docId) throw new Error('No preview; run previewTemplate first.');
-  let meetingId = null;
-  for (const tab of allTabs(DocumentApp.openById(docId))) {
-    const table = meetingTableIn(tab.asDocumentTab().getBody());
-    if (table && !meetingId) meetingId = meetingIdOf(table);
+function tryUpdateTimes() {
+  tryOnPreview(updateTimes);
+}
+
+function webAppUrl() {
+  const url = PropertiesService.getScriptProperties().getProperty('WEB_APP_URL');
+  if (!url) {
+    throw new Error('Set the WEB_APP_URL script property to the web app\'s address ' +
+      '(see "Deploying the web app" in README.md).');
   }
-  if (!meetingId) throw new Error('The preview has no meeting with links; add one first.');
-  Logger.log(JSON.stringify(action(docId, meetingId), null, 2));
-  logLink('Preview:', DocumentApp.openById(docId).getUrl());
+  return url;
 }
