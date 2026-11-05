@@ -45,7 +45,7 @@ groups_drive_sync.gs never removes the account it runs as from a group;
 pass --ignore with that address (repeatable) to leave such accounts out.
 
 Requires Google API access (Drive, Admin Directory, Groups Settings) —
-see update_groups_in_google_and_hierarchy.py's docstring for setup.
+see update_groups.py's docstring for setup.
 
 Usage:
     python audit_group_memberships.py
@@ -63,7 +63,7 @@ from pathlib import Path
 from googleapiclient.discovery import build
 from playwright.sync_api import sync_playwright
 
-from update_groups_in_google_and_hierarchy import (
+from update_groups import (
     ELIGIBLE_KINDS,
     EVERYBODY_AVAILABILITY,
     _group_is_deactivated,

@@ -6,7 +6,7 @@ naming rules.
 This script has no notion of a Gather group ID, so it can't populate a
 group's custom footer (which needs both a Gather group link and a Drive
 folder link — see util/google_group_footer.py) on its own. Footer
-maintenance is owned by update_groups_in_google_and_hierarchy.py, which has
+maintenance is owned by update_groups.py, which has
 the full Gather context; run that afterward to wire up the folder link for
 any group matched here.
 
@@ -187,7 +187,7 @@ def main():
             print(f"  {g['name']} ({g['email']})")
 
     if matched:
-        print("\nRun update_groups_in_google_and_hierarchy.py to wire up each matched "
+        print("\nRun update_groups.py to wire up each matched "
               "group's footer link to its folder.")
 
 

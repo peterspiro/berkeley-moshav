@@ -8,7 +8,7 @@ and for each folder listed there:
      /gdrive/config row — not every row exposes one), ensures the group's
      custom footer links to it (see util/google_group_footer.py). Rows
      with no resolvable Drive ID are reported, not silently skipped; run
-     update_groups_in_google_and_hierarchy.py afterward to resolve those
+     update_groups.py afterward to resolve those
      via its fuller Drive-folder-ID resolution chain.
   4. Edits the Gather group to set the Google Group email as its email list,
      check "All community members can send to list?", and submit the form.
@@ -181,7 +181,7 @@ def main():
             if not folder_id:
                 log_noop(args.quiet, "INFO", "footer",
                           f"  No known Drive folder ID for '{fname}' — skipping footer link "
-                          "(run update_groups_in_google_and_hierarchy.py to resolve it)")
+                          "(run update_groups.py to resolve it)")
             elif args.dry_run:
                 if already_exists:
                     updates = compute_group_footer_updates(

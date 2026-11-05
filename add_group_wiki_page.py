@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
-Creates a wiki page for a single Gather group and links it into the Circle
-Hierarchy.
+Creates a wiki page for a single Gather group.
 
 The group is identified by a unique prefix of its name (case-insensitive).
 The script:
@@ -11,11 +10,6 @@ The script:
   2. Creates the group's wiki page if it doesn't already exist — titled
      "<Group Name> Wiki" at slug "<name-slug>-wiki". Existing pages are left
      untouched.
-  3. Adds a [Wiki] link to the group's row in the Circle Hierarchy page,
-     positioned just after the [Members] and [Documents] links and before
-     any other, unmanaged content on that row. Errors if the group isn't
-     already in the hierarchy (run update_groups_in_google_and_hierarchy.py
-     first to add it).
 
 Only Gather access is required (no Google APIs).
 
@@ -27,7 +21,6 @@ Usage:
 import argparse
 import sys
 from pathlib import Path
-from typing import Optional
 
 from playwright.sync_api import sync_playwright
 
@@ -42,29 +35,12 @@ from util.gather_utils import (
     login,
     resolve_group_by_prefix,
 )
-from util.hierarchy_wiki import (
-    HierarchyNode,
-    ensure_hierarchy_page,
-    fetch_hierarchy_page_content,
-    iter_nodes,
-    parse_hierarchy,
-    render_hierarchy,
-)
 from util.wiki_utils import ensure_named_wiki_page, wiki_slug, wiki_title
 
 _LOG_FILE = Path("debug/add_group_wiki_page_log.csv")
 _SCREENSHOT_DIR = Path("debug/add_group_wiki_page_screenshots")
 
 configure(_LOG_FILE, _SCREENSHOT_DIR)
-
-
-def find_node_by_group_id(root: HierarchyNode, group_id: str) -> Optional[HierarchyNode]:
-    """Return the hierarchy node linked to `group_id` (via its [Members]
-    URL), or None if no row references that group."""
-    for node in iter_nodes(root):
-        if node.group_id == group_id:
-            return node
-    return None
 
 
 def main(prefix: str, base_url: str, dry_run: bool) -> None:
@@ -98,19 +74,6 @@ def main(prefix: str, base_url: str, dry_run: bool) -> None:
 
         print(f"Resolved '{prefix}' → '{group.name}' (id={group.group_id})")
 
-        content = fetch_hierarchy_page_content(page, base_url)
-        root = parse_hierarchy(content)
-
-        node = find_node_by_group_id(root, group.group_id)
-        if node is None:
-            browser.close()
-            close_log()
-            sys.exit(
-                f"Error: '{group.name}' (id={group.group_id}) isn't in the Circle "
-                "Hierarchy yet. Run update_groups_in_google_and_hierarchy.py first "
-                "to add it, then re-run this script."
-            )
-
         title = wiki_title(group.name)
         slug = wiki_slug(group.name)
         wiki_url = f"/wiki/{slug}"
@@ -122,26 +85,6 @@ def main(prefix: str, base_url: str, dry_run: bool) -> None:
             sys.exit(f"Error: failed to create wiki page '{title}' — see log.")
         print(f"Wiki page '{title}' ready at {wiki_url}")
 
-        if node.wiki_url == wiki_url:
-            print(f"'{group.name}' already links to its wiki page; nothing to change.")
-            log("INFO", "wiki_link", f"{group.name}: already linked to {wiki_url}")
-            browser.close()
-            close_log()
-            return
-
-        action = "Updating" if node.wiki_url else "Adding"
-        print(f"{action} [Wiki] link for '{group.name}' → {wiki_url}")
-        log("INFO", "wiki_link", f"{group.name}: {node.wiki_url!r} -> {wiki_url!r}")
-        node.wiki_url = wiki_url
-
-        new_content = render_hierarchy(root)
-        wrote = ensure_hierarchy_page(page, base_url, new_content, dry_run)
-        if not wrote:
-            log("ERROR", "hierarchy", "Failed to write hierarchy wiki page — see log")
-            browser.close()
-            close_log()
-            sys.exit("Error: failed to update the Circle Hierarchy page — see log.")
-
         browser.close()
 
     close_log()
@@ -149,8 +92,8 @@ def main(prefix: str, base_url: str, dry_run: bool) -> None:
 
 def cli():
     parser = argparse.ArgumentParser(
-        description="Create a Gather group's wiki page and link it into the Circle "
-                    "Hierarchy, identifying the group by a unique prefix of its name.",
+        description="Create a Gather group's wiki page, identifying the group by a "
+                    "unique prefix of its name.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
@@ -163,7 +106,7 @@ def cli():
     )
     parser.add_argument(
         "-n", "--dry-run", action="store_true",
-        help="Report what would change without creating the page or editing the hierarchy",
+        help="Report what would change without creating the page",
     )
     args = parser.parse_args()
 

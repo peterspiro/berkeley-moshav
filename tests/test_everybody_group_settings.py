@@ -1,12 +1,12 @@
 """
 Tests for the Availability = Everybody exemptions in
-update_groups_in_google_and_hierarchy.py: such groups keep their Google
+update_groups.py: such groups keep their Google
 Group whoCanModerateContent setting and their members' roles untouched.
 
 All names, emails, and IDs are fictional.
 """
 
-import update_groups_in_google_and_hierarchy as m
+import update_groups as m
 
 
 def _info(name, availability, kind="circle"):

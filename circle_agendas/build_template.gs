@@ -120,7 +120,7 @@ function previewTemplate() {
   // which come from the Circle Structure).
   const circle = circleForDoc(docId);
   build(docId, circle ? circleMemberNames(circle) : []);
-  if (circle) fillAbout(docId, 'Circle Agenda', circle.email, circle, null, []);
+  if (circle) fillAbout(docId, 'Circle Agenda', circle.email, circle);
   logLink('Preview:', DocumentApp.openById(docId).getUrl());
 }
 
@@ -249,6 +249,19 @@ function writeAboutRow(row, label, paragraphs) {
   row.getCell(1).setBackgroundColor(COLOR.aboutValue);
 }
 
+// The Roles table's roles, in order: [name, what it does].
+const ROLE_LABELS = [
+  ['Leader', 'supports circle operations'],
+  ['Feedback Link', 'second voice in parent circle'],
+  ['Facilitator', 'facilitates meetings'],
+  ['Secretary', 'minutes and circle docs'],
+];
+
+// A role's label cell's runs: its name, and what it does, in grey.
+function roleLabelRuns(name, what) {
+  return [[name, BOLD], [' (' + what + ')', MUTED]];
+}
+
 // The Roles table: each role's holder is a dropdown of the circle's members
 // (ROLES_DROPDOWN_ID; see finishWithApi), and its term's end a date chip,
 // starting at today, which markPastTermEnds (circle_docs.gs) colors red
@@ -256,16 +269,10 @@ function writeAboutRow(row, label, paragraphs) {
 function rolesTable(body) {
   const header = label => [[[label, BOLD]], [['Name', BOLD]], [['Term ends', BOLD]]];
   const today = Utilities.formatDate(new Date(), TIME_ZONE, 'yyyy-MM-dd');
-  const role = (name, what) => [[[name, BOLD], [' (' + what + ')', MUTED]],
+  const role = ([name, what]) => [roleLabelRuns(name, what),
     [[token('dropdown', ROLES_DROPDOWN_ID, ROLE_PLACEHOLDER_ID)]],
     [[token('date', today + 'T12:00:00Z')]]];
-  const rows = [
-    header('Circle Roles'),
-    role('Leader', 'supports circle operations'),
-    role('Feedback Link', 'second voice in parent circle'),
-    role('Facilitator', 'facilitates meetings'),
-    role('Secretary', 'minutes and circle docs'),
-  ];
+  const rows = [header('Circle Roles'), ...ROLE_LABELS.map(role)];
   const table = newTable(body, rows.length, 3);
   rows.forEach((cells, r) => {
     const isHeader = r === 0;
@@ -657,16 +664,35 @@ function shrinkSpacer(paragraph) {
 
 // Replaces each token in a tab (by default, the first) with its chip or
 // list, last first so the earlier ones' positions don't move.
+//
+// The positions come from reading the doc, which can return a version older
+// than the one DocumentApp just saved; applied to the newer one, they'd land
+// in the wrong places. So the changes are made only to the version read
+// (requiredRevisionId), and if the doc has moved on, it's read again.
+const TOKEN_ATTEMPTS = 5;
 function replaceTokens(docId, tabId) {
-  const requests = [];
-  for (const t of findTokens(apiTab(docId, tabId).content)) {
-    requests.push({deleteContentRange: {range: {startIndex: t.start, endIndex: t.end, tabId}}});
-    requests.push(tokenRequest(t, tabId));
-    if (t.parts[0] === 'bullet') {
-      requests.push(listIndentRequest({startIndex: t.start, endIndex: t.start + 1, tabId}));
+  for (let attempt = 1; ; attempt++) {
+    const doc = Docs.Documents.get(docId, {includeTabsContent: true});
+    const tab = tabId ? doc.tabs.find(t => t.tabProperties.tabId === tabId) : doc.tabs[0];
+    if (!tab) throw new Error('No tab ' + tabId);
+    const requests = [];
+    for (const t of findTokens(tab.documentTab.body.content)) {
+      requests.push({deleteContentRange: {range: {startIndex: t.start, endIndex: t.end, tabId}}});
+      requests.push(tokenRequest(t, tabId));
+      if (t.parts[0] === 'bullet') {
+        requests.push(listIndentRequest({startIndex: t.start, endIndex: t.start + 1, tabId}));
+      }
+    }
+    if (!requests.length) return;
+    try {
+      Docs.Documents.batchUpdate({requests, writeControl: {requiredRevisionId: doc.revisionId}},
+        docId);
+      return;
+    } catch (e) {
+      if (attempt >= TOKEN_ATTEMPTS || !/revision/i.test(e.message)) throw e;
+      Utilities.sleep(1000 * attempt);
     }
   }
-  if (requests.length) Docs.Documents.batchUpdate({requests}, docId);
 }
 
 // The request that puts a token's chip or list at its place.

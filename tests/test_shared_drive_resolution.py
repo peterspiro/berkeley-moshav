@@ -6,7 +6,7 @@ carries it yet — so the footer step becomes eligible and a dry run reports it.
 All names, emails, and IDs are fictional.
 """
 
-import update_groups_in_google_and_hierarchy as m
+import update_groups as m
 from util.gdrive_config import list_shared_drives
 from util.google_group_footer import ITEM_TYPE_FOLDER, ITEM_TYPE_SHARED_DRIVE
 

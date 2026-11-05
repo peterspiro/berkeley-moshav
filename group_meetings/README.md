@@ -1,7 +1,7 @@
 # Group Meetings
 
 Apps Script that looks after every group's Google calendar (the calendars
-`update_groups_in_google_and_hierarchy.py` creates):
+`update_groups.py` creates):
 
 - **Every 5 minutes**, for each changed event on a group calendar:
   - an event the group calendar organizes gets the group's Zoom room (link in

@@ -22,7 +22,7 @@ are; this note keeps the reasoning and the remaining work.
   room's meeting ID and passcode. The footer is the only record of which
   calendar and room are a group's; there's no separate configuration.
 - **Calendars and rooms** (`util/meeting_rooms.py`, step 0d of
-  `update_groups_in_google_and_hierarchy.py`, and `add_new_group.py`): every
+  `update_groups.py`, and `add_new_group.py`): every
   circle, working group, and club (not everybody groups) with a Drive item and
   an email list gets a calendar and a room. Existing ones are found through
   the footer, or offered by name, before anything is created. For a room,
@@ -215,7 +215,7 @@ a small script.
 
 ### 5. Room expiry outside script runs
 Rooms unused for 300 days are only warned about, and expired ones replaced,
-when someone runs `update_groups_in_google_and_hierarchy.py`. Either run it
+when someone runs `update_groups.py`. Either run it
 regularly, or have the hourly Apps Script run send the warning.
 
 ## Non-code tasks
@@ -224,7 +224,7 @@ regularly, or have the hourly Apps Script run send the warning.
   the next script run (the scripts now ask to send mail, for the email
   telling a group about its new calendar).
 
-- Run `update_groups_in_google_and_hierarchy.py` for all groups (dry run
+- Run `update_groups.py` for all groups (dry run
   first), then tell the community about the calendars and rooms.
 - Facilitator training: claiming host with the host key (and asking an
   accidental host to "Make Host"), muting, screen sharing, recording.

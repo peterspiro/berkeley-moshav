@@ -1,7 +1,10 @@
 """
-Shared helpers for reading and writing the "Circle Hierarchy" wiki page —
-the bullet-list markdown tree of circles/working groups, each optionally
-linked to its Gather group ([Members]) and Drive folder ([Documents]).
+Reading the old "Circle Structure" wiki page in Gather — the bullet-list
+markdown tree of circles/working groups, each optionally linked to its
+Gather group ([Members]), Drive folder ([Documents]), and wiki page
+([Wiki]) — for seed_circle_structure.py, which copies each group's parent
+from it into the Circle Structure sheet that replaced it (see
+circle_agendas/structure.gs). No current script writes the page.
 
 Line format (4 spaces of indent per nesting depth):
     - Name
@@ -9,16 +12,13 @@ Line format (4 spaces of indent per nesting depth):
     - Name: [Members](/groups/123) | [Documents](/gdrive/item/456)
     - Name: [Members](/groups/123) | [Documents](/gdrive/item/456) | [Wiki](/wiki/name-wiki)
 
-The [Members], [Documents], and [Wiki] links are the only parts the script
-manages, and are always emitted in that order. Any other "| …"-separated
-segments on a line (extra links or notes added by hand) are preserved
-verbatim and re-emitted after the managed links.
+Any other "| …"-separated segments on a line (extra links or notes added
+by hand) are kept as the node's extras.
 """
 
 import re
 import sys
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Optional
 
 from util.gather_utils import _check_submit_errors, _codemirror_get, _codemirror_set, log, screenshot
@@ -26,7 +26,7 @@ from util.gather_utils import _check_submit_errors, _codemirror_get, _codemirror
 WIKI_TITLE = "Circle Structure"
 WIKI_SLUG = "circle-structure"
 # The root line's full name is managed by ensure_root_node() in
-# update_groups_in_google_and_hierarchy.py and may change over time, but it
+# an earlier update_groups.py and may change over time, but it
 # always contains this substring — used below to locate the block
 # regardless of exactly how the rest of the root's name is worded.
 HIERARCHY_ROOT = "Top Circle / HOA"
@@ -39,6 +39,10 @@ HIERARCHY_BLOCK_RE = re.compile(
     r"(?m)^- [^\n]*" + re.escape(HIERARCHY_ROOT) + r"[^\n]*(?:\n[ \t][^\n]+)*"
 )
 
+
+
+# Writing the page: used only by archive/data_import/import_groups.py, which
+# first made it.
 
 def apply_hierarchy_content(page_content: str, new_hierarchy: str) -> tuple[Optional[str], str]:
     """Update just the hierarchy bullet list within the page content.
@@ -58,29 +62,6 @@ def apply_hierarchy_content(page_content: str, new_hierarchy: str) -> tuple[Opti
     base = page_content.strip()
     new_page = (base + "\n\n" if base else "") + block + "\n"
     return new_page, "add"
-
-
-def fetch_hierarchy_page_content(page, base_url: str) -> str:
-    """Read the current Circle Hierarchy wiki page content, or exit with an
-    error if it doesn't exist yet."""
-    page.goto(f"{base_url}/wiki/{WIKI_SLUG}", wait_until="networkidle")
-    page_title = page.title()
-    page_exists = (
-        "Exception" not in page_title
-        and "Error" not in page_title
-        and "404" not in page_title
-        and page.locator("h1").count() > 0
-    )
-    if not page_exists:
-        sys.exit(
-            f"Error: the '{WIKI_SLUG}' wiki page doesn't exist yet. "
-            "Run import_groups.py first to create it."
-        )
-
-    page.goto(f"{base_url}/wiki/{WIKI_SLUG}/edit", wait_until="networkidle")
-    if page.locator(".CodeMirror").count() == 0:
-        sys.exit("Error: editor not found on the hierarchy wiki edit page.")
-    return _codemirror_get(page)
 
 
 def ensure_hierarchy_page(page, base_url: str, content: str, dry_run: bool) -> bool:
@@ -148,7 +129,31 @@ def ensure_hierarchy_page(page, base_url: str, content: str, dry_run: bool) -> b
         return False
 
 
-# ── Hierarchy tree parsing (for update_groups_in_google_and_hierarchy.py) ─────
+def fetch_hierarchy_page_content(page, base_url: str) -> str:
+    """Read the current Circle Hierarchy wiki page content, or exit with an
+    error if it doesn't exist yet."""
+    page.goto(f"{base_url}/wiki/{WIKI_SLUG}", wait_until="networkidle")
+    page_title = page.title()
+    page_exists = (
+        "Exception" not in page_title
+        and "Error" not in page_title
+        and "404" not in page_title
+        and page.locator("h1").count() > 0
+    )
+    if not page_exists:
+        sys.exit(
+            f"Error: the '{WIKI_SLUG}' wiki page doesn't exist yet. "
+            "There's nothing to read."
+        )
+
+    page.goto(f"{base_url}/wiki/{WIKI_SLUG}/edit", wait_until="networkidle")
+    if page.locator(".CodeMirror").count() == 0:
+        sys.exit("Error: editor not found on the hierarchy wiki edit page.")
+    return _codemirror_get(page)
+
+
+
+# ── Hierarchy tree parsing ─────────────────────────────────────────────────
 
 _LINE_RE = re.compile(r"^(?P<indent>[ \t]*)-\s+(?P<rest>.+)$")
 _MEMBERS_RE = re.compile(r"\[Members\]\((?P<url>[^)]+)\)")
@@ -255,89 +260,3 @@ def iter_nodes(root: HierarchyNode):
     yield root
     for child in root.children:
         yield from iter_nodes(child)
-
-
-def _render_line(
-    name: str, members_url: str, documents_url: str, wiki_url: str,
-    extras: list[str], depth: int,
-) -> str:
-    pad = "    " * depth
-    parts = [name]
-    if members_url:
-        parts.append(f"[Members]({members_url})")
-    if documents_url:
-        parts.append(f"[Documents]({documents_url})")
-    if wiki_url:
-        parts.append(f"[Wiki]({wiki_url})")
-    # Unmanaged segments (extra links, notes) are re-emitted after the
-    # managed links so hand-added content isn't dropped on rewrite.
-    parts.extend(extras)
-    text = parts[0] + ": " + " | ".join(parts[1:]) if len(parts) > 1 else parts[0]
-    return f"{pad}- {text}"
-
-
-def render_hierarchy(root: HierarchyNode) -> str:
-    """Render the tree back to markdown, sorting each level's children
-    alphabetically (case-insensitive) so insertions land in the right spot
-    without any manual bisecting."""
-    lines: list[str] = []
-
-    def walk(node: HierarchyNode, depth: int) -> None:
-        lines.append(
-            _render_line(
-                node.name, node.members_url, node.documents_url,
-                node.wiki_url, node.extras, depth,
-            )
-        )
-        for child in sorted(node.children, key=lambda c: c.name.casefold()):
-            walk(child, depth + 1)
-
-    walk(root, 0)
-    return "\n".join(lines) + "\n"
-
-
-def find_unique_node_by_prefix(nodes: list[HierarchyNode], prefix: str) -> HierarchyNode:
-    """Return the single node whose name starts with `prefix`
-    (case-insensitive). Raises ValueError if zero or more than one match."""
-    matches = [n for n in nodes if n.name.casefold().startswith(prefix.casefold())]
-    if not matches:
-        raise ValueError(f"No hierarchy entry found matching prefix {prefix!r}")
-    if len(matches) > 1:
-        names = ", ".join(repr(n.name) for n in matches)
-        raise ValueError(f"Prefix {prefix!r} matches multiple hierarchy entries: {names}")
-    return matches[0]
-
-
-def remove_node(node: HierarchyNode) -> None:
-    """Remove node from the tree, re-parenting its children to node.parent
-    so the rest of the hierarchy stays connected."""
-    parent = node.parent
-    if parent is None:
-        raise ValueError("Cannot remove the hierarchy root")
-    parent.children.remove(node)
-    for child in node.children:
-        child.parent = parent
-        parent.children.append(child)
-    node.children = []
-
-
-def is_descendant(node: HierarchyNode, ancestor: HierarchyNode) -> bool:
-    """Whether node is ancestor itself or somewhere beneath it."""
-    while node is not None:
-        if node is ancestor:
-            return True
-        node = node.parent
-    return False
-
-
-def move_node(node: HierarchyNode, new_parent: HierarchyNode) -> None:
-    """Move node, with everything beneath it, to be a child of new_parent.
-    Raises ValueError for the root, or a new parent that is node itself or
-    beneath it (which would cut the subtree off from the tree)."""
-    if node.parent is None:
-        raise ValueError("Cannot move the hierarchy root")
-    if is_descendant(new_parent, node):
-        raise ValueError(f"{new_parent.name!r} is {node.name!r} or beneath it")
-    node.parent.children.remove(node)
-    new_parent.children.append(node)
-    node.parent = new_parent

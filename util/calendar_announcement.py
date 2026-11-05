@@ -1,7 +1,7 @@
 """
 The email telling a group's members about its new calendar and Zoom room.
 
-update_groups_in_google_and_hierarchy.py sends it to the group's email list,
+update_groups.py sends it to the group's email list,
 from the signed-in account (CALENDAR_OWNER), when it creates a group's
 calendar, after writing the group's footer: how to add the calendar, and
 how meeting organizers move the group's meetings onto it. Google Groups

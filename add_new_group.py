@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 """
 Creates a new Drive folder, Google Group, and Gather group, all linked
-together, and (unless --type=club) adds the new group to the Circle
-Hierarchy wiki page under its parent circle.
+together, and (unless --type=club) has the new group put under its parent
+circle in the Circle Structure.
 
 Steps:
   1. Validate: the folder, Google Group, and Gather group don't already
      exist; (unless --type=club) --parent-circle uniquely identifies a
-     live entry in the Circle Hierarchy; and --manager uniquely identifies
-     a community member.
+     Gather group that can be the new group's parent (a circle, or, for a
+     working group, a circle or working group); and --manager uniquely
+     identifies a community member.
   2. Create the Drive folder, Google Group (with the usual settings, plus
      "Conversation history" on and content moderation open to all members),
      and Gather group (with the usual settings, except clubs get
@@ -19,11 +20,12 @@ Steps:
      Content manager access.
   4. Wire the Gather group's mailing list to the new Google Group (to the
      --alias address if given, else the group's primary address).
-  5. Unless --type=club, add a row for the new group to the Circle
-     Hierarchy, alphabetically under its parent circle, and relabel the
-     parent's agenda doc, if it has one, with its sub-circles, for the
-     circle_agendas Apps Script to update its About this circle (see
-     util/circle_agenda_docs.py).
+  5. Unless --type=club, write the new group's parent to "Circle structure
+     placements.json" in admin@'s My Drive (see
+     util/circle_structure_placements.py). The circle_agendas Apps Script
+     adds the group to the Circle Structure sheet within the hour (from its
+     footer, step 7), under that parent, and updates the Circle Structure
+     doc and the parent's agenda doc.
   6. Give the group a Google calendar, shared with the new Google Group so
      its members can add and edit events, and a permanent Zoom meeting room
      (see util/meeting_rooms.py). If calendars or rooms with matching names
@@ -48,7 +50,7 @@ Steps:
 
 Requires Google API access (Drive, Admin Directory, Groups Settings,
 Calendar), signed in as the calendars' owner, and the Zoom app's
-credentials in zoom_credentials — see update_groups_in_google_and_hierarchy.py's
+credentials in zoom_credentials — see update_groups.py's
 docstring and README.md for setup.
 
 The group type (circle / working group / club) is inferred from a name
@@ -71,7 +73,7 @@ for clubs, and can't be combined with --alias.
 email uniquely identifying them; they're made a manager of the new group.
 
 Pass --idempotent to reuse any artifacts that already exist (folder,
-Google Group, Gather group, alias, folder link, hierarchy entry, and the
+Google Group, Gather group, alias, folder link, and the
 calendar and Zoom room linked in the group's footer) rather than aborting
 — useful for re-running after a partial failure. Combine it
 with --no-email if the first run already opened (and you sent) the welcome
@@ -101,10 +103,11 @@ from util.circle_agenda_docs import (
     AGENDA_KINDS,
     agenda_doc_name,
     ensure_agenda_doc,
-    update_agenda_doc_structure,
 )
+from util.circle_structure_placements import add_placements, check_parent_kind
 from util.credentials import load_credentials, load_zoom_credentials
 from util.gather_utils import (
+    _fetch_group_detail,
     close_log,
     configure,
     create_gather_group,
@@ -117,6 +120,7 @@ from util.gather_utils import (
     launch_browser,
     log,
     login,
+    resolve_group_by_prefix,
     set_gather_group_email_list,
 )
 from util.gdrive_config import (
@@ -128,7 +132,6 @@ from util.gdrive_config import (
     ensure_folder_name_available,
     find_folder_id_under_parent,
     folder_name_for_group_type,
-    gdrive_item_url,
     parent_folder_id_for_group_type,
     scrape_gdrive_config,
 )
@@ -163,16 +166,6 @@ from util.meeting_rooms import (
     list_owned_calendars,
 )
 from util.zoom_utils import ZoomClient, room_topic
-from util.hierarchy_wiki import (
-    HierarchyNode,
-    ensure_hierarchy_page,
-    fetch_hierarchy_page_content,
-    find_unique_node_by_prefix,
-    iter_nodes,
-    parse_hierarchy,
-    render_hierarchy,
-)
-
 _LOG_FILE = Path("debug/add_new_group_log.csv")
 _SCREENSHOT_DIR = Path("debug/add_new_group_screenshots")
 
@@ -376,38 +369,22 @@ def main(
                  f"(id={existing_gather_id}).")
 
         # ── Validate: parent circle ──────────────────────────────────────────
-        parent_node = None
-        root = None
+        parent_group = None
         if group_type != GroupType.CLUB:
             if not parent_circle_prefix:
                 close_log()
                 browser.close()
                 sys.exit("Error: --parent-circle is required unless --type=club.")
-
-            current_content = fetch_hierarchy_page_content(page, base_url)
-            root = parse_hierarchy(current_content)
-            all_nodes = list(iter_nodes(root))
             try:
-                parent_node = find_unique_node_by_prefix(all_nodes, parent_circle_prefix)
+                parent_group = resolve_group_by_prefix(
+                    fetch_all_gather_groups(page, base_url), parent_circle_prefix)
+                parent_kind = (_fetch_group_detail(page, base_url, parent_group).kind
+                               or "").strip().lower()
+                check_parent_kind(kind, parent_group.name, parent_kind)
             except ValueError as e:
                 close_log()
                 browser.close()
                 sys.exit(f"Error: {e}")
-
-            if not parent_node.group_id:
-                close_log()
-                browser.close()
-                sys.exit(
-                    f"Error: hierarchy entry '{parent_node.name}' has no linked Gather group."
-                )
-            live_group_ids = {g.group_id for g in fetch_all_gather_groups(page, base_url)}
-            if parent_node.group_id not in live_group_ids:
-                close_log()
-                browser.close()
-                sys.exit(
-                    f"Error: parent circle '{parent_node.name}' (group id="
-                    f"{parent_node.group_id}) no longer exists in Gather."
-                )
 
         # ── Validate: manager ────────────────────────────────────────────────
         gather_users = fetch_all_gather_users(page, base_url)
@@ -453,9 +430,9 @@ def main(
             print(f"[dry-run] Would create calendar '{gdisplay}' (shared with '{gemail}' "
                   f"as editors) and Zoom room '{room_topic(gdisplay)}', unless ones with "
                   "matching names exist and you choose one of those.")
-            if parent_node is not None:
-                print(f"[dry-run] Would add it to the Circle Hierarchy under "
-                      f"'{parent_node.name}'.")
+            if parent_group is not None:
+                print(f"[dry-run] Would have it put under '{parent_group.name}' in the "
+                      "Circle Structure.")
             print(f"[dry-run] Would add {manager.email} to the Google Group.")
             if send_email:
                 print("[dry-run] Would open this welcome message as a draft in your "
@@ -577,7 +554,7 @@ def main(
         except QuitRequested:
             log("INFO", "quit", "User quit during the calendar/Zoom room step")
             print(f"Skipped the rest of the calendar/Zoom room setup. Run "
-                  f"'python update_groups_in_google_and_hierarchy.py -g \"{gdisplay}\"' "
+                  f"'python update_groups.py -g \"{gdisplay}\"' "
                   "later to finish it.")
 
         # ── Write the Google Group's footer link block ───────────────────────
@@ -587,40 +564,22 @@ def main(
                             zoom_passcode=room.passcode if room else None)
         print(f"Set footer links for '{gemail}'.")
 
-        # ── Add to the Circle Hierarchy ──────────────────────────────────────
-        already_in_hierarchy = root is not None and any(
-            n.group_id == gather_group_id for n in iter_nodes(root)
-        )
-        if parent_node is not None and already_in_hierarchy:
-            print(f"'{gdisplay}' is already in the Circle Hierarchy — leaving it as is.")
-        elif parent_node is not None:
-            new_node = HierarchyNode(
-                name=gdisplay,
-                group_id=gather_group_id,
-                members_url=f"/groups/{gather_group_id}",
-                documents_url=gdrive_item_url(folder_id),
-                parent=parent_node,
-            )
-            parent_node.children.append(new_node)
-            new_content = render_hierarchy(root)
-            ok = ensure_hierarchy_page(page, base_url, new_content, dry_run=False)
-            if ok:
-                print(f"Added '{gdisplay}' to the Circle Hierarchy under '{parent_node.name}'.")
-            else:
-                log("ERROR", "hierarchy", "Failed to write hierarchy wiki page — see log")
-                print("ERROR: failed to update the Circle Hierarchy wiki page — see log.")
-        # The parent's agenda doc lists its sub-circles, which now include
-        # this one (checked on a re-run too, in case an earlier one stopped).
-        if parent_node is not None and (already_in_hierarchy or ok):
-            update_agenda_doc_structure(drive_service, page, base_url, parent_node,
-                                        dry_run=False)
+        # ── Have it put under its parent in the Circle Structure ─────────────
+        if parent_group is not None:
+            try:
+                add_placements(drive_service, {gather_group_id: parent_group.group_id},
+                               dry_run=False)
+                print(f"'{gdisplay}' will be put under '{parent_group.name}' in the Circle "
+                      "Structure within the hour.")
+            except Exception as e:
+                log("ERROR", "placements", str(e))
+                print(f"ERROR: couldn't write its parent for the Circle Structure ({e}); ask "
+                      f"the Coordinating Circle to put it under '{parent_group.name}'.")
 
         # ── With --agenda-doc, give it an agenda doc, for the Apps Script to build ─
         if agenda_doc and kind in AGENDA_KINDS:
             try:
-                ensure_agenda_doc(drive_service, gemail, gdisplay, folder_id,
-                                  parent_node.name if parent_node is not None else None,
-                                  dry_run=False)
+                ensure_agenda_doc(drive_service, gemail, gdisplay, folder_id, dry_run=False)
                 print(f"Created '{agenda_doc_name(gdisplay)}', to be built within minutes.")
             except Exception as e:
                 log("ERROR", "agenda_doc", str(e))
@@ -665,7 +624,7 @@ def main(
 def cli():
     parser = argparse.ArgumentParser(
         description="Create a new Drive folder, Google Group, and Gather group, "
-                    "all linked together, and add it to the Circle Hierarchy.",
+                    "all linked together, and put it under its parent in the Circle Structure.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
@@ -681,8 +640,8 @@ def cli():
     )
     parser.add_argument(
         "-p", "--parent-circle", default=None,
-        help="A prefix uniquely identifying the parent circle's entry in the "
-             "Circle Hierarchy (required unless --type=club)",
+        help="A prefix uniquely identifying the parent's Gather group: a circle, or, "
+             "for a working group, a circle or working group (required unless --type=club)",
     )
     parser.add_argument(
         "-m", "--manager", required=True,

@@ -1,7 +1,8 @@
 # Circle Agendas
 
 The circle agenda docs (see `../circle-agendas-plan.md`): building each
-circle's doc, and the web app that the links in an agenda doc run.
+circle's doc, and the web app that the links in an agenda doc run; and the
+Circle Structure, the tree of circles and working groups.
 
 - `build_template.gs` — builds an agenda doc (a circle's, or a preview)
   from a blank doc, entirely from code
@@ -13,6 +14,11 @@ circle's doc, and the web app that the links in an agenda doc run.
   which the Python scripts create empty and label
 - `circles.gs` — which circle a doc belongs to (from the Google Groups'
   footers), and its calendar's events and its members' names
+- `structure.gs` — the Circle Structure: its sheet, its doc, and each
+  agenda doc's Parent Circle and Sub-Circles rows (see "The Circle
+  Structure" below)
+- `structure_rules.gs` — the Circle Structure's rules, with no Apps Script
+  calls, tested under Node by `tests/test_circle_structure_rules.py`
 - `agenda_rules.gs` — the agenda's time arithmetic, with no Apps Script
   calls, tested under Node by `tests/test_circle_agenda_rules.py`
 - `doc_helpers.gs` — helpers the others share
@@ -20,7 +26,8 @@ circle's doc, and the web app that the links in an agenda doc run.
 The probes that were run before any of this was built, to see what Apps
 Script can do to an agenda doc, are in `../archive/circle_agendas/`.
 - `appsscript.json` — the advanced services (Docs, Drive, Calendar, Admin
-  Directory, Groups Settings), OAuth scopes, and web app settings
+  Directory, Groups Settings), OAuth scopes (Sheets too, for the Circle
+  Structure), and web app settings
 
 All of them are one Apps Script project, so they share their functions and
 constants.
@@ -92,7 +99,7 @@ The links:
   Secretary (dropdowns of the members, set to the holders chosen in the
   Circle Info tab's Roles) and Guests (named as in the Gather directory,
   from "Circle agenda member names.json" in `admin@`'s My Drive, which
-  `update_groups_in_google_and_hierarchy.py` writes on each run, or else
+  `update_groups.py` writes on each run, or else
   as Google names them); its agenda has one 5-minute topic; its
   Administrative matters list gives the next event as the next meeting
   and links "Minutes of last meeting" to the previous meeting's tab; and
@@ -195,39 +202,30 @@ web app read it (and the groups' footers) afresh.
 ## Circles' docs
 
 Each circle and working group gets an agenda doc, "<Group> Agenda", in its
-Drive folder. `update_groups_in_google_and_hierarchy.py --agenda-docs`
+Drive folder. `update_groups.py --agenda-docs`
 (with `-g`, for one group) and `add_new_group.py --agenda-doc` create it
 empty and label it in Drive with the group's
-address, its parent, and "new" (`util/circle_agenda_docs.py`).
+address and "new" (`util/circle_agenda_docs.py`).
 **`buildNewCircleDocs`** builds every doc so labelled, as
 `previewTemplate` builds the preview, puts the group's name, email
-address, Drive folder, and parent in About this circle, and relabels it
-"built", with the layout version (`LAYOUT_VERSION`).
+address, Drive folder, and place in the Circle Structure (see below) in
+About this circle, and relabels it "built", with the layout version
+(`LAYOUT_VERSION`).
 
-Docs built before About this circle's Zoom room, Drive folder, parent, and
-sub-circles were filled in can get them with **`fillAboutForCircleDocs`**,
+Docs built before About this circle's Zoom room and Drive folder were
+filled in can get them with **`fillAboutForCircleDocs`**,
 run in the editor: it fills in those rows where they're empty, in every
-built doc, and leaves rows that already say something alone. A doc's
+built doc, and leaves rows that already say something alone (but for the
+Parent Circle and Sub-Circles rows, which it writes from the Circle
+Structure). A doc's
 circle is the group whose Drive folder holds it, or else the one with its
 labelled address.
-
-When `change_parent_circle.py` moves a circle to another parent, it
-relabels the docs of the circle and of its old and new parents with their
-new parent and sub-circles; `add_new_group.py` relabels the new group's
-parent's doc with its sub-circles; and
-`update_groups_in_google_and_hierarchy.py --agenda-docs` relabels every
-existing doc whose parent or sub-circles differ from the Circle Structure
-page (after an entry was moved there by hand, say). Each labels a built doc
-`circleAgendaRefresh: structure`. Each run of `buildNewCircleDocs` then
-rewrites the Parent Circle and Sub-Circles rows of every doc so labelled
-(**`refreshCircleDocStructures`**), emptying a row with nothing left in it,
-and removes the label.
 
 About this circle's rows are, in order: Aims & Domain, Policies folder,
 Zoom room, Circle calendar (a link to the circle's Google calendar, which
 offers to add it to the clicker's own), Remind before meetings, Circle email
 address, Other Key Links, Google Drive Folder (linked by the circle's name,
-like the parent and sub-circles), Parent Circle, and Sub-Circles. Docs built
+), Parent Circle, and Sub-Circles. Docs built
 before that order (layout version 1,
 with a "Circle Google Drive Folder" row linked as "Google Drive folder")
 can be changed over with **`reorderAboutInCircleDocs`**, run in the
@@ -236,7 +234,7 @@ room, email address, Drive folder, parent, sub-circles) into place,
 leaving the rows filled in by hand (Aims & Domain, Policies folder, Other
 Key Links) where they are, so whatever's in them, smart chips included,
 is kept; renames the Drive folder row; rewrites it and the Parent Circle
-and Sub-Circles rows from the doc's labels; and labels the doc layout
+and Sub-Circles rows; and labels the doc layout
 version 2. A doc whose rows aren't the expected ones, or whose Zoom room
 or email address row holds a chip (which moving could lose), is left as
 it is, and the log says why. To see what it does first, run
@@ -259,17 +257,12 @@ version 3. It skips docs still on layout version 1 (the log says which):
 run `reorderAboutInCircleDocs` first, then this. Docs without the
 Remind before meetings row get reminders 24 hours before.
 
-The sub-circles are a bulleted list, one per line. Docs built when they
-were a comma-separated line can be changed over with
-**`rewriteStructureRowsInCircleDocs`**, run in the editor: it rewrites the
-Parent Circle and Sub-Circles rows of every built doc from its labels,
-replacing anything typed into those two rows by hand. A doc whose row is
-empty because the group has no sub-circles needs nothing: the list
-appears when a sub-circle is added.
-
 Once, in the editor, run **`installTriggers`**, which runs
 `buildNewCircleDocs` every 10 minutes and `updateRolesInCircleDocs`
-every day at 1 am (and asks to allow managing triggers). The Roles
+every day at 1 am (and asks to allow managing triggers), and, once
+`setupCircleStructure` has made the Circle Structure sheet (which runs
+`installTriggers` itself), `syncCircleStructureGroups` hourly and
+`onCircleStructureEdit` on each edit of the sheet. The Roles
 table's Name cells are dropdowns of the circle's members (showing a dash
 until one is chosen, as do a meeting's Facilitator and Secretary when the
 Roles have none), and its Term ends
@@ -298,6 +291,16 @@ unlabelled copy of one such doc, in your My Drive, and logs its link
 (delete the copy after). It can also be run by hand, to build waiting docs at once; the
 log links each doc it built.
 
+The Docs API part of building (`replaceTokens`) reads the doc's positions
+and changes the doc at them. A read just after DocumentApp has saved the doc
+can return an older version, whose positions are wrong for the new one, so
+the changes are made only to the version read, and if the doc has moved on,
+it's read again. (Before that, writing the Circle Structure's Sub-Circles
+bullets this way deleted 8 characters of some docs' Roles labels, and
+bulleted them. **`repairRoleLabelsInCircleDocs`**, run in the editor, puts
+back each role label that has a bullet in it, in every built doc, and logs
+the docs it changed.)
+
 Building only ever adds to a doc, so it's done only to one that's still
 empty: if someone has written in a doc before it's built, it's labelled
 "not empty" and left as it is, and the log says so. A doc is labelled
@@ -308,7 +311,111 @@ change a doc's contents, only create an empty one when a group has none.
 
 A group's doc is found by its label, so a group never gets a second one;
 if its doc is deleted or moved to the trash, the next run of
-`update_groups_in_google_and_hierarchy.py --agenda-docs` makes a new one.
+`update_groups.py --agenda-docs` makes a new one.
 The flags keep docs from being made for every group before their layout
 is settled: changes to the Circle Info and Backlog tabs don't reach docs
 already made (see the plan).
+
+## The Circle Structure
+
+The tree of circles and working groups (`structure.gs`, with its rules in
+`structure_rules.gs`, tested under Node by
+`tests/test_circle_structure_rules.py`). Its sheet and doc are in a
+"Circle Structure" folder at the top of the Shared Drive (`SHARED_DRIVE_ID`),
+outside every group's folder, so the Shared Drive's members can see them,
+and only its managers can move or delete them: the Coordinating Circle are
+the sheet's editors, which in a shared drive can't. It has three parts:
+
+- **The sheet**, "Circle Structure (editing)": a
+  row per group, keyed by its Gather group ID (in a hidden column, so a
+  rename keeps the row). The Coordinating Circle
+  (`coordinating-circle@berkeleymoshav.org`, `STRUCTURE_EDITORS`) can edit
+  only its **Parent** column: everything else is protected, editable only by
+  `admin@`, which the script runs as. (So can anyone with edit access to the
+  whole Shared Drive, its members with a Contributor role or above, as only
+  the Parent column isn't protected.) Each Parent cell is a dropdown of the groups the
+  row may be under: a circle under a circle, a working group under a circle
+  or working group, leaving out the group itself and the groups beneath it.
+  Full Community (`ROOT_GROUP_NAME`) is always at the top. The other
+  columns: **Type** (Circle or Working Group, from the name of the group's
+  Drive folder, or else of the group: one ending in "Circle" is a circle's,
+  and one ending in "Working Group", "Work Group", "Team", or "Pod" a
+  working group's, perhaps followed by something in brackets, such as the
+  group's acronym, as in "Development, Finance, & Legal Circle (DF&L)"; a
+  club, a group linked to a shared drive, and a group whose names don't
+  say are "Not in the structure"), **Problems** (why a group isn't in the structure, or isn't
+  placed yet), the email list (a mailto link to the group's shortest
+  address, a shorter alias if it has one; these two columns are fitted
+  to their text whenever it changes), and links to the Gather group, Drive
+  folder, and agenda doc.
+- **The doc**, "Circle Structure", which anyone
+  with the link can view (or, if the domain doesn't allow that, anyone in
+  it): under a grey line saying it's kept up to date automatically, and
+  to ask the Coordinating Circle to move a group, the tree as a bulleted
+  list (bullets at every level, each level 0.25" further in, 2 pt apart),
+  each group's name followed by small (8 pt) Members, Documents, Email,
+  and Agenda (if it has an agenda doc) links, and then the groups not
+  yet placed. It's rewritten whenever what it shows
+  changes, so edits to it don't last. (Zoom rooms are left out, since
+  anyone with the link can view it.)
+- **Each agenda doc's Parent Circle and Sub-Circles rows**, in About this
+  circle. Parent Circle: the parent; Sub-Circles: each sub-circle and
+  working group. Each is linked to its agenda doc. Each label cell has a small grey
+  "(Set in the Circle Structure)" line linking the sheet. The bullets are
+  written with DocumentApp, not the Docs API, so nothing depends on reading
+  the doc's positions just after writing it (see below). A doc can't lock
+  part of itself, so the script puts the rows back when they're edited:
+  every 10 minutes, in each doc changed since (as for the Term ends dates),
+  it writes them if they don't say what they should.
+
+How it stays up to date:
+
+- **`syncCircleStructureGroups`**, hourly, brings the rows up to date with
+  the Google Groups whose footers link a Gather group and a Drive item:
+  adds a row for a new group (with an empty Parent), renames (in the Parent
+  cells too), relinks, and retypes, and removes the row of a group that's
+  gone (only when every footer could be read). The rows stay in order by
+  name.
+- **`applyStructure`** runs on each edit
+  of the sheet (`onCircleStructureEdit`, as `admin@`, whoever made the
+  edit), every 10 minutes from `buildNewCircleDocs`, and after each sync.
+  It refuses a Parent that breaks the rules, or makes a loop (pasting can
+  get past a dropdown), putting back the parent from before, with a note
+  on the cell saying what was refused and why; updates the dropdowns and
+  the Problems column; rewrites the doc if it's changed; and rewrites the
+  rows of each agenda doc whose place changed (its path, its parent, or its
+  sub-circles, their names or links). The parents last applied, and hashes
+  of each group's place and of the doc, are in Script Properties.
+- **"Circle structure placements.json"**, in `admin@`'s My Drive, holds
+  parents from the Python scripts, by Gather group ID: `add_new_group.py`
+  writes a new group's, and `seed_circle_structure.py` every group's from
+  the old wiki page (see `util/circle_structure_placements.py`). Each is
+  given to its group when the group has a row whose Parent is empty (and
+  the rules allow it), and then removed from the file.
+- Daily, `updateRolesInCircleDocs` rewrites every doc's rows that are out of
+  date (any the other runs missed).
+
+### Setting it up
+
+1. `clasp push`, then, in the editor, run any function to allow the new
+   Sheets permission.
+2. Run **`python seed_circle_structure.py`** (`-n` first, to see what it
+   would write), to bring over the parents from the old wiki page: it
+   writes them to "Circle structure placements.json", to wait for the
+   sheet.
+3. Run **`setupCircleStructure`**. It makes the Circle Structure folder and,
+   in it, the sheet and the doc (or keeps the ones it made before, moving
+   them into the folder if they're elsewhere), protects the sheet, shares
+   it with `coordinating-circle@` as editors (without an email) and the doc
+   with anyone with the link, installs the triggers
+   (`installTriggers`), fills in the sheet, gives the groups their parents
+   from the placements, writes the doc, rewrites every agenda doc's
+   Parent Circle and Sub-Circles rows, and logs the three links. Check the
+   sheet's Problems column, and the notes on its Parent cells, for anything
+   left to place by hand.
+4. Send the sheet's link to the Coordinating Circle, and put the doc's link
+   where people look for the structure (in place of the old wiki page's
+   tree, say).
+
+**`refreshCircleStructureEverywhere`**, run in the editor, rewrites the doc
+and every agenda doc's rows that don't say what they should, at once.

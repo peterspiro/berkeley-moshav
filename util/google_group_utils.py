@@ -38,7 +38,7 @@ TOKEN_PATH = Path.home() / ".google_setup_token.pkl"
 DEFAULT_CLIENT_SECRETS_PATH = Path(__file__).parent.parent / "client_secret.json"
 
 SCOPES = [
-    # Not drive.readonly: update_groups_in_google_and_hierarchy.py creates
+    # Not drive.readonly: update_groups.py creates
     # new Drive folders (files().create()), which needs write access.
     "https://www.googleapis.com/auth/drive",
     "https://www.googleapis.com/auth/admin.directory.group",

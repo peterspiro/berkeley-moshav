@@ -1,20 +1,13 @@
 """
-Unit tests for the Circle Hierarchy tree parse/render helpers in
-util/hierarchy_wiki.py, focused on retaining row content the script
-doesn't manage (extra links or notes added by hand).
+Unit tests for reading the old Circle Structure wiki page's tree, in
+util/hierarchy_wiki.py.
 
 All names and links are fictional.
 """
 
 import textwrap
 
-from util.hierarchy_wiki import (
-    _parse_rest,
-    parse_hierarchy,
-    render_hierarchy,
-    remove_node,
-    iter_nodes,
-)
+from util.hierarchy_wiki import _parse_rest, iter_nodes, parse_hierarchy
 
 
 # ── _parse_rest: classifying managed vs. unmanaged segments ──────────────────
@@ -75,121 +68,19 @@ class TestParseRest:
 
 # ── Round-trip: extras survive parse -> render ───────────────────────────────
 
-class TestRoundTrip:
-    def test_extra_link_preserved_alongside_managed_links(self):
-        md = textwrap.dedent("""\
-            - Root: [Members](/groups/0)
-                - Care Circle: [Members](/groups/1) | [Documents](/gdrive/item/2) | [Notes](/wiki/care-notes)
-        """)
-        out = render_hierarchy(parse_hierarchy(md))
-        assert "[Members](/groups/1)" in out
-        assert "[Documents](/gdrive/item/2)" in out
-        assert "[Notes](/wiki/care-notes)" in out
 
-    def test_extra_link_preserved_without_managed_links(self):
-        md = textwrap.dedent("""\
-            - Root: [Members](/groups/0)
-                - Care Circle: [Notes](/wiki/care-notes)
-        """)
-        out = render_hierarchy(parse_hierarchy(md))
-        # The row keeps its extra link (and its ": " prefix) rather than
-        # collapsing to a bare "- Care Circle".
-        assert "- Care Circle: [Notes](/wiki/care-notes)" in out
-
-    def test_managed_links_emitted_before_extras(self):
-        md = textwrap.dedent("""\
-            - Root: [Members](/groups/0)
-                - Care Circle: [Notes](/wiki/care-notes) | [Members](/groups/1) | [Documents](/gdrive/item/2)
-        """)
-        out = render_hierarchy(parse_hierarchy(md))
-        line = next(l for l in out.splitlines() if "Care Circle" in l)
-        assert line.index("[Members]") < line.index("[Documents]") < line.index("[Notes]")
-
-    def test_idempotent_after_first_render(self):
-        # A page whose extras are already after the managed links is stable:
-        # rendering it again produces identical output.
-        md = textwrap.dedent("""\
-            - Root: [Members](/groups/0)
-                - Care Circle: [Members](/groups/1) | [Documents](/gdrive/item/2) | [Notes](/wiki/care-notes)
-                - Housing Circle: [Members](/groups/3)
-        """)
-        once = render_hierarchy(parse_hierarchy(md))
-        twice = render_hierarchy(parse_hierarchy(once))
-        assert once == twice
-
-    def test_reordered_extras_are_stable_after_first_pass(self):
-        # An extra placed before the managed links is moved to the end on the
-        # first render, then stays put on every subsequent render.
-        md = textwrap.dedent("""\
-            - Root: [Members](/groups/0)
-                - Care Circle: [Notes](/wiki/care-notes) | [Members](/groups/1)
-        """)
-        once = render_hierarchy(parse_hierarchy(md))
-        twice = render_hierarchy(parse_hierarchy(once))
-        assert once == twice
-
-
-# ── The managed [Wiki] link ──────────────────────────────────────────────────
-
-class TestWikiLink:
-    def test_wiki_url_round_trips(self):
-        md = textwrap.dedent("""\
-            - Root: [Members](/groups/0)
-                - Care Circle: [Members](/groups/1) | [Documents](/gdrive/item/2) | [Wiki](/wiki/care-circle-wiki)
-        """)
-        out = render_hierarchy(parse_hierarchy(md))
-        assert "[Wiki](/wiki/care-circle-wiki)" in out
-
-    def test_wiki_rendered_after_documents_before_extras(self):
-        md = textwrap.dedent("""\
-            - Root: [Members](/groups/0)
-                - Care Circle: [Notes](/x) | [Wiki](/wiki/care-circle-wiki) | [Members](/groups/1) | [Documents](/gdrive/item/2)
-        """)
-        out = render_hierarchy(parse_hierarchy(md))
-        line = next(l for l in out.splitlines() if "Care Circle" in l)
-        assert (
-            line.index("[Members]")
-            < line.index("[Documents]")
-            < line.index("[Wiki]")
-            < line.index("[Notes]")
-        )
-
-    def test_wiki_added_to_node_renders_in_slot(self):
-        md = textwrap.dedent("""\
-            - Root: [Members](/groups/0)
-                - Care Circle: [Members](/groups/1) | [Documents](/gdrive/item/2) | [Notes](/x)
-        """)
-        root = parse_hierarchy(md)
-        care = next(n for n in iter_nodes(root) if n.name == "Care Circle")
-        care.wiki_url = "/wiki/care-circle-wiki"
-        line = next(l for l in render_hierarchy(root).splitlines() if "Care Circle" in l)
-        assert line == (
-            "    - Care Circle: [Members](/groups/1) | [Documents](/gdrive/item/2) "
-            "| [Wiki](/wiki/care-circle-wiki) | [Notes](/x)"
-        )
-
-    def test_idempotent_with_wiki_and_extras(self):
-        md = textwrap.dedent("""\
-            - Root: [Members](/groups/0)
-                - Care Circle: [Members](/groups/1) | [Documents](/gdrive/item/2) | [Wiki](/wiki/care-circle-wiki) | [Notes](/x)
-        """)
-        once = render_hierarchy(parse_hierarchy(md))
-        twice = render_hierarchy(parse_hierarchy(once))
-        assert once == twice
-
-
-# ── Extras travel with a node through reparenting ────────────────────────────
-
-class TestReparenting:
-    def test_extras_survive_remove_node(self):
-        md = textwrap.dedent("""\
-            - Root: [Members](/groups/0)
-                - Middle Circle: [Members](/groups/1)
-                    - Leaf Circle: [Members](/groups/2) | [Notes](/wiki/leaf-notes)
-        """)
-        root = parse_hierarchy(md)
-        middle = next(n for n in iter_nodes(root) if n.name == "Middle Circle")
-        remove_node(middle)  # Leaf Circle is reparented up to Root
-        out = render_hierarchy(root)
-        assert "Middle Circle" not in out
-        assert "- Leaf Circle: [Members](/groups/2) | [Notes](/wiki/leaf-notes)" in out
+class TestParseHierarchy:
+    def test_tree_and_group_ids(self):
+        root = parse_hierarchy(textwrap.dedent("""\
+            - Full Community (Top Circle / HOA): [Members](/groups/1)
+                - Land Circle: [Members](/groups/2)
+                      - Garden: [Members](/groups/3)
+                - Tech Circle
+        """))
+        assert root.group_id == "1"
+        assert [c.name for c in root.children] == ["Land Circle", "Tech Circle"]
+        garden = root.children[0].children[0]
+        assert garden.group_id == "3" and garden.parent.group_id == "2"
+        assert root.children[1].group_id is None
+        assert [n.name for n in iter_nodes(root)] == [
+            "Full Community (Top Circle / HOA)", "Land Circle", "Garden", "Tech Circle"]

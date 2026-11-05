@@ -27,7 +27,7 @@ Steps:
      there using the new address's local part.
 
 Requires Google API access (Admin Directory) — see
-update_groups_in_google_and_hierarchy.py's docstring for setup.
+update_groups.py's docstring for setup.
 
 Usage:
     python change_group_email_alias.py care-circle

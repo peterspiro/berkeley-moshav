@@ -16,7 +16,7 @@ the host key") for doing that in Zoom's web portal.
 The group is named by its Google Group's email address, or by a prefix of
 its Google Group name or address that matches just one group.
 
-Requires Google API access (see update_groups_in_google_and_hierarchy.py)
+Requires Google API access (see update_groups.py)
 and the Zoom app's credentials in zoom_credentials (see README.md).
 
 Usage:
@@ -69,10 +69,10 @@ def reset_room_passcode(settings_service, zoom: ZoomClient, group: dict, dry_run
     meeting_id = meeting_id_from_url(parse_footer_zoom_url(footer))
     if not meeting_id:
         sys.exit(f"Error: {email}'s footer has no Zoom meeting link. Run "
-                 "update_groups_in_google_and_hierarchy.py to give the group a room.")
+                 "update_groups.py to give the group a room.")
     if zoom.get_meeting(meeting_id) is None:
         sys.exit(f"Error: {email}'s Zoom room ({meeting_id}) no longer exists. Run "
-                 "update_groups_in_google_and_hierarchy.py -g to give the group a new room.")
+                 "update_groups.py -g to give the group a new room.")
 
     if dry_run:
         print(f"[dry-run] Would give Zoom room {meeting_id} a new passcode and write its "

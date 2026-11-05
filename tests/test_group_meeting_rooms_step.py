@@ -1,5 +1,5 @@
 """
-Tests for update_groups_in_google_and_hierarchy.ensure_group_meeting_rooms
+Tests for update_groups.ensure_group_meeting_rooms
 (which groups get a calendar and Zoom room) and for the footer step writing
 their links.
 
@@ -8,7 +8,7 @@ All names, IDs, and addresses are fictional.
 
 import pytest
 
-import update_groups_in_google_and_hierarchy as m
+import update_groups as m
 import util.meeting_rooms as mr
 from tests.fakes_meeting_rooms import FakeCalendarService, FakeZoom, room
 from util.google_group_footer import (

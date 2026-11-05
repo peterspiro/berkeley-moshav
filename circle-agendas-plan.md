@@ -96,7 +96,7 @@ don't reach docs already built, and will take their own scripts (see
 - **Attendance**: a checklist of the circle's members, from its Google
   Group, by first name (with their last initial if another member of the
   community has the same first name), from the Gather directory (a file
-  that `update_groups_in_google_and_hierarchy.py` writes to `admin@`'s
+  that `update_groups.py` writes to `admin@`'s
   Drive; Google often gives only the start of the address), closely
   spaced, in columns of up to four, beside the meeting's Facilitator and
   Secretary (dropdowns of the attendees, set to the Circle Info tab's
@@ -157,7 +157,7 @@ Each circle and working group (not clubs or everybody groups) gets an
 agenda doc, built from code rather than copied from a template doc
 (a copy's links would still point at the original):
 
-- `update_groups_in_google_and_hierarchy.py --agenda-docs` and
+- `update_groups.py --agenda-docs` and
   `add_new_group.py --agenda-doc` (opt-in until the layout is settled)
   create "<Group> Agenda",
   empty, in the group's Drive item, labelled with Drive file properties
@@ -202,7 +202,7 @@ agenda doc, built from code rather than copied from a template doc
 ## Future work
 
 **Rollout**
-- Run `update_groups_in_google_and_hierarchy.py -a` (first with `-n`) to
+- Run `update_groups.py -a` (first with `-n`) to
   give every circle and working group its doc. Once the layout is
   settled, consider making docs the default in both scripts rather than
   opt-in (`-a` / `--agenda-doc`).
@@ -236,7 +236,7 @@ yet; `fillAboutForCircleDocs`, `rewriteStructureRowsInCircleDocs`, and
 - A group that's retired or deactivated keeps its doc, still labelled
   built (and so still acted on by the web app).
 - Members' names come from "Circle agenda member names.json", rewritten
-  only when `update_groups_in_google_and_hierarchy.py` runs, so a new
+  only when `update_groups.py` runs, so a new
   member appears in attendance lists only after the next run.
 - At most `MAX_SUB_CIRCLES` (12) sub-circles are labelled.
 

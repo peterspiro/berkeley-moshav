@@ -263,19 +263,22 @@ class TestParseCircleFooter:
             "1093", "FOLDER_id-1", "https://g", "Technology Circle",
             calendar_id=self.CAL, zoom_url=self.ZOOM, zoom_passcode="123456")
         assert js(f"parseCircleFooter({json.dumps(footer)})") == {
-            "name": "Technology Circle", "driveItemId": "FOLDER_id-1",
+            "name": "Technology Circle", "gatherUrl": "https://g/groups/1093",
+            "gatherId": "1093", "driveItemId": "FOLDER_id-1",
             "calendarId": self.CAL, "zoomUrl": self.ZOOM}
 
     def test_reads_shared_drive_footer_without_calendar(self):
         footer = build_footer_block("7", "0AFqDRIVE", "https://g", "Garden Pod",
                                     item_type=ITEM_TYPE_SHARED_DRIVE)
         assert js(f"parseCircleFooter({json.dumps(footer)})") == {
-            "name": "Garden Pod", "driveItemId": "0AFqDRIVE", "calendarId": None,
+            "name": "Garden Pod", "gatherUrl": "https://g/groups/7", "gatherId": "7",
+            "driveItemId": "0AFqDRIVE", "calendarId": None,
             "zoomUrl": None}
 
     def test_no_managed_block(self):
         assert js("parseCircleFooter('Just notes')") == {
-            "name": None, "driveItemId": None, "calendarId": None, "zoomUrl": None}
+            "name": None, "gatherUrl": None, "gatherId": None, "driveItemId": None,
+            "calendarId": None, "zoomUrl": None}
 
 
 class TestAboutReorder:

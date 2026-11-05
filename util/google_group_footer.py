@@ -44,7 +44,7 @@ match the label wherever it appears, so those still read correctly.
 
 The header line bakes in the group's current display name, so a rename
 isn't reflected until the next time a footer-writing step runs for that
-group — which happens whenever update_groups_in_google_and_hierarchy.py
+group — which happens whenever update_groups.py
 syncs it, same as any other rename. Any other footer content a human wrote
 is preserved — this module only ever replaces its own marked block.
 """

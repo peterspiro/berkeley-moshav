@@ -407,7 +407,7 @@ class _RecordingSettingsService:
 
 class TestEnsureGroupFooters:
     def _run(self, svc, dry_run, capsys):
-        import update_groups_in_google_and_hierarchy as m
+        import update_groups as m
         m.ensure_group_footers(
             svc, "https://x.coop",
             {"9": {"name": "Foo", "kind": "circle"}},

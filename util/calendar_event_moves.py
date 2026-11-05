@@ -2,7 +2,7 @@
 Moving a group's meetings onto its new calendar.
 
 When a group gets its own calendar (or when asked, with
-update_groups_in_google_and_hierarchy.py --move-events), its meetings may
+update_groups.py --move-events), its meetings may
 still be on other calendars. offer_event_moves() looks through every
 calendar on CALENDAR_OWNER's calendar list (its own, including its primary
 calendar, and the ones it's subscribed to) except the group calendars, the

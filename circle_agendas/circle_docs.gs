@@ -2,30 +2,28 @@
  * Circle Docs
  *
  * Builds each circle's and working group's agenda doc. The Python scripts
- * (util/circle_agenda_docs.py, run by update_groups_in_google_and_hierarchy.py
+ * (util/circle_agenda_docs.py, run by update_groups.py
  * and add_new_group.py) create the doc empty, in the group's Drive item,
  * labelled (Drive file properties, public ones: the Python scripts are a
- * different app, and can't share appProperties) with the group's address, its parent's
- * name, and the state "new". buildNewCircleDocs, run every
+ * different app, and can't share appProperties) with the group's address
+ * and the state "new". buildNewCircleDocs, run every
  * BUILD_EVERY_MINUTES by the trigger installTriggers makes (or by hand in
  * the editor), builds each doc so labelled, the same way previewTemplate
- * builds the preview, fills in About this circle, and relabels it "built",
- * with the layout version it was built with, for scripts that later update
- * existing docs. It also rewrites the Parent Circle and Sub-Circles rows of
- * each built doc that change_parent_circle.py or add_new_group.py has
- * relabelled with a new parent or sub-circles (and labelled AGENDA_REFRESH_STRUCTURE).
+ * builds the preview, fills in About this circle (its Parent Circle and
+ * Sub-Circles rows from the Circle Structure; see structure.gs), and
+ * relabels it "built", with the layout version it was built with, for
+ * scripts that later update existing docs. It also applies any change to
+ * the Circle Structure, and, in each built doc changed since its last run,
+ * recolors past Term ends dates and puts back the structure rows if
+ * they've been edited.
  * addNewAboutRowsToCircleDocs, run by hand, gives docs built before the
  * Circle calendar and Remind before meetings rows were added those rows.
  */
 
 // Must match util/circle_agenda_docs.py.
 const AGENDA_KEYS = {
-  group: 'circleAgendaGroup', parent: 'circleAgendaParent', state: 'circleAgendaState',
-  layout: 'circleAgendaLayout', sub: 'circleAgendaSub', refresh: 'circleAgendaRefresh',
+  group: 'circleAgendaGroup', state: 'circleAgendaState', layout: 'circleAgendaLayout',
 };
-// The refresh label's value for a doc whose parent or sub-circles changed.
-const AGENDA_REFRESH_STRUCTURE = 'structure';
-const STRUCTURE_ROWS = ['Parent Circle', 'Sub-Circles'];
 const AGENDA_STATE_NEW = 'new';
 // Set before building, so a build that fails partway is never retried on
 // top of itself; such a doc is left for a person to look at.
@@ -56,10 +54,14 @@ const BUILD_EVERY_MINUTES = 10;
 // day.
 const ROLES_UPDATE_HOUR = 1;
 
-// Run once, in the editor: builds new circle docs every BUILD_EVERY_MINUTES,
-// and updates their Roles every day.
+// Run once, in the editor (setupCircleStructure runs it too): builds new
+// circle docs every BUILD_EVERY_MINUTES, updates their Roles and structure
+// rows every day, brings the Circle Structure sheet's groups up to date
+// every SYNC_EVERY_HOURS, and applies each edit of the sheet (once
+// setupCircleStructure has made it).
 function installTriggers() {
-  const handlers = ['buildNewCircleDocs', 'updateRolesInCircleDocs'];
+  const handlers = ['buildNewCircleDocs', 'updateRolesInCircleDocs', 'syncCircleStructureGroups',
+    'onCircleStructureEdit'];
   for (const t of ScriptApp.getProjectTriggers()) {
     if (handlers.includes(t.getHandlerFunction())) ScriptApp.deleteTrigger(t);
   }
@@ -68,11 +70,25 @@ function installTriggers() {
     .atHour(ROLES_UPDATE_HOUR).create();
   Logger.log('buildNewCircleDocs will run every ' + BUILD_EVERY_MINUTES + ' minutes, and ' +
     'updateRolesInCircleDocs every day at ' + ROLES_UPDATE_HOUR + ':00.');
+  const sheetId = PropertiesService.getScriptProperties().getProperty(STRUCTURE_SHEET_KEY);
+  if (sheetId) {
+    ScriptApp.newTrigger('syncCircleStructureGroups').timeBased().everyHours(SYNC_EVERY_HOURS).create();
+    ScriptApp.newTrigger('onCircleStructureEdit').forSpreadsheet(sheetId).onEdit().create();
+    Logger.log('syncCircleStructureGroups will run every ' + SYNC_EVERY_HOURS + ' hour(s), and ' +
+      'onCircleStructureEdit on each edit of the Circle Structure sheet.');
+  }
 }
 
 // Run every day by the trigger installTriggers makes (or by hand): updates
-// the Roles in every built doc (see updateRoles), and logs what changed.
+// the Roles in every built doc (see updateRoles), and logs what changed;
+// then writes each doc's structure rows that are out of date (the next
+// meetings they list, say).
 function updateRolesInCircleDocs() {
+  try {
+    refreshStructureInAllCircleDocs();
+  } catch (e) {
+    console.error('Couldn\'t update the docs\' structure rows: ' + e.message);
+  }
   for (const file of builtCircleDocs()) {
     let circle = null;
     try {
@@ -239,30 +255,35 @@ function buildNewCircleDocs() {
         console.error('Couldn\'t build ' + file.name + ': ' + e.message);
       }
     }
-    refreshCircleDocStructures();
     try {
-      markPastTermEndsInChangedCircleDocs();
+      applyStructure();
     } catch (e) {
-      console.error('Couldn\'t check the changed docs\' terms: ' + e.message);
+      console.error('Couldn\'t apply the Circle Structure: ' + e.message);
+    }
+    try {
+      checkChangedCircleDocs();
+    } catch (e) {
+      console.error('Couldn\'t check the changed docs: ' + e.message);
     }
   } finally {
     lock.releaseLock();
   }
 }
 
-// The script property holding when markPastTermEndsInChangedCircleDocs
-// last started.
+// The script property holding when checkChangedCircleDocs last started.
 const DATES_CHECKED_KEY = 'circleDocDatesCheckedAt';
 // How far before its last start each run looks, in case Drive notes a
 // change a little after it's made.
 const DATES_CHECK_OVERLAP_MS = 2 * 60 * 1000;
 
-// Run by buildNewCircleDocs, every BUILD_EVERY_MINUTES: recolors the Term
-// ends dates (markPastTermEnds) in each built doc changed since the last
-// run, so a date someone changes is colored within minutes rather than at
-// the daily run. (A doc a run recolors counts as changed for the next one,
-// which finds nothing to do.)
-function markPastTermEndsInChangedCircleDocs() {
+// Run by buildNewCircleDocs, every BUILD_EVERY_MINUTES: in each built doc
+// changed since the last run, recolors the Term ends dates
+// (markPastTermEnds), so a date someone changes is colored within minutes
+// rather than at the daily run, and writes the structure rows
+// (refreshStructureRows) if they don't say what they should: someone's
+// edited them, or chosen a new Leader or Feedback Link. (A doc a run
+// changes counts as changed for the next one, which finds nothing to do.)
+function checkChangedCircleDocs() {
   const props = PropertiesService.getScriptProperties();
   const started = Date.now();
   const last = Number(props.getProperty(DATES_CHECKED_KEY)) ||
@@ -272,15 +293,18 @@ function markPastTermEndsInChangedCircleDocs() {
     q: 'properties has { key=\'' + AGENDA_KEYS.state + '\' and value=\'' + AGENDA_STATE_BUILT +
       '\' } and trashed = false and modifiedTime > \'' + since + '\'',
     corpora: 'allDrives', includeItemsFromAllDrives: true, supportsAllDrives: true,
-    fields: 'files(id,name)',
+    fields: 'files(id,name,properties)',
   });
-  for (const file of resp.files || []) {
+  const files = resp.files || [];
+  const ctx = files.length ? loadStructureContext() : null;
+  for (const file of files) {
     try {
       const marked = markPastTermEnds(file.id);
       if (marked) console.log(file.name + ': recolored ' + marked + ' Term ends date(s).');
     } catch (e) {
       console.error('Couldn\'t check the dates in ' + file.name + ': ' + e.message);
     }
+    if (ctx) refreshStructureRowsOf(file, ctx);
   }
   props.setProperty(DATES_CHECKED_KEY, String(started));
 }
@@ -305,57 +329,22 @@ function buildCircleDoc(file) {
     console.error('Couldn\'t list ' + file.name + '\'s members, for its Roles: ' + e.message);
   }
   build(file.id, members);
-  const subNames = subNamesOf(props);
-  fillAbout(file.id, file.name.replace(/ Agenda$/, ''), email, circle, props[AGENDA_KEYS.parent],
-    subNames);
+  fillAbout(file.id, file.name.replace(/ Agenda$/, ''), email, circle);
+  const ctx = loadStructureContext();
+  if (ctx) refreshStructureRowsOf(file, ctx);
   Drive.Files.update({properties: {
     [AGENDA_KEYS.state]: AGENDA_STATE_BUILT, [AGENDA_KEYS.layout]: String(LAYOUT_VERSION),
   }}, file.id, null, {supportsAllDrives: true});
 }
 
-// Rewrites the Parent Circle and Sub-Circles rows of each built doc
-// labelled AGENDA_REFRESH_STRUCTURE, from its labels, and removes that
-// label. Run by buildNewCircleDocs.
-function refreshCircleDocStructures() {
-  const resp = Drive.Files.list({
-    q: 'properties has { key=\'' + AGENDA_KEYS.refresh + '\' and value=\'' +
-      AGENDA_REFRESH_STRUCTURE + '\' } and trashed = false',
-    corpora: 'allDrives', includeItemsFromAllDrives: true, supportsAllDrives: true,
-    fields: 'files(id,name,properties)',
-  });
-  for (const file of resp.files || []) {
-    const props = file.properties || {};
-    if (props[AGENDA_KEYS.state] !== AGENDA_STATE_BUILT) continue;
-    try {
-      const email = props[AGENDA_KEYS.group];
-      fillAbout(file.id, null, email, circleOfDoc(file.id, email), props[AGENDA_KEYS.parent],
-        subNamesOf(props), false, STRUCTURE_ROWS);
-      Drive.Files.update({properties: {[AGENDA_KEYS.refresh]: null}}, file.id, null,
-        {supportsAllDrives: true});
-      console.log('Updated the parent and sub-circles of ' + file.name);
-      logLink('Updated the parent and sub-circles of ' + file.name + ':',
-        'https://docs.google.com/document/d/' + file.id + '/edit');
-    } catch (e) {
-      console.error('Couldn\'t update ' + file.name + ': ' + e.message);
-    }
-  }
-}
-
-// A doc's sub-circles' names, from its labels.
-function subNamesOf(props) {
-  const subNames = [];
-  for (let i = 1; props[AGENDA_KEYS.sub + i]; i++) subNames.push(props[AGENDA_KEYS.sub + i]);
-  return subNames;
-}
-
 // The doc's title becomes the group's name, and About this circle gets its
-// Zoom room, calendar, email address, Drive item (linked by the circle's name), and
-// parent and sub-circles (each named, and linked to its Drive folder when
-// it's a group with one; the sub-circles as a bulleted list).
+// Zoom room, calendar, email address, and Drive item (linked by the
+// circle's name). (Its Parent Circle and Sub-Circles rows come from the
+// Circle Structure: see refreshStructureRows, structure.gs.)
 // With onlyEmpty, only rows that are empty are filled in; with onlyRows,
 // only those rows are written, and emptied when there's nothing to say;
 // without a name, the title is left as it is.
-function fillAbout(docId, name, email, circle, parentName, subNames, onlyEmpty, onlyRows) {
+function fillAbout(docId, name, email, circle, onlyEmpty, onlyRows) {
   const doc = DocumentApp.openById(docId);
   const body = firstTabBody(doc);
   for (let i = 0; i < body.getNumChildren() && name; i++) {
@@ -366,12 +355,7 @@ function fillAbout(docId, name, email, circle, parentName, subNames, onlyEmpty, 
       break;
     }
   }
-  const circles = loadCircles();
   const folderLink = id => ({[A.LINK_URL]: 'https://drive.google.com/drive/folders/' + id});
-  const linkedName = groupName => {
-    const group = circleNamed(circles, groupName);
-    return [groupName, group ? folderLink(group.driveItemId) : null];
-  };
   // Each row's paragraphs, each a list of runs.
   const values = {
     'Zoom room': circle && circle.zoomUrl ? [[['Zoom room', {[A.LINK_URL]: circle.zoomUrl}]]] : [],
@@ -380,11 +364,8 @@ function fillAbout(docId, name, email, circle, parentName, subNames, onlyEmpty, 
     'Circle email address': email ? [[[email, {[A.LINK_URL]: 'mailto:' + email}]]] : [],
     'Google Drive Folder': circle && circle.driveItemId
       ? [[[name || circle.name || 'Google Drive folder', folderLink(circle.driveItemId)]]] : [],
-    'Parent Circle': parentName ? [[linkedName(parentName)]] : [],
-    'Sub-Circles': (subNames || []).map(sub => [[token('bullet')], linkedName(sub)]),
   };
   const found = findRow(body, text => text === 'Circle email address');
-  let bullets = false;
   if (found) {
     const table = found.table;
     for (let r = 0; r < table.getNumRows(); r++) {
@@ -397,12 +378,9 @@ function fillAbout(docId, name, email, circle, parentName, subNames, onlyEmpty, 
       const paragraphs = values[label] || [];
       resetCell(cell);
       writeCell(cell, paragraphs.length ? paragraphs : [[]]);
-      if (label === 'Sub-Circles' && paragraphs.length) bullets = true;
     }
   }
   doc.saveAndClose();
-  // The ⟦bullet⟧ tokens become the sub-circles' bullets.
-  if (bullets) replaceTokens(docId);
 }
 
 // Leaves a cell holding one plain, empty paragraph, for writeCell: what was
@@ -410,17 +388,6 @@ function fillAbout(docId, name, email, circle, parentName, subNames, onlyEmpty, 
 function resetCell(cell) {
   cell.insertParagraph(0, '');
   while (cell.getNumChildren() > 1) cell.getChild(1).removeFromParent();
-}
-
-// The group of circles (from their footers) with this name, or null: the
-// same name, ignoring case, or else one whose name starts the other's (so
-// "Full Community (Circle of Everyone / …)" in the Circle Structure finds
-// the "Full Community" group).
-function circleNamed(circles, name) {
-  const n = name.toLowerCase();
-  return circles.find(c => (c.name || '').toLowerCase() === n) ||
-    circles.find(c => c.name && (n.startsWith(c.name.toLowerCase()) ||
-      c.name.toLowerCase().startsWith(n))) || null;
 }
 
 // A circle doc's circle: the one whose Drive item holds it, or else the one
@@ -431,32 +398,17 @@ function circleOfDoc(docId, email) {
 }
 
 // Run from the editor: fills in the empty rows of About this circle (Zoom
-// room, calendar, email address, Drive folder, parent, sub-circles) in every built
-// circle doc, for docs built before those rows were filled in. Rows that
-// already say something are left alone.
+// room, calendar, email address, Drive folder) in every built circle doc,
+// for docs built before those rows were filled in, and writes the parent
+// and sub-circles (see refreshStructureRows). Rows that already say
+// something are left alone, but for those two.
 function fillAboutForCircleDocs() {
+  const ctx = loadStructureContext();
   for (const file of builtCircleDocs()) {
-    const props = file.properties || {};
-    const email = props[AGENDA_KEYS.group];
-    const subNames = subNamesOf(props);
-    fillAbout(file.id, null, email, circleOfDoc(file.id, email), props[AGENDA_KEYS.parent],
-      subNames, true);
+    const email = (file.properties || {})[AGENDA_KEYS.group];
+    fillAbout(file.id, null, email, circleOfDoc(file.id, email), true);
+    if (ctx) refreshStructureRowsOf(file, ctx);
     logLink('Filled in ' + file.name + ':', 'https://docs.google.com/document/d/' + file.id + '/edit');
-  }
-}
-
-// Run from the editor: rewrites the Parent Circle and Sub-Circles rows of
-// every built circle doc from its labels, the sub-circles as a bulleted
-// list (for docs built when they were a comma-separated line). Anything
-// typed into those rows by hand is replaced.
-function rewriteStructureRowsInCircleDocs() {
-  for (const file of builtCircleDocs()) {
-    const props = file.properties || {};
-    const email = props[AGENDA_KEYS.group];
-    fillAbout(file.id, null, email, circleOfDoc(file.id, email), props[AGENDA_KEYS.parent],
-      subNamesOf(props), false, STRUCTURE_ROWS);
-    logLink('Rewrote the parent and sub-circles of ' + file.name + ':',
-      'https://docs.google.com/document/d/' + file.id + '/edit');
   }
 }
 
@@ -464,7 +416,7 @@ function rewriteStructureRowsInCircleDocs() {
 // (ABOUT_LABELS) in every built doc with an older layout, renames its
 // Circle Google Drive Folder row Google Drive Folder, and rewrites that row
 // (linked by the circle's name) and the Parent Circle and Sub-Circles rows
-// from its labels; then labels it with ABOUT_ORDER_LAYOUT. Only the rows
+// (from the Circle Structure); then labels it with ABOUT_ORDER_LAYOUT. Only the rows
 // the scripts fill in move; the rows filled in by hand (ABOUT_HAND_FILLED)
 // stay where they are, so their smart chips are kept. A doc it can't
 // reorder (its rows aren't the expected ones, say) is left as it is, and
@@ -504,14 +456,16 @@ function tryReorderAboutOnCopy() {
 }
 
 // Reorders a doc's About this circle, and rewrites its Google Drive Folder
-// (if its circle has one), Parent Circle, and Sub-Circles rows from labels
-// props (the doc's own, or the doc it was copied from).
+// row (if its circle has one), and its Parent Circle and Sub-Circles rows
+// (from the Circle Structure), for the group labelled in props (the doc's
+// own labels, or those of the doc it was copied from).
 function reorderAboutAndFill(docId, props) {
   reorderAbout(docId);
   const email = props[AGENDA_KEYS.group];
   const circle = circleOfDoc(docId, email);
-  const rows = (circle && circle.driveItemId ? ['Google Drive Folder'] : []).concat(STRUCTURE_ROWS);
-  fillAbout(docId, null, email, circle, props[AGENDA_KEYS.parent], subNamesOf(props), false, rows);
+  if (circle && circle.driveItemId) fillAbout(docId, null, email, circle, false, ['Google Drive Folder']);
+  const ctx = loadStructureContext();
+  if (ctx) refreshStructureRows(docId, ctx, ctx.groups.find(g => g.email === (email || '').toLowerCase()) || null);
 }
 
 // Puts a doc's About this circle rows in ABOUT_LABELS' order (moving only
@@ -573,8 +527,7 @@ function addNewAboutRowsToCircleDocs() {
     try {
       const added = addNewAboutRows(file.id);
       const email = props[AGENDA_KEYS.group];
-      fillAbout(file.id, null, email, circleOfDoc(file.id, email), props[AGENDA_KEYS.parent],
-        subNamesOf(props), false, [CALENDAR_ROW_LABEL]);
+      fillAbout(file.id, null, email, circleOfDoc(file.id, email), false, [CALENDAR_ROW_LABEL]);
       Drive.Files.update({properties: {[AGENDA_KEYS.layout]: String(NEW_ROWS_LAYOUT)}},
         file.id, null, {supportsAllDrives: true});
       logLink((added.length ? 'Added ' + added.join(' and ') + ' to ' : 'Relabelled ') +
@@ -782,4 +735,46 @@ function isEmptyDoc(docId) {
 function setAgendaState(docId, state) {
   Drive.Files.update({properties: {[AGENDA_KEYS.state]: state}}, docId, null,
     {supportsAllDrives: true});
+}
+
+// Run from the editor: puts back the Roles table's role labels (column 1)
+// in every built doc where a bulleted list has got into one. (An earlier
+// version, making the Circle Structure's Sub-Circles bullets with the Docs
+// API from an out-of-date read of the doc, deleted 8 characters of some of
+// those cells and bulleted them.) Logs each doc it changed.
+function repairRoleLabelsInCircleDocs() {
+  for (const file of builtCircleDocs()) {
+    try {
+      const fixed = repairRoleLabels(file.id);
+      if (fixed.length) {
+        logLink('Put back ' + fixed.join(', ') + ' in the Roles of ' + file.name + ':',
+          'https://docs.google.com/document/d/' + file.id + '/edit');
+      }
+    } catch (e) {
+      console.error('Couldn\'t check the Roles of ' + file.name + ': ' + e.message);
+    }
+  }
+}
+
+// Rewrites each role label cell of a doc's Roles table that holds a list
+// item, as rolesTable writes it (the table's rows are ROLE_LABELS, in
+// order). Returns the names of the roles put back.
+function repairRoleLabels(docId) {
+  const doc = DocumentApp.openById(docId);
+  const found = findRow(firstTabBody(doc), text => text.startsWith('Circle Roles'));
+  if (!found || found.table.getNumRows() !== ROLE_LABELS.length + 1) return [];
+  const fixed = [];
+  ROLE_LABELS.forEach(([name, what], i) => {
+    const cell = found.table.getCell(i + 1, 0);
+    let listed = false;
+    for (let k = 0; k < cell.getNumChildren(); k++) {
+      if (cell.getChild(k).getType() === DocumentApp.ElementType.LIST_ITEM) listed = true;
+    }
+    if (!listed) return;
+    resetCell(cell);
+    writeCell(cell, [roleLabelRuns(name, what)]);
+    fixed.push(name);
+  });
+  doc.saveAndClose();
+  return fixed;
 }

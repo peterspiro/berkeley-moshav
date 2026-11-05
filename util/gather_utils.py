@@ -539,8 +539,8 @@ def login(page: Page, base_url: str, email: str, password: str) -> None:
 # editor is then broken for the rest of that visit, and setting its text
 # (_codemirror_set) fails with "Cannot read properties of undefined
 # (reading 'value')". A script opening the same edit form twice in one
-# run (as update_groups_in_google_and_hierarchy.py does, to read the
-# Circle Structure page and later to write it) hit that every time.
+# run (as update_groups.py did, to read the old
+# Circle Structure wiki page and later to write it) hit that every time.
 CLEAR_EDITOR_AUTOSAVE_JS = """
 try {
   for (const key of Object.keys(localStorage)) {

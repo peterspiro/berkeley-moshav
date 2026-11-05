@@ -12,9 +12,17 @@ Their main job is keeping these things linked together and consistent:
   [Google Drive settings](https://berkeley-moshav.gather.coop/gdrive/config)
 - **[Google Groups](https://groups.google.com/all-groups)** in the
   `berkeleymoshav.org` Workspace, which serve as each Gather group's email list
-- The **[Circle Structure](https://berkeley-moshav.gather.coop/wiki/circle-structure)**
-  wiki page in Gather, a tree of the circles and working groups with links to
-  each one's members, documents, and wiki page
+- The **Circle Structure**, the tree of the circles and working groups: a
+  Google Sheet where the Coordinating Circle
+  (`coordinating-circle@berkeleymoshav.org`) changes a group's parent and
+  nothing else, and a Google Doc, which anyone with the link can view, that
+  shows the tree with links to each group's agenda doc, members, documents,
+  and email list. The `circle_agendas` Apps Script fills in both from the
+  Google Groups' footers, and writes each circle's place (its parents,
+  sub-circles, and links to its parent) into its agenda doc. Both are in a
+  "Circle Structure" folder at the top of the Shared Drive. (It replaced the
+  [Circle Structure](https://berkeley-moshav.gather.coop/wiki/circle-structure)
+  wiki page in Gather.)
 - Each group's **Google calendar**, owned by `admin@berkeleymoshav.org` and
   shared with the group's Google Group so its members can add meetings, and
   its permanent **Zoom meeting room**, owned by the
@@ -43,7 +51,8 @@ A fourth, **`circle_agendas`**, will run the circle agenda docs (see
 doc, and runs the web app that the links in an agenda doc open (so far, to add
 a meeting, add an agenda item, and update a meeting's times); a meeting's
 "✉ Announce agenda" link opens an email to the circle's list in Gmail,
-announcing that its agenda is ready.
+announcing that its agenda is ready. It also keeps the Circle Structure (see
+above and `circle_agendas/structure.gs`).
 
 The repo also keeps, in `archive/`, the one-off scripts that were used to
 migrate the community into Gather (members, households, groups, photos) and
@@ -86,7 +95,7 @@ passcode exposes nothing more. Passcodes are six digits, to be easy to type
 and read out.
 
 The footer is the only record of which calendar and Zoom room belong to a
-group; `update_groups_in_google_and_hierarchy.py` and `add_new_group.py`
+group; `update_groups.py` and `add_new_group.py`
 create them and write the links. A new calendar is shared with the group's
 Google Group as "Make changes to events", so membership of the Google Group
 (kept in step with Drive above) decides who can use it. The scripts only set
@@ -98,6 +107,11 @@ A group linked to a shared drive has a "Shared Drive:" line instead of
 item's permissions to copy into the group, so a new group starts syncing as
 soon as its footer is written, with no redeploy. Rewriting the block keeps any
 calendar and Zoom links already in it, along with anything written above it.
+
+The footers are also where the `circle_agendas` Apps Script finds the groups
+for the Circle Structure sheet: each group whose footer links a Gather group
+and a Drive item gets a row, keyed by its Gather group ID, so a rename keeps
+its place.
 
 ## Setup
 
@@ -187,7 +201,7 @@ share a calendar with its group when it isn't shared with the group at all).
    they can change who edits without asking the Technology Circle.
 
 Members who can't edit still get every meeting's invitation.
-`update_groups_in_google_and_hierarchy.py` shows a restricted calendar in its
+`update_groups.py` shows a restricted calendar in its
 status line as "calendar (members can view, not edit)".
 
 ## Directories
@@ -198,7 +212,7 @@ status line as "calendar (members can view, not edit)".
 | `groups_drive_sync/` | Apps Script project that syncs each Google Group's membership from its Drive item |
 | `calendar_notifications/` | Apps Script project that announces and gatekeeps events on the shared community calendar |
 | `group_meetings/` | Apps Script project that adds Zoom rooms and guests to group calendar events, and warns about overlapping meetings |
-| `circle_agendas/` | Apps Script project for the circle agenda docs: building them, and the web app their links run |
+| `circle_agendas/` | Apps Script project for the circle agenda docs (building them, and the web app their links run) and the Circle Structure sheet and doc |
 | `util/` | Shared Python modules used by the scripts |
 | `tests/` | Unit tests (`pytest`) |
 | `archive/` | One-off scripts and plans that are no longer in use, kept for reference |
@@ -215,16 +229,21 @@ status line as "calendar (members can view, not edit)".
 - **`add_new_group.py`** creates a complete new group in one step: the Drive
   folder, the Google Group (optionally with a shorter address), the Gather
   group with its manager, and the group's calendar and Zoom room; links them
-  all together; adds the group to the Circle Structure page, and the new
-  sub-circle to its parent's agenda doc's About this circle; with
+  all together; unless it's a club, has the group put under its parent
+  (`-p`, a circle, or for a working group a circle or working group) in the
+  Circle Structure, by writing the parent to "Circle structure
+  placements.json" in `admin@`'s My Drive for the `circle_agendas` Apps
+  Script, which adds the group to the sheet from its footer within the hour; with
   `--agenda-doc`, for a circle or working group, creates its agenda doc,
   for the `circle_agendas` Apps Script to build; and opens a welcome email to the new list as a draft in
   your mail program.
-- **`update_groups_in_google_and_hierarchy.py`** brings every group (or one,
+- **`update_groups.py`** brings every group (or one,
   with `-g`) into line: offers to find or create a missing Drive folder or
   email list, enforces the Google Group settings, gives each group a calendar
-  and Zoom room, writes the footer links, and updates the Circle Structure page
-  (renames, links, missing and stale entries). Its first run also creates the
+  and Zoom room, and writes the footer links. (It was
+  `update_groups_in_google_and_hierarchy` while it also kept the Circle
+  Structure wiki page; the `circle_agendas` Apps Script now keeps the Circle
+  Structure, from the footers.) Its first run also creates the
   "All Berkeley Moshav Events" calendar, which it shares view-only with the
   everybody groups (with `-g`, only if `--share-all-events` is given, since
   finding them means reading every group from Gather). When it creates a group's calendar, it emails the
@@ -253,10 +272,7 @@ status line as "calendar (members can view, not edit)".
   every circle and working group (not everybody groups) that has a Drive item and an email list an agenda doc,
   "<Group> Agenda", created empty in its Drive item and labelled for the
   `circle_agendas` Apps Script to build within minutes; a group that has
-  one keeps it, and if its parent or sub-circles on the Circle Structure page
-  differ from the doc's, the doc is relabelled and the Apps Script rewrites
-  those rows of its About this circle (so moving an entry by hand is caught
-  here). Each run (with `-g` too) writes every Gather member's
+  one keeps it. Each run (with `-g` too) writes every Gather member's
   short name
   (first name, with the last initial if another member shares it), by
   their Gather email and their Google Email, to "Circle agenda member
@@ -326,17 +342,15 @@ status line as "calendar (members can view, not edit)".
 - **`audit_group_memberships.py`** is a read-only report of where a group's
   Gather membership, Drive permissions, and Google Group membership disagree,
   plus setup problems and anyone else with access to its Drive item.
-- **`add_group_wiki_page.py`** creates a wiki page for one group and adds a
-  `[Wiki]` link to its row on the Circle Structure page.
-- **`change_parent_circle.py`** moves a circle or working group, with its
-  sub-circles, under a different parent circle on the Circle Structure page
-  (both found by a prefix of their names). It then relabels the agenda docs
-  of the group and of its old and new parents with their new parent and
-  sub-circles, and the `circle_agendas` Apps Script rewrites the Parent Circle
-  and Sub-Circles rows of their About this circle within 10 minutes. A group's
-  parent is recorded only on that page. Moving an entry there by hand works
-  too, but the agenda docs aren't updated until the next
-  `update_groups_in_google_and_hierarchy.py --agenda-docs` run.
+- **`add_group_wiki_page.py`** creates a wiki page for one group.
+- **`seed_circle_structure.py`** copies each group's parent from the old
+  Circle Structure wiki page in Gather into the Circle Structure sheet, once,
+  before `setupCircleStructure` makes the sheet (see
+  `circle_agendas/README.md`): it writes the parents, by Gather group ID, to
+  "Circle structure placements.json" in `admin@`'s My Drive, and the
+  `circle_agendas` Apps Script gives them to the groups whose Parent is
+  still empty, if the rules allow it, as soon as the groups have rows. Rows without a
+  `[Members]` link, and the rows under them, are listed and skipped.
 - **`change_group_email_alias.py`** gives a group's Google Group a new, usually
   shorter, address and moves the Gather group's email list over to it.
 - **`setup.sh`** installs and starts a local Gather development instance, for
@@ -389,8 +403,8 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
   it reads from Script Properties.
 
 - **`circle_agendas/`** builds each circle's agenda doc (on a timer, and a
-  preview by hand from the Apps Script editor), and is the web app behind the links in an agenda
-  doc. See `circle_agendas/README.md`.
+  preview by hand from the Apps Script editor), is the web app behind the links in an agenda
+  doc, and keeps the Circle Structure. See `circle_agendas/README.md`.
   - **`circle_agendas/web_app.gs`** is the web app, deployed to run as
     `admin@berkeleymoshav.org` for anyone with a Google account: a link in
     an agenda doc names an action, the doc, and a meeting, and the web app
@@ -415,11 +429,12 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
   - **`circle_agendas/circle_docs.gs`** builds each circle's and working
     group's agenda doc, every 10 minutes: each doc the Python scripts
     created empty and labelled "new" is built, gets its group's name,
-    calendar, email address, Drive folder, parent, and sub-circles (as a bulleted
-    list) in About this circle, and is
+    calendar, email address, Drive folder, and place in the Circle
+    Structure in About this circle, and is
     relabelled "built", with its layout version. On the same timer, it
-    rewrites the Parent Circle and Sub-Circles rows of each built doc that
-    `change_parent_circle.py` or `add_new_group.py` has relabelled. Below
+    applies any change to the Circle Structure (see `structure.gs`), and puts
+    back the Parent Circle and Sub-Circles rows of each doc changed since
+    if they no longer say what they should. Below
     About this circle's Zoom room row come a link to the circle's
     calendar and the Remind before meetings row, which says when the circle's
     meetings get reminders (`group_meetings` reads it); run by hand, it
@@ -427,6 +442,23 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
     table's Name dropdowns up to date with the circle's members (as adding
     a meeting also does) and colors red its Term ends dates that are past; on the 10-minute
     timer, it does that to each doc changed since.
+  - **`circle_agendas/structure.gs`** keeps the Circle Structure:
+    `setupCircleStructure`, run once, makes the sheet (shared with
+    `coordinating-circle@`, who can edit only its Parent column, a dropdown
+    of the groups each may be under) and the doc. Hourly, it brings the
+    sheet's rows up to date with the Google Groups' footers (new groups,
+    renames, links, types, groups that are gone, and the parents waiting in
+    "Circle structure placements.json"). On each edit, and every 10
+    minutes, it refuses a parent the rules don't allow (putting back the one
+    from before, with a note on the cell saying why), updates the dropdowns
+    and the Problems column, and rewrites the doc and the Parent Circle and
+    Sub-Circles rows of the agenda docs whose place changed: its parent, and
+    its sub-circles and working groups, each linked to its agenda doc. Each
+    day it rewrites those rows in every doc where they've gone out of date.
+  - **`circle_agendas/structure_rules.gs`** holds the Circle Structure's
+    rules (a circle only under a circle, a working group under a circle or
+    working group, no loops; a group's type from its Drive folder's name: "Circle", or "Working Group", "Work Group", "Team", or "Pod" for a working group),
+    the tree, and what an agenda doc's rows say, tested under Node.
   - **`circle_agendas/build_template.gs`** builds an agenda doc from a
     blank doc, entirely from code (so it depends on no other document):
     each circle's doc, and a preview, rebuilt in place, for trying changes.
@@ -446,8 +478,13 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
   and Directory and Groups Settings API helpers
 - **`google_group_footer.py`**: reading and writing the auto-managed footer
   links
-- **`hierarchy_wiki.py`**: parsing, editing (including moving an entry to
-  another parent), and saving the Circle Structure page
+- **`hierarchy_wiki.py`**: reading the old Circle Structure wiki page (for
+  `seed_circle_structure.py`), and writing it (for
+  `archive/data_import/import_groups.py`)
+- **`circle_structure_placements.py`**: the parents the Python scripts give
+  groups in the Circle Structure sheet, written to "Circle structure
+  placements.json" for the `circle_agendas` Apps Script, and which kinds of
+  group can be under which
 - **`wiki_utils.py`**: per-group wiki pages
 - **`folder_matching.py`**: fuzzy matching of group names to folder and
   Google Group names (and, including acronyms, to calendars, Zoom meetings,
@@ -464,9 +501,7 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
 - **`member_names.py`**: members' short names by email address, from the Gather
   directory, written to `admin@`'s Drive for the circle agenda docs
 - **`circle_agenda_docs.py`**: creating a circle's or working group's agenda
-  doc, empty and labelled for the `circle_agendas` Apps Script to build, and
-  relabelling it when its parent or sub-circles change (in
-  `change_parent_circle.py` and `add_new_group.py`)
+  doc, empty and labelled for the `circle_agendas` Apps Script to build
 
 ### `archive/`: no longer in use
 

@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 """
-Syncs Google (Drive folders + Groups) and the "Circle Hierarchy" wiki page
-with the current /groups list.
+Syncs Google (Drive folders, Groups, calendars, Zoom rooms, and agenda
+docs) with the current /groups list. (It doesn't touch the Circle
+Structure, a Google Sheet that the circle_agendas Apps Script keeps up to
+date with the groups' footers; see circle_agendas/structure.gs. Until that
+replaced the Circle Structure wiki page, this script was
+update_groups_in_google_and_hierarchy.py, and kept the page too.)
 
 For every circle/working group in Gather (kind "circle" or "committee"),
 excluding hidden groups:
@@ -60,55 +64,25 @@ excluding hidden groups:
       circle_agendas/circles.gs). In a -g run too.
   0g. With -a/--agenda-docs, gives every circle and working group (not
       everybody groups) with a Drive item and an email list an agenda doc,
-      created empty in its Drive item and labelled for the circle_agendas Apps Script to build
-      (see util/circle_agenda_docs.py). A group that has one keeps it,
-      relabelled with its parent and sub-circles if they've changed on the
-      Circle Structure page, for the Apps Script to rewrite those rows of
-      its About this circle.
-  1.  If it's already in the hierarchy but has been renamed, updates the
-      hierarchy line to the current name (matched by Gather group ID, embedded
-      in the [Members] link, so renames don't break the association).
-  2.  If it has a Drive folder linked (via /gdrive/config) but the hierarchy
-      line is missing a [Documents] link, adds one. If the linked folder has
-      changed, updates the existing link. If the folder has been unlinked
-      entirely, removes the [Documents] link.
-  3.  If it's missing from the hierarchy entirely, prompts for a prefix that
-      uniquely matches an existing hierarchy entry's name, and adds it as a
-      child of that entry — inserted alphabetically among its siblings.
-      (Clubs are never offered here — steps 0a/0b still give them a Drive
-      folder, Google Group, and mailing list, but they're excluded from the
-      Circle Hierarchy entirely.)
-  4.  If a hierarchy entry's linked group no longer exists in Gather, asks
-      whether to delete it (reparenting any children to keep the tree intact).
+      created empty in its Drive item and labelled for the circle_agendas
+      Apps Script to build (see util/circle_agenda_docs.py). A group that
+      has one keeps it.
 
-Hidden and deactivated/inactive groups are skipped entirely: not offered
-for addition, not flagged as stale if their hierarchy entry still
-references them.
-
-The outermost hierarchy entry (the root) is always forced to represent the
-"everyone" group: named "Full Community (Circle of Everyone / Top Circle /
-HOA)", linked to the "Full Community" Gather group via [Members], and
-linked to the root Shared Drive page (/gdrive) via [Documents]. This
-happens unconditionally on every run, overwriting any manual edits to that
-line.
+Hidden and deactivated/inactive groups are skipped entirely.
 
 With -g/--group PREFIX, only the one group whose name starts with PREFIX
 (case-insensitive; it must match exactly one Gather group, which mustn't be
-hidden or deactivated) is processed: steps 0a-0e run for just that group,
-and in the hierarchy only that group's own row is renamed/re-linked (or
-added if missing). Hierarchy-wide passes — forcing the root entry, and
-removing entries for deleted/deactivated groups — are skipped, since they
-need every group's state. To keep the run fast, only that group's detail
+hidden or deactivated) is processed: steps 0a-0g run for just that group. To keep the run fast, only that group's detail
 page and footer are read, and the Shared Drive folder tree is only walked
 if it's actually needed (the group has no folder yet, or its linked folder
 can only be resolved by name).
 
-In dry-run mode (-n), missing/stale entries and folder/email-list gaps are
-only reported, never prompted for.
+In dry-run mode (-n), folder/email-list gaps are only reported, never
+prompted for.
 
 Every interactive prompt accepts 'q' (or 'quit') to stop immediately —
 whatever's already been done (Drive folders linked, groups created,
-footer links, hierarchy edits) is still saved.
+footer links) is still saved.
 
 Requires Google API access (Drive, Admin Directory, Groups Settings,
 Calendar):
@@ -123,9 +97,9 @@ Calendar):
 Also requires the Zoom app's credentials in zoom_credentials (see README.md).
 
 Usage:
-    python update_groups_in_google_and_hierarchy.py -e admin@example.com -p secret
-    python update_groups_in_google_and_hierarchy.py -u https://example.gather.coop -n
-    python update_groups_in_google_and_hierarchy.py -g landscape
+    python update_groups.py -e admin@example.com -p secret
+    python update_groups.py -u https://example.gather.coop -n
+    python update_groups.py -g landscape
 """
 
 import argparse
@@ -215,19 +189,8 @@ from util.meeting_rooms import (
     list_owned_calendars,
 )
 from util.zoom_utils import ZoomClient
-from util.hierarchy_wiki import (
-    WIKI_SLUG,
-    HierarchyNode,
-    ensure_hierarchy_page,
-    fetch_hierarchy_page_content,
-    iter_nodes,
-    parse_hierarchy,
-    remove_node,
-    render_hierarchy,
-)
-
-_LOG_FILE = Path("debug/update_groups_in_google_and_hierarchy_log.csv")
-_SCREENSHOT_DIR = Path("debug/update_groups_in_google_and_hierarchy_screenshots")
+_LOG_FILE = Path("debug/update_groups_log.csv")
+_SCREENSHOT_DIR = Path("debug/update_groups_screenshots")
 
 configure(_LOG_FILE, _SCREENSHOT_DIR)
 
@@ -237,10 +200,6 @@ ELIGIBLE_KINDS = {"circle", "committee", "club"}
 # weren't offered for moving, because the group's calendar already existed.
 MOVE_EVENTS_HINT = ("(Those events weren't offered for moving onto the group's calendar, "
                     "since it already existed; run with -m/--move-events to move them.)")
-
-# Clubs get a Drive folder, Google Group, and mailing list like any other
-# group, but are never added to the Circle Hierarchy wiki page.
-HIERARCHY_ELIGIBLE_KINDS = {"circle", "committee"}
 
 # Gather "Availability" value for a group open to the whole community. For
 # these groups we leave the Google Group's whoCanModerateContent setting and
@@ -260,16 +219,7 @@ class QuitScript(Exception):
     """Raised when the user asks to quit at any interactive prompt.
 
     Caught in main(), which stops asking further questions but still saves
-    whatever progress was already made (footer links, the hierarchy page)."""
-
-
-class HierarchyIntegrityError(Exception):
-    """Raised when the hierarchy is in a state the script won't silently
-    resolve — specifically, a row whose Gather group is gone (deleted or
-    deactivated) but which still carries a [Wiki] link, meaning a wiki page
-    is listed for it that a human must delete (along with the link) first.
-    Aborts the run rather than dropping the row out from under a live wiki
-    page."""
+    whatever progress was already made (footer links, calendars)."""
 
 
 def check_quit(answer: str) -> None:
@@ -384,12 +334,9 @@ def fetch_group_info(page, base_url: str) -> tuple[dict[str, dict], set[str], se
     "list_domain"}}, excluded_group_ids, deactivated_group_ids).
 
     Hidden and deactivated/inactive groups are reported separately (not
-    included in info) so callers can skip them entirely — neither offered
-    for addition nor flagged as stale if a hierarchy entry still
-    references them. excluded_group_ids is the union of both (hidden and
-    deactivated); deactivated_group_ids is the subset that's deactivated —
-    unlike merely-hidden groups, deactivated groups should also be removed
-    from the hierarchy outright.
+    included in info) so callers can skip them entirely.
+    excluded_group_ids is the union of both (hidden and deactivated);
+    deactivated_group_ids is the subset that's deactivated.
     """
     groups = fetch_all_gather_groups(page, base_url)
     log("INFO", "fetch_groups", f"{len(groups)} group(s) found")
@@ -559,36 +506,6 @@ def fetch_documents_url_by_group_id(
         documents_url_by_group_id, linked_group_ids,
         google_file_id_by_group_id, item_type_by_group_id,
     )
-
-
-# ── Interactive parent selection ───────────────────────────────────────────────
-
-def prompt_for_parent(group_name: str, all_nodes: list) -> "object | None":
-    """Ask the user for a prefix uniquely matching an existing hierarchy
-    node's name. Returns the matched node, or None if the user skips."""
-    while True:
-        prefix = input(
-            f"Group '{group_name}' is not in the hierarchy. Enter a prefix "
-            f"uniquely matching its parent circle's name (blank to skip, "
-            f"'q' to quit): "
-        ).strip()
-        check_quit(prefix)
-        if not prefix:
-            return None
-        matches = [n for n in all_nodes if n.name.lower().startswith(prefix.lower())]
-        if len(matches) == 1:
-            return matches[0]
-        if not matches:
-            print(f"  No hierarchy entry starts with {prefix!r}. Try again.")
-        else:
-            names = ", ".join(f"'{n.name}'" for n in matches)
-            print(f"  Ambiguous — matches {len(matches)} entries: {names}. Try again.")
-
-
-def prompt_yes_no(question: str) -> bool:
-    answer = input(f"{question} [y/N/q]: ").strip().lower()
-    check_quit(answer)
-    return answer in ("y", "yes")
 
 
 # ── Step 1: ensure every eligible group has a Drive folder ────────────────────
@@ -1220,237 +1137,21 @@ def ensure_group_footers(
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
-FULL_COMMUNITY_GROUP_NAME = "Full Community"
-ROOT_NODE_NAME = "Full Community (Circle of Everyone / Top Circle / HOA)"
-ROOT_DOCUMENTS_URL = "/gdrive"
-
-
 def ensure_agenda_docs(drive_service, group_info: dict[str, dict],
                        email_by_group_id: dict[str, str],
-                       google_file_id_by_group_id: dict[str, str], root,
-                       dry_run: bool) -> None:
+                       google_file_id_by_group_id: dict[str, str], dry_run: bool) -> None:
     """Give every circle and working group (not everybody groups) that has a
     Drive item and an email list an agenda doc, labelled for the
-    circle_agendas Apps Script to build (see util/circle_agenda_docs.py),
-    and relabel each one it already has whose parent or sub-circles on the
-    Circle Structure page have changed, for the Apps Script to rewrite
-    those rows of About this circle."""
-    parent_by_group_id = {n.group_id: n.parent.name for n in iter_nodes(root)
-                          if n.group_id and n.parent is not None}
-    subs_by_group_id = {n.group_id: sorted((c.name for c in n.children), key=str.casefold)
-                        for n in iter_nodes(root) if n.group_id}
+    circle_agendas Apps Script to build (see util/circle_agenda_docs.py)."""
     for group_id, info in group_info.items():
         email = email_by_group_id.get(group_id)
         item_id = google_file_id_by_group_id.get(group_id)
         if info["kind"] not in AGENDA_KINDS or _is_everybody(info) or not email or not item_id:
             continue
         try:
-            ensure_agenda_doc(drive_service, email, info["name"], item_id,
-                              parent_by_group_id.get(group_id), dry_run,
-                              subs_by_group_id.get(group_id, []), sync_existing=True)
+            ensure_agenda_doc(drive_service, email, info["name"], item_id, dry_run)
         except Exception as e:
             log("ERROR", "agenda_doc", f"{info['name']}: {e}")
-
-
-def ensure_root_node(root, group_info: dict[str, dict], dry_run: bool) -> None:
-    """Force the hierarchy root's name/links to always be the "everyone"
-    group: [Members] -> the "Full Community" Gather group, [Documents] ->
-    the root Shared Drive page (/gdrive).
-
-    Unlike every other node, the root isn't matched/renamed by its
-    group_id via sync_hierarchy (see the `node is root` skip there) —
-    its identity is fixed by this function instead.
-    """
-    full_community_id = next(
-        (gid for gid, info in group_info.items()
-         if info["name"].casefold() == FULL_COMMUNITY_GROUP_NAME.casefold()),
-        None,
-    )
-    if full_community_id is None:
-        log("WARN", "root_node",
-            f"No Gather group named '{FULL_COMMUNITY_GROUP_NAME}' found; "
-            "leaving hierarchy root untouched")
-        return
-
-    members_url = f"/groups/{full_community_id}"
-    changes = []
-    if root.name != ROOT_NODE_NAME:
-        changes.append(f"name: {root.name!r} -> {ROOT_NODE_NAME!r}")
-    if root.members_url != members_url:
-        changes.append(f"[Members] -> {members_url}")
-    if root.documents_url != ROOT_DOCUMENTS_URL:
-        changes.append(f"[Documents] -> {ROOT_DOCUMENTS_URL}")
-    if not changes:
-        return
-
-    if dry_run:
-        print(f"[dry-run] Would update hierarchy root: {'; '.join(changes)}")
-        log("INFO", "would_update_root", "; ".join(changes))
-        return
-
-    root.name = ROOT_NODE_NAME
-    root.group_id = full_community_id
-    root.members_url = members_url
-    root.documents_url = ROOT_DOCUMENTS_URL
-    print(f"Updated hierarchy root: {'; '.join(changes)}")
-    log("INFO", "update_root", "; ".join(changes))
-
-
-def _guard_wiki_link_on_removal(node, reason: str) -> None:
-    """Refuse to drop a hierarchy row that still has a [Wiki] link.
-
-    Removing such a row would orphan the group's wiki page (which this
-    script never deletes). Raise so a human deletes the wiki page and its
-    [Wiki] link first. Applies whether the group was fully deleted or just
-    deactivated.
-    """
-    if node.wiki_url:
-        raise HierarchyIntegrityError(
-            f"'{node.name}' (id={node.group_id}) {reason}, but its hierarchy row "
-            f"still lists a wiki page ([Wiki]({node.wiki_url})). Delete that wiki "
-            "page and remove its [Wiki] link from the hierarchy, then re-run."
-        )
-
-
-def sync_hierarchy(
-    root, group_info: dict[str, dict], documents_url_by_group_id: dict[str, str],
-    linked_group_ids: set[str], excluded_ids: set[str], deactivated_ids: set[str], dry_run: bool,
-    only_group_id: str | None = None,
-) -> None:
-    """Mutate the parsed hierarchy tree in place: rename, add/alter/remove
-    Documents links, prompt for deletion of stale entries.
-
-    Deactivated groups are removed from the hierarchy outright (no
-    prompt, since they're gone for good, not just excluded from
-    consideration). Merely-hidden groups are left untouched.
-
-    A row whose group is gone (deleted or deactivated) but which still
-    carries a [Wiki] link is never dropped: it raises HierarchyIntegrityError
-    so a human deletes the orphaned wiki page and its link first.
-
-    The root node itself is skipped — its name/links are forced by
-    ensure_root_node(), not by the generic rename/link-sync rules here.
-
-    If only_group_id is given, every other row is left untouched (group_info
-    then holds only that group, so it can't tell which others still exist).
-    """
-    for node in list(iter_nodes(root)):
-        if node is root or not node.group_id:
-            continue
-        if only_group_id is not None and node.group_id != only_group_id:
-            continue
-
-        if node.group_id in deactivated_ids:
-            _guard_wiki_link_on_removal(node, "deactivated")
-            if dry_run:
-                print(f"[dry-run] '{node.name}' (id={node.group_id}) is deactivated; "
-                      f"would remove from the hierarchy")
-                log("INFO", "would_remove_deactivated", f"{node.name} (id={node.group_id})")
-            else:
-                remove_node(node)
-                log("INFO", "remove_deactivated", f"{node.name} (id={node.group_id})")
-            continue
-
-        if node.group_id in excluded_ids:
-            continue
-
-        live = group_info.get(node.group_id)
-        if live is None:
-            _guard_wiki_link_on_removal(node, "no longer exists in Gather")
-            if dry_run:
-                print(f"[dry-run] '{node.name}' (id={node.group_id}) no longer exists "
-                      f"in Gather; would prompt to delete")
-                log("INFO", "would_remove", f"{node.name} (id={node.group_id})")
-            elif prompt_yes_no(
-                f"Group '{node.name}' (id={node.group_id}) is in the hierarchy "
-                f"but no longer exists in Gather. Delete it from the hierarchy?"
-            ):
-                remove_node(node)
-                log("INFO", "remove", f"{node.name} (id={node.group_id})")
-            continue
-
-        # In a dry run the tree is still edited in memory (it's never saved),
-        # so later steps see the same names and links a real run would.
-        if node.name != live["name"]:
-            _report_hierarchy_edit(
-                dry_run, "rename", f"{node.name!r} -> {live['name']!r} (id={node.group_id})",
-                f"rename '{node.name}' -> '{live['name']}'",
-            )
-            node.name = live["name"]
-
-        current_documents_url = documents_url_by_group_id.get(node.group_id)
-
-        if not node.documents_url:
-            if current_documents_url:
-                _report_hierarchy_edit(
-                    dry_run, "add_documents_link", f"{node.name} (id={node.group_id})",
-                    f"add Documents link for '{node.name}'",
-                )
-                node.documents_url = current_documents_url
-        elif current_documents_url and current_documents_url != node.documents_url:
-            _report_hierarchy_edit(
-                dry_run, "update_documents_link",
-                f"{node.name} (id={node.group_id}): {node.documents_url!r} -> {current_documents_url!r}",
-                f"update Documents link for '{node.name}'",
-            )
-            node.documents_url = current_documents_url
-        elif not current_documents_url and node.group_id not in linked_group_ids:
-            _report_hierarchy_edit(
-                dry_run, "remove_documents_link", f"{node.name} (id={node.group_id})",
-                f"remove Documents link for '{node.name}' (folder no longer linked)",
-            )
-            node.documents_url = ""
-
-
-def _report_hierarchy_edit(dry_run: bool, event: str, detail: str, action: str) -> None:
-    """Log and print one Circle Structure edit. action is lower-case
-    ("rename 'A' -> 'B'"); a dry run reports it as "would <action>" and
-    logs "would_<event>", like the script's other steps."""
-    if dry_run:
-        log("INFO", f"would_{event}", detail)
-        print(f"[dry-run] Circle Structure: would {action}")
-    else:
-        log("INFO", event, detail)
-        print(f"Circle Structure: {action[0].upper()}{action[1:]}")
-
-
-def add_missing_groups(
-    root, group_info: dict[str, dict], documents_url_by_group_id: dict[str, str],
-    dry_run: bool,
-) -> None:
-    """Prompt for and add any eligible group not yet present in the hierarchy."""
-    tree_group_ids = {n.group_id for n in iter_nodes(root) if n.group_id}
-    all_nodes = list(iter_nodes(root))
-
-    missing = [
-        (gid, info) for gid, info in group_info.items()
-        if info["kind"] in HIERARCHY_ELIGIBLE_KINDS and gid not in tree_group_ids
-    ]
-    missing.sort(key=lambda item: item[1]["name"].casefold())
-
-    for group_id, info in missing:
-        if dry_run:
-            print(f"[dry-run] '{info['name']}' (id={group_id}) is missing from the "
-                  f"hierarchy; would prompt for its parent circle")
-            log("INFO", "would_add_missing", f"{info['name']} (id={group_id})")
-            continue
-
-        parent = prompt_for_parent(info["name"], all_nodes)
-        if parent is None:
-            log("INFO", "skip_missing", f"{info['name']} (id={group_id})")
-            continue
-
-        new_node = HierarchyNode(
-            name=info["name"],
-            group_id=group_id,
-            members_url=info["url"],
-            documents_url=documents_url_by_group_id.get(group_id, ""),
-            parent=parent,
-        )
-        parent.children.append(new_node)
-        all_nodes.append(new_node)
-        log("INFO", "add_missing", f"{info['name']} (id={group_id}) under '{parent.name}'")
-        print(f"Added '{info['name']}' under '{parent.name}'")
 
 
 def main(base_url: str, email: str, password: str, dry_run: bool,
@@ -1483,9 +1184,6 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
             browser.close()
             sys.exit(1)
 
-        current_content = fetch_hierarchy_page_content(page, base_url)
-        root = parse_hierarchy(current_content)
-
         # Members' names, for the circle agenda docs' attendance lists.
         publish_member_names(
             drive_service, build_member_names(fetch_all_gather_users(page, base_url)), dry_run)
@@ -1516,10 +1214,8 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
                 log("WARN", "resolve_group",
                     f"'{target['name']}' is of kind {target['kind']!r}, not one of "
                     f"{sorted(ELIGIBLE_KINDS)} — its Google setup will be left alone")
-            excluded_ids: set[str] = set()
-            deactivated_ids: set[str] = set()
         else:
-            group_info, excluded_ids, deactivated_ids = fetch_group_info(page, base_url)
+            group_info = fetch_group_info(page, base_url)[0]
             target_id = None
 
         # Fetched on first use only — a single-group run often needs neither.
@@ -1627,36 +1323,9 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
                                created_calendar_group_ids, calendar_id_by_group_id,
                                room_by_group_id, dry_run, draft_email)
 
-        if not quit_requested:
-            try:
-                # The root and stale-entry passes need every group's state,
-                # so a single-group run skips them.
-                if target_id is None:
-                    ensure_root_node(root, group_info, dry_run)
-                sync_hierarchy(
-                    root, group_info, documents_url_by_group_id, linked_group_ids,
-                    excluded_ids, deactivated_ids, dry_run, only_group_id=target_id,
-                )
-                add_missing_groups(root, group_info, documents_url_by_group_id, dry_run)
-                if agenda_docs:
-                    ensure_agenda_docs(drive_service, group_info, email_by_group_id,
-                                       google_file_id_by_group_id, root, dry_run)
-            except QuitScript:
-                quit_requested = True
-                print("\nQuit requested — saving progress made so far.")
-                log("INFO", "quit", "User quit during the hierarchy sync step")
-            except HierarchyIntegrityError as e:
-                # The tree is in a state we refuse to persist — abort without
-                # writing the hierarchy page so the offending row is left intact.
-                log("ERROR", "hierarchy_integrity", str(e))
-                browser.close()
-                close_log()
-                sys.exit(f"Error: {e}")
-
-        new_content = render_hierarchy(root)
-        ok = ensure_hierarchy_page(page, base_url, new_content, dry_run)
-        if not ok:
-            log("ERROR", "sync", "Failed to write hierarchy wiki page — see log")
+        if not quit_requested and agenda_docs:
+            ensure_agenda_docs(drive_service, group_info, email_by_group_id,
+                               google_file_id_by_group_id, dry_run)
 
         browser.close()
 
@@ -1665,8 +1334,8 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
 
 def cli():
     parser = argparse.ArgumentParser(
-        description="Sync Google Drive folders/Groups and the Circle Hierarchy wiki page "
-                    "with the current /groups list",
+        description="Sync Google Drive folders, Groups, calendars, Zoom rooms, and agenda "
+                    "docs with the current /groups list",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
@@ -1675,7 +1344,7 @@ def cli():
     )
     parser.add_argument(
         "-n", "--dry-run", action="store_true",
-        help="Log what would change without writing the wiki page",
+        help="Log what would change without changing anything",
     )
     parser.add_argument(
         "-c", "--credentials", default=str(DEFAULT_CLIENT_SECRETS_PATH),
@@ -1721,8 +1390,7 @@ def cli():
     parser.add_argument(
         "-a", "--agenda-docs", action="store_true",
         help="Give each circle and working group without one an agenda doc, for the "
-             "circle_agendas Apps Script to build, and update existing docs' parent and "
-             "sub-circles from the Circle Structure page (with -g, just that group)",
+             "circle_agendas Apps Script to build (with -g, just that group)",
     )
     args = parser.parse_args()
 
