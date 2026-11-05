@@ -344,7 +344,8 @@ the sheet's editors, which in a shared drive can't. It has three parts:
   group's acronym, as in "Development, Finance, & Legal Circle (DF&L)"; a
   club, a group linked to a shared drive, and a group whose names don't
   say are "Not in the structure"), **Problems** (why a group isn't in the structure, or isn't
-  placed yet), the email list (a mailto link), and links to the Gather group, Drive
+  placed yet), the email list (a mailto link; these two columns are fitted
+  to their text whenever it changes), and links to the Gather group, Drive
   folder, and agenda doc.
 - **The doc**, "Circle Structure", which anyone
   with the link can view (or, if the domain doesn't allow that, anyone in

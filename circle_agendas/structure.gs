@@ -94,7 +94,6 @@ function setupCircleStructure() {
   sheet.setColumnWidth(SCOL.group, 220);
   sheet.setColumnWidth(SCOL.type, 140);
   sheet.setColumnWidth(SCOL.parent, 220);
-  sheet.setColumnWidth(SCOL.problems, 360);
   sheet.hideColumns(SCOL.id);
   for (const p of sheet.getProtections(SpreadsheetApp.ProtectionType.SHEET)) p.remove();
   const protection = sheet.protect().setDescription('Filled in by the Circle Structure script');
@@ -325,6 +324,7 @@ function syncGroups() {
   sheet.getRange(2, SCOL.problems, n, 1).setValues(rows.map(r => [r.problems]));
   sheet.getRange(2, SCOL.email, n, 1).setRichTextValues(rows.map(r => [
     text(r.email, r.email ? 'mailto:' + r.email : null)]));
+  fitTextColumns(sheet);
   sheet.getRange(2, SCOL.gather, n, 3).setRichTextValues(rows.map(r => [
     text(r.gatherUrl ? 'Members' : '', r.gatherUrl), text('Documents', r.folderUrl),
     text(r.agendaUrl ? 'Agenda' : '', r.agendaUrl)]));
@@ -338,6 +338,11 @@ function syncGroups() {
   });
   const added = rows.filter(r => r.isNew).map(r => r.name);
   if (added.length) console.log('Circle Structure: added ' + added.join(', ') + '.');
+}
+
+// Fits the Problems and Email list columns' widths to their text.
+function fitTextColumns(sheet) {
+  sheet.autoResizeColumns(SCOL.problems, 2);
 }
 
 // What guessGroupType needs to know of a Drive item: {name, isSharedDrive,
@@ -460,6 +465,7 @@ function applyStructure() {
       const current = groups.map(g => [g.problems]);
       if (JSON.stringify(current) !== JSON.stringify(problems)) {
         sheet.getRange(2, SCOL.problems, rows, 1).setValues(problems);
+        fitTextColumns(sheet);
       }
       sheet.getRange(2, SCOL.parent, rows, 1).setDataValidations(groups.map(g => {
         const choices = parentChoices(g, groups, tree.children);
