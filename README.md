@@ -452,11 +452,9 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
     minutes, it refuses a parent the rules don't allow (putting back the one
     from before, with a note on the cell saying why), updates the dropdowns
     and the Problems column, and rewrites the doc and the Parent Circle and
-    Sub-Circles rows of the agenda docs whose place changed: its parent, with
-    its next meeting (linked on the all-events calendar, which everyone can
-    view), and its sub-circles and working groups, each linked to its
-    agenda doc. Each day it rewrites those rows in every doc where they've
-    gone out of date.
+    Sub-Circles rows of the agenda docs whose place changed: its parent, and
+    its sub-circles and working groups, each linked to its agenda doc. Each
+    day it rewrites those rows in every doc where they've gone out of date.
   - **`circle_agendas/structure_rules.gs`** holds the Circle Structure's
     rules (a circle only under a circle, a working group under a circle or
     working group, no loops; a group's type from its Drive folder's name: "Circle", or "Working Group", "Work Group", "Team", or "Pod" for a working group),

@@ -231,9 +231,8 @@ class TestGroupProblem:
 class TestStructureRows:
     PLACE = {
         "status": "placed",
-        "parent": {"name": "Land", "url": "u2", "next": {"text": "Mon, Nov 9", "url": "e2"}},
-        "children": [{"name": "Compost", "url": "u4", "next": {"text": "Thu, Nov 12", "url": "e4"}},
-                     {"name": "Seeds", "url": None, "next": None}],
+        "parent": {"name": "Land", "url": "u2"},
+        "children": [{"name": "Compost", "url": "u4"}, {"name": "Seeds", "url": None}],
         "structureUrl": "doc",
     }
 
@@ -245,10 +244,9 @@ class TestStructureRows:
         assert self.text(rows["parentLabel"]) == ["Parent Circle", "(Set in the Circle Structure)"]
         hint = rows["parentLabel"][1]["runs"][0][1]
         assert hint["link"] == "doc" and hint["small"]
-        assert self.text(rows["parentValue"]) == ["Land · next meeting Mon, Nov 9"]
+        assert self.text(rows["parentValue"]) == ["Land"]
         assert rows["parentValue"][0]["runs"][0][1]["link"] == "u2"
-        assert rows["parentValue"][0]["runs"][2][1]["link"] == "e2"
-        assert self.text(rows["subValue"]) == ["Compost · next meeting Thu, Nov 12", "Seeds"]
+        assert self.text(rows["subValue"]) == ["Compost", "Seeds"]
         assert all(p["bullet"] for p in rows["subValue"])
 
     @pytest.mark.parametrize("status, text", [
@@ -285,12 +283,6 @@ def test_shared_drive_id_matches_python():
     from util.gdrive_config import DEFAULT_DRIVE_ID
     text = (PROJECT / "structure.gs").read_text()
     assert f"const SHARED_DRIVE_ID = '{DEFAULT_DRIVE_ID}';" in text
-
-
-def test_all_events_calendar_id_matches_python():
-    from util.meeting_rooms import ALL_EVENTS_CALENDAR_ID
-    text = (PROJECT / "structure.gs").read_text()
-    assert f"'{ALL_EVENTS_CALENDAR_ID}'" in text
 
 
 @pytest.mark.parametrize("aliases, address", [

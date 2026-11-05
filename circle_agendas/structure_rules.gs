@@ -274,23 +274,15 @@ function parentCellText(parent, groupsById) {
 // this circle: {parentLabel, parentValue, subLabel, subValue}, each a list
 // of paragraphs, {bullet, runs}, a run [text, {bold, muted, small, link}].
 // place: {status: 'placed' | 'top' | 'unplaced' | 'out', parent: {name,
-// url, next} (for 'placed'), children: [{name, url, next}],
-// structureUrl (the sheet, where it's set)}, next a group's next meeting,
-// {text, url}, or null.
+// url} (for 'placed'), children: [{name, url}], structureUrl (the sheet,
+// where it's set)}.
 const STRUCTURE_HINT = '(Set in the Circle Structure)';
 function structureRows(place) {
   const hint = label => [{runs: [[label, {bold: true}]]},
     {runs: [[STRUCTURE_HINT, {muted: true, small: true, link: place.structureUrl || null}]]}];
   const note = text => [{runs: [[text, {muted: true}]]}];
-  // A group's name, linked, and its next meeting.
-  const line = item => {
-    const runs = [[item.name, item.url ? {link: item.url} : {}]];
-    if (item.next) {
-      runs.push([' · next meeting ', {muted: true}]);
-      runs.push([item.next.text, item.next.url ? {link: item.next.url, muted: true} : {muted: true}]);
-    }
-    return runs;
-  };
+  // A group's name, linked.
+  const line = item => [[item.name, item.url ? {link: item.url} : {}]];
   let parentValue;
   if (place.status === 'top') {
     parentValue = note('None: this is the top circle.');

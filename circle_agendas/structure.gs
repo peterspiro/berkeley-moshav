@@ -27,7 +27,7 @@
  * - refreshStructureRows writes one agenda doc's rows, if they don't say
  *   what they should: for the docs whose place changed, each doc edited in
  *   the last BUILD_EVERY_MINUTES (checkChangedCircleDocs, circle_docs.gs),
- *   and every doc daily (for the next meetings they list).
+ *   and every doc daily.
  */
 
 // Who can change the structure: they can edit the sheet's Parent column.
@@ -496,7 +496,7 @@ function applyStructure() {
   // roles; the docs of the groups whose place changed are rewritten.
   const oldPlaces = JSON.parse(props.getProperty(STRUCTURE_PLACES_KEY) || '{}');
   const places = {};
-  for (const g of groups) places[g.id] = shortHash(JSON.stringify(placeOf(ctx, g, true)));
+  for (const g of groups) places[g.id] = shortHash(JSON.stringify(placeOf(ctx, g)));
   for (const g of groups) {
     if (places[g.id] === oldPlaces[g.id] || !g.agendaUrl) continue;
     const docId = docIdOf(g.agendaUrl);
@@ -546,9 +546,7 @@ function applyPlacements(sheet, groups) {
 function structureContext(groups, parentOf, tree) {
   const byId = {};
   for (const g of groups) byId[g.id] = g;
-  const circles = {};
-  for (const c of loadCircles()) circles[c.email] = c;
-  return {groups, byId, parentOf, tree, circles, structureUrl: structureSheetUrl(), meetings: {}};
+  return {groups, byId, parentOf, tree, structureUrl: structureSheetUrl()};
 }
 
 // The sheet's groups and parents, for refreshing agenda docs outside
@@ -701,58 +699,18 @@ const STRUCTURE_DOC_LAYOUT = 3;
 
 // ── A circle's place, in its agenda doc ──────────────────────────────────────
 
-// What structureRows needs to write a group's rows (see there); without
-// meetings if bare (for telling whether its place has changed).
-function placeOf(ctx, g, bare) {
-  const item = id => ({name: ctx.byId[id].name, url: groupUrl(ctx.byId[id]), next: null});
+// What structureRows needs to write a group's rows (see there).
+function placeOf(ctx, g) {
+  const item = id => ({name: ctx.byId[id].name, url: groupUrl(ctx.byId[id])});
   let status = 'placed';
   if (!g || !inStructure(g)) status = 'out';
   else if (ctx.parentOf[g.id] === TOP) status = 'top';
   else if (!ctx.tree.placed[g.id]) status = 'unplaced';
   const place = {status, parent: null, children: [], structureUrl: ctx.structureUrl};
   if (status === 'out') return place;
-  if (status === 'placed') {
-    place.parent = item(ctx.parentOf[g.id]);
-    if (!bare) place.parent.next = nextMeetingOf(ctx, ctx.byId[ctx.parentOf[g.id]]);
-  }
-  // The sub-circles without their next meetings: only the parent's is shown.
-  place.children = (ctx.tree.children[g.id] || []).map(id => Object.assign(item(id), {next: null}));
+  if (status === 'placed') place.parent = item(ctx.parentOf[g.id]);
+  place.children = (ctx.tree.children[g.id] || []).map(item);
   return place;
-}
-
-// The calendar every group's meetings are invited to (as
-// ALL_EVENTS_CALENDAR_ID in util/meeting_rooms.py and group_meetings.gs),
-// which everyone can view, unlike most groups' own calendars.
-const ALL_EVENTS_CALENDAR_ID =
-  'c_301c808f640b3a04f5344b1bbf266955d51fecaabd7835936b7591f9cff09222@group.calendar.google.com';
-
-// A link to an event's copy on the all-events calendar, which shares its
-// ID: an eid, as an event's htmlLink has, of its ID and that calendar's.
-function allEventsEventUrl(eventId) {
-  const eid = Utilities.base64EncodeWebSafe(eventId + ' ' + ALL_EVENTS_CALENDAR_ID).replace(/=+$/, '');
-  return 'https://www.google.com/calendar/event?eid=' + eid;
-}
-
-// A group's next meeting, from its calendar: {text, url}, or null; the url
-// opens it on the all-events calendar (see allEventsEventUrl).
-function nextMeetingOf(ctx, g) {
-  if (!g) return null;
-  if (g.id in ctx.meetings) return ctx.meetings[g.id];
-  let meeting = null;
-  const circle = ctx.circles[g.email];
-  if (circle && circle.calendarId) {
-    try {
-      const event = nextEvents(circle, new Date(), 1)[0];
-      if (event) {
-        meeting = {text: Utilities.formatDate(new Date(event.start.dateTime), TIME_ZONE, 'EEE, MMM d'),
-          url: allEventsEventUrl(event.id)};
-      }
-    } catch (e) {
-      console.warn('Couldn\'t read ' + g.name + '\'s calendar: ' + e.message);
-    }
-  }
-  ctx.meetings[g.id] = meeting;
-  return meeting;
 }
 
 // The group a circle agenda doc belongs to: by the doc linked in the sheet,
@@ -778,7 +736,7 @@ function groupOfDoc(ctx, docId, email) {
 // doesn't already say that. g: the doc's group (null if it has none).
 // Returns whether it wrote anything. Does nothing to a doc without the rows.
 function refreshStructureRows(docId, ctx, g) {
-  const place = placeOf(ctx, g, false);
+  const place = placeOf(ctx, g);
   const want = structureRows(place);
   const doc = DocumentApp.openById(docId);
   const found = findRow(firstTabBody(doc), text => text === 'Circle email address');
@@ -863,7 +821,7 @@ function cellParagraphs(cell) {
 }
 
 // Writes the rows (see refreshStructureRows) in every built circle doc that
-// doesn't say what it should: run daily, for the next meetings they list.
+// doesn't say what it should: run daily, to catch any the other runs missed.
 function refreshStructureInAllCircleDocs() {
   const ctx = loadStructureContext();
   if (!ctx) return;
