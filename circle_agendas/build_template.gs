@@ -181,6 +181,10 @@ const BOLD = {[A.BOLD]: true};
 // Table text is all Docs' default size; secondary text is grey.
 const MUTED = {[A.FOREGROUND_COLOR]: COLOR.muted};
 const HINT = {[A.FOREGROUND_COLOR]: COLOR.hint};
+// The point size of the small grey hints under About this circle's labels:
+// Remind before meetings' how to write it, and the Parent Circle and
+// Sub-Circles rows' "(Managed here. See Circle Structure.)".
+const LABEL_HINT_SIZE = 8;
 
 // Lays out the template's first tab. It has no meetings: each gets a tab of
 // its own, added by "+ New meeting".
@@ -242,20 +246,23 @@ function aboutTable(body) {
 // runs, or none).
 function writeAboutRow(row, label, paragraphs) {
   const labelCell = row.getCell(0);
-  writeCell(labelCell, [[[label[0], BOLD]], ...(label[1] ? [[[label[1], MUTED]]] : [])]);
+  const small = {[A.FOREGROUND_COLOR]: COLOR.muted, [A.FONT_SIZE]: LABEL_HINT_SIZE};
+  writeCell(labelCell, [[[label[0], BOLD]], ...(label[1] ? [[[label[1], small]]] : [])]);
   alignCell(labelCell, DocumentApp.HorizontalAlignment.RIGHT);
   labelCell.setBackgroundColor(COLOR.aboutLabel);
   writeCell(row.getCell(1), paragraphs.length ? paragraphs : [[]]);
   row.getCell(1).setBackgroundColor(COLOR.aboutValue);
 }
 
-// The Roles table's roles, in order: [name, what it does].
+// The Roles table's roles, in order: [name, what it does]. (Docs built
+// before layout ROLE_ORDER_LAYOUT have them in OLD_ROLE_ORDER.)
 const ROLE_LABELS = [
   ['Leader', 'supports circle operations'],
-  ['Feedback Link', 'second voice in parent circle'],
-  ['Facilitator', 'facilitates meetings'],
   ['Secretary', 'minutes and circle docs'],
+  ['Facilitator', 'facilitates meetings'],
+  ['Feedback Link', 'second voice in parent circle'],
 ];
+const OLD_ROLE_ORDER = ['Leader', 'Feedback Link', 'Facilitator', 'Secretary'];
 
 // A role's label cell's runs: its name, and what it does, in grey.
 function roleLabelRuns(name, what) {

@@ -245,7 +245,7 @@ The Remind before meetings row says when the circle's email list gets an email
 reminder of each meeting (`group_meetings/` sends them, and reads the row's
 value cell hourly): it holds only the setting, "24 hours" to start with
 (empty means that default too). How to write it is the grey second line of
-the label cell: "e.g. 2 days; 90 minutes; 2 days, 1 hour; none". (A meeting's own
+the label cell, in small (8 pt) type: "e.g. 2 days; 90 minutes; 2 days, 1 hour; none". (A meeting's own
 `[remind 2 hours]` or `[no reminder]`, in its description, wins; each
 reminder email says so.)
 
@@ -288,7 +288,15 @@ says so, to replace by hand. It labels the doc layout version 4, and skips
 docs on older layouts (run `addNewAboutRowsToCircleDocs` first). To see
 what it does first, run **`tryUpgradeRolesOnCopy`**: it upgrades an
 unlabelled copy of one such doc, in your My Drive, and logs its link
-(delete the copy after). It can also be run by hand, to build waiting docs at once; the
+(delete the copy after).
+The Roles are in the order Leader, Secretary, Facilitator, Feedback Link
+(`ROLE_LABELS`). Docs built before layout version 5 have them as Leader,
+Feedback Link, Facilitator, Secretary, and Remind before meetings' hint
+at full size; **`upgradeRoleOrderInCircleDocs`**, run in the editor,
+changes every doc on layout version 4 over, moving each Roles row whole
+(so its Name dropdown and Term ends date go with it), and labels it layout
+version 5. **`tryUpgradeRoleOrderOnCopy`** does it to an unlabelled copy
+of one such doc first, as `tryUpgradeRolesOnCopy` does. It can also be run by hand, to build waiting docs at once; the
 log links each doc it built.
 
 The Docs API part of building (`replaceTokens`) reads the doc's positions
@@ -343,8 +351,8 @@ the sheet's editors, which in a shared drive can't. It has three parts:
   one), **Gather
   group** (a link), **Guests** and **Meeting times** (see below), **Drive
   folder** and **Agenda doc** (links), one column for
-  each role in the agenda doc's Roles table (**Leader**, **Feedback Link**,
-  **Facilitator**, **Secretary**: who its Name dropdown shows, read
+  each role in the agenda doc's Roles table (**Leader**, **Secretary**,
+  **Facilitator**, **Feedback Link**: who its Name dropdown shows, read
   hourly), **Type** (Circle or Working Group, from the name of the group's
   Drive folder, or else of the group: one ending in "Circle" is a circle's,
   and one ending in "Working Group", "Work Group", "Team", or "Pod" a
@@ -363,7 +371,7 @@ the sheet's editors, which in a shared drive can't. It has three parts:
   who has left Full Community shows as a guest.)
   **Meeting times** says, read hourly from the group's calendar (the one its
   footer links), when its meetings in the next 8 weeks are, linking the
-  all-events calendar: a line for each repeating meeting, in alphabetical
+  all-events calendar, in week view: a line for each repeating meeting, in alphabetical
   order (numbers by value, so "1st Mon" comes before "3rd Mon"), from its
   series' repeat rule and usual times (so a meeting
   moved for one week changes nothing): "Tue 7:30–9 pm", "Mon & Thu 7–8 pm",

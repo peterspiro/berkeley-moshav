@@ -62,7 +62,7 @@ const SYNC_EVERY_HOURS = 1;
 
 // The roles in an agenda doc's Roles table, each of which has a column
 // showing who holds it (the names in ROLE_LABELS, build_template.gs).
-const STRUCTURE_ROLES = ['Leader', 'Feedback Link', 'Facilitator', 'Secretary'];
+const STRUCTURE_ROLES = ['Leader', 'Secretary', 'Facilitator', 'Feedback Link'];
 // The sheet's columns, in order: [key, heading]. Email list shows the
 // group's shortest address (see listAddress); Address, its Google Group's
 // primary address, which the script matches on. Gather ID, the Gather
@@ -86,12 +86,13 @@ const STRUCTURE_COLUMNS = STRUCTURE_HEADINGS.length;
 const HEADING_WIDE_COLUMNS = ['email', 'guests'];
 // The community's calendar of every group's meetings (ALL_EVENTS_CALENDAR_ID
 // in util/meeting_rooms.py, and in group_meetings), which the Meeting times
-// cells link.
+// cells link, opening in week view.
 const ALL_EVENTS_CALENDAR_ID =
   'c_301c808f640b3a04f5344b1bbf266955d51fecaabd7835936b7591f9cff09222@group.calendar.google.com';
 function allEventsUrl() {
   return 'https://calendar.google.com/calendar/embed?src=' +
-    encodeURIComponent(ALL_EVENTS_CALENDAR_ID) + '&ctz=' + encodeURIComponent(TIME_ZONE);
+    encodeURIComponent(ALL_EVENTS_CALENDAR_ID) + '&ctz=' + encodeURIComponent(TIME_ZONE) +
+    '&mode=WEEK';
 }
 const PARENT_HELP = 'The circle it\'s under (for a working group, the circle or working group).';
 
@@ -1012,17 +1013,13 @@ function writeStructureCell(cell, paragraphs) {
   if (paragraphs.length && paragraphs[0].bullet) placeholder.removeFromParent();
 }
 
-// The point size of the label cells' "(Managed here. See Circle
-// Structure.)".
-const STRUCTURE_HINT_SIZE = 8;
-
 // A paragraph of structureRows as runs for writeRuns.
 function docRuns(p) {
   const runs = p.runs.map(([text, style]) => {
     const attrs = {};
     if (style.bold) attrs[A.BOLD] = true;
     if (style.muted) attrs[A.FOREGROUND_COLOR] = COLOR.muted;
-    if (style.small) attrs[A.FONT_SIZE] = STRUCTURE_HINT_SIZE;
+    if (style.small) attrs[A.FONT_SIZE] = LABEL_HINT_SIZE;
     if (style.link) attrs[A.LINK_URL] = style.link;
     return [text, Object.keys(attrs).length ? attrs : null];
   });

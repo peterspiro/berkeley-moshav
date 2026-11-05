@@ -41,13 +41,17 @@ const AGENDA_STATE_NOT_EMPTY = 'not empty';
 // below Zoom room.
 // 4: the Roles table's Name a dropdown of the circle's members, and its Term
 // ends a date chip.
-const LAYOUT_VERSION = 4;
+// 5: the Roles in ROLE_LABELS' new order (Leader, Secretary, Facilitator,
+// Feedback Link), and Remind before meetings' hint in LABEL_HINT_SIZE.
+const LAYOUT_VERSION = 5;
 // The first layout version with About this circle in ABOUT_LABELS' order.
 const ABOUT_ORDER_LAYOUT = 2;
 // The first layout version with the Circle calendar and Remind before meetings rows.
 const NEW_ROWS_LAYOUT = 3;
 // The first layout version with the Roles' dropdowns and date chips.
 const ROLES_CHIPS_LAYOUT = 4;
+// The first layout version with the Roles in ROLE_LABELS' order.
+const ROLE_ORDER_LAYOUT = 5;
 const BUILD_EVERY_MINUTES = 10;
 
 // The hour (in the script's time zone) updateRolesInCircleDocs runs, each
@@ -737,6 +741,96 @@ function setAgendaState(docId, state) {
     {supportsAllDrives: true});
 }
 
+// Run from the editor: in every built doc of layout version 4 (with the
+// Roles' dropdowns and date chips), puts the Roles in ROLE_LABELS' order
+// and makes Remind before meetings' hint small (see upgradeRoleOrder), and
+// labels the doc ROLE_ORDER_LAYOUT. Docs on an older layout are skipped:
+// run upgradeRolesInCircleDocs first. tryUpgradeRoleOrderOnCopy tries it
+// on a copy.
+function upgradeRoleOrderInCircleDocs() {
+  for (const file of builtCircleDocs()) {
+    const layout = Number((file.properties || {})[AGENDA_KEYS.layout] || 1);
+    if (layout >= ROLE_ORDER_LAYOUT) continue;
+    if (layout < ROLES_CHIPS_LAYOUT) {
+      console.warn('Skipped ' + file.name + ': run upgradeRolesInCircleDocs first.');
+      continue;
+    }
+    try {
+      upgradeRoleOrder(file.id);
+      Drive.Files.update({properties: {[AGENDA_KEYS.layout]: String(ROLE_ORDER_LAYOUT)}},
+        file.id, null, {supportsAllDrives: true});
+      logLink('Reordered the Roles in ' + file.name + ':',
+        'https://docs.google.com/document/d/' + file.id + '/edit');
+    } catch (e) {
+      console.error('Couldn\'t reorder the Roles in ' + file.name + ': ' + e.message);
+    }
+  }
+}
+
+// Run from the editor: copies the first built doc that
+// upgradeRoleOrderInCircleDocs would change into your My Drive, unlabelled
+// (so no script acts on it), changes the copy as that would, and logs its
+// link, to look at (are the Name dropdowns and Term ends dates still
+// there?) before running upgradeRoleOrderInCircleDocs. Delete the copy
+// after.
+function tryUpgradeRoleOrderOnCopy() {
+  const file = builtCircleDocs().find(f => {
+    const layout = Number((f.properties || {})[AGENDA_KEYS.layout] || 1);
+    return layout >= ROLES_CHIPS_LAYOUT && layout < ROLE_ORDER_LAYOUT;
+  });
+  if (!file) return Logger.log('No built doc needs its Roles reordered.');
+  const copy = DriveApp.getFileById(file.id).makeCopy('Roles order test: ' + file.name,
+    DriveApp.getRootFolder());
+  const unlabel = {};
+  for (const key of Object.keys(file.properties || {})) unlabel[key] = null;
+  Drive.Files.update({properties: unlabel}, copy.getId(), null, {supportsAllDrives: true});
+  upgradeRoleOrder(copy.getId());
+  logLink('Reordered the Roles in a copy of ' + file.name + ':',
+    'https://docs.google.com/document/d/' + copy.getId() + '/edit');
+}
+
+// Puts a doc's Roles table's rows in ROLE_LABELS' order, moving each whole
+// row (a copy keeps its Name dropdown and Term ends date chip, as the
+// probes found), and gives Remind before meetings' hint LABEL_HINT_SIZE.
+// Throws, changing nothing, if the Roles table isn't one row per role.
+function upgradeRoleOrder(docId) {
+  const doc = DocumentApp.openById(docId);
+  const body = firstTabBody(doc);
+  const found = findRow(body, text => text.startsWith('Circle Roles'));
+  if (!found) throw new Error('it has no Roles table');
+  const table = found.table;
+  const rowOf = name => {
+    for (let r = 1; r < table.getNumRows(); r++) {
+      if (table.getCell(r, 0).getText().trim().startsWith(name + ' (')) return r;
+    }
+    return -1;
+  };
+  const order = ROLE_LABELS.map(([name]) => rowOf(name));
+  if (table.getNumRows() !== ROLE_LABELS.length + 1 || order.includes(-1)) {
+    throw new Error('its Roles table isn\'t one row for each of ' +
+      ROLE_LABELS.map(([name]) => name).join(', '));
+  }
+  if (order.some((r, i) => r !== i + 1)) {
+    const copies = order.map(r => table.getRow(r).copy());
+    for (let r = table.getNumRows() - 1; r >= 1; r--) table.removeRow(r);
+    copies.forEach((row, i) => table.insertTableRow(i + 1, row));
+  }
+  const reminder = findRow(body, text => aboutLabel(text) === REMINDER_ROW_LABEL);
+  if (reminder) {
+    for (let c = 0; c < reminder.row.getNumCells(); c++) {
+      const cell = reminder.row.getCell(c);
+      if (aboutLabel(cell.getText()) !== REMINDER_ROW_LABEL) continue;
+      for (let i = 1; i < cell.getNumChildren(); i++) {
+        const el = cell.getChild(i);
+        if (el.getType() === DocumentApp.ElementType.PARAGRAPH && el.asParagraph().getText().trim()) {
+          el.asParagraph().editAsText().setFontSize(LABEL_HINT_SIZE);
+        }
+      }
+    }
+  }
+  doc.saveAndClose();
+}
+
 // Run from the editor: puts back the Roles table's role labels (column 1)
 // in every built doc where a bulleted list has got into one. (An earlier
 // version, making the Circle Structure's Sub-Circles bullets with the Docs
@@ -745,7 +839,8 @@ function setAgendaState(docId, state) {
 function repairRoleLabelsInCircleDocs() {
   for (const file of builtCircleDocs()) {
     try {
-      const fixed = repairRoleLabels(file.id);
+      const fixed = repairRoleLabels(file.id,
+        Number((file.properties || {})[AGENDA_KEYS.layout] || 1));
       if (fixed.length) {
         logLink('Put back ' + fixed.join(', ') + ' in the Roles of ' + file.name + ':',
           'https://docs.google.com/document/d/' + file.id + '/edit');
@@ -758,13 +853,16 @@ function repairRoleLabelsInCircleDocs() {
 
 // Rewrites each role label cell of a doc's Roles table that holds a list
 // item, as rolesTable writes it (the table's rows are ROLE_LABELS, in
-// order). Returns the names of the roles put back.
-function repairRoleLabels(docId) {
+// order, or, in a doc built before ROLE_ORDER_LAYOUT, OLD_ROLE_ORDER).
+// Returns the names of the roles put back.
+function repairRoleLabels(docId, layout) {
   const doc = DocumentApp.openById(docId);
   const found = findRow(firstTabBody(doc), text => text.startsWith('Circle Roles'));
   if (!found || found.table.getNumRows() !== ROLE_LABELS.length + 1) return [];
   const fixed = [];
-  ROLE_LABELS.forEach(([name, what], i) => {
+  const labels = (layout || LAYOUT_VERSION) >= ROLE_ORDER_LAYOUT ? ROLE_LABELS
+    : OLD_ROLE_ORDER.map(name => ROLE_LABELS.find(([n]) => n === name));
+  labels.forEach(([name, what], i) => {
     const cell = found.table.getCell(i + 1, 0);
     let listed = false;
     for (let k = 0; k < cell.getNumChildren(); k++) {
