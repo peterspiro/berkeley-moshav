@@ -322,7 +322,13 @@ const ABOUT_ADDED_AFTER = {[CALENDAR_ROW_LABEL]: 'Zoom room', [REMINDER_ROW_LABE
 // util/google_group_footer.py, writes it): the ID, base64-encoded without
 // padding, percent-encoded.
 function calendarUrl(calendarId) {
-  const bytes = unescape(encodeURIComponent(calendarId));
+  return 'https://calendar.google.com/calendar/u/0?cid=' +
+    encodeURIComponent(base64NoPadding(calendarId));
+}
+
+// Text (UTF-8) as base64, without padding.
+function base64NoPadding(text) {
+  const bytes = unescape(encodeURIComponent(text));
   let out = '';
   for (let i = 0; i < bytes.length; i += 3) {
     const n = (bytes.charCodeAt(i) << 16) | ((bytes.charCodeAt(i + 1) || 0) << 8) |
@@ -330,7 +336,7 @@ function calendarUrl(calendarId) {
     const chars = Math.min(4, Math.ceil((bytes.length - i) * 4 / 3));
     for (let k = 0; k < chars; k++) out += BASE64_ALPHABET[(n >> (18 - 6 * k)) & 63];
   }
-  return 'https://calendar.google.com/calendar/u/0?cid=' + encodeURIComponent(out);
+  return out;
 }
 
 // Where to insert the rows ABOUT_ADDED_LATER that a doc's About this circle

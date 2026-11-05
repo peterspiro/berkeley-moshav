@@ -86,15 +86,10 @@ const STRUCTURE_COLUMNS = STRUCTURE_HEADINGS.length;
 const HEADING_WIDE_COLUMNS = ['email', 'guests'];
 // The community's calendar of every group's meetings (ALL_EVENTS_CALENDAR_ID
 // in util/meeting_rooms.py, and in group_meetings), which the Meeting times
-// cells link, opening in week view, at the week of the meeting a line is
-// about.
+// cells link: each line opens the next meeting it's about there, with its
+// details (see eventUrl).
 const ALL_EVENTS_CALENDAR_ID =
   'c_301c808f640b3a04f5344b1bbf266955d51fecaabd7835936b7591f9cff09222@group.calendar.google.com';
-function allEventsUrl(date) {
-  return 'https://calendar.google.com/calendar/embed?src=' +
-    encodeURIComponent(ALL_EVENTS_CALENDAR_ID) + '&ctz=' + encodeURIComponent(TIME_ZONE) +
-    '&mode=WEEK' + (date ? '&dates=' + weekOf(date) : '');
-}
 // The sheet's first row, above the headings (HEAD_ROW): a line linking the
 // doc, and saying how the structure is changed. The rows start at
 // FIRST_ROW.
@@ -185,6 +180,8 @@ function sheetLaidOut(sheet) {
 // Writes STRUCTURE_INTRO in the first row's first cell, its start linking
 // the doc.
 function writeStructureIntro(sheet) {
+  // Plain, so it keeps no look (bold, a link's blue) from what was there.
+  sheet.getRange(1, 1, 1, sheet.getMaxColumns()).clearFormat();
   const url = structureDocUrl();
   const intro = SpreadsheetApp.newRichTextValue().setText(STRUCTURE_INTRO);
   if (url) intro.setLinkUrl(0, STRUCTURE_INTRO_LINK.length, url);
@@ -202,8 +199,7 @@ function layOutSheet(sheet) {
   all.clearContent().clearNote().setDataValidation(null);
   sheet.showColumns(1, sheet.getMaxColumns());
   writeStructureIntro(sheet);
-  sheet.getRange(HEAD_ROW, 1, 1, STRUCTURE_COLUMNS).setValues([STRUCTURE_HEADINGS])
-    .setFontWeight('bold');
+  sheet.getRange(HEAD_ROW, 1, 1, STRUCTURE_COLUMNS).setValues([STRUCTURE_HEADINGS]);
   sheet.getRange(HEAD_ROW, SCOL.parent).setNote(PARENT_HELP);
   sheet.setFrozenRows(HEAD_ROW);
   sheet.hideColumns(SCOL.id, 2);
@@ -455,6 +451,10 @@ function syncGroups() {
   // Plain formatting, so no cell keeps a look (a link's blue, say) from
   // what was there before.
   sheet.getRange(FIRST_ROW, 1, n, STRUCTURE_COLUMNS).clearFormat();
+  // The headings too, but bold (fitColumns, below, cuts off the narrow
+  // ones' text again).
+  sheet.getRange(HEAD_ROW, 1, 1, sheet.getMaxColumns()).clearFormat();
+  sheet.getRange(HEAD_ROW, 1, 1, STRUCTURE_COLUMNS).setFontWeight('bold');
   const text = (t, url) => SpreadsheetApp.newRichTextValue().setText(t || '').setLinkUrl(url || null).build();
   sheet.getRange(FIRST_ROW, SCOL.group, n, 1).setValues(rows.map(r => [r.name]));
   sheet.getRange(FIRST_ROW, SCOL.email, n, 1).setRichTextValues(rows.map(r => [
@@ -495,20 +495,22 @@ function meetingTimesCell(calendarId, old) {
   if (!calendarId) return {meetingLines: []};
   try {
     const lines = meetingTimesOf(calendarId);
-    return {meetingLines: lines.length ? lines : [{text: 'None scheduled', date: null}]};
+    return {meetingLines: lines.length ? lines : [{text: 'None scheduled', eventId: null}]};
   } catch (e) {
     console.warn('Couldn\'t read calendar ' + calendarId + ', for its meeting times: ' + e.message);
     return old && old.meetingsRich ? {meetingsRich: old.meetingsRich} : {meetingLines: []};
   }
 }
 
-// The Meeting times cell: each line linking the all-events calendar at the
-// week of the meeting it's about (a line without a date, unlinked).
+// The Meeting times cell: each line linking the next meeting it's about,
+// as the all-events calendar shows it (a line without one, unlinked).
 function meetingTimesRich(lines) {
   const builder = SpreadsheetApp.newRichTextValue().setText(lines.map(l => l.text).join('\n'));
   let at = 0;
   for (const l of lines) {
-    if (l.date && l.text) builder.setLinkUrl(at, at + l.text.length, allEventsUrl(l.date));
+    if (l.eventId && l.text) {
+      builder.setLinkUrl(at, at + l.text.length, eventUrl(l.eventId, ALL_EVENTS_CALENDAR_ID));
+    }
     at += l.text.length + 1;
   }
   return builder.build();
@@ -547,12 +549,12 @@ function meetingTimesOf(calendarId) {
   return meetingTimesLines(series, oneOffs);
 }
 
-// An event's {date, weekday, start, end}, as meetingTimesLines takes them,
-// in TIME_ZONE.
+// An event's {id, date, weekday, start, end}, as meetingTimesLines takes
+// them, in TIME_ZONE.
 function localTimes(event) {
   const at = (when, pattern) => Utilities.formatDate(new Date(when.dateTime), TIME_ZONE, pattern);
   const minutes = when => Number(at(when, 'H')) * 60 + Number(at(when, 'm'));
-  return {date: at(event.start, 'yyyy-MM-dd'), weekday: Number(at(event.start, 'u')) % 7,
+  return {id: event.id, date: at(event.start, 'yyyy-MM-dd'), weekday: Number(at(event.start, 'u')) % 7,
     start: minutes(event.start), end: minutes(event.end)};
 }
 

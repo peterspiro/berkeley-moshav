@@ -391,24 +391,29 @@ def test_all_events_calendar_matches_python():
 
 class TestMeetingTimesLines:
     @staticmethod
-    def monthly(byday, date, start=990, end=1080):
+    def monthly(byday, date, eid, start=990, end=1080):
         return {"rule": "RRULE:FREQ=MONTHLY;BYDAY=" + byday, "weekday": 1, "start": start,
-                "end": end, "next": {"date": date, "start": start, "end": end}}
+                "end": end, "next": {"id": eid, "date": date, "start": start, "end": end}}
 
     def test_monthly_series_on_the_same_day_and_time_combine(self):
-        series = [self.monthly("3MO", "2026-11-16"), self.monthly("1MO", "2026-12-07"),
-                  self.monthly("2MO", "2026-11-09", 600, 660)]
+        series = [self.monthly("3MO", "2026-11-16", "a_1116"),
+                  self.monthly("1MO", "2026-12-07", "b_1207"),
+                  self.monthly("2MO", "2026-11-09", "c_1109", 600, 660)]
         assert js("meetingTimesLines(s, [])", s=series) == [
-            {"text": "1st & 3rd Mon 4:30–6 pm", "date": "2026-11-16"},
-            {"text": "2nd Mon 10–11 am", "date": "2026-11-09"}]
+            {"text": "1st & 3rd Mon 4:30–6 pm", "eventId": "a_1116"},
+            {"text": "2nd Mon 10–11 am", "eventId": "c_1109"}]
 
-    def test_one_off_line_has_its_date(self):
-        o = [{"date": "2026-11-12", "start": 1140, "end": 1230}]
+    def test_one_off_line_has_its_event(self):
+        o = [{"id": "x", "date": "2026-11-12", "start": 1140, "end": 1230}]
         assert js("meetingTimesLines([], o)", o=o) == [
-            {"text": "Next: Nov 12, 7–8:30 pm", "date": "2026-11-12"}]
+            {"text": "Next: Nov 12, 7–8:30 pm", "eventId": "x"}]
 
-    @pytest.mark.parametrize("date, week", [
-        ("2026-11-12", "20261108/20261115"), ("2026-11-08", "20261108/20261115"),
-        ("2026-12-31", "20261227/20270103")])
-    def test_week_of(self, date, week):
-        assert js("weekOf(d)", d=date) == week
+
+def test_event_url_matches_calendars_own_link():
+    # A "More details" link the calendar itself gave.
+    url = js("eventUrl('0rgvelh201i89325bujc9f8tb4_20261119T190000Z', "
+             "'c_301c808f640b3a04f5344b1bbf266955d51fecaabd7835936b7591f9cff09222"
+             "@group.calendar.google.com')")
+    assert url == ("https://calendar.google.com/calendar/u/0/event?eid="
+                   "MHJndmVsaDIwMWk4OTMyNWJ1amM5Zjh0YjRfMjAyNjExMTlUMTkwMDAwWiBjXzMwMWM4MDhmNjQwYjNh"
+                   "MDRmNTM0NGIxYmJmMjY2OTU1ZDUxZmVjYWFiZDc4MzU5MzZiNzU5MWY5Y2ZmMDkyMjJAZw")

@@ -375,9 +375,10 @@ the sheet's editors, which in a shared drive can't. It has three parts:
   `groups_drive_sync` never removes, is left out; and a community member
   who has left Full Community shows as a guest.)
   **Meeting times** says, read hourly from the group's calendar (the one its
-  footer links), when its meetings in the next 8 weeks are, linking the
-  all-events calendar in week view, each line at the week of the next
-  meeting it's about: a line for each repeating meeting, in alphabetical
+  footer links), when its meetings in the next 8 weeks are, each line
+  linking the next meeting it's about, as the all-events calendar (which
+  everyone can view) shows it: Google Calendar's page for the event, with
+  its details open, the same link as its "More details" (`eventUrl`): a line for each repeating meeting, in alphabetical
   order (numbers by value, so "1st Mon" comes before "3rd Mon"), from its
   series' repeat rule and usual times (so a meeting
   moved for one week changes nothing): "Tue 7:30–9 pm", "Mon & Thu 7–8 pm",
@@ -385,7 +386,7 @@ the sheet's editors, which in a shared drive can't. It has three parts:
   4–5:30 pm" (the month's last Sunday), "15th of month 6–7 pm" (monthly
   meetings on the same weekday at the same times but in different weeks,
   such as a series for the 1st Monday and another for the 3rd, make one
-  line, "1st & 3rd Mon 4:30–6 pm", linking the sooner's week); for a rule
+  line, "1st & 3rd Mon 4:30–6 pm", linking the sooner); for a rule
   it can't put in words, "Next: Nov 12, 7–8:30 pm", after the others. With
   no repeating meetings, it gives the next one-off that way; with nothing
   to come, "None scheduled", unlinked; with no calendar, nothing. Past meetings, cancelled

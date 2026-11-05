@@ -371,8 +371,9 @@ const WEEKDAY_CODES = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
 // (WEEKDAYS and MONTH_NAMES are agenda_rules.gs'.)
 
 // What the sheet's Meeting times cell says about a group's meetings still
-// to come (none past), as lines, [{text, date}], date ('yyyy-MM-dd') the
-// next meeting each is about, whose week the line links: a line for each
+// to come (none past), as lines, [{text, eventId}], eventId the calendar
+// event (its ID) of the next meeting each is about, which the line links
+// (see eventUrl): a line for each
 // repeating meeting, in alphabetical order (numbers by value, so "1st Mon"
 // comes before "3rd Mon", and before "Next: ..." lines, which are in date
 // order), saying when it usually is ("Tue 7:30–9 pm", "2nd & 4th Tue
@@ -383,40 +384,41 @@ const WEEKDAY_CODES = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
 // in different weeks of the month (a series for the 1st Monday, another
 // for the 3rd), make one line ("1st & 3rd Mon 4:30–6 pm"), about the
 // soonest of them. series: [{rule (its RRULE line, or null), weekday,
-// start, end (its usual times), next}]; oneOffs: [{date, start, end}];
-// next the same, for its next occurrence. A weekday is 0 (Sunday) to 6, a
+// start, end (its usual times), next}]; oneOffs: [{id, date, start,
+// end}]; next the same, for its next occurrence (id its own event ID,
+// with its date).  A date is 'yyyy-MM-dd'. A weekday is 0 (Sunday) to 6, a
 // time minutes since midnight, all in the community's time zone.
 function meetingTimesLines(series, oneOffs) {
   const byDate = (a, b) => (a.date + clockKey(a.start)).localeCompare(b.date + clockKey(b.start));
   const described = [];
   const next = [];
-  const add = (list, text, date) => {
-    if (!list.some(l => l.text === text)) list.push({text, date});
+  const add = (list, text, eventId) => {
+    if (!list.some(l => l.text === text)) list.push({text, eventId: eventId || null});
   };
   const monthly = {};
   for (const s of (series || []).slice().sort((a, b) => byDate(a.next, b.next))) {
     const m = monthlyWeekdays(s.rule);
     if (m) {
-      // The soonest comes first, so its date is the line's.
+      // The soonest comes first, so it's the line's.
       const key = [m.code, s.start, s.end].join('|');
       if (!monthly[key]) {
-        monthly[key] = {code: m.code, ords: [], start: s.start, end: s.end, date: s.next.date};
+        monthly[key] = {code: m.code, ords: [], start: s.start, end: s.end, eventId: s.next.id};
       }
       monthly[key].ords.push(...m.ords);
       continue;
     }
     const days = ruleDays(s.rule, s.weekday);
-    if (days) add(described, days + ' ' + clockRange(s.start, s.end), s.next.date);
-    else add(next, nextMeetingText(s.next), s.next.date);
+    if (days) add(described, days + ' ' + clockRange(s.start, s.end), s.next.id);
+    else add(next, nextMeetingText(s.next), s.next.id);
   }
   for (const m of Object.values(monthly)) {
-    add(described, monthlyDaysText(m.ords, m.code) + ' ' + clockRange(m.start, m.end), m.date);
+    add(described, monthlyDaysText(m.ords, m.code) + ' ' + clockRange(m.start, m.end), m.eventId);
   }
   described.sort((a, b) => a.text.localeCompare(b.text, 'en', {numeric: true, sensitivity: 'base'}));
   const lines = [...described, ...next];
   if (!lines.length && (oneOffs || []).length) {
     const first = (oneOffs || []).slice().sort(byDate)[0];
-    lines.push({text: nextMeetingText(first), date: first.date});
+    lines.push({text: nextMeetingText(first), eventId: first.id || null});
   }
   return lines;
 }
@@ -426,16 +428,17 @@ function meetingTimesText(series, oneOffs) {
   return meetingTimesLines(series, oneOffs).map(l => l.text).join('\n');
 }
 
-// The week (Sunday to Saturday) a date ('yyyy-MM-dd') is in, as the
-// calendar's dates parameter takes it: 'yyyyMMdd/yyyyMMdd', the end the
-// Sunday after.
-function weekOf(date) {
-  const [y, m, d] = date.split('-').map(Number);
-  const day = new Date(Date.UTC(y, m - 1, d));
-  const start = new Date(day.getTime() - day.getUTCDay() * 86400000);
-  const end = new Date(start.getTime() + 7 * 86400000);
-  const ymd = t => t.toISOString().slice(0, 10).replace(/-/g, '');
-  return ymd(start) + '/' + ymd(end);
+// The page Google Calendar shows one event on, with its details open, as
+// seen on a calendar it's on (calendarId; the all-events calendar is a guest
+// of every group meeting, so everyone can open it there): its eid is the
+// event's ID (for one meeting of a series, the ID with the meeting's time,
+// as the calendar API lists it) and the calendar's, a space between, in
+// base64, as the calendar's own "More details" link has it (a group
+// calendar's ID ending "@g", not "@group.calendar.google.com").
+function eventUrl(eventId, calendarId) {
+  const calendar = String(calendarId).replace(/@group\.calendar\.google\.com$/, '@g');
+  return 'https://calendar.google.com/calendar/u/0/event?eid=' +
+    encodeURIComponent(base64NoPadding(eventId + ' ' + calendar));
 }
 
 function clockKey(minutes) {
