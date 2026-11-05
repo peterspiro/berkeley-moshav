@@ -337,7 +337,10 @@ the sheet's editors, which in a shared drive can't. It has three parts:
 - **The sheet**, "Circle Structure (editing)": a
   row per circle and working group (clubs, and groups whose type can't be
   told, have none), keyed by its Gather group ID (in a
-  hidden column, so a rename keeps the row). The Coordinating Circle
+  hidden column, so a rename keeps the row). Above the headings, its first
+  row says "View the Circle Structure. Coordinating Circle: change a
+  group’s Parent here to move it within the structure.", "View the Circle
+  Structure" linking the doc. The Coordinating Circle
   (`coordinating-circle@berkeleymoshav.org`, `STRUCTURE_EDITORS`) can edit
   only its **Parent** column: everything else is protected, editable only by
   `admin@`, which the script runs as. (So can anyone with edit access to the
@@ -371,12 +374,16 @@ the sheet's editors, which in a shared drive can't. It has three parts:
   who has left Full Community shows as a guest.)
   **Meeting times** says, read hourly from the group's calendar (the one its
   footer links), when its meetings in the next 8 weeks are, linking the
-  all-events calendar, in week view: a line for each repeating meeting, in alphabetical
+  all-events calendar in week view, each line at the week of the next
+  meeting it's about: a line for each repeating meeting, in alphabetical
   order (numbers by value, so "1st Mon" comes before "3rd Mon"), from its
   series' repeat rule and usual times (so a meeting
   moved for one week changes nothing): "Tue 7:30–9 pm", "Mon & Thu 7–8 pm",
   "Every other Tue 7–8 pm", "2nd & 4th Tue 7–8:30 pm", "Last Sun of month
-  4–5:30 pm" (the month's last Sunday), "15th of month 6–7 pm"; for a rule
+  4–5:30 pm" (the month's last Sunday), "15th of month 6–7 pm" (monthly
+  meetings on the same weekday at the same times but in different weeks,
+  such as a series for the 1st Monday and another for the 3rd, make one
+  line, "1st & 3rd Mon 4:30–6 pm", linking the sooner's week); for a rule
   it can't put in words, "Next: Nov 12, 7–8:30 pm", after the others. With
   no repeating meetings, it gives the next one-off that way; with nothing
   to come, "None scheduled", unlinked; with no calendar, nothing. Past meetings, cancelled
@@ -395,7 +402,9 @@ the sheet's editors, which in a shared drive can't. It has three parts:
 - **The doc**, "Circle Structure", which anyone
   with the link can view (or, if the domain doesn't allow that, anyone in
   it): under a grey line saying it's kept up to date automatically, and
-  to ask the Coordinating Circle to move a group, the tree as a bulleted
+  to ask the Coordinating Circle to move a group, "who change it in the
+  Circle Structure sheet" (linking the sheet, which only its editors and
+  the Shared Drive's members can open), the tree as a bulleted
   list (bullets at every level, each level 0.25" further in, 2 pt apart),
   each group's name followed by small (8 pt) Members, Documents, Email,
   and Agenda (if it has an agenda doc) links, and then the groups not

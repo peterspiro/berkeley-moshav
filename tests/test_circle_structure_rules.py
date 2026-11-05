@@ -368,7 +368,7 @@ class TestMeetingTimes:
                   s("RRULE:FREQ=MONTHLY;BYDAY=1MO", "2026-12-07")]
         series[1]["rule"] = "RRULE:FREQ=WEEKLY;BYDAY=MO"
         assert js("meetingTimesText(s, [])", s=series) == (
-            "1st Mon 4:30–6 pm\n3rd Mon 4:30–6 pm\nMon 4:30–6 pm")
+            "1st & 3rd Mon 4:30–6 pm\nMon 4:30–6 pm")
 
     def test_one_offs_only_when_no_series(self):
         o = [{"date": "2026-12-01", "start": 1140, "end": 1200},
@@ -387,3 +387,28 @@ def test_all_events_calendar_matches_python():
     from util.meeting_rooms import ALL_EVENTS_CALENDAR_ID
     text = (PROJECT / "structure.gs").read_text()
     assert f"'{ALL_EVENTS_CALENDAR_ID}'" in text
+
+
+class TestMeetingTimesLines:
+    @staticmethod
+    def monthly(byday, date, start=990, end=1080):
+        return {"rule": "RRULE:FREQ=MONTHLY;BYDAY=" + byday, "weekday": 1, "start": start,
+                "end": end, "next": {"date": date, "start": start, "end": end}}
+
+    def test_monthly_series_on_the_same_day_and_time_combine(self):
+        series = [self.monthly("3MO", "2026-11-16"), self.monthly("1MO", "2026-12-07"),
+                  self.monthly("2MO", "2026-11-09", 600, 660)]
+        assert js("meetingTimesLines(s, [])", s=series) == [
+            {"text": "1st & 3rd Mon 4:30–6 pm", "date": "2026-11-16"},
+            {"text": "2nd Mon 10–11 am", "date": "2026-11-09"}]
+
+    def test_one_off_line_has_its_date(self):
+        o = [{"date": "2026-11-12", "start": 1140, "end": 1230}]
+        assert js("meetingTimesLines([], o)", o=o) == [
+            {"text": "Next: Nov 12, 7–8:30 pm", "date": "2026-11-12"}]
+
+    @pytest.mark.parametrize("date, week", [
+        ("2026-11-12", "20261108/20261115"), ("2026-11-08", "20261108/20261115"),
+        ("2026-12-31", "20261227/20270103")])
+    def test_week_of(self, date, week):
+        assert js("weekOf(d)", d=date) == week

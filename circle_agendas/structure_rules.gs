@@ -371,33 +371,71 @@ const WEEKDAY_CODES = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
 // (WEEKDAYS and MONTH_NAMES are agenda_rules.gs'.)
 
 // What the sheet's Meeting times cell says about a group's meetings still
-// to come (none past): a line for each repeating meeting, in alphabetical
-// order (numbers by value, so "1st Mon" comes before "3rd Mon", and before
-// "Next: ..." lines, which are in date order), saying when it usually is ("Tue 7:30–9 pm",
-// "2nd & 4th Tue 7–8:30 pm", "Last Sun of month 4–5:30 pm"), or, for a
-// rule it can't put in words, when it next is ("Next: Nov 12, 7–8:30 pm");
-// or, with no repeating meetings, when the next one-off is; or '' if
-// there's nothing to come. series: [{rule (its RRULE line, or null),
-// weekday, start, end (its usual times), next}]; oneOffs: [{date, start,
-// end}]; next the same, for its next occurrence. A date is 'yyyy-MM-dd',
-// a weekday 0 (Sunday) to 6, a time minutes since midnight, all in the
-// community's time zone.
-function meetingTimesText(series, oneOffs) {
+// to come (none past), as lines, [{text, date}], date ('yyyy-MM-dd') the
+// next meeting each is about, whose week the line links: a line for each
+// repeating meeting, in alphabetical order (numbers by value, so "1st Mon"
+// comes before "3rd Mon", and before "Next: ..." lines, which are in date
+// order), saying when it usually is ("Tue 7:30–9 pm", "2nd & 4th Tue
+// 7–8:30 pm", "Last Sun of month 4–5:30 pm"), or, for a rule it can't put
+// in words, when it next is ("Next: Nov 12, 7–8:30 pm"); or, with no
+// repeating meetings, a line for the next one-off; or none if there's
+// nothing to come. Monthly meetings on the same weekday at the same times,
+// in different weeks of the month (a series for the 1st Monday, another
+// for the 3rd), make one line ("1st & 3rd Mon 4:30–6 pm"), about the
+// soonest of them. series: [{rule (its RRULE line, or null), weekday,
+// start, end (its usual times), next}]; oneOffs: [{date, start, end}];
+// next the same, for its next occurrence. A weekday is 0 (Sunday) to 6, a
+// time minutes since midnight, all in the community's time zone.
+function meetingTimesLines(series, oneOffs) {
   const byDate = (a, b) => (a.date + clockKey(a.start)).localeCompare(b.date + clockKey(b.start));
   const described = [];
   const next = [];
+  const add = (list, text, date) => {
+    if (!list.some(l => l.text === text)) list.push({text, date});
+  };
+  const monthly = {};
   for (const s of (series || []).slice().sort((a, b) => byDate(a.next, b.next))) {
+    const m = monthlyWeekdays(s.rule);
+    if (m) {
+      // The soonest comes first, so its date is the line's.
+      const key = [m.code, s.start, s.end].join('|');
+      if (!monthly[key]) {
+        monthly[key] = {code: m.code, ords: [], start: s.start, end: s.end, date: s.next.date};
+      }
+      monthly[key].ords.push(...m.ords);
+      continue;
+    }
     const days = ruleDays(s.rule, s.weekday);
-    const [list, line] = days ? [described, days + ' ' + clockRange(s.start, s.end)]
-      : [next, nextMeetingText(s.next)];
-    if (!list.includes(line)) list.push(line);
+    if (days) add(described, days + ' ' + clockRange(s.start, s.end), s.next.date);
+    else add(next, nextMeetingText(s.next), s.next.date);
   }
-  described.sort((a, b) => a.localeCompare(b, 'en', {numeric: true, sensitivity: 'base'}));
+  for (const m of Object.values(monthly)) {
+    add(described, monthlyDaysText(m.ords, m.code) + ' ' + clockRange(m.start, m.end), m.date);
+  }
+  described.sort((a, b) => a.text.localeCompare(b.text, 'en', {numeric: true, sensitivity: 'base'}));
   const lines = [...described, ...next];
   if (!lines.length && (oneOffs || []).length) {
-    lines.push(nextMeetingText((oneOffs || []).slice().sort(byDate)[0]));
+    const first = (oneOffs || []).slice().sort(byDate)[0];
+    lines.push({text: nextMeetingText(first), date: first.date});
   }
-  return lines.join('\n');
+  return lines;
+}
+
+// meetingTimesLines' text, a line each.
+function meetingTimesText(series, oneOffs) {
+  return meetingTimesLines(series, oneOffs).map(l => l.text).join('\n');
+}
+
+// The week (Sunday to Saturday) a date ('yyyy-MM-dd') is in, as the
+// calendar's dates parameter takes it: 'yyyyMMdd/yyyyMMdd', the end the
+// Sunday after.
+function weekOf(date) {
+  const [y, m, d] = date.split('-').map(Number);
+  const day = new Date(Date.UTC(y, m - 1, d));
+  const start = new Date(day.getTime() - day.getUTCDay() * 86400000);
+  const end = new Date(start.getTime() + 7 * 86400000);
+  const ymd = t => t.toISOString().slice(0, 10).replace(/-/g, '');
+  return ymd(start) + '/' + ymd(end);
 }
 
 function clockKey(minutes) {
@@ -459,8 +497,24 @@ function ruleDays(rule, weekday) {
     if (days.some(d => !(d >= 1 && d <= 31))) return null;
     return list(days.map(ordinal)) + ' of month';
   }
-  if (parts.BYMONTHDAY || !byDay.length) return null;
-  // "2TU,4TU", or "TU" with BYSETPOS=2 (or 2,4).
+  const m = monthlyWeekdays(rule);
+  return m ? monthlyDaysText(m.ords, m.code) : null;
+}
+
+// A rule for a monthly meeting on given weeks' weekday ("2TU,4TU", or "TU"
+// with BYSETPOS=2,4): {code (the weekday's, as WEEKDAY_CODES), ords (1 to
+// 5, or -1 for the last)}; or null for any other rule.
+function monthlyWeekdays(rule) {
+  if (!rule) return null;
+  const parts = {};
+  for (const p of String(rule).replace(/^RRULE:/i, '').split(';')) {
+    const [k, v] = p.split('=');
+    if (k) parts[k.trim().toUpperCase()] = String(v || '').trim().toUpperCase();
+  }
+  const known = ['FREQ', 'INTERVAL', 'BYDAY', 'BYSETPOS', 'UNTIL', 'COUNT', 'WKST'];
+  if (Object.keys(parts).some(k => !known.includes(k))) return null;
+  if (parts.FREQ !== 'MONTHLY' || Number(parts.INTERVAL || 1) !== 1 || !parts.BYDAY) return null;
+  const byDay = parts.BYDAY.split(',');
   let ords = [];
   let code = null;
   for (const d of byDay) {
@@ -474,10 +528,18 @@ function ruleDays(rule, weekday) {
     ords = parts.BYSETPOS.split(',').map(Number);
   }
   if (!ords.length || ords.some(n => !(n >= 1 && n <= 5) && n !== -1)) return null;
+  return {code, ords};
+}
+
+// "2nd & 4th Tue", "1st & last Sun of month", from monthlyWeekdays' ords
+// and code.
+function monthlyDaysText(ords, code) {
   ords = ords.filter((n, i) => ords.indexOf(n) === i)
     .sort((a, b) => (a === -1 ? 9 : a) - (b === -1 ? 9 : b));
   const words = ords.map(n => n === -1 ? 'last' : ordinal(n));
-  const text = list(words) + ' ' + WEEKDAYS[WEEKDAY_CODES.indexOf(code)];
+  const list = words.length < 3 ? words.join(' & ')
+    : words.slice(0, -1).join(', ') + ' & ' + words[words.length - 1];
+  const text = list + ' ' + WEEKDAYS[WEEKDAY_CODES.indexOf(code)];
   return text.charAt(0).toUpperCase() + text.slice(1) + (ords.includes(-1) ? ' of month' : '');
 }
 

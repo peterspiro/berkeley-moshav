@@ -86,14 +86,23 @@ const STRUCTURE_COLUMNS = STRUCTURE_HEADINGS.length;
 const HEADING_WIDE_COLUMNS = ['email', 'guests'];
 // The community's calendar of every group's meetings (ALL_EVENTS_CALENDAR_ID
 // in util/meeting_rooms.py, and in group_meetings), which the Meeting times
-// cells link, opening in week view.
+// cells link, opening in week view, at the week of the meeting a line is
+// about.
 const ALL_EVENTS_CALENDAR_ID =
   'c_301c808f640b3a04f5344b1bbf266955d51fecaabd7835936b7591f9cff09222@group.calendar.google.com';
-function allEventsUrl() {
+function allEventsUrl(date) {
   return 'https://calendar.google.com/calendar/embed?src=' +
     encodeURIComponent(ALL_EVENTS_CALENDAR_ID) + '&ctz=' + encodeURIComponent(TIME_ZONE) +
-    '&mode=WEEK';
+    '&mode=WEEK' + (date ? '&dates=' + weekOf(date) : '');
 }
+// The sheet's first row, above the headings (HEAD_ROW): a line linking the
+// doc, and saying how the structure is changed. The rows start at
+// FIRST_ROW.
+const STRUCTURE_INTRO_LINK = 'View the Circle Structure';
+const STRUCTURE_INTRO = STRUCTURE_INTRO_LINK +
+  '. Coordinating Circle: change a group\u2019s Parent here to move it within the structure.';
+const HEAD_ROW = 2;
+const FIRST_ROW = 3;
 const PARENT_HELP = 'The circle it\'s under (for a working group, the circle or working group).';
 
 // ── Setting up ───────────────────────────────────────────────────────────────
@@ -115,7 +124,7 @@ function setupCircleStructure() {
     'application/vnd.google-apps.document', folderId);
 
   const sheet = structureSheet();
-  sheet.setFrozenRows(1);
+  sheet.setFrozenRows(HEAD_ROW);
   sheet.setFrozenColumns(1);
   // (syncGroups, below, lays out the columns, if they aren't already.)
   protectStructureSheet(sheet);
@@ -154,7 +163,8 @@ function setupCircleStructure() {
 function protectStructureSheet(sheet) {
   for (const p of sheet.getProtections(SpreadsheetApp.ProtectionType.SHEET)) p.remove();
   const protection = sheet.protect().setDescription('Filled in by the Circle Structure script');
-  protection.setUnprotectedRanges([sheet.getRange(2, SCOL.parent, sheet.getMaxRows() - 1, 1)]);
+  protection.setUnprotectedRanges([sheet.getRange(FIRST_ROW, SCOL.parent,
+    sheet.getMaxRows() - HEAD_ROW, 1)]);
   const me = Session.getEffectiveUser().getEmail();
   protection.addEditor(me);
   protection.removeEditors(protection.getEditors().map(u => u.getEmail())
@@ -162,11 +172,23 @@ function protectStructureSheet(sheet) {
   if (protection.canDomainEdit()) protection.setDomainEdit(false);
 }
 
-// Whether the sheet's heading row is STRUCTURE_HEADINGS, and nothing more.
+// Whether the sheet has STRUCTURE_INTRO in its first row and its heading
+// row (HEAD_ROW) is STRUCTURE_HEADINGS, and nothing more.
 function sheetLaidOut(sheet) {
   const width = Math.max(sheet.getLastColumn(), STRUCTURE_COLUMNS);
-  const row = sheet.getRange(1, 1, 1, width).getValues()[0].map(v => String(v).trim());
-  return row.every((v, i) => v === (STRUCTURE_HEADINGS[i] || ''));
+  const rows = sheet.getRange(1, 1, HEAD_ROW, width).getValues()
+    .map(row => row.map(v => String(v).trim()));
+  return rows[0][0] === STRUCTURE_INTRO && rows[0].slice(1).every(v => !v) &&
+    rows[HEAD_ROW - 1].every((v, i) => v === (STRUCTURE_HEADINGS[i] || ''));
+}
+
+// Writes STRUCTURE_INTRO in the first row's first cell, its start linking
+// the doc.
+function writeStructureIntro(sheet) {
+  const url = structureDocUrl();
+  const intro = SpreadsheetApp.newRichTextValue().setText(STRUCTURE_INTRO);
+  if (url) intro.setLinkUrl(0, STRUCTURE_INTRO_LINK.length, url);
+  sheet.getRange(1, 1).setRichTextValue(intro.build());
 }
 
 // Lays the sheet out in STRUCTURE_LAYOUT, emptying it first: its rows have
@@ -179,8 +201,11 @@ function layOutSheet(sheet) {
   const all = sheet.getRange(1, 1, rows, sheet.getMaxColumns());
   all.clearContent().clearNote().setDataValidation(null);
   sheet.showColumns(1, sheet.getMaxColumns());
-  sheet.getRange(1, 1, 1, STRUCTURE_COLUMNS).setValues([STRUCTURE_HEADINGS]).setFontWeight('bold');
-  sheet.getRange(1, SCOL.parent).setNote(PARENT_HELP);
+  writeStructureIntro(sheet);
+  sheet.getRange(HEAD_ROW, 1, 1, STRUCTURE_COLUMNS).setValues([STRUCTURE_HEADINGS])
+    .setFontWeight('bold');
+  sheet.getRange(HEAD_ROW, SCOL.parent).setNote(PARENT_HELP);
+  sheet.setFrozenRows(HEAD_ROW);
   sheet.hideColumns(SCOL.id, 2);
   protectStructureSheet(sheet);
   console.log('Circle Structure: laid the sheet\'s columns out afresh.');
@@ -308,11 +333,17 @@ function refreshCircleStructureEverywhere() {
 // order)}], row the sheet's row number. Each column is found by its heading
 // (see columnsByHeading), so this reads a sheet laid out before too.
 function readGroups(sheet) {
-  const n = sheet.getLastRow() - 1;
   const width = sheet.getLastColumn();
-  if (n < 1 || width < 1) return [];
-  const col = columnsByHeading(sheet.getRange(1, 1, 1, width).getValues()[0], STRUCTURE_HEADINGS);
-  const range = sheet.getRange(2, 1, n, width);
+  const last = sheet.getLastRow();
+  if (last < 2 || width < 1) return [];
+  // The heading row: HEAD_ROW, or the first row in a sheet laid out before
+  // the intro was added.
+  const top = sheet.getRange(1, 1, Math.min(HEAD_ROW, last), width).getValues();
+  const headRow = top.findIndex(row => columnsByHeading(row, ['Gather ID'])['Gather ID']) + 1;
+  const n = last - headRow;
+  if (headRow < 1 || n < 1) return [];
+  const col = columnsByHeading(top[headRow - 1], STRUCTURE_HEADINGS);
+  const range = sheet.getRange(headRow + 1, 1, n, width);
   const values = range.getValues();
   const rich = range.getRichTextValues();
   const at = (key, heading) => col[heading || STRUCTURE_HEADINGS[SCOL[key] - 1]];
@@ -329,14 +360,14 @@ function readGroups(sheet) {
     const id = value(r, 'id');
     if (!id) return;
     groups.push({
-      row: r + 2, id, name: value(r, 'group'), type: value(r, 'type'),
+      row: r + headRow + 1, id, name: value(r, 'group'), type: value(r, 'type'),
       parent: value(r, 'parent'), problems: value(r, 'problems'),
       email: (value(r, 'address') || value(r, 'email')).toLowerCase(),
       listAddress: value(r, 'email').toLowerCase(),
       gatherUrl: link(r, 'gather'), folderUrl: link(r, 'folder'), agendaUrl: link(r, 'agenda'),
       roles: STRUCTURE_ROLES.map(role => value(r, null, role)),
       guests: value(r, 'guests').split(/\s+/).filter(Boolean),
-      meetings: value(r, 'meetings'), calendarUrl: link(r, 'meetings'),
+      meetingsRich: at('meetings') ? rich[r][at('meetings') - 1] : null,
     });
   });
   return groups;
@@ -415,34 +446,34 @@ function syncGroups() {
   // Rewrite the rows, all but the Parent cells that haven't changed (so an
   // edit made meanwhile isn't lost).
   const n = rows.length;
-  const extra = sheet.getLastRow() - 1 - n;
+  const extra = sheet.getLastRow() - HEAD_ROW - n;
   if (extra > 0) {
-    sheet.getRange(n + 2, 1, extra, STRUCTURE_COLUMNS).clearContent().clearNote()
+    sheet.getRange(n + FIRST_ROW, 1, extra, STRUCTURE_COLUMNS).clearContent().clearNote()
       .setDataValidation(null);
   }
   if (!n) return;
   // Plain formatting, so no cell keeps a look (a link's blue, say) from
   // what was there before.
-  sheet.getRange(2, 1, n, STRUCTURE_COLUMNS).clearFormat();
+  sheet.getRange(FIRST_ROW, 1, n, STRUCTURE_COLUMNS).clearFormat();
   const text = (t, url) => SpreadsheetApp.newRichTextValue().setText(t || '').setLinkUrl(url || null).build();
-  sheet.getRange(2, SCOL.group, n, 1).setValues(rows.map(r => [r.name]));
-  sheet.getRange(2, SCOL.email, n, 1).setRichTextValues(rows.map(r => [
+  sheet.getRange(FIRST_ROW, SCOL.group, n, 1).setValues(rows.map(r => [r.name]));
+  sheet.getRange(FIRST_ROW, SCOL.email, n, 1).setRichTextValues(rows.map(r => [
     text(r.listAddress, r.listAddress ? 'mailto:' + r.listAddress : null)]));
-  sheet.getRange(2, SCOL.gather, n, 1).setRichTextValues(rows.map(r => [
+  sheet.getRange(FIRST_ROW, SCOL.gather, n, 1).setRichTextValues(rows.map(r => [
     text(r.gatherUrl ? 'Members' : '', r.gatherUrl)]));
-  sheet.getRange(2, SCOL.guests, n, 1).setValues(rows.map(r => [(r.guests || []).join('\n')]));
-  sheet.getRange(2, SCOL.meetings, n, 1).setRichTextValues(rows.map(r => [
-    text(r.meetings, r.calendarUrl)]));
-  sheet.getRange(2, SCOL.folder, n, 2).setRichTextValues(rows.map(r => [
+  sheet.getRange(FIRST_ROW, SCOL.guests, n, 1).setValues(rows.map(r => [(r.guests || []).join('\n')]));
+  sheet.getRange(FIRST_ROW, SCOL.meetings, n, 1).setRichTextValues(rows.map(r => [
+    r.meetingsRich || meetingTimesRich(r.meetingLines || [])]));
+  sheet.getRange(FIRST_ROW, SCOL.folder, n, 2).setRichTextValues(rows.map(r => [
     text('Documents', r.folderUrl), text(r.agendaUrl ? 'Agenda' : '', r.agendaUrl)]));
-  sheet.getRange(2, SCOL.role0, n, STRUCTURE_ROLES.length).setNumberFormat('@')
+  sheet.getRange(FIRST_ROW, SCOL.role0, n, STRUCTURE_ROLES.length).setNumberFormat('@')
     .setValues(rows.map(r => STRUCTURE_ROLES.map((_, i) => (r.roles || [])[i] || '')));
-  sheet.getRange(2, SCOL.type, n, 2).setValues(rows.map(r => [r.type, r.problems]));
-  sheet.getRange(2, SCOL.id, n, 2).setNumberFormat('@').setValues(rows.map(r => [r.id, r.email]));
+  sheet.getRange(FIRST_ROW, SCOL.type, n, 2).setValues(rows.map(r => [r.type, r.problems]));
+  sheet.getRange(FIRST_ROW, SCOL.id, n, 2).setNumberFormat('@').setValues(rows.map(r => [r.id, r.email]));
   rows.forEach((r, i) => {
     const before = old[i];
     if (!before || before.id !== r.id || before.parent !== r.parent) {
-      const cell = sheet.getRange(i + 2, SCOL.parent);
+      const cell = sheet.getRange(i + FIRST_ROW, SCOL.parent);
       cell.setDataValidation(null).setValue(r.parent);
     }
   });
@@ -456,23 +487,34 @@ function syncGroups() {
 const MEETING_TIMES_WEEKS = 8;
 
 // A row's Meeting times cell, from the group's calendar (calendarId, from
-// its footer; or none): {meetings, its text (see meetingTimesText, "None
-// scheduled", unlinked, if there's nothing to come), calendarUrl, which it
-// links: the all-events calendar (allEventsUrl)}. If
-// the calendar can't be read, what the row (old, or none) said before.
+// its footer; or none): {meetingLines} (see meetingTimesLines; a "None
+// scheduled" line, unlinked, if there's nothing to come), or, if the
+// calendar can't be read, {meetingsRich}, what the row (old, or none) said
+// before.
 function meetingTimesCell(calendarId, old) {
-  if (!calendarId) return {meetings: '', calendarUrl: ''};
+  if (!calendarId) return {meetingLines: []};
   try {
-    const meetings = meetingTimesOf(calendarId);
-    return meetings ? {meetings, calendarUrl: allEventsUrl()}
-      : {meetings: 'None scheduled', calendarUrl: ''};
+    const lines = meetingTimesOf(calendarId);
+    return {meetingLines: lines.length ? lines : [{text: 'None scheduled', date: null}]};
   } catch (e) {
     console.warn('Couldn\'t read calendar ' + calendarId + ', for its meeting times: ' + e.message);
-    return old ? {meetings: old.meetings, calendarUrl: old.calendarUrl} : {meetings: '', calendarUrl: ''};
+    return old && old.meetingsRich ? {meetingsRich: old.meetingsRich} : {meetingLines: []};
   }
 }
 
-// meetingTimesText for a calendar's timed meetings in the next
+// The Meeting times cell: each line linking the all-events calendar at the
+// week of the meeting it's about (a line without a date, unlinked).
+function meetingTimesRich(lines) {
+  const builder = SpreadsheetApp.newRichTextValue().setText(lines.map(l => l.text).join('\n'));
+  let at = 0;
+  for (const l of lines) {
+    if (l.date && l.text) builder.setLinkUrl(at, at + l.text.length, allEventsUrl(l.date));
+    at += l.text.length + 1;
+  }
+  return builder.build();
+}
+
+// meetingTimesLines for a calendar's timed meetings in the next
 // MEETING_TIMES_WEEKS: a repeating one described by its series' rule and
 // usual times (so a meeting moved for one week changes nothing), each
 // other one by its own.
@@ -502,10 +544,10 @@ function meetingTimesOf(calendarId) {
     const usual = rule && master.start && master.start.dateTime ? localTimes(master) : next;
     return {rule: rule || null, weekday: usual.weekday, start: usual.start, end: usual.end, next};
   });
-  return meetingTimesText(series, oneOffs);
+  return meetingTimesLines(series, oneOffs);
 }
 
-// An event's {date, weekday, start, end}, as meetingTimesText takes them,
+// An event's {date, weekday, start, end}, as meetingTimesLines takes them,
 // in TIME_ZONE.
 function localTimes(event) {
   const at = (when, pattern) => Utilities.formatDate(new Date(when.dateTime), TIME_ZONE, pattern);
@@ -564,6 +606,9 @@ function roleHolders(docId, old) {
 // headingWidth says its heading needs.)
 function fitColumns(sheet) {
   const narrow = HEADING_WIDE_COLUMNS.map(k => SCOL[k]);
+  // The intro, which overflows into the cells beside it, is taken out
+  // while resizing, so the first column isn't made as wide as it.
+  sheet.getRange(1, 1).clearContent();
   for (let c = 1; c < SCOL.id; c++) {
     if (!narrow.includes(c)) sheet.autoResizeColumn(c);
   }
@@ -572,11 +617,13 @@ function fitColumns(sheet) {
     const heading = headingWidth(STRUCTURE_HEADINGS[c - 1]);
     if (narrow.includes(c)) {
       sheet.setColumnWidth(c, heading);
-      sheet.getRange(1, c, sheet.getMaxRows(), 1).setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP);
+      sheet.getRange(HEAD_ROW, c, sheet.getMaxRows() - HEAD_ROW + 1, 1)
+        .setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP);
     } else if (sheet.getColumnWidth(c) < heading) {
       sheet.setColumnWidth(c, heading);
     }
   }
+  writeStructureIntro(sheet);
 }
 
 // What guessGroupType needs to know of a Drive item: {name, isSharedDrive,
@@ -700,14 +747,14 @@ function applyStructure() {
   if (groups.length) {
     // The rows readGroups skipped (no ID) would shift these; there are none,
     // as only the script writes IDs.
-    const rows = groups[groups.length - 1].row - 1;
+    const rows = groups[groups.length - 1].row - HEAD_ROW;
     if (rows === groups.length) {
       const current = groups.map(g => [g.problems]);
       if (JSON.stringify(current) !== JSON.stringify(problems)) {
-        sheet.getRange(2, SCOL.problems, rows, 1).setValues(problems);
+        sheet.getRange(FIRST_ROW, SCOL.problems, rows, 1).setValues(problems);
         fitColumns(sheet);
       }
-      sheet.getRange(2, SCOL.parent, rows, 1).setDataValidations(groups.map(g => {
+      sheet.getRange(FIRST_ROW, SCOL.parent, rows, 1).setDataValidations(groups.map(g => {
         const choices = parentChoices(g, groups, tree.children);
         return [choices.length ? SpreadsheetApp.newDataValidation()
           .requireValueInList(choices, true).setAllowInvalid(false).setHelpText(PARENT_HELP).build()
@@ -816,7 +863,7 @@ function writeStructureDocIfChanged(ctx) {
   const content = {placed: placed.map(entry), unplaced: unplaced.map(entry)};
   // The layout's settings count as what it shows, so changing one rewrites it.
   const layout = [STRUCTURE_DOC_LAYOUT, STRUCTURE_TEXT_SIZE, STRUCTURE_LINKS_SIZE,
-    STRUCTURE_ITEM_SPACING];
+    STRUCTURE_ITEM_SPACING, ctx.structureUrl];
   const hash = shortHash(JSON.stringify({layout, content}));
   if (props.getProperty(STRUCTURE_DOC_HASH_KEY) === hash) return;
 
@@ -833,10 +880,16 @@ function writeStructureDocIfChanged(ctx) {
   title.setHeading(DocumentApp.ParagraphHeading.TITLE);
   // The intro, and the note when nothing's placed, are subtitles, so the
   // list's paragraphs are the only plain ones (see bulletStructureDoc).
-  const subtitle = text => writeRuns(
+  const grey = {[A.FOREGROUND_COLOR]: COLOR.muted, [A.FONT_SIZE]: STRUCTURE_TEXT_SIZE};
+  const subtitle = runs => writeRuns(
     body.appendParagraph('').setHeading(DocumentApp.ParagraphHeading.SUBTITLE),
-    [[text, {[A.FOREGROUND_COLOR]: COLOR.muted, [A.FONT_SIZE]: STRUCTURE_TEXT_SIZE}]]);
-  subtitle('Kept up to date automatically. To move a group, ask the Coordinating Circle.');
+    typeof runs === 'string' ? [[runs, grey]] : runs);
+  // The sheet's link (which only its editors, the Coordinating Circle, and
+  // the Shared Drive's members can open).
+  const sheetRun = ['Circle Structure sheet', ctx.structureUrl
+    ? Object.assign({[A.LINK_URL]: ctx.structureUrl}, grey) : grey];
+  subtitle([['Kept up to date automatically. To move a group, ask the Coordinating Circle, ' +
+    'who change it in the ', grey], sheetRun, ['.', grey]]);
   // Each item is a plain paragraph, with a tab for each level it's nested
   // to, which bulletStructureDoc makes a bulleted list.
   const list = items => {
@@ -923,7 +976,7 @@ const STRUCTURE_LINKS_SIZE = 8;
 const STRUCTURE_ITEM_SPACING = 2;
 // Bump when the doc's layout changes, so it's rewritten even if the
 // structure hasn't.
-const STRUCTURE_DOC_LAYOUT = 3;
+const STRUCTURE_DOC_LAYOUT = 4;
 
 // ── A circle's place, in its agenda doc ──────────────────────────────────────
 
