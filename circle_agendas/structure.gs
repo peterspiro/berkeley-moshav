@@ -575,7 +575,7 @@ function writeStructureDocIfChanged(ctx) {
   const {placed, unplaced} = outline(ctx.tree);
   const entry = ({id, depth}) => ({depth, runs: structureDocRuns(ctx.byId[id])});
   const content = {placed: placed.map(entry), unplaced: unplaced.map(entry)};
-  const hash = shortHash(JSON.stringify(content));
+  const hash = shortHash(JSON.stringify({layout: STRUCTURE_DOC_LAYOUT, content}));
   if (props.getProperty(STRUCTURE_DOC_HASH_KEY) === hash) return;
 
   const doc = DocumentApp.openById(docId);
@@ -593,13 +593,14 @@ function writeStructureDocIfChanged(ctx) {
   // list's paragraphs are the only plain ones (see bulletStructureDoc).
   const subtitle = text => writeRuns(
     body.appendParagraph('').setHeading(DocumentApp.ParagraphHeading.SUBTITLE),
-    [[text, {[A.FOREGROUND_COLOR]: COLOR.muted, [A.FONT_SIZE]: STRUCTURE_LINKS_SIZE}]]);
+    [[text, {[A.FOREGROUND_COLOR]: COLOR.muted, [A.FONT_SIZE]: STRUCTURE_TEXT_SIZE}]]);
   subtitle('Kept up to date automatically. To move a group, ask the Coordinating Circle.');
   // Each item is a plain paragraph, with a tab for each level it's nested
   // to, which bulletStructureDoc makes a bulleted list.
   const list = items => {
     for (const item of items) {
-      const para = body.appendParagraph('').setHeading(DocumentApp.ParagraphHeading.NORMAL);
+      const para = body.appendParagraph('').setHeading(DocumentApp.ParagraphHeading.NORMAL)
+        .setSpacingAfter(STRUCTURE_ITEM_SPACING);
       writeRuns(para, [['\t'.repeat(item.depth), null], ...item.runs]);
     }
   };
@@ -645,7 +646,7 @@ function bulletStructureDoc(docId) {
 // A group's line in the doc: its name, and smaller links to its agenda doc
 // (if it has one), members, documents, and email list.
 function structureDocRuns(g) {
-  const runs = [[g.name, BOLD]];
+  const runs = [[g.name, null]];
   const links = [];
   if (g.agendaUrl) links.push(['Agenda', g.agendaUrl]);
   if (g.gatherUrl) links.push(['Members', g.gatherUrl]);
@@ -659,9 +660,15 @@ function structureDocRuns(g) {
   return runs;
 }
 
-// The point size of the doc's intro and its Agenda · Members · Documents ·
-// Email links.
+// The point sizes of the doc's group names and intro (Docs' default text
+// size), and of its Agenda · Members · Documents · Email links; and the
+// space after each group's line, in points.
+const STRUCTURE_TEXT_SIZE = 11;
 const STRUCTURE_LINKS_SIZE = 8;
+const STRUCTURE_ITEM_SPACING = 4;
+// Bump when the doc's layout changes, so it's rewritten even if the
+// structure hasn't.
+const STRUCTURE_DOC_LAYOUT = 2;
 
 // ── A circle's place, in its agenda doc ──────────────────────────────────────
 
