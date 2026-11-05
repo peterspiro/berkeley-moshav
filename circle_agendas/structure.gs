@@ -592,7 +592,8 @@ function writeStructureDocIfChanged(ctx) {
   // The intro, and the note when nothing's placed, are subtitles, so the
   // list's paragraphs are the only plain ones (see bulletStructureDoc).
   const subtitle = text => writeRuns(
-    body.appendParagraph('').setHeading(DocumentApp.ParagraphHeading.SUBTITLE), [[text, MUTED]]);
+    body.appendParagraph('').setHeading(DocumentApp.ParagraphHeading.SUBTITLE),
+    [[text, {[A.FOREGROUND_COLOR]: COLOR.muted, [A.FONT_SIZE]: STRUCTURE_LINKS_SIZE}]]);
   subtitle('Kept up to date automatically. To move a group, ask the Coordinating Circle.');
   // Each item is a plain paragraph, with a tab for each level it's nested
   // to, which bulletStructureDoc makes a bulleted list.
@@ -641,11 +642,12 @@ function bulletStructureDoc(docId) {
   if (indents.length) Docs.Documents.batchUpdate({requests: indents}, docId);
 }
 
-// A group's line in the doc: its name (linked; see groupUrl), and smaller
-// links to its members, documents, and email list.
+// A group's line in the doc: its name, and smaller links to its agenda doc
+// (if it has one), members, documents, and email list.
 function structureDocRuns(g) {
-  const runs = [[g.name, Object.assign({}, BOLD, groupUrl(g) ? {[A.LINK_URL]: groupUrl(g)} : {})]];
+  const runs = [[g.name, BOLD]];
   const links = [];
+  if (g.agendaUrl) links.push(['Agenda', g.agendaUrl]);
   if (g.gatherUrl) links.push(['Members', g.gatherUrl]);
   if (g.folderUrl) links.push(['Documents', g.folderUrl]);
   if (g.email) links.push(['Email', 'mailto:' + g.email]);
@@ -657,7 +659,8 @@ function structureDocRuns(g) {
   return runs;
 }
 
-// The point size of the doc's Members · Documents · Email links.
+// The point size of the doc's intro and its Agenda · Members · Documents ·
+// Email links.
 const STRUCTURE_LINKS_SIZE = 8;
 
 // ── A circle's place, in its agenda doc ──────────────────────────────────────
