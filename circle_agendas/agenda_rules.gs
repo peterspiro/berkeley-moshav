@@ -171,13 +171,20 @@ function roleOptionId(options, holder) {
 // added by hand, kept only while a chip shows them, and each choice that
 // stays keeping its ID, so the chips showing it still do. The placeholder
 // and Vacant keep their IDs whatever they showed (so an old "Name"
-// placeholder becomes the dash). Returns
+// placeholder becomes the dash). A choice that's a member's name but for a
+// period at its end (as last initials once had: "Ada L.") becomes the
+// name, keeping its ID. Returns
 // {options, replacements}: replacements, for updateDropdownDefinition-
 // PropertiesRequest, gives the placeholder to any chip whose choice is
 // gone (only past Docs' limit of 50).
 function updatedRoleChoices(existing, names, selected) {
   const fixed = [ROLE_PLACEHOLDER_ID, ROLE_VACANT_ID];
-  const others = existing.filter(o => !fixed.includes(o.optionId));
+  const named = new Set(names || []);
+  const others = existing.filter(o => !fixed.includes(o.optionId)).map(o => {
+    const bare = String(o.displayValue || '').replace(/\.$/, '');
+    return bare !== o.displayValue && named.has(bare) && !named.has(o.displayValue)
+      ? {optionId: o.optionId, displayValue: bare} : o;
+  });
   const shown = others.filter(o => (selected || []).includes(o.optionId)).map(o => o.displayValue);
   const fresh = roleChoices(names, shown);
   const idOf = {};

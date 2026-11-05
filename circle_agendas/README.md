@@ -107,8 +107,8 @@ The links:
   Action Items Recap (a bulleted list) become the checklist of its Action
   Items Accountability (their text only). The meetings that are over
   lose their links, so they're no longer changed. Members are named by
-  first name, with their last initial if another community member shares
-  it; the closing round has a line for each attendee's feedback. The circle is the Google Group whose footer links the
+  first name, with their last initial (no period: "Ada L") if another
+  community member shares it; the closing round has a line for each attendee's feedback. The circle is the Google Group whose footer links the
   Drive folder (or shared drive) the doc is in, so this works only for a
   doc in a circle's folder; elsewhere the page says so.
 
@@ -270,7 +270,9 @@ cells date chips, starting at the day the doc was built. The daily run, and
 adding a meeting, bring the dropdowns' choices up to date with the
 circle's members: new members are added, and members who've left, and
 choices added by hand in Docs, are removed unless a Name cell shows them,
-so no cell's choice changes. The daily run also colors red each Term ends
+so no cell's choice changes. A choice that's a member's name but for a
+period at its end ("Ada L.", as last initials once were written) becomes
+the name, so a Name cell showing it then shows "Ada L". The daily run also colors red each Term ends
 date that's past. Docs can't run a script when a date is changed, so
 `buildNewCircleDocs` also does that, every 10 minutes, in each doc changed
 since its last run, so a changed date is colored within about 10 minutes.

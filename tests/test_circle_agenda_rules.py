@@ -153,6 +153,16 @@ class TestUpdatedRoleChoices:
             {"optionId": "dropdownItem.m1", "displayValue": "Bo"},
             {"optionId": "dropdownItem.vacant", "displayValue": "Vacant"}], "replacements": {}}
 
+    def test_initial_loses_its_period_keeping_its_id(self):
+        existing = [{"optionId": "dropdownItem.none", "displayValue": "—"},
+                    {"optionId": "dropdownItem.m0", "displayValue": "Ada L."},
+                    {"optionId": "dropdownItem.m1", "displayValue": "Ben"},
+                    {"optionId": "dropdownItem.vacant", "displayValue": "Vacant"}]
+        result = self.update(["Ada L", "Ben"], ["dropdownItem.m0"], existing)
+        assert result["options"][1:3] == [{"optionId": "dropdownItem.m0", "displayValue": "Ada L"},
+                                          {"optionId": "dropdownItem.m1", "displayValue": "Ben"}]
+        assert result["replacements"] == {}
+
     def test_keeps_shown_hand_added_choice(self):
         options = self.update(["Ann"], ["dropdownItem.hand"])["options"]
         assert {"optionId": "dropdownItem.hand", "displayValue": "Guest Rae"} in options

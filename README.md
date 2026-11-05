@@ -274,7 +274,8 @@ status line as "calendar (members can view, not edit)".
   `circle_agendas` Apps Script to build within minutes; a group that has
   one keeps it. Each run (with `-g` too) writes every Gather member's
   short name
-  (first name, with the last initial if another member shares it), by
+  (first name, with the last initial, without a period, if another member
+  shares it), by
   their Gather email and their Google Email, to "Circle agenda member
   names.json" in `admin@`'s My Drive, so the circle agenda docs list
   members by name (see `circle_agendas/README.md`).

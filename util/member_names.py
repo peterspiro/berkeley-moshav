@@ -11,7 +11,8 @@ on each run. Both a member's Gather email and their Google Email (the
 address Gather shares Drive items with) are listed.
 
 A short name is the first name alone, or, if another member of the
-community has the same first name, with the last name's initial ("Ada L."),
+community has the same first name, with the last name's initial ("Ada L",
+with no period),
 or, if that's shared too, the full name.
 """
 
@@ -33,7 +34,7 @@ def short_names(users: list[GatherUser]) -> dict[str, str]:
     must be told apart from."""
     named = [u for u in users if u.full_name]
     first = {u.user_id: (u.first_name or u.full_name.split()[0]) for u in named}
-    with_initial = {u.user_id: (f"{first[u.user_id]} {u.last_name[0]}."
+    with_initial = {u.user_id: (f"{first[u.user_id]} {u.last_name[0]}"
                                 if u.last_name else first[u.user_id]) for u in named}
     first_counts = Counter(f.casefold() for f in first.values())
     initial_counts = Counter(n.casefold() for n in with_initial.values())
