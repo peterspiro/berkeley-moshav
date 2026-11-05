@@ -653,13 +653,18 @@ function bulletStructureDoc(docId) {
   // Each request removes its items' tabs, so the last run goes first.
   Docs.Documents.batchUpdate({requests: runs.reverse().map(range => ({createParagraphBullets: {
     range, bulletPreset: 'BULLET_DISC_CIRCLE_SQUARE'}}))}, docId);
-  // Bulleting resets a paragraph's spacing, so it's set here, after.
+  // Bulleting resets a paragraph's spacing, so it's set here, after, with
+  // the indents.
   const indents = paragraphs().filter(se => se.paragraph.bullet).map(se => {
     const request = listIndentRequest({startIndex: se.startIndex, endIndex: se.endIndex},
       se.paragraph.bullet.nestingLevel || 0);
     const style = request.updateParagraphStyle;
+    // Between items of the same list, Docs collapses the space unless the
+    // spacing mode says not to (as setting it in Format → Line & paragraph
+    // spacing → Custom spacing does).
     style.paragraphStyle.spaceBelow = {magnitude: STRUCTURE_ITEM_SPACING, unit: 'PT'};
-    style.fields += ',spaceBelow';
+    style.paragraphStyle.spacingMode = 'NEVER_COLLAPSE';
+    style.fields += ',spaceBelow,spacingMode';
     return request;
   });
   if (indents.length) Docs.Documents.batchUpdate({requests: indents}, docId);
