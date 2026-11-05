@@ -545,9 +545,13 @@ function writeStructureDocIfChanged(ctx) {
 
   const doc = DocumentApp.openById(docId);
   const body = doc.getBody();
-  body.clear();
+  // Empty it, leaving one plain paragraph for the title. (body.clear() fails
+  // when the doc ends with a list item, as it does once written: Docs won't
+  // remove a section's last paragraph, so a plain one is added at the end
+  // and everything before it removed.)
+  const title = body.appendParagraph('');
+  while (body.getNumChildren() > 1) body.getChild(0).removeFromParent();
   // (Paragraph.setText returns nothing, so it can't be chained.)
-  const title = body.getChild(0).asParagraph();
   title.setText(STRUCTURE_DOC_NAME);
   title.setHeading(DocumentApp.ParagraphHeading.TITLE);
   writeRuns(body.appendParagraph('').setHeading(DocumentApp.ParagraphHeading.NORMAL), [['The circles and working groups, each under the circle ' +
