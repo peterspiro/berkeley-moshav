@@ -37,8 +37,6 @@
  *   3. Run installTrigger() once to schedule daily execution.
  */
 
-// ── Configuration ────────────────────────────────────────────────────────────
-
 const DOMAIN = 'berkeleymoshav.org';
 const FOLDER_SYNC_ROLE = 'fileOrganizer'; // Drive role for a folder's "Content manager"
 const SHARED_DRIVE_SYNC_ROLE = 'reader';  // Drive role for a shared drive's "Viewer"
@@ -65,54 +63,6 @@ const SYNC_ROLE_FOR_TYPE = {
   [ITEM_TYPE_SHARED_DRIVE]: SHARED_DRIVE_SYNC_ROLE,
 };
 
-// ── Main entry point ─────────────────────────────────────────────────────────
-
-function syncAll() {
-  const runner = Session.getActiveUser().getEmail();
-  console.log(`syncAll started — runner: ${runner}`);
-
-  const groups = listAllGroups();
-  console.log(`Found ${groups.length} group(s) in ${DOMAIN}.`);
-
-  let synced = 0;
-  let skipped = 0;
-  const reports = [];
-
-  for (const group of groups) {
-    try {
-      const link = getFooterItemLink(group.email);
-      if (!link) {
-        skipped++;
-        continue;
-      }
-      const report = syncItem(link.itemId, link.itemType, group.email, runner);
-      if (hasChanges(report)) reports.push(report);
-      synced++;
-    } catch (err) {
-      console.error(`Error processing ${group.email}: ${err}`);
-    }
-  }
-
-  console.log(`syncAll complete — synced ${synced}, skipped ${skipped} (no item link in footer).`);
-
-  if (reports.length) sendChangeAlert(reports);
-}
-
-function listAllGroups() {
-  const groups = [];
-  let pageToken;
-  do {
-    const response = AdminDirectory.Groups.list({
-      domain: DOMAIN,
-      maxResults: 200,
-      pageToken,
-    });
-    if (response.groups) groups.push(...response.groups);
-    pageToken = response.nextPageToken;
-  } while (pageToken);
-  return groups;
-}
-
 /**
  * Parse a group's footer and return { itemId, itemType }, or null if the
  * footer carries no auto-managed Drive link. Throws if it ambiguously
@@ -136,19 +86,6 @@ function getFooterItemLink(groupEmail) {
   }
   return found.length ? found[0] : null;
 }
-
-function syncItem(itemId, itemType, groupEmail, runnerEmail) {
-  const label = itemType === ITEM_TYPE_SHARED_DRIVE ? 'Shared Drive' : 'Folder';
-  console.log(`${label}: ${itemId} → group: ${groupEmail}`);
-
-  const targetEmails = getSyncTargetEmails(itemId, itemType);
-  const report = syncGroupMembership(groupEmail, targetEmails, runnerEmail);
-
-  console.log(`  Done — added: ${report.syncAdded.length}, removed: ${report.syncRemoved.length}`);
-  return report;
-}
-
-// ── Drive helpers ─────────────────────────────────────────────────────────────
 
 /**
  * Return the set of lowercased user email addresses whose permission on the
@@ -185,7 +122,128 @@ function getSyncTargetEmails(itemId, itemType) {
   return emails;
 }
 
-// ── Group helpers ─────────────────────────────────────────────────────────────
+function hasChanges(report) {
+  return report.outsideAdded.length || report.outsideRemoved.length ||
+    report.syncAdded.length || report.syncRemoved.length;
+}
+
+/**
+ * Run this function once from the GAS editor to install a daily trigger.
+ * Do not run it more than once or duplicate triggers will be created.
+ */
+function installTrigger() {
+  // Remove any existing syncAll triggers first to avoid duplicates
+  ScriptApp.getProjectTriggers()
+    .filter(t => t.getHandlerFunction() === 'syncAll')
+    .forEach(t => ScriptApp.deleteTrigger(t));
+
+  ScriptApp.newTrigger('syncAll')
+    .timeBased()
+    .everyHours(1)
+    .create();
+
+  console.log('Hourly trigger installed.');
+}
+
+function listAllGroups() {
+  const groups = [];
+  let pageToken;
+  do {
+    const response = AdminDirectory.Groups.list({
+      domain: DOMAIN,
+      maxResults: 200,
+      pageToken,
+    });
+    if (response.groups) groups.push(...response.groups);
+    pageToken = response.nextPageToken;
+  } while (pageToken);
+  return groups;
+}
+
+function listAllMembers(groupEmail) {
+  const members = [];
+  let pageToken;
+  do {
+    const response = AdminDirectory.Members.list(groupEmail, {
+      maxResults: 200,
+      pageToken,
+    });
+    if (response.members) {
+      members.push(...response.members);
+    }
+    pageToken = response.nextPageToken;
+  } while (pageToken);
+  return members;
+}
+
+function loadSnapshot(groupEmail) {
+  const json = PropertiesService.getScriptProperties()
+    .getProperty(SNAPSHOT_KEY_PREFIX + groupEmail.toLowerCase());
+  return json ? new Set(JSON.parse(json)) : null;
+}
+
+function saveSnapshot(groupEmail, emails) {
+  PropertiesService.getScriptProperties().setProperty(
+    SNAPSHOT_KEY_PREFIX + groupEmail.toLowerCase(),
+    JSON.stringify([...emails].sort()));
+}
+
+function sendChangeAlert(reports) {
+  const lines = [];
+  for (const r of reports) {
+    lines.push(r.groupEmail);
+    if (r.outsideAdded.length || r.outsideRemoved.length) {
+      lines.push('  Changed outside the sync (being reverted to match Drive):');
+      r.outsideAdded.forEach(e => lines.push(`    + ${e}`));
+      r.outsideRemoved.forEach(e => lines.push(`    - ${e}`));
+    }
+    if (r.syncAdded.length || r.syncRemoved.length) {
+      lines.push('  Changed by the sync (to match Drive permissions):');
+      r.syncAdded.forEach(e => lines.push(`    + ${e}`));
+      r.syncRemoved.forEach(e => lines.push(`    - ${e}`));
+    }
+    lines.push('');
+  }
+
+  const n = reports.length;
+  MailApp.sendEmail({
+    to: ALERT_EMAIL,
+    subject: `Group membership changes (${n} group${n === 1 ? '' : 's'})`,
+    body: lines.join('\n'),
+  });
+  console.log(`Sent change alert for ${n} group(s) to ${ALERT_EMAIL}.`);
+}
+
+function syncAll() {
+  const runner = Session.getActiveUser().getEmail();
+  console.log(`syncAll started — runner: ${runner}`);
+
+  const groups = listAllGroups();
+  console.log(`Found ${groups.length} group(s) in ${DOMAIN}.`);
+
+  let synced = 0;
+  let skipped = 0;
+  const reports = [];
+
+  for (const group of groups) {
+    try {
+      const link = getFooterItemLink(group.email);
+      if (!link) {
+        skipped++;
+        continue;
+      }
+      const report = syncItem(link.itemId, link.itemType, group.email, runner);
+      if (hasChanges(report)) reports.push(report);
+      synced++;
+    } catch (err) {
+      console.error(`Error processing ${group.email}: ${err}`);
+    }
+  }
+
+  console.log(`syncAll complete — synced ${synced}, skipped ${skipped} (no item link in footer).`);
+
+  if (reports.length) sendChangeAlert(reports);
+}
 
 /**
  * Bring the group's membership in line with targetEmails, and return a
@@ -237,83 +295,13 @@ function syncGroupMembership(groupEmail, targetEmails, runnerEmail) {
   return report;
 }
 
-function listAllMembers(groupEmail) {
-  const members = [];
-  let pageToken;
-  do {
-    const response = AdminDirectory.Members.list(groupEmail, {
-      maxResults: 200,
-      pageToken,
-    });
-    if (response.members) {
-      members.push(...response.members);
-    }
-    pageToken = response.nextPageToken;
-  } while (pageToken);
-  return members;
-}
+function syncItem(itemId, itemType, groupEmail, runnerEmail) {
+  const label = itemType === ITEM_TYPE_SHARED_DRIVE ? 'Shared Drive' : 'Folder';
+  console.log(`${label}: ${itemId} → group: ${groupEmail}`);
 
-// ── Change alerts ─────────────────────────────────────────────────────────────
+  const targetEmails = getSyncTargetEmails(itemId, itemType);
+  const report = syncGroupMembership(groupEmail, targetEmails, runnerEmail);
 
-function loadSnapshot(groupEmail) {
-  const json = PropertiesService.getScriptProperties()
-    .getProperty(SNAPSHOT_KEY_PREFIX + groupEmail.toLowerCase());
-  return json ? new Set(JSON.parse(json)) : null;
-}
-
-function saveSnapshot(groupEmail, emails) {
-  PropertiesService.getScriptProperties().setProperty(
-    SNAPSHOT_KEY_PREFIX + groupEmail.toLowerCase(),
-    JSON.stringify([...emails].sort()));
-}
-
-function hasChanges(report) {
-  return report.outsideAdded.length || report.outsideRemoved.length ||
-    report.syncAdded.length || report.syncRemoved.length;
-}
-
-function sendChangeAlert(reports) {
-  const lines = [];
-  for (const r of reports) {
-    lines.push(r.groupEmail);
-    if (r.outsideAdded.length || r.outsideRemoved.length) {
-      lines.push('  Changed outside the sync (being reverted to match Drive):');
-      r.outsideAdded.forEach(e => lines.push(`    + ${e}`));
-      r.outsideRemoved.forEach(e => lines.push(`    - ${e}`));
-    }
-    if (r.syncAdded.length || r.syncRemoved.length) {
-      lines.push('  Changed by the sync (to match Drive permissions):');
-      r.syncAdded.forEach(e => lines.push(`    + ${e}`));
-      r.syncRemoved.forEach(e => lines.push(`    - ${e}`));
-    }
-    lines.push('');
-  }
-
-  const n = reports.length;
-  MailApp.sendEmail({
-    to: ALERT_EMAIL,
-    subject: `Group membership changes (${n} group${n === 1 ? '' : 's'})`,
-    body: lines.join('\n'),
-  });
-  console.log(`Sent change alert for ${n} group(s) to ${ALERT_EMAIL}.`);
-}
-
-// ── Trigger setup (run once manually) ────────────────────────────────────────
-
-/**
- * Run this function once from the GAS editor to install a daily trigger.
- * Do not run it more than once or duplicate triggers will be created.
- */
-function installTrigger() {
-  // Remove any existing syncAll triggers first to avoid duplicates
-  ScriptApp.getProjectTriggers()
-    .filter(t => t.getHandlerFunction() === 'syncAll')
-    .forEach(t => ScriptApp.deleteTrigger(t));
-
-  ScriptApp.newTrigger('syncAll')
-    .timeBased()
-    .everyHours(1)
-    .create();
-
-  console.log('Hourly trigger installed.');
+  console.log(`  Done — added: ${report.syncAdded.length}, removed: ${report.syncRemoved.length}`);
+  return report;
 }

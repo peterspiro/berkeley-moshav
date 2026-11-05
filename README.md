@@ -109,9 +109,9 @@ soon as its footer is written, with no redeploy. Rewriting the block keeps any
 calendar and Zoom links already in it, along with anything written above it.
 
 The footers are also where the `circle_agendas` Apps Script finds the groups
-for the Circle Structure sheet: each group whose footer links a Gather group
-and a Drive item gets a row, keyed by its Gather group ID, so a rename keeps
-its place.
+for the Circle Structure sheet: each circle and working group whose footer
+links a Gather group and a Drive item gets a row, keyed by its Gather group
+ID, so a rename keeps its place.
 
 ## Setup
 
@@ -274,7 +274,8 @@ status line as "calendar (members can view, not edit)".
   `circle_agendas` Apps Script to build within minutes; a group that has
   one keeps it. Each run (with `-g` too) writes every Gather member's
   short name
-  (first name, with the last initial if another member shares it), by
+  (first name, with the last initial, without a period, if another member
+  shares it), by
   their Gather email and their Google Email, to "Circle agenda member
   names.json" in `admin@`'s My Drive, so the circle agenda docs list
   members by name (see `circle_agendas/README.md`).
@@ -448,7 +449,12 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
     of the groups each may be under) and the doc. Hourly, it brings the
     sheet's rows up to date with the Google Groups' footers (new groups,
     renames, links, types, groups that are gone, and the parents waiting in
-    "Circle structure placements.json"). On each edit, and every 10
+    "Circle structure placements.json"), with a row for each circle and
+    working group (everybody groups only if named as circles; no clubs),
+    who holds each role in its agenda doc's Roles table, its guests
+    (members of its Google Group who aren't in Full Community's), and when
+    its meetings are, from its calendar's repeating meetings ("2nd & 4th Tue
+    7–8:30 pm"). On each edit, and every 10
     minutes, it refuses a parent the rules don't allow (putting back the one
     from before, with a note on the cell saying why), updates the dropdowns
     and the Problems column, and rewrites the doc and the Parent Circle and
@@ -458,7 +464,8 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
   - **`circle_agendas/structure_rules.gs`** holds the Circle Structure's
     rules (a circle only under a circle, a working group under a circle or
     working group, no loops; a group's type from its Drive folder's name: "Circle", or "Working Group", "Work Group", "Team", or "Pod" for a working group),
-    the tree, and what an agenda doc's rows say, tested under Node.
+    the tree, what an agenda doc's rows say, and how the sheet words a
+    group's meeting times, tested under Node.
   - **`circle_agendas/build_template.gs`** builds an agenda doc from a
     blank doc, entirely from code (so it depends on no other document):
     each circle's doc, and a preview, rebuilt in place, for trying changes.

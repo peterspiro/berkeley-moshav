@@ -32,7 +32,7 @@ class TestBuildMemberNames:
             user("2", "ada", "Moss", "a2@example.org"),
             user("3", "Ben", "Ruiz", "b@example.org"),
         ])
-        assert names == {"a1@example.org": "Ada L.", "a2@example.org": "ada M.",
+        assert names == {"a1@example.org": "Ada L", "a2@example.org": "ada M",
                          "b@example.org": "Ben"}
 
     def test_full_name_when_initial_is_shared_too(self):
@@ -42,13 +42,13 @@ class TestBuildMemberNames:
             user("3", "Ada", "Moss", "a3@example.org"),
         ])
         assert names == {"a1@example.org": "Ada Lane", "a2@example.org": "Ada Lowe",
-                         "a3@example.org": "Ada M."}
+                         "a3@example.org": "Ada M"}
 
     def test_counts_members_without_addresses(self):
         # Someone with no address still makes a shared first name ambiguous.
         names = build_member_names([user("1", "Ada", "Lane", "a@example.org"),
                                     user("2", "Ada", "Moss")])
-        assert names == {"a@example.org": "Ada L."}
+        assert names == {"a@example.org": "Ada L"}
 
     def test_skips_users_without_names_or_addresses(self):
         assert build_member_names([user("1", "", "", "x@example.org"),

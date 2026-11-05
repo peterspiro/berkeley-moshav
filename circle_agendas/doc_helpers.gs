@@ -8,18 +8,45 @@
  * UNSUPPORTED elements, while the API shows them as `dropdown`.
  */
 
-// Logs a doc's link on a line of its own, after what it's for, so it can be
-// selected with a triple-click.
-function logLink(label, url) {
-  Logger.log(label);
-  Logger.log(url);
+function addLeafCounts(el, counts) {
+  const type = String(el.getType());
+  if (el.getNumChildren) {
+    for (let i = 0; i < el.getNumChildren(); i++) addLeafCounts(el.getChild(i), counts);
+  } else if (type !== 'TEXT') {
+    counts[type] = (counts[type] || 0) + 1;
+  }
 }
 
-function firstTabBody(doc) {
-  return doc.getTabs()[0].asDocumentTab().getBody();
+// The text of a Docs API table cell.
+function apiCellText(cell) {
+  let text = '';
+  walkParagraphs(cell.content, para => { text += paraText(para); });
+  return text;
 }
 
-// ── Describing a doc ─────────────────────────────────────────────────────────
+// A date chip's date, 'yyyy-MM-dd': from its text, if it can be read
+// (see dateFromDisplayText), else from its timestamp, in its time zone;
+// or '' if it has neither.
+function chipDate(dateElement) {
+  const props = dateElement.dateElementProperties || {};
+  const shown = dateFromDisplayText(props.displayText);
+  if (shown) return shown;
+  if (!props.timestamp) return '';
+  const when = new Date(props.timestamp);
+  try {
+    return Utilities.formatDate(when, props.timeZoneId || 'UTC', 'yyyy-MM-dd');
+  } catch (e) {
+    return Utilities.formatDate(when, 'UTC', 'yyyy-MM-dd');
+  }
+}
+
+// Counts the non-text leaf elements (chips and anything Apps Script can't
+// represent, which it calls UNSUPPORTED) under an element, as a string.
+function countLeaves(el) {
+  const counts = {};
+  addLeafCounts(el, counts);
+  return formatCounts(counts);
+}
 
 // Lines describing the doc's first tab: each top-level element, each table
 // row (its cells' text and chips), and the kinds of paragraph element the
@@ -64,30 +91,6 @@ function describeStructure(docId) {
   return lines;
 }
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-// Counts the non-text leaf elements (chips and anything Apps Script can't
-// represent, which it calls UNSUPPORTED) under an element, as a string.
-function countLeaves(el) {
-  const counts = {};
-  addLeafCounts(el, counts);
-  return formatCounts(counts);
-}
-
-function addLeafCounts(el, counts) {
-  const type = String(el.getType());
-  if (el.getNumChildren) {
-    for (let i = 0; i < el.getNumChildren(); i++) addLeafCounts(el.getChild(i), counts);
-  } else if (type !== 'TEXT') {
-    counts[type] = (counts[type] || 0) + 1;
-  }
-}
-
-function formatCounts(counts) {
-  const keys = Object.keys(counts).sort();
-  return keys.length ? '[' + keys.map(k => k + '×' + counts[k]).join(', ') + ']' : '[no chips]';
-}
-
 // The first table row (at any depth) one of whose cells' text, trimmed,
 // passes test.
 function findRow(body, test) {
@@ -106,6 +109,31 @@ function findRow(body, test) {
   return result;
 }
 
+function firstTabBody(doc) {
+  return doc.getTabs()[0].asDocumentTab().getBody();
+}
+
+function formatCounts(counts) {
+  const keys = Object.keys(counts).sort();
+  return keys.length ? '[' + keys.map(k => k + '×' + counts[k]).join(', ') + ']' : '[no chips]';
+}
+
+// Logs a doc's link on a line of its own, after what it's for, so it can be
+// selected with a triple-click.
+function logLink(label, url) {
+  Logger.log(label);
+  Logger.log(url);
+}
+
+function paraText(para) {
+  return (para.elements || []).map(pe => (pe.textRun ? pe.textRun.content : '')).join('');
+}
+
+function snippet(text, n) {
+  const flat = text.replace(/\s+/g, ' ').trim();
+  return flat.length > n ? flat.slice(0, n - 1) + '…' : flat;
+}
+
 // Calls fn on every paragraph in Docs API content, including inside tables.
 function walkParagraphs(content, fn) {
   for (const se of content || []) {
@@ -116,36 +144,4 @@ function walkParagraphs(content, fn) {
       }
     }
   }
-}
-
-// The text of a Docs API table cell.
-function apiCellText(cell) {
-  let text = '';
-  walkParagraphs(cell.content, para => { text += paraText(para); });
-  return text;
-}
-
-// A date chip's date, 'yyyy-MM-dd': from its text, if it can be read
-// (see dateFromDisplayText), else from its timestamp, in its time zone;
-// or '' if it has neither.
-function chipDate(dateElement) {
-  const props = dateElement.dateElementProperties || {};
-  const shown = dateFromDisplayText(props.displayText);
-  if (shown) return shown;
-  if (!props.timestamp) return '';
-  const when = new Date(props.timestamp);
-  try {
-    return Utilities.formatDate(when, props.timeZoneId || 'UTC', 'yyyy-MM-dd');
-  } catch (e) {
-    return Utilities.formatDate(when, 'UTC', 'yyyy-MM-dd');
-  }
-}
-
-function paraText(para) {
-  return (para.elements || []).map(pe => (pe.textRun ? pe.textRun.content : '')).join('');
-}
-
-function snippet(text, n) {
-  const flat = text.replace(/\s+/g, ' ').trim();
-  return flat.length > n ? flat.slice(0, n - 1) + '…' : flat;
 }

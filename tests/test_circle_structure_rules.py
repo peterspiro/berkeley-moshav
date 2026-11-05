@@ -74,6 +74,7 @@ class TestGuessGroupType:
         ("Chess", {"name": "Chess Club"}, "Not in the structure"),
         ("Chess", {"name": "Chess", "inClubs": True}, "Not in the structure"),
         ("Everyone", {"name": "Everyone", "isSharedDrive": True}, "Not in the structure"),
+        ("Residents", {"name": "Residents Circle", "isSharedDrive": True}, "Circle"),
         ("Full Community", {"name": "Moshav", "isSharedDrive": True}, "Circle"),
         ("Odd", {"name": "Odd stuff"}, "Not in the structure"),
         ("Odd", None, "Not in the structure"),
@@ -233,7 +234,8 @@ class TestStructureRows:
         "status": "placed",
         "parent": {"name": "Land", "url": "u2"},
         "children": [{"name": "Compost", "url": "u4"}, {"name": "Seeds", "url": None}],
-        "structureUrl": "doc",
+        "structureUrl": "sheet",
+        "structureDocUrl": "doc",
     }
 
     def text(self, paragraphs):
@@ -241,9 +243,12 @@ class TestStructureRows:
 
     def test_placed(self):
         rows = js("structureRows(place)", place=self.PLACE)
-        assert self.text(rows["parentLabel"]) == ["Parent Circle", "(Set in the Circle Structure)"]
-        hint = rows["parentLabel"][1]["runs"][0][1]
-        assert hint["link"] == "doc" and hint["small"]
+        assert self.text(rows["parentLabel"]) == [
+            "Parent Circle", "(Managed here. See Circle\u00a0Structure.)"]
+        links = {text: style["link"] for text, style in rows["parentLabel"][1]["runs"]}
+        assert links["here"] == "sheet" and links["Circle\u00a0Structure"] == "doc"
+        assert links["(Managed "] is None
+        assert all(style["small"] for _, style in rows["parentLabel"][1]["runs"])
         assert self.text(rows["parentValue"]) == ["Land"]
         assert rows["parentValue"][0]["runs"][0][1]["link"] == "u2"
         assert self.text(rows["subValue"]) == ["Compost", "Seeds"]
@@ -273,6 +278,11 @@ class TestSignature:
         b = [{"runs": [["Land", {"link": "u3"}]]}]
         assert not js("paragraphsSignature(a) === paragraphsSignature(b)", a=a, b=b)
 
+    def test_no_break_space_differs(self):
+        a = [{"runs": [["Circle Structure", {}]]}]
+        b = [{"runs": [["Circle\u00a0Structure", {}]]}]
+        assert not js("paragraphsSignature(a) === paragraphsSignature(b)", a=a, b=b)
+
     def test_changed_text(self):
         a = [{"runs": [["Land", {}]]}]
         b = [{"runs": [["Lands", {}]]}]
@@ -293,3 +303,117 @@ def test_shared_drive_id_matches_python():
 def test_shortest_address(aliases, address):
     assert js("shortestAddress('garden-working-group@x.org', aliases, 'x.org')",
               aliases=aliases) == address
+
+
+def test_columns_by_heading():
+    row = ["Group", "Type", "Parent", " email list ", "", "Gather ID"]
+    assert js("columnsByHeading(row, ['Group', 'Parent', 'Email list', 'Gather ID', 'Leader'])",
+              row=row) == {"Group": 1, "Parent": 3, "Email list": 4, "Gather ID": 6, "Leader": 0}
+
+
+def test_guests():
+    assert js("guestsOf(m, everyone, ['admin@x.org'])",
+              m=["Bo@Gmail.com", "ann@x.org", "admin@x.org", "zed@y.org", "bo@gmail.com"],
+              everyone=["ANN@x.org"]) == ["bo@gmail.com", "zed@y.org"]
+
+
+class TestMeetingTimes:
+    @pytest.mark.parametrize("rule, days", [
+        ("RRULE:FREQ=WEEKLY;BYDAY=TU", "Tue"),
+        ("RRULE:FREQ=WEEKLY", "Wed"),
+        ("RRULE:FREQ=WEEKLY;WKST=SU;BYDAY=TH,MO", "Mon & Thu"),
+        ("RRULE:FREQ=WEEKLY;BYDAY=MO,WE,FR;UNTIL=20270101T000000Z", "Mon, Wed & Fri"),
+        ("RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=TU", "Every other Tue"),
+        ("RRULE:FREQ=WEEKLY;INTERVAL=3;BYDAY=TU", "Every 3 weeks, Tue"),
+        ("RRULE:FREQ=MONTHLY;BYDAY=2TU,4TU", "2nd & 4th Tue"),
+        ("RRULE:FREQ=MONTHLY;BYDAY=-1SU", "Last Sun of month"),
+        ("RRULE:FREQ=MONTHLY;BYDAY=-1SU,1SU", "1st & last Sun of month"),
+        ("RRULE:FREQ=MONTHLY;BYDAY=TU;BYSETPOS=3", "3rd Tue"),
+        ("RRULE:FREQ=MONTHLY;BYMONTHDAY=15", "15th of month"),
+        ("RRULE:FREQ=DAILY", "Daily"),
+        ("RRULE:FREQ=MONTHLY;BYDAY=2TU,4WE", None),
+        ("RRULE:FREQ=MONTHLY;INTERVAL=2;BYDAY=2TU", None),
+        ("RRULE:FREQ=YEARLY", None),
+        ("RRULE:FREQ=WEEKLY;BYMONTH=6;BYDAY=TU", None),
+        (None, None),
+    ])
+    def test_rule_days(self, rule, days):
+        assert js("ruleDays(rule, 3)", rule=rule) == days
+
+    @pytest.mark.parametrize("start, end, text", [
+        (1170, 1260, "7:30–9 pm"), (660, 750, "11 am–12:30 pm"), (1140, 1200, "7–8 pm"),
+        (540, 600, "9–10 am"), (720, 780, "12–1 pm")])
+    def test_clock_range(self, start, end, text):
+        assert js("clockRange(s, e)", s=start, e=end) == text
+
+    def test_series_in_order_and_fallback(self):
+        series = [
+            {"rule": "RRULE:FREQ=MONTHLY;BYDAY=-1SU", "weekday": 0, "start": 960, "end": 1050,
+             "next": {"date": "2026-11-29", "start": 960, "end": 1050}},
+            {"rule": "RRULE:FREQ=WEEKLY;BYDAY=TU", "weekday": 2, "start": 1170, "end": 1260,
+             "next": {"date": "2026-11-10", "start": 1170, "end": 1260}},
+            {"rule": "RRULE:FREQ=YEARLY", "weekday": 4, "start": 1140, "end": 1230,
+             "next": {"date": "2026-11-12", "start": 1140, "end": 1230}},
+        ]
+        assert js("meetingTimesText(s, o)", s=series, o=[{"date": "2026-11-06", "start": 600,
+                                                          "end": 660}]) == (
+            "Last Sun of month 4–5:30 pm\nTue 7:30–9 pm\nNext: Nov 12, 7–8:30 pm")
+
+    def test_sorted_by_text_numbers_by_value(self):
+        def s(rule, date):
+            return {"rule": rule, "weekday": 1, "start": 990, "end": 1080,
+                    "next": {"date": date, "start": 990, "end": 1080}}
+        series = [s("RRULE:FREQ=MONTHLY;BYDAY=3MO", "2026-11-16"),
+                  s("RRULE:FREQ=MONTHLY;BYDAY=10MO", "2026-11-01"),
+                  s("RRULE:FREQ=MONTHLY;BYDAY=1MO", "2026-12-07")]
+        series[1]["rule"] = "RRULE:FREQ=WEEKLY;BYDAY=MO"
+        assert js("meetingTimesText(s, [])", s=series) == (
+            "1st & 3rd Mon 4:30–6 pm\nMon 4:30–6 pm")
+
+    def test_one_offs_only_when_no_series(self):
+        o = [{"date": "2026-12-01", "start": 1140, "end": 1200},
+             {"date": "2026-11-12", "start": 1140, "end": 1230}]
+        assert js("meetingTimesText([], o)", o=o) == "Next: Nov 12, 7–8:30 pm"
+        assert js("meetingTimesText([], [])") == ""
+
+
+def test_heading_width_grows_with_text():
+    widths = js("['Guests', 'Email list', 'Feedback Link', 'Drive folder'].map(headingWidth)")
+    assert widths[0] < widths[1] < widths[3] < widths[2]
+    assert 95 <= widths[2] <= 125
+
+
+def test_all_events_calendar_matches_python():
+    from util.meeting_rooms import ALL_EVENTS_CALENDAR_ID
+    text = (PROJECT / "structure.gs").read_text()
+    assert f"'{ALL_EVENTS_CALENDAR_ID}'" in text
+
+
+class TestMeetingTimesLines:
+    @staticmethod
+    def monthly(byday, date, eid, start=990, end=1080):
+        return {"rule": "RRULE:FREQ=MONTHLY;BYDAY=" + byday, "weekday": 1, "start": start,
+                "end": end, "next": {"id": eid, "date": date, "start": start, "end": end}}
+
+    def test_monthly_series_on_the_same_day_and_time_combine(self):
+        series = [self.monthly("3MO", "2026-11-16", "a_1116"),
+                  self.monthly("1MO", "2026-12-07", "b_1207"),
+                  self.monthly("2MO", "2026-11-09", "c_1109", 600, 660)]
+        assert js("meetingTimesLines(s, [])", s=series) == [
+            {"text": "1st & 3rd Mon 4:30–6 pm", "eventId": "a_1116"},
+            {"text": "2nd Mon 10–11 am", "eventId": "c_1109"}]
+
+    def test_one_off_line_has_its_event(self):
+        o = [{"id": "x", "date": "2026-11-12", "start": 1140, "end": 1230}]
+        assert js("meetingTimesLines([], o)", o=o) == [
+            {"text": "Next: Nov 12, 7–8:30 pm", "eventId": "x"}]
+
+
+def test_event_url_matches_calendars_own_link():
+    # A "More details" link the calendar itself gave.
+    url = js("eventUrl('0rgvelh201i89325bujc9f8tb4_20261119T190000Z', "
+             "'c_301c808f640b3a04f5344b1bbf266955d51fecaabd7835936b7591f9cff09222"
+             "@group.calendar.google.com')")
+    assert url == ("https://calendar.google.com/calendar/u/0/event?eid="
+                   "MHJndmVsaDIwMWk4OTMyNWJ1amM5Zjh0YjRfMjAyNjExMTlUMTkwMDAwWiBjXzMwMWM4MDhmNjQwYjNh"
+                   "MDRmNTM0NGIxYmJmMjY2OTU1ZDUxZmVjYWFiZDc4MzU5MzZiNzU5MWY5Y2ZmMDkyMjJAZw")

@@ -25,6 +25,15 @@ Scripts in `archive/` were one-offs that are no longer used, and are
 described in the past tense; describe current scripts in the present tense.
 Current scripts must not import from `archive/`; put shared code in `util/`.
 
+## Apps Script files
+
+In each `.gs` file outside `archive/`, keep the top-level functions in
+alphabetical order (ignoring case), each with its comment just above it,
+after the file's header comment and its constants: the Apps Script
+editor's function menu lists functions in file order, and that's how the
+functions to run by hand are found. Put a new function in its place, and
+move one that's renamed. `tests/test_gs_function_order.py` checks this.
+
 ## Tests
 
 Run `python -m pytest` before committing; all tests should pass.

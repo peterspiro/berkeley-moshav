@@ -107,8 +107,8 @@ The links:
   Action Items Recap (a bulleted list) become the checklist of its Action
   Items Accountability (their text only). The meetings that are over
   lose their links, so they're no longer changed. Members are named by
-  first name, with their last initial if another community member shares
-  it; the closing round has a line for each attendee's feedback. The circle is the Google Group whose footer links the
+  first name, with their last initial (no period: "Ada L") if another
+  community member shares it; the closing round has a line for each attendee's feedback. The circle is the Google Group whose footer links the
   Drive folder (or shared drive) the doc is in, so this works only for a
   doc in a circle's folder; elsewhere the page says so.
 
@@ -245,7 +245,7 @@ The Remind before meetings row says when the circle's email list gets an email
 reminder of each meeting (`group_meetings/` sends them, and reads the row's
 value cell hourly): it holds only the setting, "24 hours" to start with
 (empty means that default too). How to write it is the grey second line of
-the label cell: "e.g. 2 days; 90 minutes; 2 days, 1 hour; none". (A meeting's own
+the label cell, in small (8 pt) type: "e.g. 2 days; 90 minutes; 2 days, 1 hour; none". (A meeting's own
 `[remind 2 hours]` or `[no reminder]`, in its description, wins; each
 reminder email says so.)
 
@@ -270,7 +270,9 @@ cells date chips, starting at the day the doc was built. The daily run, and
 adding a meeting, bring the dropdowns' choices up to date with the
 circle's members: new members are added, and members who've left, and
 choices added by hand in Docs, are removed unless a Name cell shows them,
-so no cell's choice changes. The daily run also colors red each Term ends
+so no cell's choice changes. A choice that's a member's name but for a
+period at its end ("Ada L.", as last initials once were written) becomes
+the name, so a Name cell showing it then shows "Ada L". The daily run also colors red each Term ends
 date that's past. Docs can't run a script when a date is changed, so
 `buildNewCircleDocs` also does that, every 10 minutes, in each doc changed
 since its last run, so a changed date is colored within about 10 minutes.
@@ -288,7 +290,15 @@ says so, to replace by hand. It labels the doc layout version 4, and skips
 docs on older layouts (run `addNewAboutRowsToCircleDocs` first). To see
 what it does first, run **`tryUpgradeRolesOnCopy`**: it upgrades an
 unlabelled copy of one such doc, in your My Drive, and logs its link
-(delete the copy after). It can also be run by hand, to build waiting docs at once; the
+(delete the copy after).
+The Roles are in the order Leader, Secretary, Facilitator, Feedback Link
+(`ROLE_LABELS`). Docs built before layout version 5 have them as Leader,
+Feedback Link, Facilitator, Secretary, and Remind before meetings' hint
+at full size; **`upgradeRoleOrderInCircleDocs`**, run in the editor,
+changes every doc on layout version 4 over, moving each Roles row whole
+(so its Name dropdown and Term ends date go with it), and labels it layout
+version 5. **`tryUpgradeRoleOrderOnCopy`** does it to an unlabelled copy
+of one such doc first, as `tryUpgradeRolesOnCopy` does. It can also be run by hand, to build waiting docs at once; the
 log links each doc it built.
 
 The Docs API part of building (`replaceTokens`) reads the doc's positions
@@ -327,8 +337,12 @@ and only its managers can move or delete them: the Coordinating Circle are
 the sheet's editors, which in a shared drive can't. It has three parts:
 
 - **The sheet**, "Circle Structure (editing)": a
-  row per group, keyed by its Gather group ID (in a hidden column, so a
-  rename keeps the row). The Coordinating Circle
+  row per circle and working group (clubs, and groups whose type can't be
+  told, have none), keyed by its Gather group ID (in a
+  hidden column, so a rename keeps the row). Above the headings, its first
+  row says "View the Circle Structure. Coordinating Circle: change a
+  group’s Parent here to move it within the structure.", "View the Circle
+  Structure" linking the doc. The Coordinating Circle
   (`coordinating-circle@berkeleymoshav.org`, `STRUCTURE_EDITORS`) can edit
   only its **Parent** column: everything else is protected, editable only by
   `admin@`, which the script runs as. (So can anyone with edit access to the
@@ -336,22 +350,64 @@ the sheet's editors, which in a shared drive can't. It has three parts:
   the Parent column isn't protected.) Each Parent cell is a dropdown of the groups the
   row may be under: a circle under a circle, a working group under a circle
   or working group, leaving out the group itself and the groups beneath it.
-  Full Community (`ROOT_GROUP_NAME`) is always at the top. The other
-  columns: **Type** (Circle or Working Group, from the name of the group's
+  Full Community (`ROOT_GROUP_NAME`) is always at the top. The columns, in
+  order (`STRUCTURE_LAYOUT`): **Group**, **Parent**, **Email list** (a
+  mailto link to the group's shortest address, a shorter alias if it has
+  one), **Gather
+  group** (a link), **Guests** and **Meeting times** (see below), **Drive
+  folder** and **Agenda doc** (links), one column for
+  each role in the agenda doc's Roles table (**Leader**, **Secretary**,
+  **Facilitator**, **Feedback Link**: who its Name dropdown shows, read
+  hourly), **Type** (Circle or Working Group, from the name of the group's
   Drive folder, or else of the group: one ending in "Circle" is a circle's,
   and one ending in "Working Group", "Work Group", "Team", or "Pod" a
   working group's, perhaps followed by something in brackets, such as the
   group's acronym, as in "Development, Finance, & Legal Circle (DF&L)"; a
-  club, a group linked to a shared drive, and a group whose names don't
-  say are "Not in the structure"), **Problems** (why a group isn't in the structure, or isn't
-  placed yet), the email list (a mailto link to the group's shortest
-  address, a shorter alias if it has one; these two columns are fitted
-  to their text whenever it changes), and links to the Gather group, Drive
-  folder, and agenda doc.
+  club, and a group whose names don't say, are left out; an everybody
+  group, linked to a shared drive, goes by its shared drive's name), and
+  **Problems** (why a group isn't placed yet).
+  **Guests** lists, one to a line, the members of the group's Google
+  Group who aren't in Full Community's, read hourly. Guests are given
+  access by adding them to the group's Drive folder (as Content managers)
+  by hand, and `groups_drive_sync` puts them in the Google Group; Full
+  Community's members are everyone in the community, so anyone else in a
+  group is a guest. (Full Community's own row shows none; `admin@`, which
+  `groups_drive_sync` never removes, is left out; and a community member
+  who has left Full Community shows as a guest.)
+  **Meeting times** says, read hourly from the group's calendar (the one its
+  footer links), when its meetings in the next 8 weeks are, each line
+  linking the next meeting it's about, as the all-events calendar (which
+  everyone can view) shows it: Google Calendar's page for the event, with
+  its details open, the same link as its "More details" (`eventUrl`): a line for each repeating meeting, in alphabetical
+  order (numbers by value, so "1st Mon" comes before "3rd Mon"), from its
+  series' repeat rule and usual times (so a meeting
+  moved for one week changes nothing): "Tue 7:30–9 pm", "Mon & Thu 7–8 pm",
+  "Every other Tue 7–8 pm", "2nd & 4th Tue 7–8:30 pm", "Last Sun of month
+  4–5:30 pm" (the month's last Sunday), "15th of month 6–7 pm" (monthly
+  meetings on the same weekday at the same times but in different weeks,
+  such as a series for the 1st Monday and another for the 3rd, make one
+  line, "1st & 3rd Mon 4:30–6 pm", linking the sooner); for a rule
+  it can't put in words, "Next: Nov 12, 7–8:30 pm", after the others. With
+  no repeating meetings, it gives the next one-off that way; with nothing
+  to come, "None scheduled", unlinked; with no calendar, nothing. Past meetings, cancelled
+  ones, and all-day events never count. (`meetingTimesText`, in
+  `structure_rules.gs`, words it, tested under Node.) Email list and Guests
+  are only as wide as their headings, cutting their text off; the other
+  columns are fitted to their text and headings whenever it changes.
+  (Sheets has no lasting "fit to data" setting, so the script resizes them
+  each time; Sheets' own resizing leaves bold headings cut off, so each is
+  made at least as wide as its heading needs, by `headingWidth`.) The
+  data cells' formatting is cleared on each run, so none keeps the look of
+  what was in them before.
+  Rows are read by their columns' headings, so when the columns change, the
+  next run reads the sheet as it was and lays it out afresh (losing only
+  the notes on Parent cells).
 - **The doc**, "Circle Structure", which anyone
   with the link can view (or, if the domain doesn't allow that, anyone in
   it): under a grey line saying it's kept up to date automatically, and
-  to ask the Coordinating Circle to move a group, the tree as a bulleted
+  to ask the Coordinating Circle to move a group, "who change it in the
+  Circle Structure sheet" (linking the sheet, which only its editors and
+  the Shared Drive's members can open), the tree as a bulleted
   list (bullets at every level, each level 0.25" further in, 2 pt apart),
   each group's name followed by small (8 pt) Members, Documents, Email,
   and Agenda (if it has an agenda doc) links, and then the groups not
@@ -361,7 +417,8 @@ the sheet's editors, which in a shared drive can't. It has three parts:
 - **Each agenda doc's Parent Circle and Sub-Circles rows**, in About this
   circle. Parent Circle: the parent; Sub-Circles: each sub-circle and
   working group. Each is linked to its agenda doc. Each label cell has a small grey
-  "(Set in the Circle Structure)" line linking the sheet. The bullets are
+  "(Managed here. See Circle Structure.)" line, "here" linking the sheet
+  and "Circle Structure" the doc. The bullets are
   written with DocumentApp, not the Docs API, so nothing depends on reading
   the doc's positions just after writing it (see below). A doc can't lock
   part of itself, so the script puts the rows back when they're edited:
@@ -372,9 +429,11 @@ How it stays up to date:
 
 - **`syncCircleStructureGroups`**, hourly, brings the rows up to date with
   the Google Groups whose footers link a Gather group and a Drive item:
-  adds a row for a new group (with an empty Parent), renames (in the Parent
-  cells too), relinks, and retypes, and removes the row of a group that's
-  gone (only when every footer could be read). The rows stay in order by
+  adds a row for a new circle or working group (with an empty Parent),
+  renames (in the Parent cells too), relinks, retypes, and reads each
+  agenda doc's role holders, the guests, and the meeting times, and removes the row of a group that's gone
+  (only when every footer could be read) or is no longer a circle or
+  working group (not when its Drive folder just couldn't be read). The rows stay in order by
   name.
 - **`applyStructure`** runs on each edit
   of the sheet (`onCircleStructureEdit`, as `admin@`, whoever made the
@@ -412,10 +471,14 @@ How it stays up to date:
    from the placements, writes the doc, rewrites every agenda doc's
    Parent Circle and Sub-Circles rows, and logs the three links. Check the
    sheet's Problems column, and the notes on its Parent cells, for anything
-   left to place by hand.
+   left to place by hand, and the execution log for groups left out because
+   their type couldn't be told.
 4. Send the sheet's link to the Coordinating Circle, and put the doc's link
    where people look for the structure (in place of the old wiki page's
    tree, say).
 
-**`refreshCircleStructureEverywhere`**, run in the editor, rewrites the doc
-and every agenda doc's rows that don't say what they should, at once.
+**`refreshCircleStructureEverywhere`**, run in the editor, does at once
+what the timers do: brings the sheet's rows up to date with the groups (as
+the hourly sync does: names, links, roles, guests, meeting times, and
+column widths), and rewrites the doc and every agenda doc's rows that
+don't say what they should.
