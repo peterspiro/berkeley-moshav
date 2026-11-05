@@ -352,7 +352,7 @@ the sheet's editors, which in a shared drive can't. It has three parts:
   with the link can view (or, if the domain doesn't allow that, anyone in
   it): under a grey line saying it's kept up to date automatically, and
   to ask the Coordinating Circle to move a group, the tree as a bulleted
-  list (bullets at every level, each level 0.25" further in, 6 pt apart),
+  list (bullets at every level, each level 0.25" further in, 2 pt apart),
   each group's name followed by small (8 pt) Members, Documents, Email,
   and Agenda (if it has an agenda doc) links, and then the groups not
   yet placed. It's rewritten whenever what it shows

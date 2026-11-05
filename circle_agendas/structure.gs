@@ -694,7 +694,7 @@ function structureDocRuns(g) {
 // space after each group's line, in points.
 const STRUCTURE_TEXT_SIZE = 11;
 const STRUCTURE_LINKS_SIZE = 8;
-const STRUCTURE_ITEM_SPACING = 6;
+const STRUCTURE_ITEM_SPACING = 2;
 // Bump when the doc's layout changes, so it's rewritten even if the
 // structure hasn't.
 const STRUCTURE_DOC_LAYOUT = 3;
