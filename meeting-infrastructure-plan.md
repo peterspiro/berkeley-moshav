@@ -134,9 +134,18 @@ calendar). The shared community calendar (`share@`, see
 `calendar-notifications-plan.md`) stays separate: it's where members put
 their own social events. Agreed design:
 - **An admin group per calendar.** Each calendar has a Gather admin group,
-  of a Gather group type that no other group uses (see "Why a distinct
-  Gather group type" below). Its Drive folder is one level down, like a
-  club's: under a top-level "Meeting Admin" folder in the Shared Drive.
+  of Gather's **Squad** type, which no other group uses (see "Why a
+  distinct Gather group type" below; the value Gather's form uses for it,
+  presumably `squad`, is to check). Its Drive folder is one level down,
+  like a club's: under a top-level "Meeting Admin" folder in the Shared
+  Drive.
+- **Names.** The Gather group has the calendar's name ("Community
+  Meetings"), and so do its calendar and its Drive folder, with no type
+  suffix: being under "Meeting Admin" already says what the folder is. The
+  Google Group's name and address get "Admins" ("Community Meetings
+  Admins", `community-meetings-admins@`), so it isn't mistaken for a list of
+  everyone who comes. `add_new_group.py` takes the type from a flag rather
+  than from the name's ending.
 - **Calendar.** Each admin group gets one calendar, shared with its Google
   Group as editors ("Make changes to events"). Everyone else sees its events
   through the all-events calendar, which is shared view-only with the
@@ -147,13 +156,25 @@ their own social events. Agreed design:
   name (see 2). A skilled host claims host with the host key for host
   features such as breakout rooms.
 - **Recorded in the admin group's footer**, as for other groups: its Gather
-  group, Drive folder, "Google calendar" and "Zoom meeting" links. So
-  `group_meetings` finds the calendars and rooms the way it finds groups',
-  and there's still no separate configuration.
+  group, Drive folder, "Google calendar" and "Zoom meeting" links, plus a
+  line naming the calendar's **audience**: the everybody group its events
+  invite and its reminders go to. For now there's only Gather's default
+  Full Community group, `all.members@berkeleymoshav.org`, but the footer
+  records it in case there are more everybody groups later. So
+  `group_meetings` finds the calendars, rooms and audiences the way it finds
+  groups', and there's still no separate configuration. It tells an admin
+  group's footer from a group's by the audience line (and the room's Zoom
+  user), since the Apps Scripts don't see Gather types.
 - **Events.** The Apps Script treats their events like group events: the
-  admin group's room's details, and the **everybody group** (not the admin
-  group) and the all-events calendar invited, but **not** the BM Meetings
-  FAQ line, which is for group meetings only.
+  admin group's room's details, and the audience (not the admin group) and
+  the all-events calendar invited, but **not** the BM Meetings FAQ line,
+  which is for group meetings only.
+- **Reminders.** Each event gets a reminder 24 hours before, sent to the
+  audience with replies going to the admin group; `[remind …]` and
+  `[no reminder]` on an event work as for group meetings.
+- **No agenda docs for now.** An admin group that later has one will need a
+  doc of its own format, not the circle agenda doc (which has the Circle
+  Structure rows), so `update_groups.py -a` leaves them out.
 - **Clashes.** A Zoom user hosts one meeting at a time, so community-wide
   meetings clash with each other (all rooms are under `community-zoom-hosts@`,
   even on different calendars), but no longer with group meetings, which
@@ -193,13 +214,15 @@ their own social events. Agreed design:
 | | Circles and working groups | Admin groups |
 |---|---|---|
 | Drive folder | Top level of the Shared Drive | Under "Meeting Admin", like clubs under "Clubs" |
-| Folder and calendar name | "<Name> Circle" / "<Name> Working Group" | The calendar's name (suffix to decide) |
+| Folder name | "<Name> Circle" / "<Name> Working Group" | The calendar's name, no suffix |
+| Google Group name | "<Name> Circle" / "<Name> Working Group" | "<Name> Admins" |
 | Zoom room | Under `circle-zoom-hosts@` (or moved to `berkeley@urbanmoshav.org`) | Under `community-zoom-hosts@`, never moved |
-| Who events invite | The group itself | The everybody group, not the admin group |
+| Who events invite | The group itself | The audience in its footer (`all.members@`), not the admin group |
 | BM Meetings FAQ line | Added | Not added |
 | Clash emails | Group-to-group wording, offering to move a room to the second Zoom user | Admin-group wording, with no room to move |
-| Agenda doc, Circle Structure sheet and doc | Yes | No: not part of the circle structure |
-| Reminder before each meeting | To the group | To decide: the admin group, the everybody group, or none |
+| Agenda doc | Yes | None for now; later, a format of their own |
+| Circle Structure sheet and doc | Yes | No: not part of the circle structure |
+| Reminder before each meeting | To the group; timing from the agenda doc or the event | To the audience, 24 hours before unless the event says otherwise |
 | Email when its calendar is made | Tells members to add the calendar and move meetings onto it | Different wording: tells the admins how to schedule community-wide events |
 
 #### Why a distinct Gather group type
@@ -218,7 +241,10 @@ group uses:
 - gives them their own branches wherever they differ (folder place, Zoom
   user, who events invite, the FAQ line, clash and reminder emails),
   without mistaking a circle or a club for one.
-Which of Gather's unused types to use is still to pick.
+Squad is the type used. The Python scripts read it from Gather; the Apps
+Scripts, which see only footers and Drive, recognise admin groups by the
+footer's audience line and the room's Zoom user. `add_new_group.py` gets a
+flag for it, since admin groups' names carry no type ending.
 
 ### 2. Recording archive
 Copy Zoom cloud recordings into the matching group's Drive folder, then let
@@ -277,6 +303,3 @@ regularly, or have the hourly Apps Script run send the warning.
   scheduling privilege, keeping its ID and link, so the footer and events
   don't change. Done by hand in Zoom for now; a script could do it (the
   API's `schedule_for`).
-- For community-wide calendars (see 1): which Gather group type admin
-  groups use; their folders' and calendars' name suffix; and who gets the
-  reminder before a community-wide meeting.
