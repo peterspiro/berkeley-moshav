@@ -8,6 +8,7 @@ group room is a recurring meeting with no fixed time (type 3), so its link
 never changes and members only ever click it. New rooms are made under
 ROOMS_USER; a room can be moved (transferred in Zoom, keeping its link) to
 another of ROOM_USERS, to keep its meetings from clashing with others'.
+Community-wide calendars' rooms are under COMMUNITY_ROOMS_USER instead.
 
 Room settings (ROOM_SETTINGS) let a meeting run with no host present:
 participants can join before the host at any time, there's no waiting room
@@ -31,6 +32,13 @@ TOKEN_URL = "https://zoom.us/oauth/token"
 # licensed user that may own one (a Zoom user can run one meeting at a time).
 ROOMS_USER = "circle-zoom-hosts@berkeleymoshav.org"
 ROOM_USERS = (ROOMS_USER, "berkeley@urbanmoshav.org")
+
+# The licensed Zoom user that owns every community-wide calendar's room
+# (one per calendar, so each calendar's recordings can be told apart).
+# Group rooms are never moved to it, so community-wide meetings only clash
+# with each other.
+COMMUNITY_ROOMS_USER = "community-zoom-hosts@berkeleymoshav.org"
+COMMUNITY_ROOM_USERS = (COMMUNITY_ROOMS_USER,)
 
 ROOM_TOPIC_SUFFIX = " Meeting Room"
 MEETING_TYPE_NO_FIXED_TIME = 3

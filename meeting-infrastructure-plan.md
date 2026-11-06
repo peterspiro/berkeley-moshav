@@ -50,6 +50,12 @@ are; this note keeps the reasoning and the remaining work.
 - **`group_meetings` Apps Script**: adds the room and guests to group
   calendar events, alerts about invitation-only copies, and warns about
   clashes.
+- **Community calendars** (see "Community calendars" below): admin groups of
+  Gather's Squad type, made by `add_new_group.py -t a` or set up by
+  `update_groups.py`, each with a calendar, a room under
+  `community-zoom-hosts@`, and its audience in its footer; `group_meetings`
+  invites the audience, reminds it, and words clash emails for them; the
+  `[no invite]` tag; the admins' emails and guide.
 
 ## Decisions
 
@@ -63,8 +69,8 @@ are; this note keeps the reasoning and the remaining work.
   clashing with others' (see "Open decisions"). Both are `ROOM_USERS` in
   `util/zoom_utils.py`.
 - A third licensed Zoom user, `community-zoom-hosts@berkeleymoshav.org`,
-  hosts the community-wide meetings (see "Not built yet", 1). It isn't one
-  of `ROOM_USERS`: group rooms aren't moved to it.
+  hosts the community-wide meetings (see "Community calendars"). It isn't
+  one of `ROOM_USERS`: group rooms aren't moved to it.
 - Zoom is reached through a Server-to-Server OAuth app ("Berkeley Moshav Admin
   Scripts"). Its credentials are the project's, not a person's, so they live
   in the repo's git-ignored `zoom_credentials` file (Python) and the Apps
@@ -125,90 +131,162 @@ are; this note keeps the reasoning and the remaining work.
     the Technology Circle are asked to agree which moves;
   - two meetings scheduled in Zoom: the Technology Circle is asked to move one.
 
-## Not built yet
-
-### 1. Community-wide calendars
+### Community calendars
 Several calendars for community-wide events (for example "Community
 Meetings"), each managed by a small set of admins (a different set for each
 calendar). The shared community calendar (`share@`, see
 `calendar-notifications-plan.md`) stays separate: it's where members put
-their own social events. Agreed design:
+their own social events.
 - **An admin group per calendar.** Each calendar has a Gather admin group,
-  of Gather's **Squad** type, which no other group uses (see "Why a
-  distinct Gather group type" below; the value Gather's form uses for it,
-  presumably `squad`, is to check). Its Drive folder is one level down,
-  like a club's: under a top-level "Meeting Admin" folder in the Shared
-  Drive.
+  of Gather's **Squad** type (`ADMIN_GROUP_KIND`, `squad`; the value
+  Gather's form uses is still to check), which no other group uses (see
+  "Why a distinct Gather group type" below). Its Drive folder is one level
+  down, like a club's: under a top-level "Meeting Admin" folder in the
+  Shared Drive.
 - **Names.** The Gather group has the calendar's name ("Community
   Meetings"), and so do its calendar and its Drive folder, with no type
   suffix: being under "Meeting Admin" already says what the folder is. The
   Google Group's name and address get "Admins" ("Community Meetings
   Admins", `community-meetings-admins@`), so it isn't mistaken for a list of
-  everyone who comes. `add_new_group.py` takes the type from a flag rather
-  than from the name's ending.
+  everyone who comes. `add_new_group.py` takes the type from `-t a`
+  rather than from the name's ending.
 - **Calendar.** Each admin group gets one calendar, shared with its Google
   Group as editors ("Make changes to events"). Everyone else sees its events
   through the all-events calendar, which is shared view-only with the
   everybody groups; that's enough, so admin groups get no other read access.
 - **Zoom room.** Each admin group gets its own no-fixed-time room (Zoom
-  type 3, the standard room settings) under the `community-zoom-hosts@`
-  Zoom user, so each calendar's recordings can be told apart by the room's
-  name (see 2). A skilled host claims host with the host key for host
-  features such as breakout rooms.
+  type 3, the standard room settings) under the
+  `community-zoom-hosts@berkeleymoshav.org` Zoom user
+  (`COMMUNITY_ROOMS_USER`), so each calendar's recordings can be told apart
+  by the room's name (see "Not built yet", 1). A skilled host claims host
+  with that user's host key for host features such as breakout rooms.
 - **Recorded in the admin group's footer**, as for other groups: its Gather
   group, Drive folder, "Google calendar" and "Zoom meeting" links, plus a
-  line naming the calendar's **audience**: the everybody group its events
-  invite and its reminders go to. For now there's only Gather's default
-  Full Community group, `all.members@berkeleymoshav.org`, but the footer
-  records it in case there are more everybody groups later. So
-  `group_meetings` finds the calendars, rooms and audiences the way it finds
-  groups', and there's still no separate configuration. It tells an admin
-  group's footer from a group's by the audience line (and the room's Zoom
-  user), since the Apps Scripts don't see Gather types.
+  "Calendar audience:" line naming the everybody group its events invite
+  and its reminders go to. For now there's only Gather's default Full
+  Community group, `all.members@berkeleymoshav.org`
+  (`COMMUNITY_CALENDAR_AUDIENCE`, written when a footer names none), but
+  the footer records it in case there are more everybody groups later.
+  `group_meetings` finds the calendars, rooms and audiences the way it
+  finds groups', and tells an admin group's footer from a group's by the
+  audience line, since the Apps Scripts don't see Gather types. The
+  calendar's name is the Google Group's without "Admins".
 - **Events.** The Apps Script treats their events like group events: the
   admin group's room's details, and the audience (not the admin group) and
   the all-events calendar invited, but **not** the BM Meetings FAQ line,
   which is for group meetings only.
+- **`[no invite]`.** An event marked `[no invite]` (in its title or
+  description) doesn't invite the audience, nor get a reminder unless it
+  also has a reminder tag: for an event only some people should come to,
+  so the whole community isn't emailed about it. It works on group
+  calendars too (not inviting the group). An audience already invited
+  stays a guest (the script can't tell who added it), so the tag must be
+  there before the event is first saved; otherwise the admins remove the
+  guest by hand.
 - **Reminders.** Each event gets a reminder 24 hours before, sent to the
-  audience with replies going to the admin group; `[remind …]` and
-  `[no reminder]` on an event work as for group meetings.
+  audience ("Hi everyone"), with replies going to the admin group;
+  `[remind …]` and `[no reminder]` on an event work as for group meetings.
 - **No agenda docs for now.** An admin group that later has one will need a
   doc of its own format, not the circle agenda doc (which has the Circle
   Structure rows), so `update_groups.py -a` leaves them out.
+- **Not in the Circle Structure.** The `circle_agendas` Apps Script leaves
+  out a group whose folder is in "Meeting Admin", without a warning.
 - **Clashes.** A Zoom user hosts one meeting at a time, so community-wide
   meetings clash with each other (all rooms are under `community-zoom-hosts@`,
-  even on different calendars), but no longer with group meetings, which
-  are under the other two Zoom users. The existing check (overlapping or
-  less than 15 minutes apart, next 8 weeks) covers them once it knows that
-  `community-zoom-hosts@`'s rooms belong to admin groups; until then it
-  would see them as meetings scheduled directly in Zoom. Clash emails, sent
-  like the others, in an overlapping and a "too close together" version:
+  Zoom user 3, even on different calendars), but not with group meetings,
+  which are under the other two Zoom users. The existing check (overlapping
+  or less than 15 minutes apart, next 8 weeks) covers them. Their clash
+  emails are the group ones (`overlapMessage`), with the admin group
+  greeted ("Community Meetings admins"), the meeting named by its calendar
+  ("Community Meetings calendar"), and no option to move a room to the
+  second Zoom user:
   - *Two community-wide meetings.* To: both calendars' admin groups (or the
     one, if both are on the same calendar); cc: `calendaring-alerts@`.
-
-    > **Subject:** Zoom meetings overlap: "Community meeting" and
-    > "Movie night"
-    >
-    > Hi Community Meetings admins and Social Events admins,
-    >
-    > These two community-wide meetings overlap: …
-    >
-    > All our community-wide meetings use one Zoom user, which can host
-    > only one meeting at a time. Please agree which one moves. To find a
-    > free time, check the All Berkeley Moshav Events calendar: <link>
-
+    Options: hold one on a personal or work Zoom account, or agree which one
+    moves on its calendar.
   - *A community-wide meeting and one scheduled directly in Zoom under
-    `community-zoom-hosts@`.* To: the admin group; cc:
-    `calendaring-alerts@`; asking them to agree which moves.
-
-  The "too close together" versions say how many minutes apart the meetings
-  are, that the second can't start until the first ends if it runs over, and
-  ask for at least 15 minutes between them. `overlapMessage` in
-  `group_meetings/event_rules.gs` builds the group cases.
+    `community-zoom-hosts@`.* To: the admin group and
+    `calendaring-alerts@`, asking them to agree which moves.
 
   (The earlier design, with one shared room under `circle-zoom-hosts@`, had
   community-wide meetings clash with group meetings too, and asked the group
-  to move; with the separate Zoom user that case goes away.)
+  to move; with the separate Zoom user that case went away.)
+- **Emails to the admins.** `add_new_group.py -t a`'s welcome email (a
+  draft from the person running it) and, for an admin group whose calendar
+  `update_groups.py` creates, the announcement (from `admin@`, replies to
+  `calendaring-alerts@`) tell the admins how community-wide events are
+  scheduled, rather than how to move a group's meetings; they share that
+  text (`admin_calendar_paragraphs` in `util/calendar_announcement.py`).
+  The welcome email reads:
+
+  > **To:** community-meetings-admins@berkeleymoshav.org
+  > **Subject:** Your new community calendar: Community Meetings
+  >
+  > Hi Dana,
+  >
+  > I've created the Community Meetings calendar for community-wide events,
+  > and this email list, community-meetings-admins@berkeleymoshav.org, for
+  > the people who schedule them. Links to the calendar, its Zoom room, its
+  > Drive folder, and its admin group in Gather are in the footer at the
+  > bottom of this message.
+  >
+  > Everyone on this list can add and change events on the Community
+  > Meetings calendar. The rest of the community sees its events on the All
+  > Berkeley Moshav Events calendar.
+  >
+  > Scheduling an event:
+  > Create the event on the Community Meetings calendar itself, not on your
+  > own calendar. (To add the calendar to your own Google Calendar, click its
+  > link in the footer.) An invitation from your own calendar only gives the
+  > calendar a copy, which can't be given the Zoom room or the community's
+  > invitation.
+  >
+  > A few minutes after you save it, the event automatically gets:
+  > - the calendar's Zoom room (its link, meeting ID and passcode), unless
+  >   the event says [no zoom] or has another Zoom or Meet link;
+  > - the whole community (all.members@berkeleymoshav.org) invited, each
+  >   member getting the invitation by email, unless the event says
+  >   [no invite];
+  > - a place on the All Berkeley Moshav Events calendar.
+  >
+  > So there's no need to add Zoom details or guests yourself.
+  >
+  > Everyone invited is also emailed a reminder 24 hours before each event,
+  > and replies to it come to this list. For one event, type
+  > [remind 2 hours] (or another time) or [no reminder] in its description.
+  > An event marked [no invite] gets no reminder unless it says
+  > [remind ...] too.
+  >
+  > The Zoom room:
+  > The room is the calendar's permanent meeting place: its link never
+  > changes, and anyone with the link can join, with or without a host. For
+  > host features such as breakout rooms or recording, a host claims host
+  > with the host key; the Technology Circle
+  > (calendaring-alerts@berkeleymoshav.org) can give it to whoever hosts.
+  >
+  > All the community-wide calendars' rooms belong to one Zoom user, which
+  > can host only one meeting at a time. If an event overlaps another
+  > community-wide event, or is less than 15 minutes from one, you'll get an
+  > email asking the admins involved to agree which one moves.
+  >
+  > All of this, and more, is in the guide for community calendar admins:
+  > (the guide's link, once `ADMIN_GUIDE_URL` is set)
+  >
+  > I've made you a manager of the Gather group, which allows you to add
+  > members to it, and to make other members managers. Everyone in it
+  > receives messages sent to this list, and can add and edit files in the
+  > folder.
+  >
+  > If you'd like a different address for the list, or a different name for
+  > the calendar, just let me know.
+  >
+  > Peter
+- **The admins' guide.** `community-calendar-admins-guide.md` holds the same
+  information at more length (adding the calendar, scheduling step by step,
+  the tags, reminders, the host key, clashes), for the admins to keep
+  coming back to. It's written to be made into a Google Doc, viewable by
+  anyone with the link, whose link goes in `ADMIN_GUIDE_URL` so the emails
+  link it. The repo's copy is the source; the doc is updated from it.
 
 #### How admin groups differ from circles
 | | Circles and working groups | Admin groups |
@@ -223,7 +301,8 @@ their own social events. Agreed design:
 | Agenda doc | Yes | None for now; later, a format of their own |
 | Circle Structure sheet and doc | Yes | No: not part of the circle structure |
 | Reminder before each meeting | To the group; timing from the agenda doc or the event | To the audience, 24 hours before unless the event says otherwise |
-| Email when its calendar is made | Tells members to add the calendar and move meetings onto it | Different wording: tells the admins how to schedule community-wide events |
+| Email when its calendar is made | Tells members to add the calendar and move meetings onto it | Tells the admins how to schedule community-wide events, linking their guide |
+| `[no invite]` | The group isn't invited, nor reminded | The audience isn't invited, nor reminded |
 
 #### Why a distinct Gather group type
 The scripts decide what a group gets from its Gather type (`kind`), not
@@ -243,10 +322,13 @@ group uses:
   without mistaking a circle or a club for one.
 Squad is the type used. The Python scripts read it from Gather; the Apps
 Scripts, which see only footers and Drive, recognise admin groups by the
-footer's audience line and the room's Zoom user. `add_new_group.py` gets a
-flag for it, since admin groups' names carry no type ending.
+footer's audience line (`group_meetings`) and by their folder being in
+"Meeting Admin" (`circle_agendas`). `add_new_group.py` takes it from
+`-t a`, since admin groups' names carry no type ending.
 
-### 2. Recording archive
+## Not built yet
+
+### 1. Recording archive
 Copy Zoom cloud recordings into the matching group's Drive folder, then let
 Zoom delete them.
 - Match recordings to groups by meeting topic ("<Group> Meeting Room"); a
@@ -260,23 +342,31 @@ Zoom delete them.
   off-the-shelf alternatives considered.
 - Needs the retention decision below, and more Zoom scopes (recordings).
 
-### 3. Phone dial-in numbers
+### 2. Phone dial-in numbers
 The original design wanted dial-in numbers alongside the link. Event
 descriptions and footers show only the link, meeting ID, and passcode; the
 numbers would come from Zoom with each room's details.
 
-### 4. "How to join" sheets
+### 3. "How to join" sheets
 One page per group: the link, what to click, the meeting ID and passcode,
 dial-in, and who to contact if Zoom says "host has another meeting in
 progress". Written by hand from a template, or generated from the footers by
 a small script.
 
-### 5. Room expiry outside script runs
+### 4. Room expiry outside script runs
 Rooms unused for 300 days are only warned about, and expired ones replaced,
 when someone runs `update_groups.py`. Either run it
 regularly, or have the hourly Apps Script run send the warning.
 
 ## Non-code tasks
+
+- Before the first community calendar: make the "Meeting Admin" folder at
+  the top of the Shared Drive; check that Gather's Squad type is `squad`;
+  make sure `all.members@` lets `admin@` post (for reminders); push
+  `group_meetings` and `circle_agendas`; make the admins' guide a Google Doc
+  and set `ADMIN_GUIDE_URL` (README.md: "Setting up community calendars").
+- Give the community calendars' hosts the `community-zoom-hosts@` host key
+  privately.
 
 - Enable the Gmail API in the Google Cloud project, then sign in again on
   the next script run (the scripts now ask to send mail, for the email

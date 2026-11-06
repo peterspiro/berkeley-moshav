@@ -1,12 +1,22 @@
 #!/usr/bin/env python3
 """
 Creates a new Drive folder, Google Group, and Gather group, all linked
-together, and (unless --type=club) has the new group put under its parent
-circle in the Circle Structure.
+together, and (unless --type=club or admin) has the new group put under its
+parent circle in the Circle Structure.
+
+With --type=admin, the new group is a community-wide calendar's admin
+group (Gather type "Squad"): its folder is named like the calendar, with
+no type suffix, under the top-level "Meeting Admin" folder; its Google
+Group's name and address end in "Admins" ("Community Meetings Admins",
+community-meetings-admins@); its Zoom room is under the community-wide
+calendars' Zoom user (COMMUNITY_ROOMS_USER); its footer also names the
+calendar's audience (COMMUNITY_CALENDAR_AUDIENCE), the everybody group its
+events invite and its reminders go to; and its welcome message tells the
+admins how to schedule community-wide events.
 
 Steps:
   1. Validate: the folder, Google Group, and Gather group don't already
-     exist; (unless --type=club) --parent-circle uniquely identifies a
+     exist; (unless --type=club or admin) --parent-circle uniquely identifies a
      Gather group that can be the new group's parent (a circle, or, for a
      working group, a circle or working group); and --manager uniquely
      identifies a community member.
@@ -20,7 +30,7 @@ Steps:
      Content manager access.
   4. Wire the Gather group's mailing list to the new Google Group (to the
      --alias address if given, else the group's primary address).
-  5. Unless --type=club, write the new group's parent to "Circle structure
+  5. Unless --type=club or admin, write the new group's parent to "Circle structure
      placements.json" in admin@'s My Drive (see
      util/circle_structure_placements.py). The circle_agendas Apps Script
      adds the group to the Circle Structure sheet within the hour (from its
@@ -55,7 +65,8 @@ docstring and README.md for setup.
 
 The group type (circle / working group / club) is inferred from a name
 ending in the matching suffix ("Circle" / "Working Group" / "Club");
-pass -t/--type explicitly only when the name has no such suffix.
+pass -t/--type explicitly only when the name has no such suffix, and
+always for an admin group (-t a), whose name has none.
 
 The name (-N/--name, required) may be given as multiple unquoted words.
 
@@ -84,6 +95,7 @@ Usage:
     python add_new_group.py -N Tech Support -t w -p Operations -m Dana
     python add_new_group.py -N Book Club -m alice@example.org
     python add_new_group.py -N Landscape Circle -p Property -m jsmith --alias landscape
+    python add_new_group.py -N Community Meetings -t a -m Dana
 """
 
 import argparse
@@ -97,7 +109,7 @@ from pathlib import Path
 from googleapiclient.discovery import build
 from playwright.sync_api import sync_playwright
 
-from util.calendar_announcement import GROUP_CALENDAR_HOWTO_URL
+from util.calendar_announcement import GROUP_CALENDAR_HOWTO_URL, admin_calendar_paragraphs
 from util.calendar_event_moves import EventMover
 from util.circle_agenda_docs import (
     AGENDA_KINDS,
@@ -124,14 +136,17 @@ from util.gather_utils import (
     set_gather_group_email_list,
 )
 from util.gdrive_config import (
+    ADMIN_GROUP_KIND,
     DEFAULT_DRIVE_ID,
     FOLDER_TYPE_SUFFIXES,
+    PARENT_FOLDER_NAMES,
     add_group_access_to_gdrive_item,
     create_drive_folder,
     create_gdrive_item,
     ensure_folder_name_available,
     find_folder_id_under_parent,
     folder_name_for_group_type,
+    google_group_name_for_group_type,
     parent_folder_id_for_group_type,
     scrape_gdrive_config,
 )
@@ -139,6 +154,7 @@ from util.google_group_footer import (
     ensure_group_footer,
     fetch_footer_calendar_id,
     fetch_footer_zoom_url,
+    parse_footer_audience,
 )
 from util.google_group_utils import (
     CONVERSATION_HISTORY_SETTINGS,
@@ -158,6 +174,7 @@ from util.google_group_utils import (
 )
 from util.mail_draft import open_draft
 from util.meeting_rooms import (
+    COMMUNITY_CALENDAR_AUDIENCE,
     QuitRequested,
     check_calendar_owner,
     ensure_group_calendar,
@@ -165,7 +182,12 @@ from util.meeting_rooms import (
     find_linked_resources,
     list_owned_calendars,
 )
-from util.zoom_utils import ZoomClient, room_topic
+from util.zoom_utils import (
+    COMMUNITY_ROOM_USERS,
+    ROOM_USERS,
+    ZoomClient,
+    room_topic,
+)
 _LOG_FILE = Path("debug/add_new_group_log.csv")
 _SCREENSHOT_DIR = Path("debug/add_new_group_screenshots")
 
@@ -176,6 +198,7 @@ class GroupType(Enum):
     CIRCLE = ("circle", "circle", "c")
     WORKING_GROUP = ("working group", "committee", "w")
     CLUB = ("club", "club", "b")
+    ADMIN = ("admin", ADMIN_GROUP_KIND, "a")  # a community-wide calendar's admins
 
     def __init__(self, label: str, kind: str, letter: str):
         self.label = label
@@ -194,10 +217,11 @@ class GroupType(Enum):
     @classmethod
     def from_name_suffix(cls, name: str) -> "GroupType | None":
         """Infer the type from a name ending in the type's folder suffix
-        ("Circle"/"Working Group"/"Club"), or None if it ends with none."""
+        ("Circle"/"Working Group"/"Club"), or None if it ends with none (an
+        admin group's has none)."""
         for member in cls:
             suffix = FOLDER_TYPE_SUFFIXES[member.kind]
-            if re.search(r"\b" + re.escape(suffix) + r"\s*$", name, re.IGNORECASE):
+            if suffix and re.search(r"\b" + re.escape(suffix) + r"\s*$", name, re.IGNORECASE):
                 return member
         return None
 
@@ -242,6 +266,32 @@ def build_welcome_message(
     return subject, body
 
 
+def build_admin_welcome_message(
+    calendar_name: str, list_address: str, manager_first_name: str, sender_first_name: str,
+    audience: str,
+) -> tuple[str, str]:
+    """Return (subject, body) of the welcome message to a new community-wide
+    calendar's admin group's list: what was created, and how community-wide
+    events are scheduled (admin_calendar_paragraphs())."""
+    subject = f"Your new community calendar: {calendar_name}"
+    greeting = f"Hi {manager_first_name}," if manager_first_name else "Hi,"
+    body = "\n\n".join([
+        greeting,
+        f"I've created the {calendar_name} calendar for community-wide events, and this "
+        f"email list, {list_address}, for the people who schedule them. Links to the "
+        "calendar, its Zoom room, its Drive folder, and its admin group in Gather are in "
+        "the footer at the bottom of this message.",
+        *admin_calendar_paragraphs(calendar_name, audience),
+        "I've made you a manager of the Gather group, which allows you to add members to "
+        "it, and to make other members managers. Everyone in it receives messages sent to "
+        "this list, and can add and edit files in the folder.",
+        "If you'd like a different address for the list, or a different name for the "
+        "calendar, just let me know.",
+        sender_first_name,
+    ]) + "\n"
+    return subject, body
+
+
 def print_welcome_message(to: str, subject: str, body: str) -> None:
     print(f"To: {to}")
     print(f"Subject: {subject}")
@@ -277,9 +327,15 @@ def main(
         f"send_email={send_email}")
 
     kind = group_type.kind
+    is_admin_group = group_type == GroupType.ADMIN
     folder_name = folder_name_for_group_type(raw_name, kind)
-    gemail = group_email(folder_name)
+    # The Gather group, folder, calendar, and room are named gdisplay; the
+    # Google Group list_display ("<Name> Admins" for an admin group).
+    list_name = google_group_name_for_group_type(folder_name, kind)
+    gemail = group_email(list_name)
     gdisplay = group_display_name(folder_name)
+    list_display = group_display_name(list_name)
+    room_users = COMMUNITY_ROOM_USERS if is_admin_group else ROOM_USERS
 
     # The Google Group's primary address is normally the full name; --alias
     # adds a second (shorter) address to reach it, and makes the Gather
@@ -370,11 +426,11 @@ def main(
 
         # ── Validate: parent circle ──────────────────────────────────────────
         parent_group = None
-        if group_type != GroupType.CLUB:
+        if group_type not in (GroupType.CLUB, GroupType.ADMIN):
             if not parent_circle_prefix:
                 close_log()
                 browser.close()
-                sys.exit("Error: --parent-circle is required unless --type=club.")
+                sys.exit("Error: --parent-circle is required unless --type=club or admin.")
             try:
                 parent_group = resolve_group_by_prefix(
                     fetch_all_gather_groups(page, base_url), parent_circle_prefix)
@@ -409,8 +465,18 @@ def main(
         sender = next(
             (u for u in gather_users if u.email and u.email.lower() == email.lower()), None)
         list_address = f"{list_local}@{DOMAIN}"
-        subject, body = build_welcome_message(
-            gdisplay, list_address, manager.first_name, sender.first_name if sender else "")
+        audience = None
+        if is_admin_group:
+            if google_group_exists:
+                audience = parse_footer_audience(settings_service.groups().get(
+                    groupUniqueId=gemail).execute().get("customFooterText"))
+            audience = audience or COMMUNITY_CALENDAR_AUDIENCE
+            subject, body = build_admin_welcome_message(
+                gdisplay, list_address, manager.first_name,
+                sender.first_name if sender else "", audience)
+        else:
+            subject, body = build_welcome_message(
+                gdisplay, list_address, manager.first_name, sender.first_name if sender else "")
 
         if dry_run:
             if idempotent and (existing_folder_id or google_group_exists or existing_gather_id):
@@ -420,16 +486,22 @@ def main(
                     "Gather group" if existing_gather_id else "",
                 ]))
                 print(f"[dry-run] Would reuse existing: {reused}.")
-            print(f"[dry-run] Would create Drive folder '{folder_name}', Google Group "
-                  f"'{gemail}', and Gather group '{gdisplay}' (type={group_type.label}).")
+            where = (f" in '{PARENT_FOLDER_NAMES[kind]}'" if kind in PARENT_FOLDER_NAMES else "")
+            print(f"[dry-run] Would create Drive folder '{folder_name}'{where}, Google Group "
+                  f"'{list_display}' <{gemail}>, and Gather group '{gdisplay}' "
+                  f"(type={group_type.label}).")
             print(f"[dry-run] Would add {manager.full_name} <{manager.email}> as a manager "
                   "of the new Gather group.")
             if alias_email:
                 print(f"[dry-run] Would add alias '{alias_email}' to the Google Group and "
                       f"set the Gather group's mailing list to '{list_local}@{DOMAIN}'.")
             print(f"[dry-run] Would create calendar '{gdisplay}' (shared with '{gemail}' "
-                  f"as editors) and Zoom room '{room_topic(gdisplay)}', unless ones with "
-                  "matching names exist and you choose one of those.")
+                  f"as editors) and Zoom room '{room_topic(gdisplay)}' (under "
+                  f"{room_users[0]}), unless ones with matching names exist and you choose "
+                  "one of those.")
+            if audience:
+                print(f"[dry-run] Would name {audience} as the calendar's audience in the "
+                      "footer: its events invite it, and its reminders go to it.")
             if parent_group is not None:
                 print(f"[dry-run] Would have it put under '{parent_group.name}' in the "
                       "Circle Structure.")
@@ -458,7 +530,7 @@ def main(
             print(f"Reusing existing Google Group '{gemail}'.")
         else:
             dir_service.groups().insert(
-                body={"email": gemail, "name": gdisplay}
+                body={"email": gemail, "name": list_display}
             ).execute()
             log("INFO", "create_google_group", gemail)
             print(f"Created Google Group '{gemail}'.")
@@ -550,6 +622,7 @@ def main(
                 zoom, gdisplay, linked_zoom_url, gemail,
                 meetings=zoom_meetings, linked=get_linked, dry_run=False,
                 events_using=lambda meeting_id: mover.events_using_meeting(gdisplay, meeting_id),
+                room_users=room_users,
             )
         except QuitRequested:
             log("INFO", "quit", "User quit during the calendar/Zoom room step")
@@ -561,7 +634,7 @@ def main(
         ensure_group_footer(settings_service, gemail, gather_group_id, folder_id, base_url,
                             gdisplay, calendar_id=calendar_id,
                             zoom_url=room.join_url if room else None,
-                            zoom_passcode=room.passcode if room else None)
+                            zoom_passcode=room.passcode if room else None, audience=audience)
         print(f"Set footer links for '{gemail}'.")
 
         # ── Have it put under its parent in the Circle Structure ─────────────
@@ -634,14 +707,16 @@ def cli():
     )
     parser.add_argument(
         "-t", "--type", type=GroupType.parse, default=None,
-        help="Group type — 'c'/'circle', 'w'/'working group', or 'b'/'club'. "
+        help="Group type — 'c'/'circle', 'w'/'working group', 'b'/'club', or 'a'/'admin' "
+             "(a community-wide calendar's admin group, named like the calendar). "
              "Only required if the name doesn't end with a type suffix "
              "('Circle'/'Working Group'/'Club'), from which it's otherwise inferred.",
     )
     parser.add_argument(
         "-p", "--parent-circle", default=None,
         help="A prefix uniquely identifying the parent's Gather group: a circle, or, "
-             "for a working group, a circle or working group (required unless --type=club)",
+             "for a working group, a circle or working group (required unless --type=club "
+             "or admin)",
     )
     parser.add_argument(
         "-m", "--manager", required=True,
@@ -710,7 +785,7 @@ def cli():
 
     if args.short_address and args.alias:
         sys.exit("Error: --short-address and --alias can't be combined.")
-    if args.short_address and group_type == GroupType.CLUB:
+    if args.short_address and group_type in (GroupType.CLUB, GroupType.ADMIN):
         sys.exit("Error: --short-address only applies to circles and working groups.")
 
     if args.alias and "@" in args.alias:

@@ -73,6 +73,8 @@ class TestGuessGroupType:
         ("Odd", {"name": "Circle (old) stuff"}, "Not in the structure"),
         ("Chess", {"name": "Chess Club"}, "Not in the structure"),
         ("Chess", {"name": "Chess", "inClubs": True}, "Not in the structure"),
+        ("Community Meetings", {"name": "Community Meetings", "inMeetingAdmin": True},
+         "Not in the structure"),
         ("Everyone", {"name": "Everyone", "isSharedDrive": True}, "Not in the structure"),
         ("Residents", {"name": "Residents Circle", "isSharedDrive": True}, "Circle"),
         ("Full Community", {"name": "Moshav", "isSharedDrive": True}, "Circle"),
@@ -85,6 +87,10 @@ class TestGuessGroupType:
     def test_says_why_out(self):
         reason = js("guessGroupType('Odd', {name: 'Odd stuff'}).reason")
         assert "Odd stuff" in reason and "rename the folder" in reason
+
+    def test_says_an_admin_group_is_out(self):
+        reason = js("guessGroupType('C', {name: 'C', inMeetingAdmin: true}).reason")
+        assert reason == "it's a community-wide calendar's admin group"
 
 
 class TestResolveParents:

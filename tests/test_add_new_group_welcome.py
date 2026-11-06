@@ -76,3 +76,31 @@ class TestMailtoUrl:
         assert "&" not in query.split("&body=")[0].replace("subject=", "", 1)
         assert "#" not in url and " " not in url
         assert "%0D%0A" in url
+
+
+class TestAdminGroups:
+    def test_type_letter_and_kind(self):
+        from add_new_group import GroupType
+        assert GroupType.parse("a") is GroupType.ADMIN
+        assert GroupType.parse("squad") is GroupType.ADMIN
+        assert GroupType.ADMIN.kind == "squad"
+
+    def test_type_not_inferred_from_a_name(self):
+        from add_new_group import GroupType
+        assert GroupType.from_name_suffix("Community Meetings") is None
+        assert GroupType.from_name_suffix("Book Club") is GroupType.CLUB
+
+    def test_welcome_message(self):
+        from add_new_group import build_admin_welcome_message
+        subject, body = build_admin_welcome_message(
+            "Community Meetings", "community-meetings-admins@example.org", "Dana", "Sam",
+            "all@example.org")
+        assert subject == "Your new community calendar: Community Meetings"
+        assert body.startswith("Hi Dana,\n\nI've created the Community Meetings calendar for "
+                               "community-wide events, and this email list, "
+                               "community-meetings-admins@example.org, for the people who "
+                               "schedule them.")
+        assert "the whole community (all@example.org) invited" in body
+        assert "[no invite]" in body and "[no reminder]" in body
+        assert "I've made you a manager of the Gather group" in body
+        assert body.endswith("\n\nSam\n")

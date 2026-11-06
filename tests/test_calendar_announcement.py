@@ -146,7 +146,7 @@ class TestDraft:
                                  {"1": "membership@x.org"}, ["1"], {"1": "c1"},
                                  {"1": RoomLink("https://zoom.us/j/7?pwd=p", "135790")},
                                  dry_run=False, draft=True)
-        assert calls == [(None, "Membership Circle", "membership@x.org", "c1", False, True)]
+        assert calls == [(None, "Membership Circle", "membership@x.org", "c1", False, True, None)]
 
 
 class TestAnnounceNewCalendars:
@@ -181,6 +181,30 @@ class TestAnnounceNewCalendars:
                                  {"1": self.ROOM}, dry_run=False)
         (_, msg), = gmail.sent
         assert msg["Subject"] == "Garden Pod's new calendar and Zoom room"
+
+    def test_admin_group_gets_the_admins_version(self, monkeypatch):
+        monkeypatch.setattr(m, "log", lambda *a, **k: None)
+        gmail = FakeGmail()
+        groups = {"1": {"name": "Community Meetings", "kind": "squad"}}
+        m.announce_new_calendars(gmail, groups, {"1": "community-meetings-admins@x.org"}, ["1"],
+                                 {"1": "c1"}, {"1": self.ROOM}, dry_run=False,
+                                 audience_by_group_id={"1": "everyone@x.org"})
+        (_, msg), = gmail.sent
+        assert msg["Subject"] == "The Community Meetings calendar and Zoom room"
+        plain, rich = msg.get_payload()
+        text = plain.get_payload(decode=True).decode()
+        assert text.startswith("Hello Community Meetings admins,")
+        assert "the whole community (everyone@x.org) invited" in text
+        assert "[no invite]" in text and "move" not in text.split("All the")[0]
+        assert rich.get_content_type() == "text/html"  # no icon attached
+
+    def test_admin_group_without_audience_uses_the_default(self, monkeypatch):
+        calls = []
+        monkeypatch.setattr(m, "announce_calendar", lambda *args: calls.append(args))
+        m.announce_new_calendars(None, {"1": {"name": "Community Meetings", "kind": "squad"}},
+                                 {"1": "a@x.org"}, ["1"], {"1": "c1"}, {"1": self.ROOM},
+                                 dry_run=False)
+        assert calls[0][-1] == "all.members@berkeleymoshav.org"
 
     def test_none_created_none_sent(self):
         gmail = FakeGmail()
@@ -228,3 +252,18 @@ def test_step_with_announce_records_existing_calendars(monkeypatch):
         {"3": "F3"}, {"3": "books@x.org"}, lambda: LinkedResources(), False, {}, {},
         created_calendar_group_ids=created, announce_calendars=True)
     assert created == ["3"]
+
+
+class TestAdminCalendarParagraphs:
+    def test_no_guide_link_until_set(self, monkeypatch):
+        monkeypatch.setattr(ca, "ADMIN_GUIDE_URL", "")
+        assert "guide" not in " ".join(ca.admin_calendar_paragraphs("C", "a@x.org"))
+
+    def test_guide_linked_once_set(self, monkeypatch):
+        monkeypatch.setattr(ca, "ADMIN_GUIDE_URL", "https://docs.google.com/document/d/g")
+        assert ca.admin_calendar_paragraphs("C", "a@x.org")[-1].endswith(
+            "admins:\nhttps://docs.google.com/document/d/g")
+
+    def test_html_lists(self):
+        assert ca._text_to_html("Gets:\n- one;\n- two.\nSo.\n\nEnd") == (
+            "<p>Gets:</p>\n<ul><li>one;</li><li>two.</li></ul>\n<p>So.</p>\n<p>End</p>\n")

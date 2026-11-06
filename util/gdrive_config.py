@@ -136,11 +136,28 @@ def get_drive_folder_by_id(drive_service, folder_id: str) -> dict | None:
 
 _SMALL_WORDS = {"a", "an", "and", "at", "by", "for", "in", "of", "on", "or", "the", "to"}
 
-# Gather group "kind" -> folder name suffix / Shared Drive placement rule.
+# The Gather group kind ("Squad" in Gather's menu) of a community-wide
+# calendar's admin group, used by no other group. Its folder is under
+# MEETING_ADMIN_FOLDER_NAME, named like the calendar, with no type suffix;
+# its Google Group's name ends in ADMIN_LIST_SUFFIX.
+ADMIN_GROUP_KIND = "squad"
+MEETING_ADMIN_FOLDER_NAME = "Meeting Admin"
+ADMIN_LIST_SUFFIX = "Admins"
+
+# Gather group "kind" -> folder name suffix / Shared Drive placement rule
+# ("" for none).
 FOLDER_TYPE_SUFFIXES = {
     "circle": "Circle",
     "committee": "Working Group",
     "club": "Club",
+    ADMIN_GROUP_KIND: "",
+}
+
+# Top-level Shared Drive folder that a kind's folders go in (other kinds'
+# go at the top level).
+PARENT_FOLDER_NAMES = {
+    "club": "Clubs",
+    ADMIN_GROUP_KIND: MEETING_ADMIN_FOLDER_NAME,
 }
 
 
@@ -180,7 +197,7 @@ def _with_type_suffix(name: str, kind: str) -> str:
         raise ValueError(f"Don't know how to handle type {kind!r}")
     name = name.strip()
     suffix = FOLDER_TYPE_SUFFIXES[kind]
-    return name if _ends_with(name, suffix) else f"{name} {suffix}"
+    return name if not suffix or _ends_with(name, suffix) else f"{name} {suffix}"
 
 
 def full_group_name(name: str, kind: str) -> str:
@@ -202,18 +219,30 @@ def folder_name_for_group_type(raw_name: str, kind: str) -> str:
     return _with_type_suffix(standardize_name(raw_name), kind)
 
 
+def google_group_name_for_group_type(folder_name: str, kind: str) -> str:
+    """The name to give a new group's Google Group (and so its address):
+    the folder's name, plus ADMIN_LIST_SUFFIX for an admin group ("Community
+    Meetings" -> "Community Meetings Admins"), so its list isn't taken for
+    one of everyone who comes."""
+    if kind == ADMIN_GROUP_KIND and not _ends_with(folder_name, ADMIN_LIST_SUFFIX):
+        return f"{folder_name.strip()} {ADMIN_LIST_SUFFIX}"
+    return folder_name
+
+
 def parent_folder_id_for_group_type(drive_service, drive_id: str, kind: str) -> str:
     """Return the Drive folder ID under which a new folder for a group of
     this kind should be created: the Shared Drive's own root for
-    circle/committee, or the top-level "Clubs" folder for club. Raises
-    ValueError for any other kind, or if "Clubs" can't be found."""
+    circle/committee, or the top-level folder PARENT_FOLDER_NAMES names
+    ("Clubs" for club, "Meeting Admin" for an admin group). Raises
+    ValueError for any other kind, or if that folder can't be found."""
     if kind in ("circle", "committee"):
         return drive_id
-    if kind == "club":
-        clubs_id = find_top_level_folder_id(drive_service, drive_id, "Clubs")
-        if clubs_id is None:
-            raise ValueError('Could not find a top-level "Clubs" folder in the Shared Drive')
-        return clubs_id
+    if kind in PARENT_FOLDER_NAMES:
+        name = PARENT_FOLDER_NAMES[kind]
+        folder_id = find_top_level_folder_id(drive_service, drive_id, name)
+        if folder_id is None:
+            raise ValueError(f'Could not find a top-level "{name}" folder in the Shared Drive')
+        return folder_id
     raise ValueError(f"Don't know how to handle type {kind!r}")
 
 

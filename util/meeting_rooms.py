@@ -11,8 +11,9 @@ ensure_group_calendar() and ensure_zoom_room():
      these" creating a new one — so a calendar made by an earlier,
      interrupted run is picked up rather than duplicated. For a room, list
      every meeting in the Zoom account whose name matches, and ask of each
-     whether to use it (only a no-fixed-time meeting of ROOM_USERS can be
-     a room), ignore it, or delete it, then create a room unless one is
+     whether to use it (only a no-fixed-time meeting of ROOM_USERS, or for
+     a community-wide calendar's admin group of COMMUNITY_ROOM_USERS, can
+     be a room), ignore it, or delete it, then create a room unless one is
      used (decide_on_matching_meetings());
   3. then bring it into line: a calendar named after the group (or by a
      name the caller gives, such as the group's full name), and shared
@@ -70,6 +71,13 @@ ALL_EVENTS_CALENDAR_ID = (
     "c_301c808f640b3a04f5344b1bbf266955d51fecaabd7835936b7591f9cff09222"
     "@group.calendar.google.com"
 )
+
+# The everybody group a community-wide calendar's events invite and its
+# reminders go to (Gather's default Full Community group's list), written
+# on its admin group's footer's "Calendar audience" line when the footer
+# has none. The footer, not this, is what the Apps Script reads, so a
+# calendar for another everybody group is set there.
+COMMUNITY_CALENDAR_AUDIENCE = "all.members@berkeleymoshav.org"
 
 # Calendar ACL role for "Make changes to events".
 GROUP_CALENDAR_ROLE = "writer"
@@ -417,11 +425,11 @@ def room_candidates(meetings: list[dict]) -> list[dict]:
     return out
 
 
-def _can_be_room(meeting: dict) -> bool:
-    """Only a no-fixed-time meeting of one of ROOM_USERS can be a group's
+def _can_be_room(meeting: dict, room_users: tuple[str, ...] = ROOM_USERS) -> bool:
+    """Only a no-fixed-time meeting of one of room_users can be a group's
     room (a meeting's type can't be changed)."""
     return (meeting.get("type") == MEETING_TYPE_NO_FIXED_TIME
-            and (meeting.get("host_email") or "").lower() in ROOM_USERS)
+            and (meeting.get("host_email") or "").lower() in room_users)
 
 
 # ── Describing a meeting's schedule ──
@@ -615,6 +623,7 @@ def ensure_zoom_room(
     meetings: Callable[[], list[dict]], linked: Callable[[], LinkedResources], dry_run: bool,
     input_fn: Callable[[str], str] = input, now: datetime.datetime | None = None,
     events_using: Callable[[str], list[str]] | None = None, events_note: str | None = None,
+    room_users: tuple[str, ...] = ROOM_USERS,
 ) -> RoomLink | None:
     """Return the group's room's join link and passcode, finding, choosing,
     or creating the room (see the module docstring), and make sure its
@@ -624,8 +633,11 @@ def ensure_zoom_room(
     there's no room in the footer. events_using(meeting ID), if given,
     describes the calendar events matching the group that are held in
     that meeting, to show beside it, followed by events_note if any are
-    shown (decide_on_matching_meetings()). Returns None only in a dry
-    run that would create a room. Raises QuitRequested if the user quits."""
+    shown (decide_on_matching_meetings()). room_users are the Zoom users
+    that may own the room: a new one is made under the first (ROOMS_USER,
+    or COMMUNITY_ROOMS_USER for a community-wide calendar's admin group).
+    Returns None only in a dry run that would create a room. Raises
+    QuitRequested if the user quits."""
     group_email = group_email.lower()
     topic = room_topic(group_name)
     meeting_id = meeting_id_from_url(linked_join_url)
@@ -644,7 +656,7 @@ def ensure_zoom_room(
             details = zoom.get_meeting(c["id"]) or {}
             c["details"] = {**details, "host_email": c["host_email"]}
             c["schedule"] = describe_schedule(details, when)
-            c["can_use"] = _can_be_room(c["details"])
+            c["can_use"] = _can_be_room(c["details"], room_users)
             c["used_by"] = events_using(c["id"]) if events_using else []
         use, delete = (decide_on_matching_meetings(group_name, available, taken, dry_run,
                                                    input_fn, events_note)
@@ -668,16 +680,16 @@ def ensure_zoom_room(
             log("INFO", "would_create_room", group_name)
             return None
         else:
-            meeting = zoom.create_room(topic)
+            meeting = zoom.create_room(topic, room_users[0])
             created = True
             linked().rooms[str(meeting["id"])] = group_email
             print(f"  + created Zoom room '{topic}' ({meeting['id']})")
             log("INFO", "create_room", f"{group_name}: {meeting['id']}")
 
-    if meeting.get("host_email") and meeting["host_email"].lower() not in ROOM_USERS:
+    if meeting.get("host_email") and meeting["host_email"].lower() not in room_users:
         log("WARN", "room_host",
             f"{group_name}: room {meeting['id']} belongs to {meeting['host_email']}, "
-            f"not to one of {', '.join(ROOM_USERS)}")
+            f"not to one of {', '.join(room_users)}")
 
     body = room_settings_differences(meeting, topic)
     described = dict(body)

@@ -22,6 +22,7 @@ from util.google_group_footer import (
     compute_group_footer_updates,
     describe_footer_updates,
     footer_updates,
+    parse_footer_audience,
     parse_footer_calendar_id,
     parse_footer_folder_id,
     parse_footer_link,
@@ -196,6 +197,45 @@ class TestZoomDetails:
     ])
     def test_format_meeting_id(self, raw, shown):
         assert format_meeting_id(raw) == shown
+
+
+class TestCalendarAudience:
+    """A community-wide calendar's admin group's footer names the calendar's
+    audience."""
+
+    def block(self, audience="all.members@berkeleymoshav.org"):
+        return build_footer_block(
+            "7", "F", "https://g", "Community Meetings", calendar_id="c@group.calendar.google.com",
+            zoom_url="https://zoom.us/j/81234567890?pwd=x", zoom_passcode="123456",
+            audience=audience)
+
+    def test_written_last(self):
+        assert self.block().endswith("\nCalendar audience: all.members@berkeleymoshav.org")
+
+    def test_read_back(self):
+        assert parse_footer_audience("Notes\n\n" + self.block()) == \
+            "all.members@berkeleymoshav.org"
+
+    def test_absent_for_other_groups(self):
+        assert parse_footer_audience(self.block(audience=None)) is None
+        assert "audience" not in self.block(audience=None)
+
+    def test_kept_when_not_given(self):
+        current = {"customFooterText": self.block(), "includeCustomFooter": "true"}
+        assert footer_updates(
+            current, "7", "F", "https://g", "Community Meetings") == {}
+
+    def test_change_described(self):
+        old = self.block()
+        updates = footer_updates({"customFooterText": old, "includeCustomFooter": "true"},
+                                 "7", "F", "https://g", "Community Meetings",
+                                 audience="everyone@berkeleymoshav.org")
+        assert parse_footer_audience(updates["customFooterText"]) == "everyone@berkeleymoshav.org"
+        assert describe_footer_updates(old, updates) == "calendar audience"
+
+    def test_kept_when_zoom_replaced(self):
+        new = replace_footer_zoom(self.block(), "https://zoom.us/j/81234567890?pwd=y", "654321")
+        assert parse_footer_audience(new) == "all.members@berkeleymoshav.org"
 
 
 class TestReplaceFooterZoom:

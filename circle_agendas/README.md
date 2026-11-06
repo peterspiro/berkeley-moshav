@@ -363,7 +363,9 @@ the sheet's editors, which in a shared drive can't. It has three parts:
   and one ending in "Working Group", "Work Group", "Team", or "Pod" a
   working group's, perhaps followed by something in brackets, such as the
   group's acronym, as in "Development, Finance, & Legal Circle (DF&L)"; a
-  club, and a group whose names don't say, are left out; an everybody
+  club, a community calendar's admin group (its folder is in the Shared
+  Drive's "Meeting Admin" folder), and a group whose names don't say, are
+  left out; an everybody
   group, linked to a shared drive, goes by its shared drive's name), and
   **Problems** (why a group isn't placed yet).
   **Guests** lists, one to a line, the members of the group's Google

@@ -5,7 +5,8 @@ Administration scripts for the Berkeley Moshav community's online setup.
 Their main job is keeping these things linked together and consistent:
 
 - **[Gather groups](https://berkeley-moshav.gather.coop/groups)** (circles,
-  working groups, and clubs, with their members and managers)
+  working groups, clubs, and community calendars' admin groups, with their
+  members and managers)
 - **Google Drive** folders and shared drives in the community's
   [Shared Drive](https://drive.google.com/drive/folders/0AFqC2xo9aTgPUk9PVA),
   linked to Gather groups through Gather's
@@ -29,6 +30,14 @@ Their main job is keeping these things linked together and consistent:
   `circle-zoom-hosts@berkeleymoshav.org` Zoom user. A room's link never
   changes, and meetings in it can run with no host present. There's also one "All Berkeley
   Moshav Events" calendar for every meeting, which everyone can view.
+- **Community calendars**, for community-wide events (such as community
+  meetings), each run by its own admin group (Gather's "Squad" type): its
+  calendar, its email list ("<Calendar> Admins"), its folder in the Shared
+  Drive's "Meeting Admin" folder, and its own Zoom room, owned by the
+  `community-zoom-hosts@berkeleymoshav.org` Zoom user. Their events invite
+  the whole community (`all.members@berkeleymoshav.org`).
+  `community-calendar-admins-guide.md` is the guide for their admins, to
+  make into a Google Doc (see "Setup").
 
 Three Google Apps Script projects run inside Google Workspace alongside the
 Python scripts:
@@ -38,9 +47,11 @@ Python scripts:
 - **`calendar_notifications`** looks after the shared community calendar: it
   emails a community group when one of its members adds an event, and removes
   invitations from anyone who isn't allowed to add events.
-- **`group_meetings`** looks after the groups' calendars: it gives each
-  group's meetings its Zoom room and invites the group and the all-events
-  calendar, emails each group a reminder before its meetings, and emails
+- **`group_meetings`** looks after the groups' calendars and the community
+  calendars: it gives each group's meetings its Zoom room and invites the
+  group (for a community calendar, the community) and the all-events
+  calendar, emails each group (or the community) a reminder before its
+  meetings, and emails
   warnings about meetings that would clash over a Zoom
   user, and about meetings set up as invitations from someone's own calendar.
   It also invites the all-events calendar to the events created on the admin
@@ -87,6 +98,15 @@ Google Docs folder: https://drive.google.com/drive/folders/...
 Google calendar: https://calendar.google.com/calendar/u/0?cid=...
 Zoom meeting: https://us06web.zoom.us/j/...
 Meeting ID 812 3456 7890, passcode 123456
+```
+
+A community calendar's admin group's footer also names the calendar's
+**audience**, the everybody group its events invite and its reminders go to.
+That line is how the `group_meetings` Apps Script, which can't see Gather's
+group types, knows a community calendar from a group's:
+
+```
+Calendar audience: all.members@berkeleymoshav.org
 ```
 
 The meeting ID and passcode are for members who type them into Zoom instead
@@ -183,6 +203,38 @@ group then needs the new one. It's changed by hand, not by a script: sign in
 to the Zoom web portal as `circle-zoom-hosts@berkeleymoshav.org`, open
 **Profile**, and edit **Host Key** (6 to 10 digits; Zoom rejects easy ones like 123456).
 
+The community calendars' rooms have their own host key, the
+`community-zoom-hosts@berkeleymoshav.org` Zoom user's, given to the
+community-wide events' hosts and changed the same way.
+
+### Setting up community calendars
+
+Before making the first community calendar's admin group:
+
+1. Make a top-level folder named **Meeting Admin** in the Shared Drive (the
+   scripts put admin groups' folders in it, and the `circle_agendas` Apps
+   Script leaves groups whose folders are there out of the Circle Structure).
+2. Check that Gather's "Squad" group type is `squad` in its group form
+   (`ADMIN_GROUP_KIND` in `util/gdrive_config.py`); `add_new_group.py -t a -n`
+   doesn't check it, but a real run fails to create the Gather group if it's
+   wrong.
+3. Make sure `all.members@berkeleymoshav.org` (the audience) lets
+   `admin@berkeleymoshav.org` post, or the reminders it sends there bounce.
+4. Push the `group_meetings` and `circle_agendas` Apps Scripts (`clasp push`
+   in each folder).
+5. Make the admins' guide a Google Doc: upload
+   `community-calendar-admins-guide.md` to Drive and open it with Google Docs
+   (or paste it into a new doc with Edit → Paste from Markdown), share it as
+   "Anyone with the link can view", and put its link in `ADMIN_GUIDE_URL` in
+   `util/calendar_announcement.py`, so the emails to admins link it. Keep the
+   two in step when either changes.
+
+Then, for each calendar:
+
+```bash
+python add_new_group.py -N Community Meetings -t a -m Dana
+```
+
 
 ### Letting only some members edit a group's calendar
 
@@ -229,21 +281,35 @@ status line as "calendar (members can view, not edit)".
 - **`add_new_group.py`** creates a complete new group in one step: the Drive
   folder, the Google Group (optionally with a shorter address), the Gather
   group with its manager, and the group's calendar and Zoom room; links them
-  all together; unless it's a club, has the group put under its parent
+  all together; unless it's a club or an admin group, has the group put under its parent
   (`-p`, a circle, or for a working group a circle or working group) in the
   Circle Structure, by writing the parent to "Circle structure
   placements.json" in `admin@`'s My Drive for the `circle_agendas` Apps
   Script, which adds the group to the sheet from its footer within the hour; with
   `--agenda-doc`, for a circle or working group, creates its agenda doc,
   for the `circle_agendas` Apps Script to build; and opens a welcome email to the new list as a draft in
-  your mail program.
+  your mail program. With `-t a` (`--type admin`), it makes a community
+  calendar's admin group instead (Gather type "Squad"), named like the
+  calendar (`-N Community Meetings -t a -m Dana`): its folder, with no
+  type suffix, in the Shared Drive's "Meeting Admin" folder; its Google
+  Group "Community Meetings Admins" (`community-meetings-admins@`); its
+  room under `community-zoom-hosts@`; the calendar's audience,
+  `all.members@`, in its footer; no parent and no agenda doc; and a
+  welcome email telling the admins how community-wide events are scheduled.
 - **`update_groups.py`** brings every group (or one,
   with `-g`) into line: offers to find or create a missing Drive folder or
   email list, enforces the Google Group settings, gives each group a calendar
   and Zoom room, and writes the footer links. (It was
   `update_groups_in_google_and_hierarchy` while it also kept the Circle
   Structure wiki page; the `circle_agendas` Apps Script now keeps the Circle
-  Structure, from the footers.) Its first run also creates the
+  Structure, from the footers.) A community calendar's admin group (Gather
+  type "Squad") is handled like `add_new_group.py -t a` makes it: a new
+  folder for it goes in "Meeting Admin", with no type suffix; a new Google
+  Group for it is named "<Calendar> Admins"; its room is under
+  `community-zoom-hosts@` (only a no-fixed-time meeting of that user can
+  be used); its footer gets the audience line (`all.members@` unless it
+  names another); the email about its new calendar is the admins' version
+  (how to schedule community-wide events); and it gets no agenda doc. Its first run also creates the
   "All Berkeley Moshav Events" calendar, which it shares view-only with the
   everybody groups (with `-g`, only if `--share-all-events` is given, since
   finding them means reading every group from Gather). When it creates a group's calendar, it emails the
@@ -381,7 +447,16 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
   any "Zoom link to follow" line, and the group and the all-events calendar as guests, unless it's marked `[no zoom]`
   or has another meeting link typed in (then it gets only the guests).
   An event of a group with a circle agenda doc also gets a link to the doc,
-  removed again if the doc is trashed or deleted.
+  removed again if the doc is trashed or deleted. An event marked
+  `[no invite]` doesn't get the group as a guest, nor a reminder unless it
+  has a reminder tag.
+  A community calendar (one whose admin group's footer names an audience)
+  is handled like a group's, except that its events invite the audience,
+  not the admin group, and get no FAQ line; their reminders go to the
+  audience, with replies to the admin group; and its clash emails go to
+  the admin groups, naming the calendars, without the option of moving a
+  room to another Zoom user (all community rooms are under
+  `community-zoom-hosts@`, Zoom user 3, so they clash only with each other).
   An event that's only a copy of someone's invitation gets its organizer an
   email asking them to create it on the group calendar instead. Each group
   gets a reminder email before each of its meetings: 24 hours before, unless
@@ -450,7 +525,8 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
     sheet's rows up to date with the Google Groups' footers (new groups,
     renames, links, types, groups that are gone, and the parents waiting in
     "Circle structure placements.json"), with a row for each circle and
-    working group (everybody groups only if named as circles; no clubs),
+    working group (everybody groups only if named as circles; no clubs, nor
+    community calendars' admin groups, whose folders are in "Meeting Admin"),
     who holds each role in its agenda doc's Roles table, its guests
     (members of its Google Group who aren't in Full Community's), and when
     its meetings are, from its calendar's repeating meetings ("2nd & 4th Tue
@@ -500,10 +576,12 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
   calendar and Zoom room (and deleting matching meetings you don't want),
   and keeping them named, shared, and configured
 - **`calendar_announcement.py`**: the email telling a group about its new
-  calendar and Zoom room
+  calendar and Zoom room, the admins' version for a community calendar, and
+  the text it shares with `add_new_group.py`'s welcome email to admins
 - **`calendar_event_moves.py`**: finding a group's meetings on other
   calendars, and copying them to its calendar or deleting them
-- **`zoom_utils.py`**: the Zoom API, and the standard room settings
+- **`zoom_utils.py`**: the Zoom API, the standard room settings, and which
+  Zoom users own rooms
 - **`credentials.py`**: reading `~/.gather` and `zoom_credentials`
 - **`member_names.py`**: members' short names by email address, from the Gather
   directory, written to `admin@`'s Drive for the circle agenda docs
@@ -563,8 +641,10 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
 - `calendar-notifications-plan.md`: design of the calendar notifications
   script
 - `meeting-infrastructure-plan.md`: decisions behind the group calendars,
-  Zoom rooms, and `group_meetings`, and the meeting features not built yet
-  (community-wide calendars, recording archive, and more)
+  community calendars, Zoom rooms, and `group_meetings`, and the meeting
+  features not built yet (recording archive, and more)
+- `community-calendar-admins-guide.md`: the guide for community calendars'
+  admins (not a design note: it's to be made into a Google Doc)
 - `circle-agendas-plan.md`: design of the circle agenda docs, and what
   the tests found
 - `archive/gather-sandbox-plan.md` and `archive/gather-import-plan.md`: plans

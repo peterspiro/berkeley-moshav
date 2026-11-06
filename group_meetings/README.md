@@ -6,8 +6,9 @@ Apps Script that looks after every group's Google calendar (the calendars
 - **Every 5 minutes**, for each changed event on a group calendar:
   - an event the group calendar organizes gets the group's Zoom room (link in
     the location; link, meeting ID, passcode, and which Zoom user owns the
-    room (its number, `1` for `circle-zoom-hosts@berkeleymoshav.org` or `2` for
-    `berkeley@urbanmoshav.org`, and its name in Zoom, so anyone looking at
+    room (its number, `1` for `circle-zoom-hosts@berkeleymoshav.org`, `2` for
+    `berkeley@urbanmoshav.org`, or `3` for `community-zoom-hosts@berkeleymoshav.org`
+    (the community calendars' rooms), and its name in Zoom, so anyone looking at
     the all-events calendar can tell which meetings can't overlap) in the
     description, with a
     line linking the "BM Meetings FAQ" just above them, unless the
@@ -73,6 +74,28 @@ Apps Script that looks after every group's Google calendar (the calendars
   short lines. `calendaring-alerts@`
   (the Technology Circle) is copied, or, when one of the meetings was
   scheduled directly in Zoom, asked to agree too.
+
+An event on a group calendar marked **`[no invite]`** (in its title or
+description) doesn't get the group as a guest, nor a reminder unless it also
+has a reminder tag. A group already invited stays invited.
+
+**Community calendars.** A community calendar's admin group (made by
+`add_new_group.py -t a`) has a footer that also names the calendar's
+audience (`Calendar audience: all.members@berkeleymoshav.org`). Its calendar
+is handled like a group's, except that:
+- its events invite the audience, not the admin group, and get no FAQ line;
+- their reminders go to the audience ("Hi everyone"), with replies going to
+  the admin group;
+- in clash emails, its meetings are named by their calendar, the admin
+  group is greeted ("Community Meetings admins"), and there's no option to
+  move a room to the second Zoom user. Its room is under
+  `community-zoom-hosts@berkeleymoshav.org` (Zoom user 3), so it clashes
+  only with other community calendars' meetings, or ones scheduled directly
+  in Zoom under that user;
+- an invitation copy's email speaks of the calendar, not a group.
+
+The calendar's name is the admin group's name without "Admins". The
+audience must let `admin@berkeleymoshav.org` post, or reminders bounce.
 
 Which calendar and room are a group's comes from the group's email footer,
 read hourly, so new groups need no redeploy. When a group's room link changes

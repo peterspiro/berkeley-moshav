@@ -188,11 +188,10 @@ class FakeZoom:
     def get_meeting(self, meeting_id):
         return self.meetings.get(str(meeting_id))
 
-    def create_room(self, topic):
+    def create_room(self, topic, user="circle-zoom-hosts@berkeleymoshav.org"):
         mid = str(90000 + len(self.meetings))
         meeting = {"id": int(mid), "topic": topic, "join_url": f"https://zoom.us/j/{mid}?pwd=x",
-                   "password": "246810", "settings": {},
-                   "host_email": "circle-zoom-hosts@berkeleymoshav.org"}
+                   "password": "246810", "settings": {}, "host_email": user}
         from util.zoom_utils import ROOM_SETTINGS
         meeting["settings"] = dict(ROOM_SETTINGS)
         self.meetings[mid] = meeting

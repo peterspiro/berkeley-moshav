@@ -29,7 +29,8 @@ const TOP = 'top';
 // A group's type, from its name and its Drive item (as its footer links
 // it): {type, reason}, reason saying why a group is TYPE_OUT. item:
 // {name, isSharedDrive, inClubs (it's in the Shared Drive's Clubs
-// folder)}, or null if it couldn't be read. Circles' and working groups'
+// folder), inMeetingAdmin (it's in its Meeting Admin folder, a
+// community-wide calendar's admin group's)}, or null if it couldn't be read. Circles' and working groups'
 // folders are named with their type ("Technology Circle", "Garden Working
 // Group"; see folder_name_for_group_type in util/gdrive_config.py), as
 // their Gather names often aren't: a name ending in one of
@@ -191,6 +192,9 @@ function guessGroupType(name, item) {
     .test(text || '');
   if (item.inClubs || endsWith(item.name, ['Club']) || endsWith(name, ['Club'])) {
     return {type: TYPE_OUT, reason: 'it\'s a club'};
+  }
+  if (item.inMeetingAdmin) {
+    return {type: TYPE_OUT, reason: 'it\'s a community-wide calendar\'s admin group'};
   }
   for (const text of [item.name, name]) {
     if (endsWith(text, WORKING_GROUP_WORDS)) return {type: TYPE_WORKING_GROUP, reason: ''};

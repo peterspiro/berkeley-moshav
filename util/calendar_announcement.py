@@ -13,6 +13,14 @@ Reply-To.
 
 Groups made by add_new_group.py don't get it: its welcome message covers the
 same ground.
+
+A community-wide calendar's admin group gets a version of its own
+(build_admin_calendar_announcement()): how to schedule community-wide
+events, rather than how to move a group's meetings. add_new_group.py's
+welcome message for an admin group uses the same text
+(admin_calendar_paragraphs()), and so does the admins' guide,
+community-calendar-admins-guide.md, which both link once it's a Google Doc
+(ADMIN_GUIDE_URL).
 """
 
 import base64
@@ -35,6 +43,19 @@ GROUP_CALENDAR_HOWTO_URL = (
     "https://docs.google.com/document/d/1rr8WqPnsLKw-tgVea40NkyTxlwLFVVLnXbL3UVFQcZY"
     "/edit?tab=t.0#heading=h.5orsgyhrirdv"
 )
+
+
+# The community calendar admins' guide (community-calendar-admins-guide.md,
+# made into a Google Doc viewable by anyone with the link), linked from the
+# emails to admin groups; until it's set, they don't link it.
+ADMIN_GUIDE_URL = ""
+
+# How long before a community-wide event its reminder goes out, by default
+# (DEFAULT_REMINDER_LEADS in group_meetings/event_rules.gs).
+REMINDER_LEAD_TEXT = "24 hours"
+# The gap community-wide meetings must leave (MIN_GAP_MINUTES in
+# group_meetings/group_meetings.gs).
+MIN_GAP_MINUTES = 15
 
 
 # Google Calendar's "calendar event" icon (Material Symbols "event"), shown
@@ -101,11 +122,90 @@ def build_calendar_announcement(group_name: str, calendar_link: str) -> tuple[st
     return subject, text, rich
 
 
+def admin_calendar_paragraphs(calendar_name: str, audience: str) -> list[str]:
+    """The paragraphs, in plain text, that tell a community-wide calendar's
+    admins how its events are scheduled: shared by the email when the
+    calendar is made and add_new_group.py's welcome message. A line starting
+    "- " is a list item."""
+    paragraphs = [
+        f"Everyone on this list can add and change events on the {calendar_name} "
+        "calendar. The rest of the community sees its events on the All Berkeley Moshav "
+        "Events calendar.",
+        "Scheduling an event:\n"
+        f"Create the event on the {calendar_name} calendar itself, not on your own "
+        "calendar. (To add the calendar to your own Google Calendar, click its link in the "
+        "footer.) An invitation from your own calendar only gives the calendar a copy, "
+        "which can't be given the Zoom room or the community's invitation.",
+        "A few minutes after you save it, the event automatically gets:\n"
+        "- the calendar's Zoom room (its link, meeting ID and passcode), unless the event "
+        "says [no zoom] or has another Zoom or Meet link;\n"
+        f"- the whole community ({audience}) invited, each member getting the invitation "
+        "by email, unless the event says [no invite];\n"
+        "- a place on the All Berkeley Moshav Events calendar.\n"
+        "So there's no need to add Zoom details or guests yourself.",
+        f"Everyone invited is also emailed a reminder {REMINDER_LEAD_TEXT} before each "
+        "event, and replies to it come to this list. For one event, type [remind 2 hours] "
+        "(or another time) or [no reminder] in its description. An event marked "
+        "[no invite] gets no reminder unless it says [remind ...] too.",
+        "The Zoom room:\n"
+        "The room is the calendar's permanent meeting place: its link never changes, and "
+        "anyone with the link can join, with or without a host. For host features such as "
+        "breakout rooms or recording, a host claims host with the host key; the Technology "
+        f"Circle ({ALERT_EMAIL}) can give it to whoever hosts.",
+        "All the community-wide calendars' rooms belong to one Zoom user, which can host "
+        "only one meeting at a time. If an event overlaps another community-wide event, or "
+        f"is less than {MIN_GAP_MINUTES} minutes from one, you'll get an email asking the "
+        "admins involved to agree which one moves.",
+    ]
+    if ADMIN_GUIDE_URL:
+        paragraphs.append(f"All of this, and more, is in the guide for community calendar "
+                          f"admins:\n{ADMIN_GUIDE_URL}")
+    return paragraphs
+
+
+def _text_to_html(text: str) -> str:
+    """Plain text as HTML: blank-line-separated paragraphs, lines starting
+    "- " as a bulleted list (as textToHtml in group_meetings does)."""
+    out = []
+    for block in text.strip().split("\n\n"):
+        lines, items = [], []
+        for line in block.split("\n"):
+            if line.startswith("- "):
+                items.append(html.escape(line[2:], quote=False))
+            elif items:
+                out.append(f"<p>{'<br>'.join(lines)}</p>" if lines else "")
+                out.append("<ul>" + "".join(f"<li>{i}</li>" for i in items) + "</ul>")
+                lines, items = [html.escape(line, quote=False)], []
+            else:
+                lines.append(html.escape(line, quote=False))
+        if lines:
+            out.append(f"<p>{'<br>'.join(lines)}</p>")
+        if items:
+            out.append("<ul>" + "".join(f"<li>{i}</li>" for i in items) + "</ul>")
+    return "\n".join(p for p in out if p) + "\n"
+
+
+def build_admin_calendar_announcement(calendar_name: str, audience: str) -> tuple[str, str, str]:
+    """Return (subject, plain-text body, HTML body) of the email to a
+    community-wide calendar's admin group about its new calendar and Zoom
+    room."""
+    subject = f"The {calendar_name} calendar and Zoom room"
+    text = "\n\n".join([
+        f"Hello {calendar_name} admins,",
+        f"You now have a Google calendar and a Zoom meeting room for {calendar_name}, for "
+        "community-wide events. Their links are in the footer at the bottom of this "
+        "message.",
+        *admin_calendar_paragraphs(calendar_name, audience),
+        "Questions? Reply to this message.",
+    ]) + "\n"
+    return subject, text, _text_to_html(text)
+
+
 def send_email(gmail_service, to: str, subject: str, text: str, rich: str,
                reply_to: str) -> None:
     """Send an email from the signed-in account, as plain text with an HTML
     version (rich) that mail programs show instead, with the icon attached
-    for it. Unlike plain text, which gets wrapped at about 78 characters on
+    for it if it shows it. Unlike plain text, which gets wrapped at about 78 characters on
     the way, HTML is reflowed to fit the reader's window."""
     message = EmailMessage()
     message["To"] = to
@@ -113,9 +213,10 @@ def send_email(gmail_service, to: str, subject: str, text: str, rich: str,
     message["Reply-To"] = reply_to
     message.set_content(text)
     message.add_alternative(rich, subtype="html")
-    message.get_payload()[1].add_related(
-        ICON_PATH.read_bytes(), "image", "png", cid=f"<{ICON_CID}>",
-        filename="calendar_event_icon.png", disposition="inline")
+    if f"cid:{ICON_CID}" in rich:
+        message.get_payload()[1].add_related(
+            ICON_PATH.read_bytes(), "image", "png", cid=f"<{ICON_CID}>",
+            filename="calendar_event_icon.png", disposition="inline")
     raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
     gmail_service.users().messages().send(userId="me", body={"raw": raw}).execute()
 
@@ -132,13 +233,19 @@ def _show(list_email: str, subject: str, body: str, reply_to: str | None) -> Non
 
 
 def announce_calendar(gmail_service, group_name: str, list_email: str,
-                      calendar_id: str | None, dry_run: bool, draft: bool = False) -> None:
+                      calendar_id: str | None, dry_run: bool, draft: bool = False,
+                      audience: str | None = None) -> None:
     """Email the group's list about its new calendar and Zoom room, or with
     draft, open the email as a draft in the user's mail program (or, in a
     dry run, show the email it would send or open; calendar_id is None
-    there if the calendar would be created)."""
-    link = calendar_url(calendar_id) if calendar_id else "(the new calendar's link)"
-    subject, body, rich = build_calendar_announcement(group_name, link)
+    there if the calendar would be created). With audience, the group is a
+    community-wide calendar's admin group (group_name naming the calendar),
+    and gets the admins' version."""
+    if audience:
+        subject, body, rich = build_admin_calendar_announcement(group_name, audience)
+    else:
+        link = calendar_url(calendar_id) if calendar_id else "(the new calendar's link)"
+        subject, body, rich = build_calendar_announcement(group_name, link)
     if dry_run:
         if draft:
             print(f"  [dry-run] would open a draft to {list_email} in your mail program: "

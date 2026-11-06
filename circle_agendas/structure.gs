@@ -58,6 +58,9 @@ const STRUCTURE_DOC_HASH_KEY = 'circleStructureDocHash';
 const PLACEMENTS_FILE = 'Circle structure placements.json';
 // The Shared Drive's folder of clubs' folders.
 const CLUBS_FOLDER_NAME = 'Clubs';
+// The Shared Drive's folder of community-wide calendars' admin groups'
+// folders (MEETING_ADMIN_FOLDER_NAME in util/gdrive_config.py).
+const MEETING_ADMIN_FOLDER_NAME = 'Meeting Admin';
 const SYNC_EVERY_HOURS = 1;
 
 // The roles in an agenda doc's Roles table, each of which has a column
@@ -343,7 +346,7 @@ function docRuns(p) {
 }
 
 // What guessGroupType needs to know of a Drive item: {name, isSharedDrive,
-// inClubs}, or null if it can't be read.
+// inClubs, inMeetingAdmin}, or null if it can't be read.
 function driveItemInfo(id) {
   try {
     const file = Drive.Files.get(id, {fields: 'id,name,parents,driveId', supportsAllDrives: true});
@@ -354,15 +357,15 @@ function driveItemInfo(id) {
       } catch (e) {
         // The root folder's name will do.
       }
-      return {name, isSharedDrive: true, inClubs: false};
+      return {name, isSharedDrive: true, inClubs: false, inMeetingAdmin: false};
     }
     const parent = (file.parents || [])[0];
-    let inClubs = false;
+    let parentName = '';
     if (parent && parent !== file.driveId) {
-      inClubs = Drive.Files.get(parent, {fields: 'name', supportsAllDrives: true}).name ===
-        CLUBS_FOLDER_NAME;
+      parentName = Drive.Files.get(parent, {fields: 'name', supportsAllDrives: true}).name;
     }
-    return {name: file.name, isSharedDrive: false, inClubs};
+    return {name: file.name, isSharedDrive: false, inClubs: parentName === CLUBS_FOLDER_NAME,
+            inMeetingAdmin: parentName === MEETING_ADMIN_FOLDER_NAME};
   } catch (e) {
     console.warn('Couldn\'t read Drive item ' + id + ': ' + e.message);
     return null;
@@ -933,7 +936,8 @@ function syncGroups() {
       if (!item && old) rows.push(Object.assign({}, old, {isNew: false}));
       else if (old) console.log('Circle Structure: removed ' + old.name + ', as ' + reason + '.');
       // A circle whose folder is misnamed would be missed without a word.
-      else if (item && !item.isSharedDrive && !/\bclub\b/i.test(reason)) {
+      else if (item && !item.isSharedDrive && !item.inClubs && !item.inMeetingAdmin &&
+               !/\bclub\b/i.test(reason)) {
         console.warn('Circle Structure: left out ' + f.name + ', as ' + reason + '.');
       }
       continue;
