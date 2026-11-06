@@ -62,6 +62,9 @@ are; this note keeps the reasoning and the remaining work.
   group's room, transferred to it in Zoom, when the group's meetings keep
   clashing with others' (see "Open decisions"). Both are `ROOM_USERS` in
   `util/zoom_utils.py`.
+- A third licensed Zoom user, `community-zoom-hosts@berkeleymoshav.org`,
+  hosts the community-wide meetings (see "Not built yet", 1). It isn't one
+  of `ROOM_USERS`: group rooms aren't moved to it.
 - Zoom is reached through a Server-to-Server OAuth app ("Berkeley Moshav Admin
   Scripts"). Its credentials are the project's, not a person's, so they live
   in the repo's git-ignored `zoom_credentials` file (Python) and the Apps
@@ -125,49 +128,40 @@ are; this note keeps the reasoning and the remaining work.
 ## Not built yet
 
 ### 1. Community-wide calendars
-Several calendars for community-wide events, each managed by a small set of
-admins (a different set for each calendar). Agreed design:
-- Each calendar has a **Gather admin group**, using a Gather group type that no
-  other group uses (Gather has several besides circle, committee, and club).
-  That type marks the group as a calendar's admins, and keeps admin groups out
-  of the per-group calendar and room setup (which covers circles, working
-  groups, and clubs only).
-- Each calendar is shared with its admin group's Google Group as editors.
-- All community-wide calendars share **one Zoom room, owned by
-  `circle-zoom-hosts@`** like the group rooms, so members can easily keep track of it.
-  A skilled host claims host with the host key for host features such as
-  breakout rooms. Being under the same Zoom user, community-wide meetings
-  clash with overlapping group meetings, which the existing check catches.
-- The Apps Script treats their events like group events: the shared room's
-  details, and the **everybody group** and the all-events calendar invited,
-  but **not** the BM Meetings FAQ line, which is for group meetings only.
-- **Read access to the all-events calendar**: originally each admin group
-  (and anyone shared a community-wide calendar by hand) was to get it; the
-  everybody groups' view-only access, added since, may cover this already.
-- **Clash emails** (alongside the group cases above), sent like the others,
-  in an overlapping and a "too close together" version:
-  - *A community-wide meeting and a group meeting.* Community-wide meetings
-    come first, so the group is asked to move its meeting. To: the group;
-    cc: `calendaring-alerts@` and the community calendar's admin group.
-
-    > **Subject:** Please move your meeting: "Finance Circle meeting" overlaps
-    > a community-wide meeting
-    >
-    > Hi Finance Circle,
-    >
-    > Your meeting overlaps a community-wide meeting:
-    >   - "Finance Circle meeting" (Finance Circle), Tue Nov 4, 7:00–8:30 PM
-    >   - "Community meeting" (Community Meetings calendar), Tue Nov 4,
-    >     8:00–9:30 PM
-    >
-    > All our meetings use one Zoom account, which can host only one meeting
-    > at a time. Community-wide meetings come first, so please move your
-    > meeting to another time on the Finance Circle calendar. To find a free
-    > time, check the All Berkeley Moshav Events calendar: <link>
-    >
-    > This message was sent automatically. Questions? Reply to
-    > calendaring-alerts@berkeleymoshav.org.
-
+Several calendars for community-wide events (for example "Community
+Meetings"), each managed by a small set of admins (a different set for each
+calendar). The shared community calendar (`share@`, see
+`calendar-notifications-plan.md`) stays separate: it's where members put
+their own social events. Agreed design:
+- **An admin group per calendar.** Each calendar has a Gather admin group,
+  of a Gather group type that no other group uses (see "Why a distinct
+  Gather group type" below). Its Drive folder is one level down, like a
+  club's: under a top-level "Meeting Admin" folder in the Shared Drive.
+- **Calendar.** Each admin group gets one calendar, shared with its Google
+  Group as editors ("Make changes to events"). Everyone else sees its events
+  through the all-events calendar, which is shared view-only with the
+  everybody groups; that's enough, so admin groups get no other read access.
+- **Zoom room.** Each admin group gets its own no-fixed-time room (Zoom
+  type 3, the standard room settings) under the `community-zoom-hosts@`
+  Zoom user, so each calendar's recordings can be told apart by the room's
+  name (see 2). A skilled host claims host with the host key for host
+  features such as breakout rooms.
+- **Recorded in the admin group's footer**, as for other groups: its Gather
+  group, Drive folder, "Google calendar" and "Zoom meeting" links. So
+  `group_meetings` finds the calendars and rooms the way it finds groups',
+  and there's still no separate configuration.
+- **Events.** The Apps Script treats their events like group events: the
+  admin group's room's details, and the **everybody group** (not the admin
+  group) and the all-events calendar invited, but **not** the BM Meetings
+  FAQ line, which is for group meetings only.
+- **Clashes.** A Zoom user hosts one meeting at a time, so community-wide
+  meetings clash with each other (all rooms are under `community-zoom-hosts@`,
+  even on different calendars), but no longer with group meetings, which
+  are under the other two Zoom users. The existing check (overlapping or
+  less than 15 minutes apart, next 8 weeks) covers them once it knows that
+  `community-zoom-hosts@`'s rooms belong to admin groups; until then it
+  would see them as meetings scheduled directly in Zoom. Clash emails, sent
+  like the others, in an overlapping and a "too close together" version:
   - *Two community-wide meetings.* To: both calendars' admin groups (or the
     one, if both are on the same calendar); cc: `calendaring-alerts@`.
 
@@ -178,21 +172,59 @@ admins (a different set for each calendar). Agreed design:
     >
     > These two community-wide meetings overlap: …
     >
-    > They share one Zoom room, which can host only one meeting at a time.
-    > Please agree which one moves. To find a free time, check the All
-    > Berkeley Moshav Events calendar: <link>
+    > All our community-wide meetings use one Zoom user, which can host
+    > only one meeting at a time. Please agree which one moves. To find a
+    > free time, check the All Berkeley Moshav Events calendar: <link>
+
+  - *A community-wide meeting and one scheduled directly in Zoom under
+    `community-zoom-hosts@`.* To: the admin group; cc:
+    `calendaring-alerts@`; asking them to agree which moves.
 
   The "too close together" versions say how many minutes apart the meetings
   are, that the second can't start until the first ends if it runs over, and
   ask for at least 15 minutes between them. `overlapMessage` in
   `group_meetings/event_rules.gs` builds the group cases.
-- Where the calendars and the room are recorded is to be decided (the admin
-  groups' footers would follow the existing pattern).
+
+  (The earlier design, with one shared room under `circle-zoom-hosts@`, had
+  community-wide meetings clash with group meetings too, and asked the group
+  to move; with the separate Zoom user that case goes away.)
+
+#### How admin groups differ from circles
+| | Circles and working groups | Admin groups |
+|---|---|---|
+| Drive folder | Top level of the Shared Drive | Under "Meeting Admin", like clubs under "Clubs" |
+| Folder and calendar name | "<Name> Circle" / "<Name> Working Group" | The calendar's name (suffix to decide) |
+| Zoom room | Under `circle-zoom-hosts@` (or moved to `berkeley@urbanmoshav.org`) | Under `community-zoom-hosts@`, never moved |
+| Who events invite | The group itself | The everybody group, not the admin group |
+| BM Meetings FAQ line | Added | Not added |
+| Clash emails | Group-to-group wording, offering to move a room to the second Zoom user | Admin-group wording, with no room to move |
+| Agenda doc, Circle Structure sheet and doc | Yes | No: not part of the circle structure |
+| Reminder before each meeting | To the group | To decide: the admin group, the everybody group, or none |
+| Email when its calendar is made | Tells members to add the calendar and move meetings onto it | Different wording: tells the admins how to schedule community-wide events |
+
+#### Why a distinct Gather group type
+The scripts decide what a group gets from its Gather type (`kind`), not
+from its name or a list: `ELIGIBLE_KINDS` in `update_groups.py` (calendar
+and room), `FOLDER_TYPE_SUFFIXES` and `parent_folder_id_for_group_type` in
+`util/gdrive_config.py` (folder name and place), `AGENDA_KINDS` in
+`util/circle_agenda_docs.py` (agenda docs), and `STRUCTURE_KINDS` in
+`util/circle_structure_placements.py` (Circle Structure). A type no other
+group uses:
+- marks a group as a calendar's admins without a naming convention or a
+  hardcoded list, so a new one is set up just by choosing the type in Gather
+  (or in `add_new_group.py`);
+- keeps admin groups out of what's only for circles and working groups
+  (agenda docs, Circle Structure), as the club type already does for clubs;
+- gives them their own branches wherever they differ (folder place, Zoom
+  user, who events invite, the FAQ line, clash and reminder emails),
+  without mistaking a circle or a club for one.
+Which of Gather's unused types to use is still to pick.
 
 ### 2. Recording archive
 Copy Zoom cloud recordings into the matching group's Drive folder, then let
 Zoom delete them.
-- Match recordings to groups by meeting topic ("<Group> Meeting Room").
+- Match recordings to groups by meeting topic ("<Group> Meeting Room"); a
+  community-wide calendar's go to its admin group's folder, by its room.
 - Copy each file (video, audio, transcript, chat), recording which recordings
   are done so none is copied twice; optionally delete from Zoom after a
   verified upload and a grace period.
@@ -245,4 +277,6 @@ regularly, or have the hourly Apps Script run send the warning.
   scheduling privilege, keeping its ID and link, so the footer and events
   don't change. Done by hand in Zoom for now; a script could do it (the
   API's `schedule_for`).
-- Where community-wide calendars and their room are recorded (see 1).
+- For community-wide calendars (see 1): which Gather group type admin
+  groups use; their folders' and calendars' name suffix; and who gets the
+  reminder before a community-wide meeting.
