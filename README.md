@@ -257,7 +257,7 @@ willing members, letting `admin@` post), and a test calendar whose audience
 it is:
 
 ```bash
-python add_new_group.py -N Calendar Test -t a -m Dana --audience calendar-test@berkeleymoshav.org
+python add_new_group.py -N Calendar Test -t a -m Dana -A calendar-test@berkeleymoshav.org
 ```
 
 Its events then invite, and remind, only `calendar-test@`. The rest of the
@@ -330,7 +330,7 @@ status line as "calendar (members can view, not edit)".
   (`community-meetings-admins@`); its calendar "Community Meetings"; its
   room "Community Meetings Zoom Room", under `community-zoom-hosts@`; the
   host key doc's link and the calendar's audience, `all.members@`, in its
-  footer (`--audience` names another, for trying a calendar out); no parent
+  footer (`-A`/`--audience` names another, for trying a calendar out); no parent
   and no agenda doc; and a welcome email telling the admins how
   community-wide events are scheduled.
 - **`update_groups.py`** brings every group (or one,

@@ -72,7 +72,7 @@ such suffix.
 
 The name (-N/--name, required) may be given as multiple unquoted words.
 
-For an admin group, --audience names another Google Group as the
+For an admin group, -A/--audience names another Google Group as the
 calendar's audience (the one its events invite and its reminders go to),
 for trying a community calendar out on a few people before it reaches
 everyone; afterwards, change the footer's "Calendar audience:" line by
@@ -791,7 +791,7 @@ def cli():
              "circle_agendas Apps Script to build",
     )
     parser.add_argument(
-        "--audience", metavar="ADDRESS", default=None,
+        "-A", "--audience", metavar="ADDRESS", default=None,
         help="For an admin group, the Google Group its calendar's events invite and its "
              f"reminders go to, instead of {COMMUNITY_CALENDAR_AUDIENCE} (say, a small "
              "group, to try a community calendar out without emailing everyone)",
