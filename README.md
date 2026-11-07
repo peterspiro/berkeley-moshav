@@ -113,9 +113,10 @@ Zoom host key: https://docs.google.com/document/d/.../edit
 Calendar audience: all.members@berkeleymoshav.org
 ```
 
-The host key link is safe in the footer only because the doc's sharing is
-restricted to the admin groups; the link itself gives nothing away. It's
-never put in calendar events, which go to the whole community.
+The host key doc can be opened by the Shared Drive's members (the
+community), which is judged safe enough, but not by anyone with the link; the
+link itself gives nothing away. It's not put in calendar events, which are
+emailed to members' own accounts and may be forwarded.
 
 The meeting ID and passcode are for members who type them into Zoom instead
 of clicking the link; since the link already lets anyone in, showing the
@@ -228,12 +229,9 @@ Before making the first community calendar's admin group:
    (`ADMIN_GROUP_KIND` in `util/gdrive_config.py`); `add_new_group.py -t a -n`
    doesn't check it, but a real run fails to create the Gather group if it's
    wrong.
-3. Restrict the "Community Events Zoom Host Key" doc to the admins: in its
-   Share dialog, General access "Restricted", and each admin group's Google
-   Group (`<calendar>-admins@`) added as Viewer, as each is made. Every member
-   of the Shared Drive can open everything in it, so check the drive's member
-   list too; if it's broader than the people who may see the key, move the
-   doc out of the Shared Drive and update `COMMUNITY_HOST_KEY_DOC_URL`.
+3. Check that the "Community Events Zoom Host Key" doc's General access is
+   "Restricted", not "Anyone with the link": the Shared Drive's members (the
+   community, admins included) can open it, and no one else should.
 4. Make sure `all.members@berkeleymoshav.org` (the audience) lets
    `admin@berkeleymoshav.org` post, or the reminders it sends there bounce.
 5. Push the `group_meetings` and `circle_agendas` Apps Scripts (`clasp push`
@@ -250,6 +248,26 @@ Then, for each calendar:
 ```bash
 python add_new_group.py -N Community Meetings -t a -m Dana
 ```
+
+#### Trying one out
+
+To try a community calendar without emailing the whole community, make a
+small Google Group to stand in for it (say `calendar-test@`, with a few
+willing members, letting `admin@` post), and a test calendar whose audience
+it is:
+
+```bash
+python add_new_group.py -N Calendar Test -t a -m Dana --audience calendar-test@berkeleymoshav.org
+```
+
+Its events then invite, and remind, only `calendar-test@`. The rest of the
+community isn't emailed, but test events do show on the All Berkeley Moshav
+Events calendar, which everyone can view, so give them titles like "TEST" and
+delete them afterwards. Clash emails go to the test admin list and
+`calendaring-alerts@`; a test event that overlaps a real community-wide event
+also emails that calendar's admins, so pick free times. Afterwards, delete the
+test group (in Gather, its Google Group, folder, calendar, and Zoom room), or
+change its footer's "Calendar audience:" line by hand to make it real.
 
 
 ### Letting only some members edit a group's calendar
@@ -312,8 +330,9 @@ status line as "calendar (members can view, not edit)".
   (`community-meetings-admins@`); its calendar "Community Meetings"; its
   room "Community Meetings Zoom Room", under `community-zoom-hosts@`; the
   host key doc's link and the calendar's audience, `all.members@`, in its
-  footer; no parent and no agenda doc; and a welcome email telling the
-  admins how community-wide events are scheduled.
+  footer (`--audience` names another, for trying a calendar out); no parent
+  and no agenda doc; and a welcome email telling the admins how
+  community-wide events are scheduled.
 - **`update_groups.py`** brings every group (or one,
   with `-g`) into line: offers to find or create a missing Drive folder or
   email list, enforces the Google Group settings, gives each group a calendar

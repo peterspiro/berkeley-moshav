@@ -15,8 +15,7 @@ the group:
 
 The calendar and Zoom lines appear only once the group has a calendar and
 a meeting room. A community-wide calendar's admin group's footer also
-links the doc holding its rooms' Zoom host key (which only the admins can
-open), and names the calendar's audience, the everybody group its events
+links the doc holding its rooms' Zoom host key, and names the calendar's audience, the everybody group its events
 invite and its reminders go to (the group_meetings Apps Script reads it,
 and knows the group for an admin group by it):
 

@@ -195,7 +195,7 @@ class TestAnnounceNewCalendars:
         text = plain.get_payload(decode=True).decode()
         assert text.startswith("Hello Community Meetings admins,")
         assert "the whole community (everyone@x.org) invited" in text
-        assert "[no invite]" in text and "move" not in text.split("All the")[0]
+        assert "[no invite]" in text and "move" not in text.split("We have several")[0]
         assert rich.get_content_type() == "text/html"  # no icon attached
 
     def test_admin_group_without_audience_uses_the_default(self, monkeypatch):

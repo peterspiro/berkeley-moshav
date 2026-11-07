@@ -90,16 +90,10 @@ Claim Host, and enter the key. If someone else becomes host by accident, ask
 them to make you host ("Make Host").
 
 The host key is in the "Community Events Zoom Host Key" doc, linked from the
-"Zoom host key" line in the footer of every message to the admins' list. Only
-admins can open it. Please keep it that way:
-
-- Don't share the key, or forward the doc, to anyone who isn't an admin. With
-  the key, anyone can take over any community event's meeting.
-- Don't put the key, or the doc's link, in an event's description: events are
-  sent to the whole community.
-- If someone asks for access to the doc, don't grant it from the doc. If they
-  should be an admin, a manager of the admin group adds them to it in Gather,
-  which gives them access within the hour.
+"Zoom host key" line in the footer of every message to the admins' list.
+Community members can open the doc, but no one outside the community can.
+With the key, anyone can take over any community event's meeting, so please
+don't share it outside the community, or put it in an event's description.
 
 All the community calendars' rooms share one host key. If it leaks, tell the
 Technology Circle, who will change it.

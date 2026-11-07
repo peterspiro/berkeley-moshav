@@ -84,8 +84,8 @@ COMMUNITY_CALENDAR_AUDIENCE = "all.members@berkeleymoshav.org"
 # The doc holding the host key of the community-wide calendars' rooms (the
 # community-zoom-hosts@ Zoom user's), "Community Events Zoom Host Key" in
 # the Shared Drive's Meeting Admin folder, linked from every admin group's
-# footer. Its sharing is what keeps the key to the admins: it must stay
-# restricted, shared only with the admin groups.
+# footer. The community (the Shared Drive's members) can open it, which is
+# safe enough; it mustn't be open to anyone with the link.
 COMMUNITY_HOST_KEY_DOC_URL = (
     "https://docs.google.com/document/d/1TCqog7YWYQOJ3oAA6yJTeIecHsicIE2O8Glzgj7DYzI/edit")
 

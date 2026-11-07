@@ -162,13 +162,11 @@ their own social events.
   with that user's host key for host features such as breakout rooms.
 - **Host key.** It's kept in the "Community Events Zoom Host Key" doc in the
   Meeting Admin folder, linked from every admin group's footer ("Zoom host
-  key:", `COMMUNITY_HOST_KEY_DOC_URL`). The link is safe there because the
-  doc's sharing is restricted to the admin groups (and the Shared Drive's
-  members can open it too, so that list must be no broader): a forwarded
-  footer gives away only a link. It's never in calendar events, which go to
-  the whole community and are on the all-events calendar: even with the doc
-  restricted, a link labelled as the host key would invite access requests,
-  and one granted by reflex would leak the key.
+  key:", `COMMUNITY_HOST_KEY_DOC_URL`). The doc can be opened by the
+  Shared Drive's members, the whole community, which is judged safe enough,
+  but not by anyone with the link, so a forwarded footer gives away only a
+  link. It's not put in calendar events, which are emailed to members'
+  personal accounts and may be forwarded outside the community.
 - **Recorded in the admin group's footer**, as for other groups: its Gather
   group, Drive folder, "Google calendar" and "Zoom meeting" links, plus the
   host key link and a "Calendar audience:" line naming the everybody group its events invite
@@ -240,8 +238,8 @@ their own social events.
   > bottom of this message.
   >
   > Everyone on this list can add and change events on the Community
-  > Meetings calendar. The rest of the community sees its events on the All
-  > Berkeley Moshav Events calendar.
+  > Meetings calendar. The rest of the community sees these events on their
+  > primary calendars.
   >
   > Scheduling an event:
   > Create the event on the Community Meetings calendar itself, not on your
@@ -267,12 +265,13 @@ their own social events.
   > changes, and anyone with the link can join, with or without a host. For
   > host features such as breakout rooms or recording, a host claims host
   > with the host key, which is in the doc linked from the footer ("Zoom
-  > host key"); only admins can open it, so please don't share the key.
+  > host key").
   >
-  > All the community-wide calendars' rooms belong to one Zoom user, which
-  > can host only one meeting at a time. If an event overlaps another
-  > community-wide event, or is less than 15 minutes from one, you'll get an
-  > email asking the admins involved to agree which one moves.
+  > We have several community-wide calendars, all of which have zoom rooms
+  > which belong to the same Zoom user, which can host only one meeting at a
+  > time. If an event overlaps another community-wide event, or is less than
+  > 15 minutes from one, you'll get an email asking the admins involved to
+  > agree which one moves.
   >
   > All of this, and more, is in the guide for community calendar admins:
   > (the guide's link, once `ADMIN_GUIDE_URL` is set)
@@ -300,7 +299,7 @@ their own social events.
 | Gather group, folder, and Google Group names | "<Name> Circle" / "<Name> Working Group" | "<Calendar> Admins" |
 | Calendar name | The group's | The calendar's, without "Admins" |
 | Zoom room | "<Group> Meeting Room", under `circle-zoom-hosts@` (or moved to `berkeley@urbanmoshav.org`) | "<Calendar> Zoom Room", under `community-zoom-hosts@`, never moved |
-| Host key | Given privately to facilitators | In a restricted doc linked from the footer |
+| Host key | Given privately to facilitators | In a doc the community can open, linked from the footer |
 | Who events invite | The group itself | The audience in its footer (`all.members@`), not the admin group |
 | BM Meetings FAQ line | Added | Not added |
 | Clash emails | Group-to-group wording, offering to move a room to the second Zoom user | Admin-group wording, with no room to move |
@@ -372,10 +371,8 @@ regularly, or have the hourly Apps Script run send the warning.
   make sure `all.members@` lets `admin@` post (for reminders); push
   `group_meetings` and `circle_agendas`; make the admins' guide a Google Doc
   and set `ADMIN_GUIDE_URL` (README.md: "Setting up community calendars").
-- Restrict the "Community Events Zoom Host Key" doc to the admin groups
-  (General access "Restricted"; each admin group's Google Group as Viewer)
-  and check the Shared Drive's member list (README.md: "Setting up community
-  calendars").
+- Check that the "Community Events Zoom Host Key" doc isn't open to
+  anyone with the link (README.md: "Setting up community calendars").
 
 - Enable the Gmail API in the Google Cloud project, then sign in again on
   the next script run (the scripts now ask to send mail, for the email

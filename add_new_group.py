@@ -72,6 +72,12 @@ such suffix.
 
 The name (-N/--name, required) may be given as multiple unquoted words.
 
+For an admin group, --audience names another Google Group as the
+calendar's audience (the one its events invite and its reminders go to),
+for trying a community calendar out on a few people before it reaches
+everyone; afterwards, change the footer's "Calendar audience:" line by
+hand, or delete the test group and its calendar and room.
+
 Pass --alias to also give the new Google Group a shorter second address
 and point the Gather group's mailing list at it — the same effect as
 running change_group_email_alias.py afterward.
@@ -172,6 +178,7 @@ from util.google_group_utils import (
     group_display_name,
     group_email,
     group_exists,
+    is_in_domain,
     truncate_local_part,
 )
 from util.mail_draft import open_draft
@@ -323,6 +330,7 @@ def main(
     idempotent: bool = False,
     send_email: bool = True,
     agenda_doc: bool = False,
+    audience_override: str | None = None,
 ) -> None:
     base_url = base_url.rstrip("/")
     init_log()
@@ -473,7 +481,9 @@ def main(
         list_address = f"{list_local}@{DOMAIN}"
         audience = None
         if is_admin_group:
-            if google_group_exists:
+            if audience_override:
+                audience = audience_override.lower()
+            elif google_group_exists:
                 audience = parse_footer_audience(settings_service.groups().get(
                     groupUniqueId=gemail).execute().get("customFooterText"))
             audience = audience or COMMUNITY_CALENDAR_AUDIENCE
@@ -780,6 +790,12 @@ def cli():
         help="For a circle or working group, also create its agenda doc, for the "
              "circle_agendas Apps Script to build",
     )
+    parser.add_argument(
+        "--audience", metavar="ADDRESS", default=None,
+        help="For an admin group, the Google Group its calendar's events invite and its "
+             f"reminders go to, instead of {COMMUNITY_CALENDAR_AUDIENCE} (say, a small "
+             "group, to try a community calendar out without emailing everyone)",
+    )
     args = parser.parse_args()
 
     name = " ".join(args.name)
@@ -789,6 +805,11 @@ def cli():
             f"Error: couldn't infer the group type from {name!r} — it doesn't end "
             "with 'Circle', 'Working Group', 'Club', or 'Admins'. Pass -t/--type explicitly."
         )
+
+    if args.audience and group_type != GroupType.ADMIN:
+        sys.exit("Error: --audience only applies to admin groups (-t a).")
+    if args.audience and ("@" not in args.audience or not is_in_domain(args.audience)):
+        sys.exit(f"Error: --audience must be a full @{DOMAIN} address.")
 
     if args.short_address and args.alias:
         sys.exit("Error: --short-address and --alias can't be combined.")
@@ -812,7 +833,7 @@ def cli():
         group_type, name, args.parent_circle, args.manager, args.base_url, email,
         password, args.dry_run, args.credentials, args.drive_id, alias=args.alias,
         short_address=args.short_address, idempotent=args.idempotent, send_email=not args.no_email,
-        agenda_doc=args.agenda_doc,
+        agenda_doc=args.agenda_doc, audience_override=args.audience,
     )
 
 

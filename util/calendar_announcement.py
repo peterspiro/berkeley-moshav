@@ -129,8 +129,8 @@ def admin_calendar_paragraphs(calendar_name: str, audience: str) -> list[str]:
     "- " is a list item."""
     paragraphs = [
         f"Everyone on this list can add and change events on the {calendar_name} "
-        "calendar. The rest of the community sees its events on the All Berkeley Moshav "
-        "Events calendar.",
+        "calendar. The rest of the community sees these events on their primary "
+        "calendars.",
         "Scheduling an event:\n"
         f"Create the event on the {calendar_name} calendar itself, not on your own "
         "calendar. (To add the calendar to your own Google Calendar, click its link in the "
@@ -148,10 +148,9 @@ def admin_calendar_paragraphs(calendar_name: str, audience: str) -> list[str]:
         "The room is the calendar's permanent meeting place: its link never changes, and "
         "anyone with the link can join, with or without a host. For host features such as "
         "breakout rooms or recording, a host claims host with the host key, which is in the "
-        "doc linked from the footer (\"Zoom host key\"); only admins can open it, so "
-        "please don't share the key.",
-        "All the community-wide calendars' rooms belong to one Zoom user, which can host "
-        "only one meeting at a time. If an event overlaps another community-wide event, or "
+        "doc linked from the footer (\"Zoom host key\").",
+        "We have several community-wide calendars, all of which have zoom rooms which "
+        "belong to the same Zoom user, which can host only one meeting at a time. If an event overlaps another community-wide event, or "
         f"is less than {MIN_GAP_MINUTES} minutes from one, you'll get an email asking the "
         "admins involved to agree which one moves.",
     ]
