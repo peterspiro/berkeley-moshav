@@ -15,10 +15,13 @@ inviting share@berkeleymoshav.org.)
   group's meetings and every community-wide event.
 - **An email list for its admins**, named after the calendar, ending in
   "Admins" (for example community-meetings-admins@berkeleymoshav.org). The
-  links to the calendar, its Zoom room, its Drive folder, and the admin group
-  in Gather are in the footer at the bottom of every message to the list.
-- **A Zoom room**: the calendar's permanent meeting place.
-- **A Drive folder**, for the admins' documents, in the Meeting Admin folder.
+  links to the calendar, its Zoom room, its Drive folder, the admin group
+  in Gather, and the Zoom host key are in the footer at the bottom of every
+  message to the list.
+- **A Zoom room** (for example "Community Meetings Zoom Room"): the
+  calendar's permanent meeting place.
+- **A Drive folder**, for the admins' documents, in the Meeting Admin folder
+  (for example "Community Meetings Admins").
 - **An admin group in Gather.** Its managers can add and remove admins, and
   make other admins managers. Admins are added to the email list and the
   Drive folder within the hour.
@@ -83,10 +86,23 @@ without a host. The room isn't recorded unless a host records it.
 
 For host features, such as breakout rooms, muting, or recording, the event's
 host claims host with the room's host key: in Zoom, click Participants, then
-Claim Host, and enter the key. Ask the Technology Circle
-(calendaring-alerts@berkeleymoshav.org) for the key; please don't share it.
-If someone else becomes host by accident, ask them to make you host
-("Make Host").
+Claim Host, and enter the key. If someone else becomes host by accident, ask
+them to make you host ("Make Host").
+
+The host key is in the "Community Events Zoom Host Key" doc, linked from the
+"Zoom host key" line in the footer of every message to the admins' list. Only
+admins can open it. Please keep it that way:
+
+- Don't share the key, or forward the doc, to anyone who isn't an admin. With
+  the key, anyone can take over any community event's meeting.
+- Don't put the key, or the doc's link, in an event's description: events are
+  sent to the whole community.
+- If someone asks for access to the doc, don't grant it from the doc. If they
+  should be an admin, a manager of the admin group adds them to it in Gather,
+  which gives them access within the hour.
+
+All the community calendars' rooms share one host key. If it leaks, tell the
+Technology Circle, who will change it.
 
 ## When events clash
 

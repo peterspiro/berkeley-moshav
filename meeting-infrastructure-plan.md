@@ -143,13 +143,13 @@ their own social events.
   "Why a distinct Gather group type" below). Its Drive folder is one level
   down, like a club's: under a top-level "Meeting Admin" folder in the
   Shared Drive.
-- **Names.** The Gather group has the calendar's name ("Community
-  Meetings"), and so do its calendar and its Drive folder, with no type
-  suffix: being under "Meeting Admin" already says what the folder is. The
-  Google Group's name and address get "Admins" ("Community Meetings
-  Admins", `community-meetings-admins@`), so it isn't mistaken for a list of
-  everyone who comes. `add_new_group.py` takes the type from `-t a`
-  rather than from the name's ending.
+- **Names.** The Gather group, its Drive folder, and its Google Group end
+  in "Admins", as other groups' names end in their type ("Community
+  Meetings Admins", `community-meetings-admins@`), so the list isn't
+  mistaken for one of everyone who comes; the folder must still be under
+  "Meeting Admin". Its calendar is named without "Admins" ("Community
+  Meetings"), and its room "Community Meetings Zoom Room". `add_new_group.py`
+  takes the type from `-t a`, or from a name ending in "Admins".
 - **Calendar.** Each admin group gets one calendar, shared with its Google
   Group as editors ("Make changes to events"). Everyone else sees its events
   through the all-events calendar, which is shared view-only with the
@@ -160,9 +160,18 @@ their own social events.
   (`COMMUNITY_ROOMS_USER`), so each calendar's recordings can be told apart
   by the room's name (see "Not built yet", 1). A skilled host claims host
   with that user's host key for host features such as breakout rooms.
+- **Host key.** It's kept in the "Community Events Zoom Host Key" doc in the
+  Meeting Admin folder, linked from every admin group's footer ("Zoom host
+  key:", `COMMUNITY_HOST_KEY_DOC_URL`). The link is safe there because the
+  doc's sharing is restricted to the admin groups (and the Shared Drive's
+  members can open it too, so that list must be no broader): a forwarded
+  footer gives away only a link. It's never in calendar events, which go to
+  the whole community and are on the all-events calendar: even with the doc
+  restricted, a link labelled as the host key would invite access requests,
+  and one granted by reflex would leak the key.
 - **Recorded in the admin group's footer**, as for other groups: its Gather
-  group, Drive folder, "Google calendar" and "Zoom meeting" links, plus a
-  "Calendar audience:" line naming the everybody group its events invite
+  group, Drive folder, "Google calendar" and "Zoom meeting" links, plus the
+  host key link and a "Calendar audience:" line naming the everybody group its events invite
   and its reminders go to. For now there's only Gather's default Full
   Community group, `all.members@berkeleymoshav.org`
   (`COMMUNITY_CALENDAR_AUDIENCE`, written when a footer names none), but
@@ -236,33 +245,29 @@ their own social events.
   >
   > Scheduling an event:
   > Create the event on the Community Meetings calendar itself, not on your
-  > own calendar. (To add the calendar to your own Google Calendar, click its
-  > link in the footer.) An invitation from your own calendar only gives the
-  > calendar a copy, which can't be given the Zoom room or the community's
-  > invitation.
+  > own calendar. (To add the calendar to your own Google Calendar, click
+  > its link in the footer.)
   >
   > A few minutes after you save it, the event automatically gets:
-  > - the calendar's Zoom room (its link, meeting ID and passcode), unless
-  >   the event says [no zoom] or has another Zoom or Meet link;
+  > - a link to the calendar's Zoom room, if it doesn't already have another
+  >   Zoom or Meet link (or says [no zoom] in the description);
   > - the whole community (all.members@berkeleymoshav.org) invited, each
   >   member getting the invitation by email, unless the event says
-  >   [no invite];
-  > - a place on the All Berkeley Moshav Events calendar.
+  >   [no invite].
   >
   > So there's no need to add Zoom details or guests yourself.
   >
   > Everyone invited is also emailed a reminder 24 hours before each event,
-  > and replies to it come to this list. For one event, type
-  > [remind 2 hours] (or another time) or [no reminder] in its description.
-  > An event marked [no invite] gets no reminder unless it says
-  > [remind ...] too.
+  > and replies to it come to this list. You can change the reminder time by
+  > adding, for example, [remind 2 hours] or [no reminder] in its
+  > description.
   >
   > The Zoom room:
   > The room is the calendar's permanent meeting place: its link never
   > changes, and anyone with the link can join, with or without a host. For
   > host features such as breakout rooms or recording, a host claims host
-  > with the host key; the Technology Circle
-  > (calendaring-alerts@berkeleymoshav.org) can give it to whoever hosts.
+  > with the host key, which is in the doc linked from the footer ("Zoom
+  > host key"); only admins can open it, so please don't share the key.
   >
   > All the community-wide calendars' rooms belong to one Zoom user, which
   > can host only one meeting at a time. If an event overlaps another
@@ -292,9 +297,10 @@ their own social events.
 | | Circles and working groups | Admin groups |
 |---|---|---|
 | Drive folder | Top level of the Shared Drive | Under "Meeting Admin", like clubs under "Clubs" |
-| Folder name | "<Name> Circle" / "<Name> Working Group" | The calendar's name, no suffix |
-| Google Group name | "<Name> Circle" / "<Name> Working Group" | "<Name> Admins" |
-| Zoom room | Under `circle-zoom-hosts@` (or moved to `berkeley@urbanmoshav.org`) | Under `community-zoom-hosts@`, never moved |
+| Gather group, folder, and Google Group names | "<Name> Circle" / "<Name> Working Group" | "<Calendar> Admins" |
+| Calendar name | The group's | The calendar's, without "Admins" |
+| Zoom room | "<Group> Meeting Room", under `circle-zoom-hosts@` (or moved to `berkeley@urbanmoshav.org`) | "<Calendar> Zoom Room", under `community-zoom-hosts@`, never moved |
+| Host key | Given privately to facilitators | In a restricted doc linked from the footer |
 | Who events invite | The group itself | The audience in its footer (`all.members@`), not the admin group |
 | BM Meetings FAQ line | Added | Not added |
 | Clash emails | Group-to-group wording, offering to move a room to the second Zoom user | Admin-group wording, with no room to move |
@@ -332,7 +338,8 @@ footer's audience line (`group_meetings`) and by their folder being in
 Copy Zoom cloud recordings into the matching group's Drive folder, then let
 Zoom delete them.
 - Match recordings to groups by meeting topic ("<Group> Meeting Room"); a
-  community-wide calendar's go to its admin group's folder, by its room.
+  community-wide calendar's ("<Calendar> Zoom Room") go to its admin
+  group's folder.
 - Copy each file (video, audio, transcript, chat), recording which recordings
   are done so none is copied twice; optionally delete from Zoom after a
   verified upload and a grace period.
@@ -365,8 +372,10 @@ regularly, or have the hourly Apps Script run send the warning.
   make sure `all.members@` lets `admin@` post (for reminders); push
   `group_meetings` and `circle_agendas`; make the admins' guide a Google Doc
   and set `ADMIN_GUIDE_URL` (README.md: "Setting up community calendars").
-- Give the community calendars' hosts the `community-zoom-hosts@` host key
-  privately.
+- Restrict the "Community Events Zoom Host Key" doc to the admin groups
+  (General access "Restricted"; each admin group's Google Group as Viewer)
+  and check the Shared Drive's member list (README.md: "Setting up community
+  calendars").
 
 - Enable the Gmail API in the Google Cloud project, then sign in again on
   the next script run (the scripts now ask to send mail, for the email

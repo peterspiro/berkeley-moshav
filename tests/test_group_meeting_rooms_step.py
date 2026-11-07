@@ -268,7 +268,7 @@ def test_all_events_shared_with_everybody_groups_given_to_a_single_group_run():
     assert shares == [("ae", {"role": "reader", "scope": {"type": "group", "value": "all@berkeleymoshav.org"}})]
 
 
-ADMIN = {"6": {"name": "Community Meetings", "kind": "squad", "availability": "closed"}}
+ADMIN = {"6": {"name": "Community Meetings Admins", "kind": "squad", "availability": "closed"}}
 ADMIN_EMAILS = {"6": "community-meetings-admins@x.org"}
 
 
@@ -283,25 +283,27 @@ def test_admin_group_room_under_the_community_zoom_user():
     assert set(cals) == set(urls) == {"6"}
     (meeting,) = zoom.meetings.values()
     assert meeting["host_email"] == "community-zoom-hosts@berkeleymoshav.org"
-    assert meeting["topic"] == "Community Meetings Meeting Room"
+    assert meeting["topic"] == "Community Meetings Zoom Room"
     names = [w[1]["summary"] for w in cal.writes if w[0] == "create"]
     assert names == ["Community Meetings"]
 
 
-def test_footer_step_names_an_admin_groups_audience():
-    old = build_footer_block("6", "F6", "https://g", "Community Meetings")
+def test_footer_step_names_an_admin_groups_audience_and_host_key():
+    old = build_footer_block("6", "F6", "https://g", "Community Meetings Admins")
     settings = _Settings({"community-meetings-admins@x.org": old})
     audiences = {}
     m.ensure_group_footers(settings, "https://g", ADMIN, {"6": "F6"}, {"6": ITEM_TYPE_FOLDER},
                            ADMIN_EMAILS, False, audience_by_group_id=audiences)
     footer = settings.updated["community-meetings-admins@x.org"]["customFooterText"]
-    assert footer.endswith("Calendar audience: all.members@berkeleymoshav.org")
+    assert footer.endswith(
+        f"\nZoom host key: {mr.COMMUNITY_HOST_KEY_DOC_URL}"
+        "\nCalendar audience: all.members@berkeleymoshav.org")
     assert audiences == {"6": "all.members@berkeleymoshav.org"}
 
 
 def test_footer_step_keeps_an_admin_groups_own_audience():
-    old = build_footer_block("6", "F6", "https://g", "Community Meetings",
-                             audience="everyone@x.org")
+    old = build_footer_block("6", "F6", "https://g", "Community Meetings Admins",
+                             audience="everyone@x.org", host_key_url=mr.COMMUNITY_HOST_KEY_DOC_URL)
     settings = _Settings({"community-meetings-admins@x.org": old})
     audiences = {}
     m.ensure_group_footers(settings, "https://g", ADMIN, {"6": "F6"}, {"6": ITEM_TYPE_FOLDER},

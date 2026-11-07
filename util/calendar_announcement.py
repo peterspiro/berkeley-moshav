@@ -134,24 +134,22 @@ def admin_calendar_paragraphs(calendar_name: str, audience: str) -> list[str]:
         "Scheduling an event:\n"
         f"Create the event on the {calendar_name} calendar itself, not on your own "
         "calendar. (To add the calendar to your own Google Calendar, click its link in the "
-        "footer.) An invitation from your own calendar only gives the calendar a copy, "
-        "which can't be given the Zoom room or the community's invitation.",
+        "footer.)",
         "A few minutes after you save it, the event automatically gets:\n"
-        "- the calendar's Zoom room (its link, meeting ID and passcode), unless the event "
-        "says [no zoom] or has another Zoom or Meet link;\n"
+        "- a link to the calendar's Zoom room, if it doesn't already have another Zoom or "
+        "Meet link (or says [no zoom] in the description);\n"
         f"- the whole community ({audience}) invited, each member getting the invitation "
-        "by email, unless the event says [no invite];\n"
-        "- a place on the All Berkeley Moshav Events calendar.\n"
+        "by email, unless the event says [no invite].\n"
         "So there's no need to add Zoom details or guests yourself.",
         f"Everyone invited is also emailed a reminder {REMINDER_LEAD_TEXT} before each "
-        "event, and replies to it come to this list. For one event, type [remind 2 hours] "
-        "(or another time) or [no reminder] in its description. An event marked "
-        "[no invite] gets no reminder unless it says [remind ...] too.",
+        "event, and replies to it come to this list. You can change the reminder time by "
+        "adding, for example, [remind 2 hours] or [no reminder] in its description.",
         "The Zoom room:\n"
         "The room is the calendar's permanent meeting place: its link never changes, and "
         "anyone with the link can join, with or without a host. For host features such as "
-        "breakout rooms or recording, a host claims host with the host key; the Technology "
-        f"Circle ({ALERT_EMAIL}) can give it to whoever hosts.",
+        "breakout rooms or recording, a host claims host with the host key, which is in the "
+        "doc linked from the footer (\"Zoom host key\"); only admins can open it, so "
+        "please don't share the key.",
         "All the community-wide calendars' rooms belong to one Zoom user, which can host "
         "only one meeting at a time. If an event overlaps another community-wide event, or "
         f"is less than {MIN_GAP_MINUTES} minutes from one, you'll get an email asking the "

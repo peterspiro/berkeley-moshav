@@ -138,19 +138,19 @@ _SMALL_WORDS = {"a", "an", "and", "at", "by", "for", "in", "of", "on", "or", "th
 
 # The Gather group kind ("Squad" in Gather's menu) of a community-wide
 # calendar's admin group, used by no other group. Its folder is under
-# MEETING_ADMIN_FOLDER_NAME, named like the calendar, with no type suffix;
-# its Google Group's name ends in ADMIN_LIST_SUFFIX.
+# MEETING_ADMIN_FOLDER_NAME, and its names end in ADMIN_SUFFIX, like other
+# groups' type suffixes ("Community Meetings Admins"); its calendar and Zoom
+# room are named without it (calendar_name_for_group()).
 ADMIN_GROUP_KIND = "squad"
 MEETING_ADMIN_FOLDER_NAME = "Meeting Admin"
-ADMIN_LIST_SUFFIX = "Admins"
+ADMIN_SUFFIX = "Admins"
 
-# Gather group "kind" -> folder name suffix / Shared Drive placement rule
-# ("" for none).
+# Gather group "kind" -> folder name suffix / Shared Drive placement rule.
 FOLDER_TYPE_SUFFIXES = {
     "circle": "Circle",
     "committee": "Working Group",
     "club": "Club",
-    ADMIN_GROUP_KIND: "",
+    ADMIN_GROUP_KIND: ADMIN_SUFFIX,
 }
 
 # Top-level Shared Drive folder that a kind's folders go in (other kinds'
@@ -197,7 +197,7 @@ def _with_type_suffix(name: str, kind: str) -> str:
         raise ValueError(f"Don't know how to handle type {kind!r}")
     name = name.strip()
     suffix = FOLDER_TYPE_SUFFIXES[kind]
-    return name if not suffix or _ends_with(name, suffix) else f"{name} {suffix}"
+    return name if _ends_with(name, suffix) else f"{name} {suffix}"
 
 
 def full_group_name(name: str, kind: str) -> str:
@@ -219,14 +219,15 @@ def folder_name_for_group_type(raw_name: str, kind: str) -> str:
     return _with_type_suffix(standardize_name(raw_name), kind)
 
 
-def google_group_name_for_group_type(folder_name: str, kind: str) -> str:
-    """The name to give a new group's Google Group (and so its address):
-    the folder's name, plus ADMIN_LIST_SUFFIX for an admin group ("Community
-    Meetings" -> "Community Meetings Admins"), so its list isn't taken for
-    one of everyone who comes."""
-    if kind == ADMIN_GROUP_KIND and not _ends_with(folder_name, ADMIN_LIST_SUFFIX):
-        return f"{folder_name.strip()} {ADMIN_LIST_SUFFIX}"
-    return folder_name
+def calendar_name_for_group(name: str, kind: str) -> str:
+    """The name of a group's calendar and Zoom room: the group's own, or for
+    a community-wide calendar's admin group, the group's without
+    ADMIN_SUFFIX ("Community Meetings Admins" -> "Community Meetings"), as
+    the calendar is for everyone and the group only runs it."""
+    name = name.strip()
+    if kind == ADMIN_GROUP_KIND and _ends_with(name, ADMIN_SUFFIX):
+        return re.sub(r"\s*\b" + re.escape(ADMIN_SUFFIX) + r"\s*$", "", name, flags=re.IGNORECASE)
+    return name
 
 
 def parent_folder_id_for_group_type(drive_service, drive_id: str, kind: str) -> str:

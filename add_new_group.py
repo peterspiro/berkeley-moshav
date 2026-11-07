@@ -5,14 +5,16 @@ together, and (unless --type=club or admin) has the new group put under its
 parent circle in the Circle Structure.
 
 With --type=admin, the new group is a community-wide calendar's admin
-group (Gather type "Squad"): its folder is named like the calendar, with
-no type suffix, under the top-level "Meeting Admin" folder; its Google
-Group's name and address end in "Admins" ("Community Meetings Admins",
-community-meetings-admins@); its Zoom room is under the community-wide
-calendars' Zoom user (COMMUNITY_ROOMS_USER); its footer also names the
-calendar's audience (COMMUNITY_CALENDAR_AUDIENCE), the everybody group its
-events invite and its reminders go to; and its welcome message tells the
-admins how to schedule community-wide events.
+group (Gather type "Squad"): its Gather group, folder (under the top-level
+"Meeting Admin" folder), and Google Group are named with "Admins" as the
+type suffix ("Community Meetings Admins", community-meetings-admins@); its
+calendar is named without it ("Community Meetings"), and its Zoom room
+"Community Meetings Zoom Room", under the community-wide calendars' Zoom
+user (COMMUNITY_ROOMS_USER); its footer also links the rooms' host key doc
+(COMMUNITY_HOST_KEY_DOC_URL) and names the calendar's audience
+(COMMUNITY_CALENDAR_AUDIENCE), the everybody group its events invite and
+its reminders go to; and its welcome message tells the admins how to
+schedule community-wide events.
 
 Steps:
   1. Validate: the folder, Google Group, and Gather group don't already
@@ -63,10 +65,10 @@ Calendar), signed in as the calendars' owner, and the Zoom app's
 credentials in zoom_credentials — see update_groups.py's
 docstring and README.md for setup.
 
-The group type (circle / working group / club) is inferred from a name
-ending in the matching suffix ("Circle" / "Working Group" / "Club");
-pass -t/--type explicitly only when the name has no such suffix, and
-always for an admin group (-t a), whose name has none.
+The group type (circle / working group / club / admin group) is inferred
+from a name ending in the matching suffix ("Circle" / "Working Group" /
+"Club" / "Admins"); pass -t/--type explicitly only when the name has no
+such suffix.
 
 The name (-N/--name, required) may be given as multiple unquoted words.
 
@@ -146,7 +148,7 @@ from util.gdrive_config import (
     ensure_folder_name_available,
     find_folder_id_under_parent,
     folder_name_for_group_type,
-    google_group_name_for_group_type,
+    calendar_name_for_group,
     parent_folder_id_for_group_type,
     scrape_gdrive_config,
 )
@@ -175,6 +177,7 @@ from util.google_group_utils import (
 from util.mail_draft import open_draft
 from util.meeting_rooms import (
     COMMUNITY_CALENDAR_AUDIENCE,
+    COMMUNITY_HOST_KEY_DOC_URL,
     QuitRequested,
     check_calendar_owner,
     ensure_group_calendar,
@@ -183,7 +186,9 @@ from util.meeting_rooms import (
     list_owned_calendars,
 )
 from util.zoom_utils import (
+    COMMUNITY_ROOM_TOPIC_SUFFIX,
     COMMUNITY_ROOM_USERS,
+    ROOM_TOPIC_SUFFIX,
     ROOM_USERS,
     ZoomClient,
     room_topic,
@@ -217,11 +222,11 @@ class GroupType(Enum):
     @classmethod
     def from_name_suffix(cls, name: str) -> "GroupType | None":
         """Infer the type from a name ending in the type's folder suffix
-        ("Circle"/"Working Group"/"Club"), or None if it ends with none (an
-        admin group's has none)."""
+        ("Circle"/"Working Group"/"Club"/"Admins"), or None if it ends with
+        none."""
         for member in cls:
             suffix = FOLDER_TYPE_SUFFIXES[member.kind]
-            if suffix and re.search(r"\b" + re.escape(suffix) + r"\s*$", name, re.IGNORECASE):
+            if re.search(r"\b" + re.escape(suffix) + r"\s*$", name, re.IGNORECASE):
                 return member
         return None
 
@@ -329,13 +334,14 @@ def main(
     kind = group_type.kind
     is_admin_group = group_type == GroupType.ADMIN
     folder_name = folder_name_for_group_type(raw_name, kind)
-    # The Gather group, folder, calendar, and room are named gdisplay; the
-    # Google Group list_display ("<Name> Admins" for an admin group).
-    list_name = google_group_name_for_group_type(folder_name, kind)
-    gemail = group_email(list_name)
+    gemail = group_email(folder_name)
     gdisplay = group_display_name(folder_name)
-    list_display = group_display_name(list_name)
+    # The calendar and room are named cal_name: gdisplay, or for an admin
+    # group, the calendar's name, without "Admins".
+    cal_name = calendar_name_for_group(gdisplay, kind)
     room_users = COMMUNITY_ROOM_USERS if is_admin_group else ROOM_USERS
+    room_suffix = COMMUNITY_ROOM_TOPIC_SUFFIX if is_admin_group else ROOM_TOPIC_SUFFIX
+    host_key_url = COMMUNITY_HOST_KEY_DOC_URL if is_admin_group else None
 
     # The Google Group's primary address is normally the full name; --alias
     # adds a second (shorter) address to reach it, and makes the Gather
@@ -472,7 +478,7 @@ def main(
                     groupUniqueId=gemail).execute().get("customFooterText"))
             audience = audience or COMMUNITY_CALENDAR_AUDIENCE
             subject, body = build_admin_welcome_message(
-                gdisplay, list_address, manager.first_name,
+                cal_name, list_address, manager.first_name,
                 sender.first_name if sender else "", audience)
         else:
             subject, body = build_welcome_message(
@@ -488,15 +494,15 @@ def main(
                 print(f"[dry-run] Would reuse existing: {reused}.")
             where = (f" in '{PARENT_FOLDER_NAMES[kind]}'" if kind in PARENT_FOLDER_NAMES else "")
             print(f"[dry-run] Would create Drive folder '{folder_name}'{where}, Google Group "
-                  f"'{list_display}' <{gemail}>, and Gather group '{gdisplay}' "
+                  f"'{gdisplay}' <{gemail}>, and Gather group '{gdisplay}' "
                   f"(type={group_type.label}).")
             print(f"[dry-run] Would add {manager.full_name} <{manager.email}> as a manager "
                   "of the new Gather group.")
             if alias_email:
                 print(f"[dry-run] Would add alias '{alias_email}' to the Google Group and "
                       f"set the Gather group's mailing list to '{list_local}@{DOMAIN}'.")
-            print(f"[dry-run] Would create calendar '{gdisplay}' (shared with '{gemail}' "
-                  f"as editors) and Zoom room '{room_topic(gdisplay)}' (under "
+            print(f"[dry-run] Would create calendar '{cal_name}' (shared with '{gemail}' "
+                  f"as editors) and Zoom room '{room_topic(cal_name, room_suffix)}' (under "
                   f"{room_users[0]}), unless ones with matching names exist and you choose "
                   "one of those.")
             if audience:
@@ -530,7 +536,7 @@ def main(
             print(f"Reusing existing Google Group '{gemail}'.")
         else:
             dir_service.groups().insert(
-                body={"email": gemail, "name": list_display}
+                body={"email": gemail, "name": gdisplay}
             ).execute()
             log("INFO", "create_google_group", gemail)
             print(f"Created Google Group '{gemail}'.")
@@ -608,7 +614,7 @@ def main(
         try:
             created = []
             calendar_id = ensure_group_calendar(
-                calendar_service, gdisplay, gemail, linked_calendar_id,
+                calendar_service, cal_name, gemail, linked_calendar_id,
                 owned_calendars=lambda: list_owned_calendars(calendar_service),
                 linked=get_linked, dry_run=False, on_create=lambda: created.append(True),
             )
@@ -617,12 +623,12 @@ def main(
                                dry_run=False, zoom_meetings=zoom_meetings,
                                dir_service=dir_service)
             if created:
-                mover.offer(gdisplay, calendar_id, gemail)
+                mover.offer(cal_name, calendar_id, gemail)
             room = ensure_zoom_room(
-                zoom, gdisplay, linked_zoom_url, gemail,
+                zoom, cal_name, linked_zoom_url, gemail,
                 meetings=zoom_meetings, linked=get_linked, dry_run=False,
-                events_using=lambda meeting_id: mover.events_using_meeting(gdisplay, meeting_id),
-                room_users=room_users,
+                events_using=lambda meeting_id: mover.events_using_meeting(cal_name, meeting_id),
+                room_users=room_users, topic_suffix=room_suffix,
             )
         except QuitRequested:
             log("INFO", "quit", "User quit during the calendar/Zoom room step")
@@ -634,7 +640,8 @@ def main(
         ensure_group_footer(settings_service, gemail, gather_group_id, folder_id, base_url,
                             gdisplay, calendar_id=calendar_id,
                             zoom_url=room.join_url if room else None,
-                            zoom_passcode=room.passcode if room else None, audience=audience)
+                            zoom_passcode=room.passcode if room else None, audience=audience,
+                            host_key_url=host_key_url)
         print(f"Set footer links for '{gemail}'.")
 
         # ── Have it put under its parent in the Circle Structure ─────────────
@@ -708,9 +715,9 @@ def cli():
     parser.add_argument(
         "-t", "--type", type=GroupType.parse, default=None,
         help="Group type — 'c'/'circle', 'w'/'working group', 'b'/'club', or 'a'/'admin' "
-             "(a community-wide calendar's admin group, named like the calendar). "
-             "Only required if the name doesn't end with a type suffix "
-             "('Circle'/'Working Group'/'Club'), from which it's otherwise inferred.",
+             "(a community-wide calendar's admin group, its calendar named without "
+             "'Admins'). Only required if the name doesn't end with a type suffix "
+             "('Circle'/'Working Group'/'Club'/'Admins'), from which it's otherwise inferred.",
     )
     parser.add_argument(
         "-p", "--parent-circle", default=None,
@@ -780,7 +787,7 @@ def cli():
     if group_type is None:
         sys.exit(
             f"Error: couldn't infer the group type from {name!r} — it doesn't end "
-            "with 'Circle', 'Working Group', or 'Club'. Pass -t/--type explicitly."
+            "with 'Circle', 'Working Group', 'Club', or 'Admins'. Pass -t/--type explicitly."
         )
 
     if args.short_address and args.alias:

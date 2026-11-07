@@ -24,6 +24,7 @@ from util.google_group_footer import (
     footer_updates,
     parse_footer_audience,
     parse_footer_calendar_id,
+    parse_footer_host_key_url,
     parse_footer_folder_id,
     parse_footer_link,
     format_meeting_id,
@@ -232,6 +233,17 @@ class TestCalendarAudience:
                                  audience="everyone@berkeleymoshav.org")
         assert parse_footer_audience(updates["customFooterText"]) == "everyone@berkeleymoshav.org"
         assert describe_footer_updates(old, updates) == "calendar audience"
+
+    def test_host_key_link(self):
+        block = build_footer_block("7", "F", "https://g", "Community Meetings Admins",
+                                   host_key_url="https://docs.google.com/document/d/k/edit",
+                                   audience="a@x.org")
+        assert block.endswith("\nZoom host key: https://docs.google.com/document/d/k/edit"
+                              "\nCalendar audience: a@x.org")
+        assert parse_footer_host_key_url(block) == "https://docs.google.com/document/d/k/edit"
+        assert parse_footer_zoom_url(block) is None
+        current = {"customFooterText": block, "includeCustomFooter": "true"}
+        assert footer_updates(current, "7", "F", "https://g", "Community Meetings Admins") == {}
 
     def test_kept_when_zoom_replaced(self):
         new = replace_footer_zoom(self.block(), "https://zoom.us/j/81234567890?pwd=y", "654321")

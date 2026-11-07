@@ -89,6 +89,7 @@ class TestAdminGroups:
         from add_new_group import GroupType
         assert GroupType.from_name_suffix("Community Meetings") is None
         assert GroupType.from_name_suffix("Book Club") is GroupType.CLUB
+        assert GroupType.from_name_suffix("Community Meetings Admins") is GroupType.ADMIN
 
     def test_welcome_message(self):
         from add_new_group import build_admin_welcome_message
@@ -101,6 +102,13 @@ class TestAdminGroups:
                                "community-meetings-admins@example.org, for the people who "
                                "schedule them.")
         assert "the whole community (all@example.org) invited" in body
-        assert "[no invite]" in body and "[no reminder]" in body
+        assert ("- a link to the calendar's Zoom room, if it doesn't already have another "
+                "Zoom or Meet link (or says [no zoom] in the description);\n") in body
+        assert "unless the event says [no invite].\nSo there's no need" in body
+        assert ("You can change the reminder time by adding, for example, [remind 2 hours] "
+                "or [no reminder] in its description.") in body
+        assert "only gives the calendar a copy" not in body
+        assert "a place on the All Berkeley Moshav Events calendar" not in body
+        assert 'the doc linked from the footer ("Zoom host key")' in body
         assert "I've made you a manager of the Gather group" in body
         assert body.endswith("\n\nSam\n")

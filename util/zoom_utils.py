@@ -41,6 +41,9 @@ COMMUNITY_ROOMS_USER = "community-zoom-hosts@berkeleymoshav.org"
 COMMUNITY_ROOM_USERS = (COMMUNITY_ROOMS_USER,)
 
 ROOM_TOPIC_SUFFIX = " Meeting Room"
+# A community-wide calendar's room is "<Calendar> Zoom Room" instead.
+COMMUNITY_ROOM_TOPIC_SUFFIX = " Zoom Room"
+ROOM_TOPIC_SUFFIXES = (ROOM_TOPIC_SUFFIX, COMMUNITY_ROOM_TOPIC_SUFFIX)
 MEETING_TYPE_NO_FIXED_TIME = 3
 
 ROOM_SETTINGS = {
@@ -59,8 +62,8 @@ PASSCODE_LENGTH = 6
 _MEETING_ID_RE = re.compile(r"/j/(\d+)")
 
 
-def room_topic(group_name: str) -> str:
-    return group_name + ROOM_TOPIC_SUFFIX
+def room_topic(group_name: str, suffix: str = ROOM_TOPIC_SUFFIX) -> str:
+    return group_name + suffix
 
 
 def meeting_id_from_url(join_url: str | None) -> str | None:

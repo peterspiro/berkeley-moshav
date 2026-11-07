@@ -8,7 +8,7 @@ import pytest
 from util.gdrive_config import (
     folder_name_for_group_type,
     full_group_name,
-    google_group_name_for_group_type,
+    calendar_name_for_group,
     parent_folder_id_for_group_type,
 )
 
@@ -37,19 +37,20 @@ def test_folder_names_still_get_the_type():
 
 
 class TestAdminGroups:
-    def test_no_type_suffix(self):
-        assert full_group_name("Community Meetings", "squad") == "Community Meetings"
-        assert folder_name_for_group_type("community meetings", "squad") == "Community Meetings"
-
-    def test_google_group_name_ends_in_admins(self):
-        assert google_group_name_for_group_type("Community Meetings", "squad") == \
+    def test_names_end_in_admins(self):
+        assert full_group_name("Community Meetings", "squad") == "Community Meetings Admins"
+        assert folder_name_for_group_type("community meetings", "squad") == \
             "Community Meetings Admins"
-        assert google_group_name_for_group_type("Community Meetings Admins", "squad") == \
+        assert folder_name_for_group_type("Community Meetings Admins", "squad") == \
             "Community Meetings Admins"
 
-    def test_other_groups_google_group_named_like_the_folder(self):
-        assert google_group_name_for_group_type("Technology Circle", "circle") == \
-            "Technology Circle"
+    def test_calendar_named_without_admins(self):
+        assert calendar_name_for_group("Community Meetings Admins", "squad") == \
+            "Community Meetings"
+        assert calendar_name_for_group("Community Meetings", "squad") == "Community Meetings"
+
+    def test_other_groups_calendars_named_like_the_group(self):
+        assert calendar_name_for_group("Admins Circle", "circle") == "Admins Circle"
 
 
 class FakeDrive:

@@ -39,8 +39,8 @@ excluding hidden groups:
       group and, if it isn't shared with its Google Group at all, shared
       with it as "Make changes to events" (other access, such as a circle
       restricted by hand to "See all event details", is left alone);
-      each room is titled "<Group> Meeting Room" with the standard room
-      settings. Also makes sure the all-events calendar exists, and is
+      each room is titled "<Group> Meeting Room" (an admin group's,
+      "<Calendar> Zoom Room") with the standard room settings. Also makes sure the all-events calendar exists, and is
       shared read-only, without an email, with the everybody groups (in a
       -g run, only if the group named is one).
   0e. Once every group's folder and mailing-list state is settled, ensures
@@ -69,14 +69,17 @@ excluding hidden groups:
       has one keeps it.
 
 A community-wide calendar's admin group (Gather type "Squad",
-ADMIN_GROUP_KIND) is handled like a circle, except that its new folder is
-named like its calendar, with no type suffix, under the top-level "Meeting
-Admin" folder; its new Google Group's name ends in "Admins"; its Zoom room
-is under the community-wide calendars' Zoom user (COMMUNITY_ROOMS_USER);
-its footer also names the calendar's audience, the everybody group its
-events invite and its reminders go to ("Calendar audience:", the one it
-names already or COMMUNITY_CALENDAR_AUDIENCE); the email about its new
-calendar is the admins' version; and it gets no agenda doc.
+ADMIN_GROUP_KIND) is handled like a circle, except that its new folder
+(under the top-level "Meeting Admin" folder) and Google Group are named
+with "Admins" as the type suffix ("Community Meetings Admins"); its
+calendar is named without it ("Community Meetings"), and its Zoom room
+"<Calendar> Zoom Room", under the community-wide calendars' Zoom user
+(COMMUNITY_ROOMS_USER); its footer also links the rooms' host key doc
+(COMMUNITY_HOST_KEY_DOC_URL) and names the calendar's audience, the
+everybody group its events invite and its reminders go to ("Calendar
+audience:", the one it names already or COMMUNITY_CALENDAR_AUDIENCE); the
+email about its new calendar is the admins' version; and it gets no agenda
+doc.
 
 Hidden and deactivated/inactive groups are skipped entirely.
 
@@ -143,6 +146,7 @@ from util.gather_utils import (
 from util.gdrive_config import (
     ADMIN_GROUP_KIND,
     DEFAULT_DRIVE_ID,
+    calendar_name_for_group,
     add_group_access_to_gdrive_item,
     check_single_link_per_group,
     create_drive_folder,
@@ -153,7 +157,6 @@ from util.gdrive_config import (
     full_group_name,
     gdrive_item_url,
     get_drive_folder_by_id,
-    google_group_name_for_group_type,
     list_shared_drives,
     load_gdrive_item_map,
     parent_folder_id_for_group_type,
@@ -190,6 +193,7 @@ from util.circle_agenda_docs import AGENDA_KINDS, ensure_agenda_doc
 from util.member_names import build_member_names, publish_member_names
 from util.meeting_rooms import (
     COMMUNITY_CALENDAR_AUDIENCE,
+    COMMUNITY_HOST_KEY_DOC_URL,
     LinkedResources,
     QuitRequested,
     check_calendar_owner,
@@ -202,7 +206,13 @@ from util.meeting_rooms import (
     group_can_edit,
     list_owned_calendars,
 )
-from util.zoom_utils import COMMUNITY_ROOM_USERS, ROOM_USERS, ZoomClient
+from util.zoom_utils import (
+    COMMUNITY_ROOM_TOPIC_SUFFIX,
+    COMMUNITY_ROOM_USERS,
+    ROOM_TOPIC_SUFFIX,
+    ROOM_USERS,
+    ZoomClient,
+)
 _LOG_FILE = Path("debug/update_groups_log.csv")
 _SCREENSHOT_DIR = Path("debug/update_groups_screenshots")
 
@@ -811,7 +821,9 @@ def ensure_email_lists(
             continue
 
         if action == "create":
-            list_name = google_group_name_for_group_type(folder_name, info["kind"])
+            # An admin group's list ends in "Admins" even if its folder doesn't.
+            list_name = (full_group_name(folder_name, info["kind"])
+                         if info["kind"] == ADMIN_GROUP_KIND else folder_name)
             gemail = group_email(list_name)
             gdisplay = group_display_name(list_name)
             created = ensure_group_exists(dir_service, gemail, gdisplay)
@@ -1029,25 +1041,34 @@ def ensure_group_meeting_rooms(
         created = []
         full_name = full_group_name(group_name, info["kind"])
         is_admin_group = info["kind"] == ADMIN_GROUP_KIND
+        # An admin group's calendar and room, and the events moved onto it,
+        # go by the calendar's name ("Community Meetings"), not the group's.
+        name = calendar_name_for_group(group_name, info["kind"]) if is_admin_group else group_name
+        if is_admin_group:
+            calendar_name, other_names = name, ()
+        elif full_calendar_names:
+            calendar_name, other_names = full_name, ()
+        else:
+            calendar_name, other_names = group_name, (full_name,)
         calendar_id = ensure_group_calendar(
-            calendar_service, group_name, email, parse_footer_calendar_id(footer),
+            calendar_service, name, email, parse_footer_calendar_id(footer),
             owned_calendars=owned_calendars, linked=get_linked, dry_run=dry_run,
             on_create=lambda: created.append(True),
-            calendar_name=full_name if full_calendar_names else group_name,
-            other_names=() if full_calendar_names else (full_name,),
+            calendar_name=calendar_name, other_names=other_names,
         )
         if calendar_id:
             calendar_id_by_group_id[group_id] = calendar_id
         if (created or announce_calendars) and created_calendar_group_ids is not None:
             created_calendar_group_ids.append(group_id)
         if created or move_events:
-            mover.offer(group_name, calendar_id, email)
+            mover.offer(name, calendar_id, email)
         room = ensure_zoom_room(
-            zoom, group_name, parse_footer_zoom_url(footer), email,
+            zoom, name, parse_footer_zoom_url(footer), email,
             meetings=zoom_meetings, linked=get_linked, dry_run=dry_run,
-            events_using=lambda meeting_id: mover.events_using_meeting(group_name, meeting_id),
+            events_using=lambda meeting_id: mover.events_using_meeting(name, meeting_id),
             events_note=None if created or move_events else MOVE_EVENTS_HINT,
             room_users=COMMUNITY_ROOM_USERS if is_admin_group else ROOM_USERS,
+            topic_suffix=COMMUNITY_ROOM_TOPIC_SUFFIX if is_admin_group else ROOM_TOPIC_SUFFIX,
         )
         if room:
             room_by_group_id[group_id] = room
@@ -1079,7 +1100,10 @@ def announce_new_calendars(
             audience = audience_by_group_id.get(group_id)
             if info["kind"] == ADMIN_GROUP_KIND and not audience:
                 audience = COMMUNITY_CALENDAR_AUDIENCE
-            announce_calendar(gmail_service, full_group_name(info["name"], info["kind"]),
+            name = (calendar_name_for_group(info["name"], info["kind"])
+                    if info["kind"] == ADMIN_GROUP_KIND
+                    else full_group_name(info["name"], info["kind"]))
+            announce_calendar(gmail_service, name,
                               email_by_group_id[group_id],
                               calendar_id_by_group_id.get(group_id), dry_run, draft, audience)
 
@@ -1127,8 +1151,9 @@ def ensure_group_footers(
     ensure_group_meeting_rooms()) give the calendar and Zoom links; a group
     missing from them keeps whatever calendar/Zoom link its footer has.
 
-    A community-wide calendar's admin group's footer also names the
-    calendar's audience: the one it already names, or
+    A community-wide calendar's admin group's footer also links the host
+    key doc (COMMUNITY_HOST_KEY_DOC_URL) and names the calendar's audience:
+    the one it already names, or
     COMMUNITY_CALENDAR_AUDIENCE. Each admin group's is recorded in
     audience_by_group_id (mutated in place), for announce_new_calendars().
     """
@@ -1152,16 +1177,17 @@ def ensure_group_footers(
 
         room = room_by_group_id.get(group_id)
         current = settings_service.groups().get(groupUniqueId=email).execute()
-        audience = None
+        audience = host_key_url = None
         if info["kind"] == ADMIN_GROUP_KIND:
             audience = (parse_footer_audience(current.get("customFooterText"))
                         or COMMUNITY_CALENDAR_AUDIENCE)
             audience_by_group_id[group_id] = audience
+            host_key_url = COMMUNITY_HOST_KEY_DOC_URL
         updates = footer_updates(
             current, group_id, item_id, base_url, group_name, item_type,
             calendar_id_by_group_id.get(group_id),
             room.join_url if room else None, room.passcode if room else None,
-            audience,
+            audience, host_key_url,
         )
         if not updates:
             continue
