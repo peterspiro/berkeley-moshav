@@ -201,6 +201,15 @@ from util.zoom_utils import (
     room_topic,
 )
 _LOG_FILE = Path("debug/add_new_group_log.csv")
+
+# Who a Google Group's whoCanPostMessage setting lets post, for the warning
+# about an admin group's audience.
+AUDIENCE_POSTERS = {
+    "ALL_MEMBERS_CAN_POST": "its members",
+    "ALL_MANAGERS_CAN_POST": "its managers",
+    "ALL_OWNERS_CAN_POST": "its owners",
+    "NONE_CAN_POST": "no one",
+}
 _SCREENSHOT_DIR = Path("debug/add_new_group_screenshots")
 
 configure(_LOG_FILE, _SCREENSHOT_DIR)
@@ -431,6 +440,22 @@ def main(
                 )
                 if not same_group:
                     fail(f"'{alias_email}' is already in use by another Google Group.")
+
+        # ── Validate: an admin group's audience ─────────────────────────────
+        # The Google Group its events invite and its reminders go to must
+        # exist, and should accept the reminders admin@ sends it.
+        if is_admin_group:
+            audience_email = audience_override or COMMUNITY_CALENDAR_AUDIENCE
+            if get_group_by_email(dir_service, audience_email) is None:
+                fail(f"the audience, '{audience_email}', isn't a Google Group.")
+            who_can_post = settings_service.groups().get(
+                groupUniqueId=audience_email).execute().get("whoCanPostMessage")
+            if who_can_post not in ("ANYONE_CAN_POST", "ALL_IN_DOMAIN_CAN_POST"):
+                posters = AUDIENCE_POSTERS.get(who_can_post, who_can_post)
+                print(f"WARNING: only {posters} can post to '{audience_email}', so the "
+                      "reminders admin@ sends it may bounce. Let anyone in the organization "
+                      "post (in its Google Group settings, Who can post).")
+                log("WARN", "audience_posting", f"{audience_email}: {who_can_post}")
 
         # ── Validate: Gather group ──────────────────────────────────────────
         existing_gather_id = find_gather_group_id_by_name(page, base_url, gdisplay)

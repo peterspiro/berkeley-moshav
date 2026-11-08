@@ -260,6 +260,9 @@ it is:
 python add_new_group.py -N Calendar Test -t a -m Dana -A calendar-test
 ```
 
+`add_new_group.py` stops if the audience isn't a Google Group, and warns if
+it doesn't let everyone in the organization post (so `admin@`'s reminders
+would bounce); it checks `all.members@` the same way for a real calendar.
 Its events then invite, and remind, only `calendar-test@`. The rest of the
 community isn't emailed, but test events do show on the All Berkeley Moshav
 Events calendar, which everyone can view, so give them titles like "TEST" and
