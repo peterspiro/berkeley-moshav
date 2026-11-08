@@ -206,6 +206,11 @@ from util.zoom_utils import (
 )
 _LOG_FILE = Path("debug/add_new_group_log.csv")
 
+# Added to the errors about something that already exists, which is
+# usually left from an earlier, interrupted run.
+REUSE_HINT = (" If an earlier run of this script made it, run again with -i/--idempotent "
+              "to reuse it.")
+
 # Who a Google Group's whoCanPostMessage setting lets post, for the warning
 # about an admin group's audience.
 AUDIENCE_POSTERS = {
@@ -423,12 +428,12 @@ def main(
             drive_service, drive_id, parent_id, folder_name)
         if existing_folder_id and not idempotent:
             fail(f"A folder named {folder_name!r} already exists here "
-                 f"(id={existing_folder_id})")
+                 f"(id={existing_folder_id}).{REUSE_HINT}")
 
         # ── Validate: Google Group ──────────────────────────────────────────
         google_group_exists = group_exists(dir_service, gemail)
         if google_group_exists and not idempotent:
-            fail(f"Google Group '{gemail}' already exists.")
+            fail(f"Google Group '{gemail}' already exists.{REUSE_HINT}")
 
         if alias_email:
             if alias_email.lower() == gemail.lower():
@@ -465,7 +470,7 @@ def main(
         existing_gather_id = find_gather_group_id_by_name(page, base_url, gdisplay)
         if existing_gather_id and not idempotent:
             fail(f"a Gather group named '{gdisplay}' already exists "
-                 f"(id={existing_gather_id}).")
+                 f"(id={existing_gather_id}).{REUSE_HINT}")
 
         # ── Validate: parent circle ──────────────────────────────────────────
         parent_group = None
