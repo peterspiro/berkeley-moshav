@@ -959,3 +959,25 @@ class TestCommunityOverlapMessage:
         assert ("for the Community Meetings meeting, replace the Zoom link") in body
         assert ("The Community Meetings meeting can be moved on the Community Meetings "
                 "calendar; the other meeting can be moved in Zoom.") in body
+
+
+class TestNoZoomMarker:
+    @pytest.mark.parametrize("event", [
+        {"summary": "Picnic [No Zoom]"},
+        {"description": "Bring food. [no zoom]"},
+        {"description": "<p>Bring food.</p><p>[no&nbsp;zoom]</p>"},
+        {"description": "[no&#160;zoom]"},
+        {"description": "[no zoom]"},
+        {"description": "<b>[no zoom]</b>"},
+    ])
+    def test_recognized(self, event):
+        assert js("hasNoZoomMarker(e)", e=event) is True
+
+    def test_not_in_location(self):
+        assert js("hasNoZoomMarker(e)", e={"location": "[no zoom]"}) is False
+
+    def test_formatting_inside_the_tag(self):
+        assert js("hasNoZoomMarker(e)", e={"description": "[no <b>zoom</b>]"}) is True
+
+    def test_no_room_added(self):
+        assert "description" not in (patch({"description": "[no&nbsp;zoom]"}) or {}).get("patch", {})

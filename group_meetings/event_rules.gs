@@ -312,8 +312,11 @@ function hasNoInviteMarker(event) {
   return plainText(lower(event.summary) + ' ' + lower(event.description)).includes(NO_INVITE_MARKER);
 }
 
+/** True if the event's title or description says "[no zoom]", in any
+ * case, and whatever formatting or non-breaking spaces the description's
+ * HTML has (see plainText). */
 function hasNoZoomMarker(event) {
-  return (lower(event.summary) + ' ' + lower(event.description)).includes(NO_ZOOM_MARKER);
+  return plainText(lower(event.summary) + ' ' + lower(event.description)).includes(NO_ZOOM_MARKER);
 }
 
 /** True if the event's location or description links some meeting
@@ -557,10 +560,11 @@ function parseReminderLeads(text) {
 
 /** An event description's text without its HTML: tags removed (a line
  * break kept as one), and the entities Calendar writes (such as the
- * &nbsp; its editor puts between words) decoded. */
+ * &nbsp; its editor puts between words) decoded, a non-breaking space
+ * becoming an ordinary one. */
 function plainText(html) {
   return (html || '').replace(/<br\s*\/?>|<\/(?:p|div|li)>/gi, '\n').replace(/<[^>]*>/g, '')
-    .replace(/&nbsp;|&#160;/gi, ' ').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>')
+    .replace(/&nbsp;|&#160;|\u00a0/gi, ' ').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>')
     .replace(/&quot;/gi, '"').replace(/&#39;|&apos;/gi, "'").replace(/&amp;/gi, '&');
 }
 
