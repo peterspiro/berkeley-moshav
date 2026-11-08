@@ -281,13 +281,33 @@ def compute_group_settings_updates(settings_service, gemail: str, required: dict
     return {k: v for k, v in required.items() if current.get(k) != v}
 
 
-def ensure_group_settings(settings_service, gemail: str, required: dict = None) -> dict:
+def ensure_group_settings(settings_service, gemail: str, required: dict = None,
+                          max_wait: float = 120.0) -> dict:
     """Apply `required` settings (default REQUIRED_GROUP_SETTINGS) to the
-    group. Return dict of {field: new_value} for changed fields."""
-    updates = compute_group_settings_updates(settings_service, gemail, required)
-    if updates:
-        settings_service.groups().update(groupUniqueId=gemail, body=updates).execute()
-    return updates
+    group. Return dict of {field: new_value} for changed fields.
+
+    A group created moments earlier can take a while to reach the Groups
+    Settings API, which until then answers 404 ("Unable to lookup group"),
+    so a 404 is retried with backoff for up to max_wait seconds before
+    giving up."""
+    deadline = time.monotonic() + max_wait
+    delay = 2.0
+    while True:
+        try:
+            updates = compute_group_settings_updates(settings_service, gemail, required)
+            if updates:
+                settings_service.groups().update(groupUniqueId=gemail, body=updates).execute()
+            return updates
+        except Exception as err:
+            if _http_status(err) == 404 and time.monotonic() < deadline:
+                time.sleep(delay)
+                delay = min(delay * 2, 15.0)
+                continue
+            raise
+
+
+def _http_status(err: Exception) -> int | None:
+    return getattr(getattr(err, "resp", None), "status", None)
 
 
 def ensure_who_can_post_web(settings_service, gemail: str) -> bool:

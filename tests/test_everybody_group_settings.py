@@ -81,3 +81,56 @@ class TestDemoteManagersEverybody:
         assert "finance@x.coop" in visited
         assert ("finance@x.coop", "mgr@x.coop", "MEMBER") in demoted
         assert all(gemail != "everyone@x.coop" for gemail, _, _ in demoted)
+
+
+class TestNewGroupNotYetVisible:
+    """A group created moments earlier can be unknown to the Groups Settings
+    API for a while; ensure_group_settings waits for it."""
+
+    class _NotFound(Exception):
+        def __init__(self):
+            super().__init__("<HttpError 404 ... Unable to lookup group>")
+            self.resp = type("R", (), {"status": 404})()
+
+    class _Settings:
+        def __init__(self, misses):
+            self.misses = misses
+            self.updated = None
+            self._op = None
+
+        def groups(self):
+            return self
+
+        def get(self, groupUniqueId):
+            self._op = "get"
+            return self
+
+        def update(self, groupUniqueId, body):
+            self._op = "update"
+            self.updated = body
+            return self
+
+        def execute(self):
+            if self._op == "get":
+                if self.misses:
+                    self.misses -= 1
+                    raise TestNewGroupNotYetVisible._NotFound()
+                return {"whoCanPostMessage": "ALL_MEMBERS_CAN_POST"}
+            return self.updated
+
+    def test_retries_until_the_group_appears(self, monkeypatch):
+        import util.google_group_utils as g
+        monkeypatch.setattr(g.time, "sleep", lambda s: None)
+        settings = self._Settings(misses=2)
+        assert g.ensure_group_settings(settings, "new@x.org",
+                                       {"whoCanPostMessage": "ANYONE_CAN_POST"}) == \
+            {"whoCanPostMessage": "ANYONE_CAN_POST"}
+        assert settings.updated == {"whoCanPostMessage": "ANYONE_CAN_POST"}
+
+    def test_gives_up_after_max_wait(self, monkeypatch):
+        import pytest
+        import util.google_group_utils as g
+        monkeypatch.setattr(g.time, "sleep", lambda s: None)
+        with pytest.raises(self._NotFound):
+            g.ensure_group_settings(self._Settings(misses=99), "new@x.org",
+                                    {"whoCanPostMessage": "ANYONE_CAN_POST"}, max_wait=0)
