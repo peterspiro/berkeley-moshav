@@ -237,9 +237,11 @@ their own social events.
   > Drive folder, and its admin group in Gather are in the footer at the
   > bottom of this message.
   >
-  > Everyone on this list can add and change events on the Community
-  > Meetings calendar. The rest of the community sees these events on their
-  > primary calendars.
+  > I've made you a manager of the Gather group, which allows you to add
+  > members to it, and to make other members managers. Everyone in it
+  > receives messages sent to this list, and can add and change events on
+  > the Community Meetings calendar. The rest of the community sees these
+  > events on their primary calendars.
   >
   > Scheduling an event:
   > Create the event on the Community Meetings calendar itself, not on your
@@ -263,7 +265,7 @@ their own social events.
   > The Zoom room:
   > The room is the calendar's permanent meeting place: its link never
   > changes, and anyone with the link can join, with or without a host. For
-  > host features such as breakout rooms or recording, a host claims host
+  > host features such as breakout rooms or recording, one can claim host
   > with the host key, which is in the doc linked from the footer ("Zoom
   > host key").
   >
@@ -275,11 +277,6 @@ their own social events.
   >
   > All of this, and more, is in the guide for community calendar admins:
   > (the guide's link, once `ADMIN_GUIDE_URL` is set)
-  >
-  > I've made you a manager of the Gather group, which allows you to add
-  > members to it, and to make other members managers. Everyone in it
-  > receives messages sent to this list, and can add and edit files in the
-  > folder.
   >
   > If you'd like a different address for the list, or a different name for
   > the calendar, just let me know.

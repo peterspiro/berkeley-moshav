@@ -117,7 +117,11 @@ from pathlib import Path
 from googleapiclient.discovery import build
 from playwright.sync_api import sync_playwright
 
-from util.calendar_announcement import GROUP_CALENDAR_HOWTO_URL, admin_calendar_paragraphs
+from util.calendar_announcement import (
+    GROUP_CALENDAR_HOWTO_URL,
+    admin_calendar_paragraphs,
+    who_sees_events,
+)
 from util.calendar_event_moves import EventMover
 from util.circle_agenda_docs import (
     AGENDA_KINDS,
@@ -302,10 +306,10 @@ def build_admin_welcome_message(
         f"email list, {list_address}, for the people who schedule them. Links to the "
         "calendar, its Zoom room, its Drive folder, and its admin group in Gather are in "
         "the footer at the bottom of this message.",
-        *admin_calendar_paragraphs(calendar_name, audience),
         "I've made you a manager of the Gather group, which allows you to add members to "
         "it, and to make other members managers. Everyone in it receives messages sent to "
-        "this list, and can add and edit files in the folder.",
+        f"this list, and {who_sees_events(calendar_name)}",
+        *admin_calendar_paragraphs(calendar_name, audience),
         "If you'd like a different address for the list, or a different name for the "
         "calendar, just let me know.",
         sender_first_name,

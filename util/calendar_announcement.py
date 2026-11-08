@@ -125,12 +125,10 @@ def build_calendar_announcement(group_name: str, calendar_link: str) -> tuple[st
 def admin_calendar_paragraphs(calendar_name: str, audience: str) -> list[str]:
     """The paragraphs, in plain text, that tell a community-wide calendar's
     admins how its events are scheduled: shared by the email when the
-    calendar is made and add_new_group.py's welcome message. A line starting
-    "- " is a list item."""
+    calendar is made and add_new_group.py's welcome message, after each
+    one's own paragraph about who can add events (who_sees_events()). A line
+    starting "- " is a list item."""
     paragraphs = [
-        f"Everyone on this list can add and change events on the {calendar_name} "
-        "calendar. The rest of the community sees these events on their primary "
-        "calendars.",
         "Scheduling an event:\n"
         f"Create the event on the {calendar_name} calendar itself, not on your own "
         "calendar. (To add the calendar to your own Google Calendar, click its link in the "
@@ -147,7 +145,7 @@ def admin_calendar_paragraphs(calendar_name: str, audience: str) -> list[str]:
         "The Zoom room:\n"
         "The room is the calendar's permanent meeting place: its link never changes, and "
         "anyone with the link can join, with or without a host. For host features such as "
-        "breakout rooms or recording, a host claims host with the host key, which is in the "
+        "breakout rooms or recording, one can claim host with the host key, which is in the "
         "doc linked from the footer (\"Zoom host key\").",
         "We have several community-wide calendars, all of which have zoom rooms which "
         "belong to the same Zoom user, which can host only one meeting at a time. If an event overlaps another community-wide event, or "
@@ -158,6 +156,13 @@ def admin_calendar_paragraphs(calendar_name: str, audience: str) -> list[str]:
         paragraphs.append(f"All of this, and more, is in the guide for community calendar "
                           f"admins:\n{ADMIN_GUIDE_URL}")
     return paragraphs
+
+
+def who_sees_events(calendar_name: str) -> str:
+    """The end of the paragraph saying who can add a community-wide
+    calendar's events, and who sees them."""
+    return (f"can add and change events on the {calendar_name} calendar. The rest of the "
+            "community sees these events on their primary calendars.")
 
 
 def _text_to_html(text: str) -> str:
@@ -192,6 +197,7 @@ def build_admin_calendar_announcement(calendar_name: str, audience: str) -> tupl
         f"You now have a Google calendar and a Zoom meeting room for {calendar_name}, for "
         "community-wide events. Their links are in the footer at the bottom of this "
         "message.",
+        f"Everyone on this list {who_sees_events(calendar_name)}",
         *admin_calendar_paragraphs(calendar_name, audience),
         "Questions? Reply to this message.",
     ]) + "\n"
