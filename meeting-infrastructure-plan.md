@@ -242,7 +242,7 @@ their own social events.
   >
   > Hi Dana,
   >
-  > I've created the Community Meetings calendar for community-wide events,
+  > I've created a Community Meetings calendar for community-wide events,
   > and this email list, community-meetings-admins@berkeleymoshav.org, for
   > the people who schedule them. Links to the calendar, its Zoom room, its
   > Drive folder, and its admin group in Gather are in the footer at the

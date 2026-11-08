@@ -300,6 +300,12 @@ def build_welcome_message(
     return subject, body
 
 
+def _a(word: str) -> str:
+    """The indefinite article for word: "an" before a vowel ("an Open Mic
+    calendar"), else "a"."""
+    return "an" if word[:1].lower() in "aeiou" else "a"
+
+
 def build_admin_welcome_message(
     calendar_name: str, list_address: str, manager_first_name: str, sender_first_name: str,
     audience: str, zoom: bool = True,
@@ -312,7 +318,8 @@ def build_admin_welcome_message(
     greeting = f"Hi {manager_first_name}," if manager_first_name else "Hi,"
     body = "\n\n".join([
         greeting,
-        f"I've created the {calendar_name} calendar for community-wide events, and this "
+        f"I've created {_a(calendar_name)} {calendar_name} calendar for community-wide "
+        "events, and this "
         f"email list, {list_address}, for the people who schedule them. Links to the "
         f"calendar, {'its Zoom room, ' if zoom else ''}its Drive folder, and its admin "
         "group in Gather are in the footer at the bottom of this message.",

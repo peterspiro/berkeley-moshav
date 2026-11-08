@@ -97,7 +97,7 @@ class TestAdminGroups:
             "Community Meetings", "community-meetings-admins@example.org", "Dana", "Sam",
             "all@example.org")
         assert subject == "Your new community calendar: Community Meetings"
-        assert body.startswith("Hi Dana,\n\nI've created the Community Meetings calendar for "
+        assert body.startswith("Hi Dana,\n\nI've created a Community Meetings calendar for "
                                "community-wide events, and this email list, "
                                "community-meetings-admins@example.org, for the people who "
                                "schedule them.")
@@ -163,3 +163,10 @@ class TestCalendarAndRoom:
         assert zoom.list_calls == 0
         assert zoom.meetings[next(iter(zoom.meetings))]["topic"] == "Community Meetings Zoom Room"
         assert "No events on other calendars" not in out
+
+
+def test_admin_welcome_message_article():
+    from add_new_group import build_admin_welcome_message
+    _, body = build_admin_welcome_message("Open Mic", "open-mic-admins@example.org", "Dana",
+                                          "Sam", "all@example.org")
+    assert "I've created an Open Mic calendar for community-wide events" in body
