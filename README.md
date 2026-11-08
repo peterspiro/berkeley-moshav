@@ -415,8 +415,10 @@ status line as "calendar (members can view, not edit)".
   until the end, when it shows what it will do and, if it will delete any
   meeting (whose link then stops working), asks you to type `delete`. Unless
   a meeting is used, it creates a room. A dry run asks the same questions but
-  changes nothing. `add_new_group.py` does the same, its dry run (`-n`)
-  included, though a real run asks again.
+  changes nothing. `add_new_group.py` doesn't look for matches: a new
+  group's calendar and room are made new (or, on a re-run with `-i`, are
+  the ones its footer links), and it offers no events to move; run
+  `update_groups.py -g ... -m` afterwards for that.
 
   When it creates a group's calendar, or for every group with
   `-m`/`--move-events`, it looks for the group's meetings on other calendars:

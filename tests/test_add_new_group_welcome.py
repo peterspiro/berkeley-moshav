@@ -124,39 +124,42 @@ def test_admin_welcome_message_without_zoom():
     assert "Zoom" not in body and "host key" not in body
 
 
-class TestCalendarAndRoomDryRun:
-    """add_new_group.py -n goes through the calendar and room step, changing
-    nothing."""
+class TestCalendarAndRoom:
+    """add_new_group.py creates a new group's calendar and room without
+    looking for ones with matching names; a dry run only says so."""
 
-    def run(self, monkeypatch, capsys, no_zoom=False, real=False):
+    def run(self, monkeypatch, capsys, no_zoom=False, real=False, calendars=None,
+            meetings=None):
         import add_new_group as ang
         import util.meeting_rooms as mr
         from tests.fakes_meeting_rooms import FakeCalendarService, FakeZoom
-        from tests.test_group_meeting_rooms_step import _Directory, _Settings
+        from tests.test_group_meeting_rooms_step import _Settings
         monkeypatch.setattr(mr, "ALL_EVENTS_CALENDAR_ID", "ae")
         monkeypatch.setattr(mr, "log", lambda *a, **k: None)
-        monkeypatch.setattr(ang, "find_linked_resources", lambda d, s: mr.LinkedResources())
-        cal = FakeCalendarService({"ae": "All Berkeley Moshav Events"})
+        cal = FakeCalendarService({"ae": "All Berkeley Moshav Events", **(calendars or {})})
         zoom = FakeZoom()
         found = ang.calendar_and_room(
-            cal, zoom, _Directory(), _Settings({}), "Community Meetings",
-            "community-meetings-admins@x.org", False, no_zoom,
-            ("community-zoom-hosts@berkeleymoshav.org",), " Zoom Room",
+            cal, zoom, _Settings({}), "Community Meetings", "community-meetings-admins@x.org",
+            False, no_zoom, ("community-zoom-hosts@berkeleymoshav.org",), " Zoom Room",
             "Community Meetings Admins", dry_run=not real)
         return found, cal, zoom, capsys.readouterr().out
 
-    def test_changes_nothing(self, monkeypatch, capsys):
+    def test_dry_run_changes_nothing(self, monkeypatch, capsys):
         found, cal, zoom, out = self.run(monkeypatch, capsys)
         assert found == {"calendar_id": None, "room": None}
         assert cal.writes == [] and zoom.writes == []
         assert "[dry-run] would create calendar 'Community Meetings'" in out
         assert "[dry-run] would create Zoom room 'Community Meetings Zoom Room'" in out
+        assert "would ask" not in out
 
     def test_no_zoom_skips_the_room(self, monkeypatch, capsys):
         _, _, zoom, out = self.run(monkeypatch, capsys, no_zoom=True)
         assert "Zoom room" not in out and zoom.writes == []
 
-    def test_real_run_makes_them(self, monkeypatch, capsys):
-        found, cal, zoom, _ = self.run(monkeypatch, capsys, real=True)
-        assert found["calendar_id"] and found["room"]
+    def test_real_run_makes_new_ones_without_matching(self, monkeypatch, capsys):
+        found, cal, zoom, out = self.run(monkeypatch, capsys, real=True,
+                                         calendars={"old": "Community Meetings"})
+        assert found["calendar_id"] != "old" and found["room"]
+        assert zoom.list_calls == 0
         assert zoom.meetings[next(iter(zoom.meetings))]["topic"] == "Community Meetings Zoom Room"
+        assert "No events on other calendars" not in out

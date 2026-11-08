@@ -25,7 +25,8 @@ are; this note keeps the reasoning and the remaining work.
   `update_groups.py`, and `add_new_group.py`): every
   circle, working group, and club (not everybody groups) with a Drive item and
   an email list gets a calendar and a room. Existing ones are found through
-  the footer, or offered by name, before anything is created. For a room,
+  the footer, or (by `update_groups.py`, not `add_new_group.py`, as a new
+  group has none) offered by name, before anything is created. For a room,
   every meeting in the Zoom account whose name matches is listed, and for
   each you choose to use it (only a no-fixed-time meeting of either room
   user, since Zoom can't change a meeting's type), ignore it, or delete

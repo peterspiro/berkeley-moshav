@@ -40,9 +40,10 @@ Steps:
      doc and the parent's agenda doc.
   6. Give the group a Google calendar, shared with the new Google Group so
      its members can add and edit events, and a permanent Zoom meeting room
-     (see util/meeting_rooms.py). If calendars or rooms with matching names
-     already exist (say, from an interrupted earlier run), offer to use one
-     of those instead.
+     (see util/meeting_rooms.py), or on a re-run (-i), the ones its footer
+     already links. Unlike update_groups.py, it doesn't look for existing
+     calendars, Zoom meetings, or events with matching names: a new group
+     has none.
   7. Write the new Google Group's custom footer with its "Gather group",
      "Google Docs folder", "Google calendar", and "Zoom meeting" links (see
      util/google_group_footer.py) — this is what groups_drive_sync.gs reads
@@ -59,12 +60,6 @@ Steps:
      own account. It tells the manager what was created and what they can
      do, and that they can ask the sender for a different list address or
      group name. A dry run prints the draft instead.
-
-A dry run (-n) checks step 1 and says what steps 2-8 would do; for step 6
-it goes through the calendars, Zoom meetings, and events whose names match,
-asking the same questions a real run would but changing nothing (it asks
-about every guest of an event, as the new Google Group's members aren't
-known yet). Its answers aren't kept: a real run asks again.
 
 Requires Google API access (Drive, Admin Directory, Groups Settings,
 Calendar), signed in as the calendars' owner, and the Zoom app's
@@ -119,7 +114,6 @@ Usage:
 """
 
 import argparse
-import functools
 import os
 import re
 import sys
@@ -134,7 +128,6 @@ from util.calendar_announcement import (
     admin_calendar_paragraphs,
     who_sees_events,
 )
-from util.calendar_event_moves import EventMover
 from util.circle_agenda_docs import (
     AGENDA_KINDS,
     agenda_doc_name,
@@ -202,12 +195,11 @@ from util.mail_draft import open_draft
 from util.meeting_rooms import (
     COMMUNITY_CALENDAR_AUDIENCE,
     COMMUNITY_HOST_KEY_DOC_URL,
+    LinkedResources,
     QuitRequested,
     check_calendar_owner,
     ensure_group_calendar,
     ensure_zoom_room,
-    find_linked_resources,
-    list_owned_calendars,
 )
 from util.zoom_utils import (
     COMMUNITY_ROOM_TOPIC_SUFFIX,
@@ -346,54 +338,41 @@ def print_welcome_message(to: str, subject: str, body: str) -> None:
 
 
 def calendar_and_room(
-    calendar_service, zoom: ZoomClient, dir_service, settings_service, cal_name: str,
-    gemail: str, google_group_exists: bool, no_zoom: bool, room_users: tuple[str, ...],
-    room_suffix: str, gdisplay: str, dry_run: bool,
+    calendar_service, zoom: ZoomClient, settings_service, cal_name: str, gemail: str,
+    google_group_exists: bool, no_zoom: bool, room_users: tuple[str, ...], room_suffix: str,
+    gdisplay: str, dry_run: bool,
 ) -> dict:
-    """Give the group its calendar and (unless no_zoom) its Zoom room, named
-    cal_name: the ones its footer already links (if the Google Group
-    exists), or ones chosen from those with matching names, or new ones (see
-    util/meeting_rooms.py); and, if the calendar is created, offer to move
-    matching events onto it (util/calendar_event_moves.py). In a dry run,
-    the same questions are asked and nothing is changed; the events' guests
-    are all asked about, as the Google Group whose members a real run leaves
-    out may not exist yet. Returns {"calendar_id", "room"}, either None if
-    not made (in a dry run, or if the user quit, which is reported)."""
+    """Give the new group its calendar and (unless no_zoom) its Zoom room,
+    named cal_name: the ones its footer already links (on a re-run, -i), or
+    new ones (see util/meeting_rooms.py). Unlike update_groups.py, it
+    doesn't look for existing calendars, Zoom meetings, or events with
+    matching names, since a new group has none. A dry run only says what
+    it would create. Returns {"calendar_id", "room"}, either None if not
+    made (in a dry run, or if the user quit, which is reported)."""
     found = {"calendar_id": None, "room": None}
     linked_calendar_id = linked_zoom_url = None
     if google_group_exists:
         linked_calendar_id = fetch_footer_calendar_id(settings_service, gemail)
         linked_zoom_url = fetch_footer_zoom_url(settings_service, gemail)
-    get_linked = functools.cache(lambda: find_linked_resources(dir_service, settings_service))
+    # No candidates to match against, so anything the footer doesn't link
+    # is created.
+    linked = LinkedResources()
     try:
-        created = []
         found["calendar_id"] = ensure_group_calendar(
             calendar_service, cal_name, gemail, linked_calendar_id,
-            owned_calendars=lambda: list_owned_calendars(calendar_service),
-            linked=get_linked, dry_run=dry_run, on_create=lambda: created.append(True),
+            owned_calendars=lambda: [], linked=lambda: linked, dry_run=dry_run,
         )
-        zoom_meetings = functools.cache(zoom.list_account_meetings)
-        mover = EventMover(calendar_service, lambda: set(get_linked().calendars),
-                           dry_run=dry_run, zoom_meetings=zoom_meetings,
-                           dir_service=dir_service)
-        if created:
-            mover.offer(cal_name, found["calendar_id"],
-                        gemail if google_group_exists or not dry_run else None)
         if not no_zoom:
             found["room"] = ensure_zoom_room(
                 zoom, cal_name, linked_zoom_url, gemail,
-                meetings=zoom_meetings, linked=get_linked, dry_run=dry_run,
-                events_using=lambda meeting_id: mover.events_using_meeting(cal_name, meeting_id),
+                meetings=lambda: [], linked=lambda: linked, dry_run=dry_run,
                 room_users=room_users, topic_suffix=room_suffix,
             )
     except QuitRequested:
         log("INFO", "quit", "User quit during the calendar/Zoom room step")
-        if dry_run:
-            print("[dry-run] Stopped going through the calendar and Zoom room.")
-        else:
-            print(f"Skipped the rest of the calendar/Zoom room setup. Run "
-                  f"'python update_groups.py -g \"{gdisplay}\"' "
-                  "later to finish it.")
+        print(f"Skipped the rest of the calendar/Zoom room setup. Run "
+              f"'python update_groups.py -g \"{gdisplay}\"' "
+              "later to finish it.")
     return found
 
 
@@ -627,14 +606,9 @@ def main(
                 print(f"[dry-run] Would have it put under '{parent_group.name}' in the "
                       "Circle Structure.")
             print(f"[dry-run] Would add {manager.email} to the Google Group.")
-            # The calendars, events, and Zoom meetings a real run would offer,
-            # asking the same questions but changing nothing.
-            print(f"\n[dry-run] The calendar '{cal_name}'"
-                  f"{'' if no_zoom else ' and its Zoom room'}:")
             calendar_and_room(
-                calendar_service, zoom, dir_service, settings_service, cal_name, gemail,
+                calendar_service, zoom, settings_service, cal_name, gemail,
                 google_group_exists, no_zoom, room_users, room_suffix, gdisplay, dry_run=True)
-            print()
             if send_email:
                 print("[dry-run] Would open this welcome message as a draft in your "
                       "mail program:\n")
@@ -729,7 +703,7 @@ def main(
 
         # ── Calendar and Zoom room (or the ones its footer already links) ───
         found = calendar_and_room(
-            calendar_service, zoom, dir_service, settings_service, cal_name, gemail,
+            calendar_service, zoom, settings_service, cal_name, gemail,
             google_group_exists, no_zoom, room_users, room_suffix, gdisplay, dry_run=False)
         calendar_id, room = found["calendar_id"], found["room"]
 
