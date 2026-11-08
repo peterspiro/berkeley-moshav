@@ -118,6 +118,13 @@ community), which is judged safe enough, but not by anyone with the link; the
 link itself gives nothing away. It's not put in calendar events, which are
 emailed to members' own accounts and may be forwarded.
 
+A community calendar made without a Zoom room (`add_new_group.py -z`, for
+in-person events) has `Zoom meeting: none` in its footer instead of its
+room's lines, and no host key line. Neither script then makes it a room, and
+`group_meetings`, which finds no room link, adds no Zoom details to its
+events. To give it a room later, delete that line and run
+`update_groups.py -g` for it.
+
 The meeting ID and passcode are for members who type them into Zoom instead
 of clicking the link; since the link already lets anyone in, showing the
 passcode exposes nothing more. Passcodes are six digits, to be easy to type
@@ -335,7 +342,9 @@ status line as "calendar (members can view, not edit)".
   host key doc's link and the calendar's audience, `all.members@`, in its
   footer (`-A`/`--audience` names another, for trying a calendar out); no parent
   and no agenda doc; and a welcome email telling the admins how
-  community-wide events are scheduled.
+  community-wide events are scheduled. `-z`/`--no-zoom` makes it with no
+  Zoom room, for a calendar of in-person events (see "How the group linking
+  fits together").
 - **`update_groups.py`** brings every group (or one,
   with `-g`) into line: offers to find or create a missing Drive folder or
   email list, enforces the Google Group settings, gives each group a calendar
@@ -348,7 +357,9 @@ status line as "calendar (members can view, not edit)".
   named "<Calendar> Admins"; its calendar is named without "Admins", and
   its room "<Calendar> Zoom Room", under `community-zoom-hosts@` (only a
   no-fixed-time meeting of that user can be used); its footer gets the host
-  key link and the audience line (`all.members@` unless it names another); the email about its new calendar is the admins' version
+  key link and the audience line (`all.members@` unless it names another);
+  one whose footer says `Zoom meeting: none` gets no room and no host key
+  link; the email about its new calendar is the admins' version
   (how to schedule community-wide events); and it gets no agenda doc. Its first run also creates the
   "All Berkeley Moshav Events" calendar, which it shares view-only with the
   everybody groups (with `-g`, only if `--share-all-events` is given, since

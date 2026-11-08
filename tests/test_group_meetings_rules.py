@@ -981,3 +981,23 @@ class TestNoZoomMarker:
 
     def test_no_room_added(self):
         assert "description" not in (patch({"description": "[no&nbsp;zoom]"}) or {}).get("patch", {})
+
+
+class TestCalendarWithoutZoom:
+    """A community calendar made with --no-zoom: its footer says "Zoom
+    meeting: none", so it has no room, and its events only get guests."""
+
+    FOOTER = build_footer_block("1", "F", "https://g", "Social Events Admins", calendar_id=CAL,
+                                no_zoom=True, audience="all@x.org")
+
+    def test_no_room_read(self):
+        assert js("parseFooter(f)", f=self.FOOTER) == {
+            "calendarId": CAL, "zoomUrl": None, "passcode": None, "audience": "all@x.org"}
+
+    def test_event_gets_only_guests(self):
+        links = js("parseFooter(f)", f=self.FOOTER)
+        ctx = {"zoomUrl": links["zoomUrl"], "passcode": links["passcode"],
+               "groupEmail": links["audience"], "allEventsCalendarId": ALL_EVENTS, "faqUrl": None}
+        change = patch({"summary": "Picnic", "description": "Bring food."}, ctx)
+        assert change == {"patch": {"attendees": [{"email": ALL_EVENTS}, {"email": "all@x.org"}]},
+                          "sendUpdates": "all"}

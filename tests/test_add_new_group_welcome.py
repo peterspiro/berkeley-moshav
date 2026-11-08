@@ -112,3 +112,13 @@ class TestAdminGroups:
         assert 'the doc linked from the footer ("Zoom host key")' in body
         assert "I've made you a manager of the Gather group" in body
         assert body.endswith("\n\nSam\n")
+
+
+def test_admin_welcome_message_without_zoom():
+    from add_new_group import build_admin_welcome_message
+    _, body = build_admin_welcome_message(
+        "Social Events", "social-events-admins@example.org", "Dana", "Sam", "all@example.org",
+        zoom=False)
+    assert ("Links to the calendar, its Drive folder, and its admin group in Gather are in "
+            "the footer") in body
+    assert "Zoom" not in body and "host key" not in body

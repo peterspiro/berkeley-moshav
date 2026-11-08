@@ -122,36 +122,47 @@ def build_calendar_announcement(group_name: str, calendar_link: str) -> tuple[st
     return subject, text, rich
 
 
-def admin_calendar_paragraphs(calendar_name: str, audience: str) -> list[str]:
+def admin_calendar_paragraphs(calendar_name: str, audience: str,
+                              zoom: bool = True) -> list[str]:
     """The paragraphs, in plain text, that tell a community-wide calendar's
     admins how its events are scheduled: shared by the email when the
     calendar is made and add_new_group.py's welcome message, after each
     one's own paragraph about who can add events (who_sees_events()). A line
-    starting "- " is a list item."""
+    starting "- " is a list item. Without zoom (a calendar made with no Zoom
+    room), nothing is said of a room, its host key, or clashes."""
+    room_item = (
+        "- a link to the calendar's Zoom room, if it doesn't already have another Zoom or "
+        "Meet link (or says [no zoom] in the description);\n")
     paragraphs = [
         "Scheduling an event:\n"
         f"Create the event on the {calendar_name} calendar itself, not on your own "
         "calendar. (To add the calendar to your own Google Calendar, click its link in the "
         "footer.)",
-        "A few minutes after you save it, the event automatically gets:\n"
-        "- a link to the calendar's Zoom room, if it doesn't already have another Zoom or "
-        "Meet link (or says [no zoom] in the description);\n"
-        f"- the whole community ({audience}) invited, each member getting the invitation "
-        "by email, unless the event says [no invite].\n"
-        "So there's no need to add Zoom details or guests yourself.",
+        ("A few minutes after you save it, the event automatically gets:\n"
+         f"{room_item}"
+         f"- the whole community ({audience}) invited, each member getting the invitation "
+         "by email, unless the event says [no invite].\n"
+         "So there's no need to add Zoom details or guests yourself." if zoom else
+         f"A few minutes after you save it, the whole community ({audience}) is invited "
+         "automatically, each member getting the invitation by email, unless the event "
+         "says [no invite]. So there's no need to add guests yourself."),
         f"Everyone invited is also emailed a reminder {REMINDER_LEAD_TEXT} before each "
         "event, and replies to it come to this list. You can change the reminder time by "
         "adding, for example, [remind 2 hours] or [no reminder] in its description.",
-        "The Zoom room:\n"
-        "The room is the calendar's permanent meeting place: its link never changes, and "
-        "anyone with the link can join, with or without a host. For host features such as "
-        "breakout rooms or recording, one can claim host with the host key, which is in the "
-        "doc linked from the footer (\"Zoom host key\").",
-        "We have several community-wide calendars, all of which have zoom rooms which "
-        "belong to the same Zoom user, which can host only one meeting at a time. If an event overlaps another community-wide event, or "
-        f"is less than {MIN_GAP_MINUTES} minutes from one, you'll get an email asking the "
-        "admins involved to agree which one moves.",
     ]
+    if zoom:
+        paragraphs += [
+            "The Zoom room:\n"
+            "The room is the calendar's permanent meeting place: its link never changes, "
+            "and anyone with the link can join, with or without a host. For host features "
+            "such as breakout rooms or recording, one can claim host with the host key, "
+            "which is in the doc linked from the footer (\"Zoom host key\").",
+            "We have several community-wide calendars, all of which have zoom rooms which "
+            "belong to the same Zoom user, which can host only one meeting at a time. If an "
+            f"event overlaps another community-wide event, or is less than {MIN_GAP_MINUTES} "
+            "minutes from one, you'll get an email asking the admins involved to agree "
+            "which one moves.",
+        ]
     if ADMIN_GUIDE_URL:
         paragraphs.append(f"All of this, and more, is in the guide for community calendar "
                           f"admins:\n{ADMIN_GUIDE_URL}")
@@ -187,18 +198,24 @@ def _text_to_html(text: str) -> str:
     return "\n".join(p for p in out if p) + "\n"
 
 
-def build_admin_calendar_announcement(calendar_name: str, audience: str) -> tuple[str, str, str]:
+def build_admin_calendar_announcement(calendar_name: str, audience: str,
+                                      zoom: bool = True) -> tuple[str, str, str]:
     """Return (subject, plain-text body, HTML body) of the email to a
     community-wide calendar's admin group about its new calendar and Zoom
-    room."""
-    subject = f"The {calendar_name} calendar and Zoom room"
+    room (without zoom, a calendar with no room: just its calendar)."""
+    if zoom:
+        subject = f"The {calendar_name} calendar and Zoom room"
+        what = (f"a Google calendar and a Zoom meeting room for {calendar_name}, for "
+                "community-wide events. Their links are")
+    else:
+        subject = f"The {calendar_name} calendar"
+        what = (f"a Google calendar for {calendar_name}, for community-wide events. Its "
+                "link is")
     text = "\n\n".join([
         f"Hello {calendar_name} admins,",
-        f"You now have a Google calendar and a Zoom meeting room for {calendar_name}, for "
-        "community-wide events. Their links are in the footer at the bottom of this "
-        "message.",
+        f"You now have {what} in the footer at the bottom of this message.",
         f"Everyone on this list {who_sees_events(calendar_name)}",
-        *admin_calendar_paragraphs(calendar_name, audience),
+        *admin_calendar_paragraphs(calendar_name, audience, zoom),
         "Questions? Reply to this message.",
     ]) + "\n"
     return subject, text, _text_to_html(text)
@@ -237,15 +254,16 @@ def _show(list_email: str, subject: str, body: str, reply_to: str | None) -> Non
 
 def announce_calendar(gmail_service, group_name: str, list_email: str,
                       calendar_id: str | None, dry_run: bool, draft: bool = False,
-                      audience: str | None = None) -> None:
+                      audience: str | None = None, zoom: bool = True) -> None:
     """Email the group's list about its new calendar and Zoom room, or with
     draft, open the email as a draft in the user's mail program (or, in a
     dry run, show the email it would send or open; calendar_id is None
     there if the calendar would be created). With audience, the group is a
     community-wide calendar's admin group (group_name naming the calendar),
-    and gets the admins' version."""
+    and gets the admins' version (without zoom, for a calendar with no Zoom
+    room)."""
     if audience:
-        subject, body, rich = build_admin_calendar_announcement(group_name, audience)
+        subject, body, rich = build_admin_calendar_announcement(group_name, audience, zoom)
     else:
         link = calendar_url(calendar_id) if calendar_id else "(the new calendar's link)"
         subject, body, rich = build_calendar_announcement(group_name, link)

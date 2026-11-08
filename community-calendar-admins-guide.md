@@ -19,7 +19,9 @@ inviting share@berkeleymoshav.org.)
   in Gather, and the Zoom host key are in the footer at the bottom of every
   message to the list.
 - **A Zoom room** (for example "Community Meetings Zoom Room"): the
-  calendar's permanent meeting place.
+  calendar's permanent meeting place. A calendar for in-person events may
+  have none; then its events get no Zoom details, and the parts of this
+  guide about the room don't apply.
 - **A Drive folder**, for the admins' documents, in the Meeting Admin folder
   (for example "Community Meetings Admins").
 - **An admin group in Gather.** Its managers can add and remove admins, and

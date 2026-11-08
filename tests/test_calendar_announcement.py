@@ -146,7 +146,7 @@ class TestDraft:
                                  {"1": "membership@x.org"}, ["1"], {"1": "c1"},
                                  {"1": RoomLink("https://zoom.us/j/7?pwd=p", "135790")},
                                  dry_run=False, draft=True)
-        assert calls == [(None, "Membership Circle", "membership@x.org", "c1", False, True, None)]
+        assert calls == [(None, "Membership Circle", "membership@x.org", "c1", False, True, None, True)]
 
 
 class TestAnnounceNewCalendars:
@@ -204,7 +204,15 @@ class TestAnnounceNewCalendars:
         m.announce_new_calendars(None, {"1": {"name": "Community Meetings", "kind": "squad"}},
                                  {"1": "a@x.org"}, ["1"], {"1": "c1"}, {"1": self.ROOM},
                                  dry_run=False)
-        assert calls[0][-1] == "all.members@berkeleymoshav.org"
+        assert calls[0][-2] == "all.members@berkeleymoshav.org"
+
+    def test_admin_group_without_zoom(self, monkeypatch):
+        calls = []
+        monkeypatch.setattr(m, "announce_calendar", lambda *args: calls.append(args))
+        m.announce_new_calendars(None, {"1": {"name": "Social Events Admins", "kind": "squad"}},
+                                 {"1": "a@x.org"}, ["1"], {"1": "c1"}, {"1": None},
+                                 dry_run=False)
+        assert calls[0][1] == "Social Events" and calls[0][-1] is False
 
     def test_none_created_none_sent(self):
         gmail = FakeGmail()
@@ -267,3 +275,12 @@ class TestAdminCalendarParagraphs:
     def test_html_lists(self):
         assert ca._text_to_html("Gets:\n- one;\n- two.\nSo.\n\nEnd") == (
             "<p>Gets:</p>\n<ul><li>one;</li><li>two.</li></ul>\n<p>So.</p>\n<p>End</p>\n")
+
+
+def test_admin_announcement_without_zoom():
+    subject, text, _ = ca.build_admin_calendar_announcement("Social Events", "a@x.org", zoom=False)
+    assert subject == "The Social Events calendar"
+    assert "You now have a Google calendar for Social Events" in text
+    assert ("A few minutes after you save it, the whole community (a@x.org) is invited "
+            "automatically") in text
+    assert "Zoom" not in text and "host key" not in text

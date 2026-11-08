@@ -78,6 +78,12 @@ for trying a community calendar out on a few people before it reaches
 everyone; afterwards, change the footer's "Calendar audience:" line by
 hand, or delete the test group and its calendar and room.
 
+For an admin group, -z/--no-zoom gives its calendar no Zoom room (for
+in-person events): its footer says "Zoom meeting: none", so neither this
+script nor update_groups.py makes one, its events get no Zoom details, and
+its welcome message says nothing of a room. To give it one later, delete
+that line from its footer and run update_groups.py -g for it.
+
 Pass --alias to also give the new Google Group a shorter second address
 and point the Gather group's mailing list at it — the same effect as
 running change_group_email_alias.py afterward.
@@ -167,6 +173,7 @@ from util.google_group_footer import (
     fetch_footer_calendar_id,
     fetch_footer_zoom_url,
     parse_footer_audience,
+    parse_footer_no_zoom,
 )
 from util.google_group_utils import (
     CONVERSATION_HISTORY_SETTINGS,
@@ -298,23 +305,24 @@ def build_welcome_message(
 
 def build_admin_welcome_message(
     calendar_name: str, list_address: str, manager_first_name: str, sender_first_name: str,
-    audience: str,
+    audience: str, zoom: bool = True,
 ) -> tuple[str, str]:
     """Return (subject, body) of the welcome message to a new community-wide
     calendar's admin group's list: what was created, and how community-wide
-    events are scheduled (admin_calendar_paragraphs())."""
+    events are scheduled (admin_calendar_paragraphs()). Without zoom, for a
+    calendar with no Zoom room, nothing is said of one."""
     subject = f"Your new community calendar: {calendar_name}"
     greeting = f"Hi {manager_first_name}," if manager_first_name else "Hi,"
     body = "\n\n".join([
         greeting,
         f"I've created the {calendar_name} calendar for community-wide events, and this "
         f"email list, {list_address}, for the people who schedule them. Links to the "
-        "calendar, its Zoom room, its Drive folder, and its admin group in Gather are in "
-        "the footer at the bottom of this message.",
+        f"calendar, {'its Zoom room, ' if zoom else ''}its Drive folder, and its admin "
+        "group in Gather are in the footer at the bottom of this message.",
         "I've made you a manager of the Gather group, which allows you to add members to "
         "it, and to make other members managers. Everyone in it receives messages sent to "
         f"this list, and {who_sees_events(calendar_name)}",
-        *admin_calendar_paragraphs(calendar_name, audience),
+        *admin_calendar_paragraphs(calendar_name, audience, zoom),
         "If you'd like a different address for the list, or a different name for the "
         "calendar, just let me know.",
         sender_first_name,
@@ -349,6 +357,7 @@ def main(
     send_email: bool = True,
     agenda_doc: bool = False,
     audience_override: str | None = None,
+    no_zoom: bool = False,
 ) -> None:
     base_url = base_url.rstrip("/")
     init_log()
@@ -367,7 +376,7 @@ def main(
     cal_name = calendar_name_for_group(gdisplay, kind)
     room_users = COMMUNITY_ROOM_USERS if is_admin_group else ROOM_USERS
     room_suffix = COMMUNITY_ROOM_TOPIC_SUFFIX if is_admin_group else ROOM_TOPIC_SUFFIX
-    host_key_url = COMMUNITY_HOST_KEY_DOC_URL if is_admin_group else None
+    host_key_url = COMMUNITY_HOST_KEY_DOC_URL if is_admin_group and not no_zoom else None
 
     # The Google Group's primary address is normally the full name; --alias
     # adds a second (shorter) address to reach it, and makes the Gather
@@ -514,6 +523,12 @@ def main(
             (u for u in gather_users if u.email and u.email.lower() == email.lower()), None)
         list_address = f"{list_local}@{DOMAIN}"
         audience = None
+        # A re-run (-i) keeps a footer's "Zoom meeting: none".
+        if is_admin_group and google_group_exists and not no_zoom and parse_footer_no_zoom(
+                settings_service.groups().get(groupUniqueId=gemail).execute()
+                .get("customFooterText")):
+            no_zoom = True
+            host_key_url = None
         if is_admin_group:
             if audience_override:
                 audience = audience_override.lower()
@@ -523,7 +538,7 @@ def main(
             audience = audience or COMMUNITY_CALENDAR_AUDIENCE
             subject, body = build_admin_welcome_message(
                 cal_name, list_address, manager.first_name,
-                sender.first_name if sender else "", audience)
+                sender.first_name if sender else "", audience, zoom=not no_zoom)
         else:
             subject, body = build_welcome_message(
                 gdisplay, list_address, manager.first_name, sender.first_name if sender else "")
@@ -545,10 +560,15 @@ def main(
             if alias_email:
                 print(f"[dry-run] Would add alias '{alias_email}' to the Google Group and "
                       f"set the Gather group's mailing list to '{list_local}@{DOMAIN}'.")
-            print(f"[dry-run] Would create calendar '{cal_name}' (shared with '{gemail}' "
-                  f"as editors) and Zoom room '{room_topic(cal_name, room_suffix)}' (under "
-                  f"{room_users[0]}), unless ones with matching names exist and you choose "
-                  "one of those.")
+            if no_zoom:
+                print(f"[dry-run] Would create calendar '{cal_name}' (shared with '{gemail}' "
+                      "as editors), unless one with a matching name exists and you choose "
+                      "it, and no Zoom room (its footer would say \"Zoom meeting: none\").")
+            else:
+                print(f"[dry-run] Would create calendar '{cal_name}' (shared with '{gemail}' "
+                      f"as editors) and Zoom room '{room_topic(cal_name, room_suffix)}' (under "
+                      f"{room_users[0]}), unless ones with matching names exist and you "
+                      "choose one of those.")
             if audience:
                 print(f"[dry-run] Would name {audience} as the calendar's audience in the "
                       "footer: its events invite it, and its reminders go to it.")
@@ -668,12 +688,14 @@ def main(
                                dir_service=dir_service)
             if created:
                 mover.offer(cal_name, calendar_id, gemail)
-            room = ensure_zoom_room(
-                zoom, cal_name, linked_zoom_url, gemail,
-                meetings=zoom_meetings, linked=get_linked, dry_run=False,
-                events_using=lambda meeting_id: mover.events_using_meeting(cal_name, meeting_id),
-                room_users=room_users, topic_suffix=room_suffix,
-            )
+            if not no_zoom:
+                room = ensure_zoom_room(
+                    zoom, cal_name, linked_zoom_url, gemail,
+                    meetings=zoom_meetings, linked=get_linked, dry_run=False,
+                    events_using=lambda meeting_id: mover.events_using_meeting(cal_name,
+                                                                               meeting_id),
+                    room_users=room_users, topic_suffix=room_suffix,
+                )
         except QuitRequested:
             log("INFO", "quit", "User quit during the calendar/Zoom room step")
             print(f"Skipped the rest of the calendar/Zoom room setup. Run "
@@ -685,7 +707,7 @@ def main(
                             gdisplay, calendar_id=calendar_id,
                             zoom_url=room.join_url if room else None,
                             zoom_passcode=room.passcode if room else None, audience=audience,
-                            host_key_url=host_key_url)
+                            host_key_url=host_key_url, no_zoom=no_zoom or None)
         print(f"Set footer links for '{gemail}'.")
 
         # ── Have it put under its parent in the Circle Structure ─────────────
@@ -831,6 +853,12 @@ def cli():
              "group, to try a community calendar out without emailing everyone); its "
              f"address, or just the part before @{DOMAIN}",
     )
+    parser.add_argument(
+        "-z", "--no-zoom", action="store_true",
+        help="For an admin group, give its calendar no Zoom room, for a calendar of "
+             "in-person events: its footer says \"Zoom meeting: none\", so the scripts never "
+             "make one, and its events get no Zoom details",
+    )
     args = parser.parse_args()
 
     name = " ".join(args.name)
@@ -841,6 +869,8 @@ def cli():
             "with 'Circle', 'Working Group', 'Club', or 'Admins'. Pass -t/--type explicitly."
         )
 
+    if args.no_zoom and group_type != GroupType.ADMIN:
+        sys.exit("Error: --no-zoom only applies to admin groups (-t a).")
     if args.audience and group_type != GroupType.ADMIN:
         sys.exit("Error: --audience only applies to admin groups (-t a).")
     if args.audience and "@" not in args.audience:
@@ -870,7 +900,7 @@ def cli():
         group_type, name, args.parent_circle, args.manager, args.base_url, email,
         password, args.dry_run, args.credentials, args.drive_id, alias=args.alias,
         short_address=args.short_address, idempotent=args.idempotent, send_email=not args.no_email,
-        agenda_doc=args.agenda_doc, audience_override=args.audience,
+        agenda_doc=args.agenda_doc, audience_override=args.audience, no_zoom=args.no_zoom,
     )
 
 

@@ -193,6 +193,16 @@ their own social events.
 - **Reminders.** Each event gets a reminder 24 hours before, sent to the
   audience ("Hi everyone"), with replies going to the admin group;
   `[remind …]` and `[no reminder]` on an event work as for group meetings.
+- **A calendar with no Zoom room.** `add_new_group.py -z` makes an admin
+  group whose calendar has no room, for in-person events: its footer says
+  `Zoom meeting: none` in place of the room's lines (and has no host key
+  line), so `update_groups.py` never makes one, and `group_meetings`, which
+  then has no room link, adds no Zoom details. Its events still invite the
+  audience and get reminders. The emails to its admins say nothing of a
+  room, its host key, or clashes. (Keeping a room that events get only on
+  request, with a tag, was the alternative; it was left out because a
+  rarely used room expires after a year unused, changing its link, and a
+  forgotten tag sends an event out without Zoom details.)
 - **No agenda docs for now.** An admin group that later has one will need a
   doc of its own format, not the circle agenda doc (which has the Circle
   Structure rows), so `update_groups.py -a` leaves them out.

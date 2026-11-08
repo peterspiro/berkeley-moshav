@@ -94,6 +94,10 @@ is handled like a group's, except that:
   in Zoom under that user;
 - an invitation copy's email speaks of the calendar, not a group.
 
+A community calendar made without a Zoom room (its footer says
+`Zoom meeting: none`) has no room link, so its events get only the audience
+and the all-events calendar as guests, and their reminders.
+
 The calendar's name is the admin group's name without "Admins". The
 audience must let `admin@berkeleymoshav.org` post, or reminders bounce.
 

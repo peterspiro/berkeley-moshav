@@ -318,3 +318,27 @@ def test_footer_step_gives_circles_no_audience():
     m.ensure_group_footers(settings, "https://g", {"1": GROUPS["1"]}, FOLDERS,
                            {"1": ITEM_TYPE_FOLDER}, EMAILS, False)
     assert settings.updated == {}
+
+
+def test_admin_group_without_zoom_gets_no_room(capsys):
+    footer = build_footer_block("6", "F6", "https://g", "Community Meetings Admins",
+                                calendar_id="c6", no_zoom=True, audience="all@x.org")
+    cal = FakeCalendarService({"ae": "All Berkeley Moshav Events", "c6": "Community Meetings"})
+    zoom = FakeZoom()
+    cals, rooms = {}, {}
+    m.ensure_group_meeting_rooms(
+        _Directory(), _Settings({"community-meetings-admins@x.org": footer}), cal, zoom, ADMIN,
+        {"6": "F6"}, ADMIN_EMAILS, lambda: LinkedResources(), False, cals, rooms,
+    )
+    assert cals == {"6": "c6"} and rooms == {"6": None}
+    assert zoom.writes == []
+    assert "no Zoom room (its footer says none)" in capsys.readouterr().out
+
+
+def test_footer_step_keeps_no_zoom_and_adds_no_host_key():
+    old = build_footer_block("6", "F6", "https://g", "Community Meetings Admins",
+                             calendar_id="c6", no_zoom=True, audience="all@x.org")
+    settings = _Settings({"community-meetings-admins@x.org": old})
+    m.ensure_group_footers(settings, "https://g", ADMIN, {"6": "F6"}, {"6": ITEM_TYPE_FOLDER},
+                           ADMIN_EMAILS, False, {"6": "c6"}, {"6": None})
+    assert settings.updated == {}
