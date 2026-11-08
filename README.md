@@ -257,7 +257,7 @@ willing members, letting `admin@` post), and a test calendar whose audience
 it is:
 
 ```bash
-python add_new_group.py -N Calendar Test -t a -m Dana -A calendar-test@berkeleymoshav.org
+python add_new_group.py -N Calendar Test -t a -m Dana -A calendar-test
 ```
 
 Its events then invite, and remind, only `calendar-test@`. The rest of the

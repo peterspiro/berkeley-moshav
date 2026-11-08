@@ -794,7 +794,8 @@ def cli():
         "-A", "--audience", metavar="ADDRESS", default=None,
         help="For an admin group, the Google Group its calendar's events invite and its "
              f"reminders go to, instead of {COMMUNITY_CALENDAR_AUDIENCE} (say, a small "
-             "group, to try a community calendar out without emailing everyone)",
+             "group, to try a community calendar out without emailing everyone); its "
+             f"address, or just the part before @{DOMAIN}",
     )
     args = parser.parse_args()
 
@@ -808,8 +809,10 @@ def cli():
 
     if args.audience and group_type != GroupType.ADMIN:
         sys.exit("Error: --audience only applies to admin groups (-t a).")
-    if args.audience and ("@" not in args.audience or not is_in_domain(args.audience)):
-        sys.exit(f"Error: --audience must be a full @{DOMAIN} address.")
+    if args.audience and "@" not in args.audience:
+        args.audience = f"{args.audience}@{DOMAIN}"
+    if args.audience and not is_in_domain(args.audience):
+        sys.exit(f"Error: --audience must be an @{DOMAIN} address (or just its name).")
 
     if args.short_address and args.alias:
         sys.exit("Error: --short-address and --alias can't be combined.")
