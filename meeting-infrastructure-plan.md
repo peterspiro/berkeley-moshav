@@ -287,7 +287,7 @@ their own social events.
   > agree which one moves.
   >
   > All of this, and more, is in the guide for community calendar admins:
-  > (the guide's link, once `ADMIN_GUIDE_URL` is set)
+  > https://docs.google.com/document/d/1CO85_1BlMX_ONiSGp9g6B2svbi-ZGEa89YtMj8H6tkE/edit
   >
   > If you'd like a different address for the list, or a different name for
   > the calendar, just let me know.
@@ -296,9 +296,9 @@ their own social events.
 - **The admins' guide.** `community-calendar-admins-guide.md` holds the same
   information at more length (adding the calendar, scheduling step by step,
   the tags, reminders, the host key, clashes), for the admins to keep
-  coming back to. It's written to be made into a Google Doc, viewable by
-  anyone with the link, whose link goes in `ADMIN_GUIDE_URL` so the emails
-  link it. The repo's copy is the source; the doc is updated from it.
+  coming back to. It's also a Google Doc, whose link is in `ADMIN_GUIDE_URL`
+  so the emails link it. The repo's copy is the source; the doc is updated
+  from it.
 
 #### How admin groups differ from circles
 | | Circles and working groups | Admin groups |
@@ -377,8 +377,9 @@ regularly, or have the hourly Apps Script run send the warning.
 - Before the first community calendar: make the "Meeting Admin" folder at
   the top of the Shared Drive; check that Gather's Squad type is `squad`;
   make sure `all.members@` lets `admin@` post (for reminders); push
-  `group_meetings` and `circle_agendas`; make the admins' guide a Google Doc
-  and set `ADMIN_GUIDE_URL` (README.md: "Setting up community calendars").
+  `group_meetings` and `circle_agendas` (README.md: "Setting up community
+  calendars"). (The admins' guide is already a Google Doc, linked from the
+  emails.)
 - Check that the "Community Events Zoom Host Key" doc isn't open to
   anyone with the link (README.md: "Setting up community calendars").
 

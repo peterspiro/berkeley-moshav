@@ -45,10 +45,12 @@ GROUP_CALENDAR_HOWTO_URL = (
 )
 
 
-# The community calendar admins' guide (community-calendar-admins-guide.md,
-# made into a Google Doc viewable by anyone with the link), linked from the
-# emails to admin groups; until it's set, they don't link it.
-ADMIN_GUIDE_URL = ""
+# The community calendar admins' guide: community-calendar-admins-guide.md,
+# made into a Google Doc, linked from the emails to admin groups (they leave
+# it out if this is empty). The repo's copy is the source; update the doc to
+# match it.
+ADMIN_GUIDE_URL = (
+    "https://docs.google.com/document/d/1CO85_1BlMX_ONiSGp9g6B2svbi-ZGEa89YtMj8H6tkE/edit")
 
 # How long before a community-wide event its reminder goes out, by default
 # (DEFAULT_REMINDER_LEADS in group_meetings/event_rules.gs).

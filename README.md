@@ -243,12 +243,11 @@ Before making the first community calendar's admin group:
    `admin@berkeleymoshav.org` post, or the reminders it sends there bounce.
 5. Push the `group_meetings` and `circle_agendas` Apps Scripts (`clasp push`
    in each folder).
-6. Make the admins' guide a Google Doc: upload
-   `community-calendar-admins-guide.md` to Drive and open it with Google Docs
-   (or paste it into a new doc with Edit → Paste from Markdown), share it as
-   "Anyone with the link can view", and put its link in `ADMIN_GUIDE_URL` in
-   `util/calendar_announcement.py`, so the emails to admins link it. Keep the
-   two in step when either changes.
+6. The admins' guide, `community-calendar-admins-guide.md`, is also a
+   [Google Doc](https://docs.google.com/document/d/1CO85_1BlMX_ONiSGp9g6B2svbi-ZGEa89YtMj8H6tkE/edit)
+   linked from the emails to admins
+   (`ADMIN_GUIDE_URL` in `util/calendar_announcement.py`). The repo's copy is
+   the source: when it changes, update the doc to match.
 
 Then, for each calendar:
 
