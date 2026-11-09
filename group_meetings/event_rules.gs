@@ -20,6 +20,8 @@ const CALENDAR_LINK_RE =
 const ZOOM_LINK_RE = /Zoom meeting:\s*(https:\/\/\S+)/;
 const ZOOM_DETAILS_RE = /^Meeting ID [\d ]+, passcode (\S+)$/m;
 const AUDIENCE_RE = /Calendar audience:\s*(\S+@\S+)/;
+// More addresses every event on a community calendar invites.
+const ALSO_INVITE_RE = /^Also invite:(.*)$/m;
 // The end of a community-wide calendar's admin group's name (see
 // ADMIN_LIST_SUFFIX in util/gdrive_config.py): "Community Meetings Admins"
 // runs the Community Meetings calendar.
@@ -139,11 +141,11 @@ function base64ToString(text) {
  *     since that doc was trashed or deleted; lines linking any other doc
  *     are kept.
  *   - Guests: the all-events calendar and the group's Google Group (for a
- *     community-wide calendar, ctx.groupEmail is its audience), unless the
- *     event is marked "[no invite]" (then not the group; a group already
- *     invited stays a guest).
- * sendUpdates is 'all' when the group is newly invited (so members get the
- * invitation), else 'none'.
+ *     community-wide calendar, ctx.groupEmail is its audience), and the
+ *     addresses in ctx.alsoInvite, unless the event is marked "[no invite]"
+ *     (then neither the group nor those; a guest already invited stays).
+ * sendUpdates is 'all' when the group or one of those is newly invited (so
+ * they get the invitation), else 'none'.
  */
 function computeEventPatch(event, ctx) {
   const patch = {};
@@ -200,15 +202,18 @@ function computeEventPatch(event, ctx) {
   const attendees = event.attendees || [];
   const emails = new Set(attendees.map(a => lower(a.email)));
   const added = [];
-  const guests = [ctx.allEventsCalendarId, hasNoInviteMarker(event) ? null : ctx.groupEmail];
-  for (const email of guests) {
-    if (email && !emails.has(lower(email))) added.push({ email });
+  const invitees = hasNoInviteMarker(event) ? [] : [ctx.groupEmail].concat(ctx.alsoInvite || []);
+  for (const email of [ctx.allEventsCalendarId].concat(invitees)) {
+    if (email && !emails.has(lower(email))) {
+      added.push({ email });
+      emails.add(lower(email));
+    }
   }
   if (added.length) patch.attendees = attendees.concat(added);
 
   if (!Object.keys(patch).length) return null;
-  const invitesGroup = added.some(a => lower(a.email) === lower(ctx.groupEmail));
-  return { patch, sendUpdates: invitesGroup ? 'all' : 'none' };
+  const invites = added.some(a => lower(a.email) !== lower(ctx.allEventsCalendarId));
+  return { patch, sendUpdates: invites ? 'all' : 'none' };
 }
 
 function conflictFingerprint(c) {
@@ -507,9 +512,11 @@ function overlapMessage(c, opts) {
 
 /**
  * The managed links in a group's footer: { calendarId, zoomUrl, passcode,
- * audience }, each null if absent. Only the auto-managed block is read. An
- * audience (the everybody group a community-wide calendar's events invite
- * and its reminders go to) marks a community-wide calendar's admin group.
+ * audience, alsoInvite }, each null if absent ([] for alsoInvite). Only the
+ * auto-managed block is read. An audience (the everybody group a
+ * community-wide calendar's events invite and its reminders go to) marks a
+ * community-wide calendar's admin group; alsoInvite are more addresses its
+ * events invite (but don't remind).
  */
 function parseFooter(footerText) {
   const text = footerText || '';
@@ -519,11 +526,17 @@ function parseFooter(footerText) {
   const zoom = block.match(ZOOM_LINK_RE);
   const details = block.match(ZOOM_DETAILS_RE);
   const audience = block.match(AUDIENCE_RE);
+  const also = block.match(ALSO_INVITE_RE);
+  const alsoInvite = [];
+  for (const part of (also ? also[1] : '').split(/[,\s]+/)) {
+    if (part.includes('@') && !alsoInvite.includes(lower(part))) alsoInvite.push(lower(part));
+  }
   return {
     calendarId: cal ? base64ToString(decodeURIComponent(cal[1])) : null,
     zoomUrl: zoom ? zoom[1] : null,
     passcode: details ? details[1] : null,
     audience: audience ? lower(audience[1]) : null,
+    alsoInvite,
   };
 }
 

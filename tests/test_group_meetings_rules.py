@@ -57,7 +57,8 @@ class TestParseFooter:
             "1", "F", "https://g", "Tech Circle", calendar_id=CAL, zoom_url=URL,
             zoom_passcode="123456")
         assert js("parseFooter(f)", f=footer) == {
-            "calendarId": CAL, "zoomUrl": URL, "passcode": "123456", "audience": None}
+            "calendarId": CAL, "zoomUrl": URL, "passcode": "123456", "audience": None,
+            "alsoInvite": []}
 
     def test_calendar_id_with_plus_and_slash(self):
         footer = build_footer_block("1", "F", "https://g", "X", calendar_id="a?>")
@@ -65,7 +66,7 @@ class TestParseFooter:
 
     def test_no_links(self):
         assert js("parseFooter(null)") == {"calendarId": None, "zoomUrl": None, "passcode": None,
-                                           "audience": None}
+                                           "audience": None, "alsoInvite": []}
 
     def test_reads_an_admin_groups_audience(self):
         footer = build_footer_block(
@@ -992,7 +993,8 @@ class TestCalendarWithoutZoom:
 
     def test_no_room_read(self):
         assert js("parseFooter(f)", f=self.FOOTER) == {
-            "calendarId": CAL, "zoomUrl": None, "passcode": None, "audience": "all@x.org"}
+            "calendarId": CAL, "zoomUrl": None, "passcode": None, "audience": "all@x.org",
+            "alsoInvite": []}
 
     def test_event_gets_only_guests(self):
         links = js("parseFooter(f)", f=self.FOOTER)
@@ -1001,3 +1003,34 @@ class TestCalendarWithoutZoom:
         change = patch({"summary": "Picnic", "description": "Bring food."}, ctx)
         assert change == {"patch": {"attendees": [{"email": ALL_EVENTS}, {"email": "all@x.org"}]},
                           "sendUpdates": "all"}
+
+
+class TestAlsoInvite:
+    FOOTER = build_footer_block("1", "F", "https://g", "Community Meetings Admins",
+                                calendar_id=CAL, zoom_url=URL, zoom_passcode="123456",
+                                audience="all@x.org",
+                                also_invite=["neighbors@example.org", "pat@example.com"])
+    CTX = {**CTX, "groupEmail": "all@x.org", "alsoInvite": ["neighbors@example.org",
+                                                           "pat@example.com"]}
+
+    def test_read(self):
+        assert js("parseFooter(f).alsoInvite", f=self.FOOTER) == [
+            "neighbors@example.org", "pat@example.com"]
+
+    def test_invited_with_the_audience(self):
+        change = patch({"summary": "Town hall"}, self.CTX)
+        assert [a["email"] for a in change["patch"]["attendees"]] == [
+            ALL_EVENTS, "all@x.org", "neighbors@example.org", "pat@example.com"]
+        assert change["sendUpdates"] == "all"
+
+    def test_only_missing_ones_added_and_emailed(self):
+        event = {"summary": "Town hall", "attendees": [
+            {"email": ALL_EVENTS}, {"email": "all@x.org"}, {"email": "Pat@Example.com"}]}
+        change = patch(event, self.CTX)
+        assert change["patch"]["attendees"][-1] == {"email": "neighbors@example.org"}
+        assert len(change["patch"]["attendees"]) == 4 and change["sendUpdates"] == "all"
+
+    def test_not_with_no_invite(self):
+        change = patch({"summary": "Town hall [no invite]"}, self.CTX)
+        assert change["patch"]["attendees"] == [{"email": ALL_EVENTS}]
+        assert change["sendUpdates"] == "none"

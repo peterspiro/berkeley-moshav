@@ -119,6 +119,30 @@ def group_email(folder_name: str) -> str:
 SUFFIXES = ["-working-group", "-work-group", "-circle"]
 
 
+def also_invite_addresses(values: list[str]) -> list[str]:
+    """The addresses given to --also-invite (add_new_group.py and
+    update_groups.py), each value one or more separated by commas or
+    spaces: lowercase, each once, in order, a bare name getting @DOMAIN
+    ("planning" -> "planning@berkeleymoshav.org"). "none" gives [], to
+    remove them. Raises ValueError for one that isn't an address."""
+    out: list[str] = []
+    for value in values:
+        for part in re.split(r"[,\s]+", value.strip()):
+            part = part.lower()
+            if not part:
+                continue
+            if part == "none":
+                return []
+            if "@" not in part:
+                part = f"{part}@{DOMAIN}"
+            local, _, domain = part.partition("@")
+            if not local or "." not in domain or "@" in domain:
+                raise ValueError(f"{part!r} isn't an email address")
+            if part not in out:
+                out.append(part)
+    return out
+
+
 def truncate_local_part(local: str) -> str | None:
     """Return local with a recognized suffix removed, or None if it
     doesn't end with one of SUFFIXES."""

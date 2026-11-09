@@ -118,6 +118,13 @@ community), which is judged safe enough, but not by anyone with the link; the
 link itself gives nothing away. It's not put in calendar events, which are
 emailed to members' own accounts and may be forwarded.
 
+A community calendar's footer can also have an `Also invite:` line, of more
+addresses (of any domain, such as a mailing list outside the Workspace)
+that every event on the calendar invites along with the audience, but
+doesn't remind. `add_new_group.py -I` sets it, and `update_groups.py -g ...
+-I` changes it (`-I none` removes it); `group_meetings` then rechecks the
+calendar's upcoming events within the hour.
+
 A community calendar made without a Zoom room (`add_new_group.py -z`, for
 in-person events) has `Zoom meeting: none` in its footer instead of its
 room's lines, and no host key line. Neither script then makes it a room, and
@@ -341,7 +348,9 @@ status line as "calendar (members can view, not edit)".
   host key doc's link and the calendar's audience, `all.members@`, in its
   footer (`-A`/`--audience` names another, for trying a calendar out); no parent
   and no agenda doc; and a welcome email telling the admins how
-  community-wide events are scheduled. `-z`/`--no-zoom` makes it with no
+  community-wide events are scheduled. `-I`/`--also-invite` names more
+  addresses its events invite (see "How the group linking fits together").
+  `-z`/`--no-zoom` makes it with no
   Zoom room, for a calendar of in-person events (see "How the group linking
   fits together").
 - **`update_groups.py`** brings every group (or one,
@@ -358,7 +367,8 @@ status line as "calendar (members can view, not edit)".
   no-fixed-time meeting of that user can be used); its footer gets the host
   key link and the audience line (`all.members@` unless it names another);
   one whose footer says `Zoom meeting: none` gets no room and no host key
-  link; the email about its new calendar is the admins' version
+  link; with `-g`, `-I`/`--also-invite` replaces its footer's "Also invite"
+  addresses (`-I none` removes them); the email about its new calendar is the admins' version
   (how to schedule community-wide events); and it gets no agenda doc. Its first run also creates the
   "All Berkeley Moshav Events" calendar, which it shares view-only with the
   everybody groups (with `-g`, only if `--share-all-events` is given, since

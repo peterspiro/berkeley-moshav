@@ -79,6 +79,11 @@ for trying a community calendar out on a few people before it reaches
 everyone; afterwards, change the footer's "Calendar audience:" line by
 hand, or delete the test group and its calendar and room.
 
+For an admin group, -I/--also-invite names more addresses (of any domain:
+say, a mailing list outside the Workspace) that every event on its
+calendar invites along with the audience, but doesn't remind; they go on
+its footer's "Also invite:" line. update_groups.py -g ... -I changes them.
+
 For an admin group, -z/--no-zoom gives its calendar no Zoom room (for
 in-person events): its footer says "Zoom meeting: none", so neither this
 script nor update_groups.py makes one, its events get no Zoom details, and
@@ -188,6 +193,7 @@ from util.google_group_utils import (
     group_display_name,
     group_email,
     group_exists,
+    also_invite_addresses,
     is_in_domain,
     truncate_local_part,
 )
@@ -401,6 +407,7 @@ def main(
     agenda_doc: bool = False,
     audience_override: str | None = None,
     no_zoom: bool = False,
+    also_invite: list[str] | None = None,
 ) -> None:
     base_url = base_url.rstrip("/")
     init_log()
@@ -609,6 +616,8 @@ def main(
             if audience:
                 print(f"[dry-run] Would name {audience} as the calendar's audience in the "
                       "footer: its events invite it, and its reminders go to it.")
+            if also_invite:
+                print(f"[dry-run] Would have its events also invite {', '.join(also_invite)}.")
             if parent_group is not None:
                 print(f"[dry-run] Would have it put under '{parent_group.name}' in the "
                       "Circle Structure.")
@@ -719,7 +728,8 @@ def main(
                             gdisplay, calendar_id=calendar_id,
                             zoom_url=room.join_url if room else None,
                             zoom_passcode=room.passcode if room else None, audience=audience,
-                            host_key_url=host_key_url, no_zoom=no_zoom or None)
+                            host_key_url=host_key_url, no_zoom=no_zoom or None,
+                            also_invite=also_invite)
         print(f"Set footer links for '{gemail}'.")
 
         # ── Have it put under its parent in the Circle Structure ─────────────
@@ -871,6 +881,13 @@ def cli():
              "in-person events: its footer says \"Zoom meeting: none\", so the scripts never "
              "make one, and its events get no Zoom details",
     )
+    parser.add_argument(
+        "-I", "--also-invite", metavar="ADDRESSES", action="append", default=None,
+        help="For an admin group, more addresses (any domain; just the name for "
+             f"@{DOMAIN}) that every event on its calendar invites along with its "
+             "audience, but doesn't remind; separate several with commas, or give the "
+             "option again",
+    )
     args = parser.parse_args()
 
     name = " ".join(args.name)
@@ -881,6 +898,14 @@ def cli():
             "with 'Circle', 'Working Group', 'Club', or 'Admins'. Pass -t/--type explicitly."
         )
 
+    also_invite = None
+    if args.also_invite:
+        if group_type != GroupType.ADMIN:
+            sys.exit("Error: --also-invite only applies to admin groups (-t a).")
+        try:
+            also_invite = also_invite_addresses(args.also_invite)
+        except ValueError as e:
+            sys.exit(f"Error: --also-invite: {e}.")
     if args.no_zoom and group_type != GroupType.ADMIN:
         sys.exit("Error: --no-zoom only applies to admin groups (-t a).")
     if args.audience and group_type != GroupType.ADMIN:
@@ -913,6 +938,7 @@ def cli():
         password, args.dry_run, args.credentials, args.drive_id, alias=args.alias,
         short_address=args.short_address, idempotent=args.idempotent, send_email=not args.no_email,
         agenda_doc=args.agenda_doc, audience_override=args.audience, no_zoom=args.no_zoom,
+        also_invite=also_invite,
     )
 
 

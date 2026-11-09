@@ -22,6 +22,8 @@ from util.google_group_footer import (
     compute_group_footer_updates,
     describe_footer_updates,
     footer_updates,
+    parse_addresses,
+    parse_footer_also_invite,
     parse_footer_audience,
     parse_footer_calendar_id,
     parse_footer_host_key_url,
@@ -286,6 +288,33 @@ class TestNoZoom:
 
     def test_other_groups_never_have_it(self):
         assert not parse_footer_no_zoom(build_footer_block("1", "F", "https://g", "Tech Circle"))
+
+
+class TestAlsoInvite:
+    def block(self, also=("list@example.org", "someone@example.com")):
+        return build_footer_block("7", "F", "https://g", "Community Meetings Admins",
+                                  audience="a@x.org", also_invite=list(also))
+
+    def test_written_after_the_audience(self):
+        assert self.block().endswith("\nCalendar audience: a@x.org"
+                                     "\nAlso invite: list@example.org, someone@example.com")
+
+    def test_read_back(self):
+        assert parse_footer_also_invite(self.block()) == ["list@example.org",
+                                                          "someone@example.com"]
+        assert parse_footer_also_invite(self.block(also=())) == []
+
+    def test_kept_unless_given(self):
+        current = {"customFooterText": self.block(), "includeCustomFooter": "true"}
+        assert footer_updates(current, "7", "F", "https://g", "Community Meetings Admins") == {}
+        updates = footer_updates(current, "7", "F", "https://g", "Community Meetings Admins",
+                                 also_invite=[])
+        assert parse_footer_also_invite(updates["customFooterText"]) == []
+        assert describe_footer_updates(self.block(), updates) == "also invite"
+
+    def test_parse_addresses(self):
+        assert parse_addresses("a@x.org, B@y.com  c@z.net,a@x.org, not-an-address") == [
+            "a@x.org", "b@y.com", "c@z.net"]
 
 
 class TestReplaceFooterZoom:

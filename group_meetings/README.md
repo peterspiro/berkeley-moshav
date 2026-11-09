@@ -94,6 +94,12 @@ is handled like a group's, except that:
   in Zoom under that user;
 - an invitation copy's email speaks of the calendar, not a group.
 
+A community calendar's events also invite the addresses on its footer's
+`Also invite:` line, if any, which get the invitation (and updates) but
+not reminders; `[no invite]` leaves them out too. When that line changes,
+the calendar's upcoming events are rechecked within the hour, and get the
+new addresses.
+
 A community calendar made without a Zoom room (its footer says
 `Zoom meeting: none`) has no room link, so its events get only the audience
 and the all-events calendar as guests, and their reminders.

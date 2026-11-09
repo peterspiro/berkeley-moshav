@@ -342,3 +342,19 @@ def test_footer_step_keeps_no_zoom_and_adds_no_host_key():
     m.ensure_group_footers(settings, "https://g", ADMIN, {"6": "F6"}, {"6": ITEM_TYPE_FOLDER},
                            ADMIN_EMAILS, False, {"6": "c6"}, {"6": None})
     assert settings.updated == {}
+
+
+def test_footer_step_sets_and_keeps_also_invite():
+    from util.google_group_footer import parse_footer_also_invite
+    old = build_footer_block("6", "F6", "https://g", "Community Meetings Admins",
+                             audience="all@x.org", host_key_url=mr.COMMUNITY_HOST_KEY_DOC_URL,
+                             also_invite=["old@example.org"])
+    settings = _Settings({"community-meetings-admins@x.org": old})
+    m.ensure_group_footers(settings, "https://g", ADMIN, {"6": "F6"}, {"6": ITEM_TYPE_FOLDER},
+                           ADMIN_EMAILS, False)
+    assert settings.updated == {}
+    m.ensure_group_footers(settings, "https://g", ADMIN, {"6": "F6"}, {"6": ITEM_TYPE_FOLDER},
+                           ADMIN_EMAILS, False,
+                           also_invite_by_group_id={"6": ["a@example.org", "b@example.com"]})
+    footer = settings.updated["community-meetings-admins@x.org"]["customFooterText"]
+    assert parse_footer_also_invite(footer) == ["a@example.org", "b@example.com"]

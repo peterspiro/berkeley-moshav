@@ -178,6 +178,7 @@ from util.google_group_utils import (
     DEFAULT_CLIENT_SECRETS_PATH,
     DOMAIN,
     MODERATION_SETTINGS,
+    also_invite_addresses,
     compute_group_settings_updates,
     ensure_group_exists,
     ensure_group_settings,
@@ -1151,6 +1152,7 @@ def ensure_group_footers(
     calendar_id_by_group_id: dict[str, str] | None = None,
     room_by_group_id: dict[str, RoomLink | None] | None = None,
     audience_by_group_id: dict[str, str] | None = None,
+    also_invite_by_group_id: dict[str, list[str]] | None = None,
 ) -> None:
     """Keep each eligible Google Group's custom footer in sync with
     Gather's own state: for every eligible group that currently has both a
@@ -1174,6 +1176,8 @@ def ensure_group_footers(
     the one it already names, or
     COMMUNITY_CALENDAR_AUDIENCE. Each admin group's is recorded in
     audience_by_group_id (mutated in place), for announce_new_calendars().
+    Its "Also invite" addresses are kept, or replaced by those in
+    also_invite_by_group_id ([] removing them).
     """
     calendar_id_by_group_id = calendar_id_by_group_id or {}
     room_by_group_id = room_by_group_id or {}
@@ -1206,7 +1210,8 @@ def ensure_group_footers(
             current, group_id, item_id, base_url, group_name, item_type,
             calendar_id_by_group_id.get(group_id),
             room.join_url if room else None, room.passcode if room else None,
-            audience, host_key_url,
+            audience, host_key_url, None,
+            (also_invite_by_group_id or {}).get(group_id),
         )
         if not updates:
             continue
@@ -1245,7 +1250,8 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
          credentials_path: str, drive_id: str, group_prefix: str | None = None,
          move_events: bool = False, announce_calendars: bool = False,
          share_all_events: bool = False, full_calendar_names: bool = False,
-         draft_email: bool = False, agenda_docs: bool = False):
+         draft_email: bool = False, agenda_docs: bool = False,
+         also_invite: list[str] | None = None):
     base_url = base_url.rstrip("/")
     init_log()
     log("INFO", "start", f"base_url={base_url} dry_run={dry_run} group={group_prefix!r}")
@@ -1297,6 +1303,11 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
                 everybody_groups = {gid: info for gid, info
                                     in fetch_group_info(page, base_url)[0].items()
                                     if _is_everybody(info)}
+            if also_invite is not None and target["kind"] != ADMIN_GROUP_KIND:
+                close_log()
+                browser.close()
+                sys.exit(f"Error: --also-invite only applies to a community calendar's admin "
+                         f"group, and '{target['name']}' is of kind {target['kind']!r}.")
             if target["kind"] not in ELIGIBLE_KINDS:
                 log("WARN", "resolve_group",
                     f"'{target['name']}' is of kind {target['kind']!r}, not one of "
@@ -1403,6 +1414,7 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
             settings_service, base_url, group_info, google_file_id_by_group_id,
             item_type_by_group_id, email_by_group_id, dry_run,
             calendar_id_by_group_id, room_by_group_id, audience_by_group_id,
+            {target_id: also_invite} if also_invite is not None else None,
         )
 
         # Step 3b: tell groups about their new calendars, now that their
@@ -1480,8 +1492,24 @@ def cli():
         help="Give each circle and working group without one an agenda doc, for the "
              "circle_agendas Apps Script to build (with -g, just that group)",
     )
+    parser.add_argument(
+        "-I", "--also-invite", metavar="ADDRESSES", action="append", default=None,
+        help="With -g, for a community calendar's admin group: replace the more addresses "
+             "(any domain; just the name for @berkeleymoshav.org) that every event on its "
+             "calendar invites along with its audience, but doesn't remind; separate "
+             "several with commas, or give the option again; 'none' removes them. Its "
+             "upcoming events are rechecked within the hour",
+    )
     args = parser.parse_args()
 
+    also_invite = None
+    if args.also_invite:
+        if not args.group:
+            parser.error("--also-invite needs -g")
+        try:
+            also_invite = also_invite_addresses(args.also_invite)
+        except ValueError as e:
+            parser.error(f"--also-invite: {e}")
     if args.full_calendar_name and not args.group:
         parser.error("--full-calendar-name needs -g")
     if args.email_draft and not args.group:
@@ -1502,7 +1530,7 @@ def cli():
     email, password = load_credentials()
     main(args.base_url, email, password, args.dry_run, args.credentials, args.drive_id,
          args.group, args.move_events, args.announce_calendar, args.share_all_events,
-         args.full_calendar_name, args.email_draft, args.agenda_docs)
+         args.full_calendar_name, args.email_draft, args.agenda_docs, also_invite)
 
 
 if __name__ == "__main__":

@@ -134,3 +134,17 @@ class TestNewGroupNotYetVisible:
         with pytest.raises(self._NotFound):
             g.ensure_group_settings(self._Settings(misses=99), "new@x.org",
                                     {"whoCanPostMessage": "ANYONE_CAN_POST"}, max_wait=0)
+
+
+class TestAlsoInviteAddresses:
+    def test_parsing(self):
+        from util.google_group_utils import also_invite_addresses
+        assert also_invite_addresses(["planning, Pat@Example.com", "x@y.org pat@example.com"]) \
+            == ["planning@berkeleymoshav.org", "pat@example.com", "x@y.org"]
+        assert also_invite_addresses(["a@x.org", "none"]) == []
+
+    def test_bad_address(self):
+        import pytest
+        from util.google_group_utils import also_invite_addresses
+        with pytest.raises(ValueError):
+            also_invite_addresses(["pat@localhost"])

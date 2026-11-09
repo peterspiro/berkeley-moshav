@@ -194,6 +194,15 @@ their own social events.
 - **Reminders.** Each event gets a reminder 24 hours before, sent to the
   audience ("Hi everyone"), with replies going to the admin group;
   `[remind …]` and `[no reminder]` on an event work as for group meetings.
+- **More invitees.** An admin group's footer can have an "Also invite:"
+  line of more addresses, of any domain (say, a mailing list outside the
+  Workspace that overlaps the community), that every event on its calendar
+  invites along with the audience. They aren't reminded (reminders go to
+  the audience only), and `[no invite]` leaves them out too. Set with
+  `add_new_group.py -I`, changed with `update_groups.py -g ... -I` (`-I
+  none` removes them); a changed line has `group_meetings` recheck the
+  calendar's upcoming events, adding the new ones (an address removed from
+  the line stays a guest of events it was already invited to).
 - **A calendar with no Zoom room.** `add_new_group.py -z` makes an admin
   group whose calendar has no room, for in-person events: its footer says
   `Zoom meeting: none` in place of the room's lines (and has no host key

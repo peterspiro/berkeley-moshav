@@ -40,8 +40,10 @@
  * except that its events invite the audience (an everybody group) instead
  * of the admin group, and get no FAQ line; their reminders go to the
  * audience, with replies to the admin group; and its clash emails name the
- * calendar. An event marked "[no invite]" invites nobody, and gets no
- * reminder unless it has a reminder tag.
+ * calendar. Its events also invite the addresses on the footer's "Also
+ * invite" line, if any (they get no reminders). An event marked
+ * "[no invite]" invites nobody, and gets no reminder unless it has a
+ * reminder tag.
  *
  * Which calendar and room are a group's comes from the group's own email
  * footer (written by update_groups.py), read hourly,
@@ -82,8 +84,8 @@ const ZOOM_USER_NUMBERS = {
 
 // Script Properties keys.
 const PROP_GROUPS = 'groups';                // JSON [{ email, name, calendarId, zoomUrl, passcode,
-                                             //         audience, calendarName?, agendaUrl?,
-                                             //         reminders?, staleAgendaUrl? }]
+                                             //         audience, alsoInvite, calendarName?,
+                                             //         agendaUrl?, reminders?, staleAgendaUrl? }]
 const PROP_OTHER_CALENDARS = 'otherCalendars'; // JSON [{ id, name }], see refreshOtherCalendars
 const PROP_SYNC_PREFIX = 'syncToken:';       // + calendar ID
 const PROP_COPY_ALERTS = 'copyAlerts';       // JSON { iCalUID: forgetAfterMs }
@@ -363,6 +365,7 @@ function handleEvent(event, group, groups) {
     passcode: group.passcode,
     zoomUser: groupZoomUser(group),
     groupEmail: group.audience || group.email,
+    alsoInvite: group.alsoInvite || [],
     allEventsCalendarId: ALL_EVENTS_CALENDAR_ID,
     faqUrl: group.audience ? null : MEETINGS_FAQ_URL,
     agendaUrl: group.agendaUrl || null,
@@ -541,7 +544,8 @@ function refreshGroups() {
     const old = previous.get(g.email);
     if (old && (old.zoomUrl !== g.zoomUrl || old.passcode !== g.passcode ||
                 old.calendarId !== g.calendarId || old.agendaUrl !== g.agendaUrl ||
-                (old.audience || null) !== g.audience)) {
+                (old.audience || null) !== g.audience ||
+                (old.alsoInvite || []).join() !== g.alsoInvite.join())) {
       PropertiesService.getScriptProperties().deleteProperty(PROP_SYNC_PREFIX + old.calendarId);
       console.log(`${g.email}: Zoom room, calendar, agenda doc, or audience changed; ` +
                   'rechecking its events.');

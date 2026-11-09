@@ -58,6 +58,9 @@ A few minutes after you save an event, it gets:
   link, meeting ID and passcode in its description.
 - **The whole community invited** (all.members@berkeleymoshav.org): each member
   gets the invitation by email, and the event appears on their calendar.
+- **Any other addresses your calendar invites** (such as a mailing list
+  outside the community), if the Technology Circle has set some up for it.
+  They get the invitation, but not the reminder.
 - **A place on the All Berkeley Moshav Events calendar.**
 
 When you later change an event's time, Google Calendar asks whether to email
@@ -77,7 +80,7 @@ Type one of these tags in the event's title or description:
 | Tag | What it does |
 |---|---|
 | `[no zoom]` | No Zoom room: for an event held in person, or elsewhere. An event with another Zoom or Google Meet link typed in keeps that link, and doesn't get the room either. |
-| `[no invite]` | The community isn't invited, and gets no reminder: for an event only some people should come to. Add it before you first save the event: once the community has been invited, remove all.members@berkeleymoshav.org from the guests by hand. |
+| `[no invite]` | The community (and any other addresses your calendar invites) isn't invited, and gets no reminder: for an event only some people should come to. Add it before you first save the event: once they've been invited, remove all.members@berkeleymoshav.org (and the others) from the guests by hand. |
 | `[remind 2 hours]` | A reminder at another time: any length of time, such as `[remind 90 minutes]` or `[remind 2 days]`, or several, such as `[remind 1 day, 1 hour]`. With `[no invite]`, the reminder still goes to the community. |
 | `[no reminder]` | No reminder. |
 
