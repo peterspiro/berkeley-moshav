@@ -8,6 +8,7 @@ group room is a recurring meeting with no fixed time (type 3), so its link
 never changes and members only ever click it. New rooms are made under
 ROOMS_USER; a room can be moved (transferred in Zoom, keeping its link) to
 another of ROOM_USERS, to keep its meetings from clashing with others'.
+Community-wide calendars' rooms are under COMMUNITY_ROOMS_USER instead.
 
 Room settings (ROOM_SETTINGS) let a meeting run with no host present:
 participants can join before the host at any time, there's no waiting room
@@ -32,7 +33,17 @@ TOKEN_URL = "https://zoom.us/oauth/token"
 ROOMS_USER = "circle-zoom-hosts@berkeleymoshav.org"
 ROOM_USERS = (ROOMS_USER, "berkeley@urbanmoshav.org")
 
+# The licensed Zoom user that owns every community-wide calendar's room
+# (one per calendar, so each calendar's recordings can be told apart).
+# Group rooms are never moved to it, so community-wide meetings only clash
+# with each other.
+COMMUNITY_ROOMS_USER = "community-zoom-hosts@berkeleymoshav.org"
+COMMUNITY_ROOM_USERS = (COMMUNITY_ROOMS_USER,)
+
 ROOM_TOPIC_SUFFIX = " Meeting Room"
+# A community-wide calendar's room is "<Calendar> Zoom Room" instead.
+COMMUNITY_ROOM_TOPIC_SUFFIX = " Zoom Room"
+ROOM_TOPIC_SUFFIXES = (ROOM_TOPIC_SUFFIX, COMMUNITY_ROOM_TOPIC_SUFFIX)
 MEETING_TYPE_NO_FIXED_TIME = 3
 
 ROOM_SETTINGS = {
@@ -51,8 +62,8 @@ PASSCODE_LENGTH = 6
 _MEETING_ID_RE = re.compile(r"/j/(\d+)")
 
 
-def room_topic(group_name: str) -> str:
-    return group_name + ROOM_TOPIC_SUFFIX
+def room_topic(group_name: str, suffix: str = ROOM_TOPIC_SUFFIX) -> str:
+    return group_name + suffix
 
 
 def meeting_id_from_url(join_url: str | None) -> str | None:

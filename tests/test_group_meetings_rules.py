@@ -57,14 +57,22 @@ class TestParseFooter:
             "1", "F", "https://g", "Tech Circle", calendar_id=CAL, zoom_url=URL,
             zoom_passcode="123456")
         assert js("parseFooter(f)", f=footer) == {
-            "calendarId": CAL, "zoomUrl": URL, "passcode": "123456"}
+            "calendarId": CAL, "zoomUrl": URL, "passcode": "123456", "audience": None,
+            "alsoInvite": []}
 
     def test_calendar_id_with_plus_and_slash(self):
         footer = build_footer_block("1", "F", "https://g", "X", calendar_id="a?>")
         assert js("parseFooter(f).calendarId", f=footer) == "a?>"
 
     def test_no_links(self):
-        assert js("parseFooter(null)") == {"calendarId": None, "zoomUrl": None, "passcode": None}
+        assert js("parseFooter(null)") == {"calendarId": None, "zoomUrl": None, "passcode": None,
+                                           "audience": None, "alsoInvite": []}
+
+    def test_reads_an_admin_groups_audience(self):
+        footer = build_footer_block(
+            "1", "F", "https://g", "Community Meetings", calendar_id=CAL, zoom_url=URL,
+            zoom_passcode="123456", audience="All.Members@x.org")
+        assert js("parseFooter(f).audience", f=footer) == "all.members@x.org"
 
 
 class TestComputeEventPatch:
@@ -848,3 +856,181 @@ def test_reminder_row_label_matches_the_agenda_doc():
     agenda_rules = (RULES.parent.parent / "circle_agendas" / "agenda_rules.gs").read_text()
     assert "const REMINDER_ROW_LABEL = 'Remind before meetings';" in agenda_rules
     assert js("REMINDER_ROW_LABEL") == "Remind before meetings"
+
+
+def test_admin_calendar_name():
+    assert js("adminCalendarName('Community Meetings Admins')") == "Community Meetings"
+    assert js("adminCalendarName('Social Events')") == "Social Events"
+
+
+class TestNoInvite:
+    def test_group_not_invited(self):
+        change = patch({"summary": "Movie night [no invite]"})
+        assert change["patch"]["attendees"] == [{"email": ALL_EVENTS}]
+        assert change["sendUpdates"] == "none"
+
+    def test_marker_in_html_description(self):
+        change = patch({"summary": "Movie night", "description": "<b>[no invite]</b>"})
+        assert change["patch"]["attendees"] == [{"email": ALL_EVENTS}]
+
+    def test_group_already_invited_stays(self):
+        event = {"summary": "Movie night [no invite]",
+                 "attendees": [{"email": GROUP}, {"email": ALL_EVENTS}]}
+        assert "attendees" not in (patch(event) or {}).get("patch", {})
+
+    def test_no_reminder_unless_tagged(self):
+        r = js("reminderLeads(e, null)", e={"summary": "Movie night [no invite]"})
+        assert r == {"leads": [], "source": "event"}
+        r = js("reminderLeads(e, null)",
+               e={"summary": "Movie night [no invite]", "description": "[remind 2 hours]"})
+        assert r == {"leads": [2 * 60 * 60 * 1000], "source": "event"}
+
+
+class TestCommunityReminder:
+    def test_goes_to_the_audience(self):
+        opts = {"groupEmail": "community-meetings-admins@x.org",
+                "groupName": "Community Meetings Admins", "when": "Tue Nov 4, 7:00–8:30 PM",
+                "lead": 24 * 60 * 60 * 1000, "zoomUrl": URL, "passcode": "123456",
+                "source": "default", "audience": "all@x.org",
+                "calendarName": "Community Meetings"}
+        event = {"summary": "Community meeting", "location": URL,
+                 "htmlLink": "https://cal/e"}
+        m = js("reminderMessage(e, o)", e=event, o=opts)
+        assert m["to"] == "all@x.org"
+        assert m["subject"] == 'Reminder: "Community meeting", Tue Nov 4, 7:00–8:30 PM'
+        assert m["body"] == (
+            "Hi everyone,\n\n"
+            "A reminder of this community event:\n\n"
+            '  "Community meeting"\n'
+            "  Tue Nov 4, 7:00–8:30 PM\n"
+            f"  Join: {URL}\n"
+            "  Meeting ID 812 3456 7890, passcode 123456\n"
+            "  Calendar event: https://cal/e\n\n"
+            "This reminder was sent automatically, 24 hours before the event, for the "
+            "Community Meetings calendar. Replies go to its admins.\n")
+
+
+def community_meeting(title, calendar, start, end):
+    return meeting(title, "u3", start * MIN, end * MIN, title=title,
+                   groups=[f"{calendar.split()[0].lower()}-admins@x.org"],
+                   names=[f"{calendar} admins"], calendars=[calendar], community=True)
+
+
+class TestCommunityOverlapMessage:
+    def test_two_community_calendars(self):
+        msg = message(community_meeting("Community meeting", "Community Meetings", 0, 90),
+                      community_meeting("Movie night", "Social Events", 60, 120))
+        assert msg["to"] == ["community-admins@x.org", "social-admins@x.org"]
+        assert msg["cc"] == ["alerts@x.org"]
+        assert msg["body"] == (
+            "Hi Community Meetings admins and Social Events admins,\n\n"
+            "These two meetings overlap:\n"
+            '  - "Community meeting" (Community Meetings calendar), 0-90\n'
+            '  - "Movie night" (Social Events calendar), 60-120\n\n'
+            "Both meetings use the same Zoom user account, which can host only one meeting "
+            "at a time, so the second meeting won't be able to start while the first is "
+            "still going.\n\n"
+            "Your options are:\n"
+            "- Hold one of these meetings on a personal or work Zoom account instead: "
+            "replace the Zoom link in its calendar event with that account's link, and "
+            "delete the room's \"Join Zoom meeting\" details from the event's "
+            "description.\n"
+            "- Agree between you to move one of these meetings, and change its time on its "
+            "calendar. To find a free time, check the All Berkeley Moshav Events "
+            "calendar, which shows every group's meetings:\nhttps://cal/all\n\n"
+            "This message was sent automatically. Questions? Reply to alerts@x.org.\n")
+
+    def test_one_community_calendar(self):
+        msg = message(community_meeting("Community meeting", "Community Meetings", 0, 90),
+                      community_meeting("Town hall", "Community Meetings", 100, 120))
+        assert msg["to"] == ["community-admins@x.org"]
+        assert msg["body"].startswith("Hi Community Meetings admins,\n\n"
+                                      "These two meetings are only 10 minutes apart:")
+        assert ("- Move one of them to another time on the Community Meetings calendar, "
+                "leaving at least 15 minutes between them.") in msg["body"]
+        assert "second Zoom user" not in msg["body"]
+
+    def test_community_and_zoom_meeting(self):
+        msg = message(community_meeting("Community meeting", "Community Meetings", 0, 90),
+                      zoom_meeting("Webinar", 60, 120))
+        assert msg["to"] == ["community-admins@x.org", "alerts@x.org"]
+        body = msg["body"]
+        assert body.startswith("Hi Technology Circle and Community Meetings admins,")
+        assert "second Zoom user" not in body
+        assert ("for the Community Meetings meeting, replace the Zoom link") in body
+        assert ("The Community Meetings meeting can be moved on the Community Meetings "
+                "calendar; the other meeting can be moved in Zoom.") in body
+
+
+class TestNoZoomMarker:
+    @pytest.mark.parametrize("event", [
+        {"summary": "Picnic [No Zoom]"},
+        {"description": "Bring food. [no zoom]"},
+        {"description": "<p>Bring food.</p><p>[no&nbsp;zoom]</p>"},
+        {"description": "[no&#160;zoom]"},
+        {"description": "[no zoom]"},
+        {"description": "<b>[no zoom]</b>"},
+    ])
+    def test_recognized(self, event):
+        assert js("hasNoZoomMarker(e)", e=event) is True
+
+    def test_not_in_location(self):
+        assert js("hasNoZoomMarker(e)", e={"location": "[no zoom]"}) is False
+
+    def test_formatting_inside_the_tag(self):
+        assert js("hasNoZoomMarker(e)", e={"description": "[no <b>zoom</b>]"}) is True
+
+    def test_no_room_added(self):
+        assert "description" not in (patch({"description": "[no&nbsp;zoom]"}) or {}).get("patch", {})
+
+
+class TestCalendarWithoutZoom:
+    """A community calendar made with --no-zoom: its footer says "Zoom
+    meeting: none", so it has no room, and its events only get guests."""
+
+    FOOTER = build_footer_block("1", "F", "https://g", "Social Events Admins", calendar_id=CAL,
+                                no_zoom=True, audience="all@x.org")
+
+    def test_no_room_read(self):
+        assert js("parseFooter(f)", f=self.FOOTER) == {
+            "calendarId": CAL, "zoomUrl": None, "passcode": None, "audience": "all@x.org",
+            "alsoInvite": []}
+
+    def test_event_gets_only_guests(self):
+        links = js("parseFooter(f)", f=self.FOOTER)
+        ctx = {"zoomUrl": links["zoomUrl"], "passcode": links["passcode"],
+               "groupEmail": links["audience"], "allEventsCalendarId": ALL_EVENTS, "faqUrl": None}
+        change = patch({"summary": "Picnic", "description": "Bring food."}, ctx)
+        assert change == {"patch": {"attendees": [{"email": ALL_EVENTS}, {"email": "all@x.org"}]},
+                          "sendUpdates": "all"}
+
+
+class TestAlsoInvite:
+    FOOTER = build_footer_block("1", "F", "https://g", "Community Meetings Admins",
+                                calendar_id=CAL, zoom_url=URL, zoom_passcode="123456",
+                                audience="all@x.org",
+                                also_invite=["neighbors@example.org", "pat@example.com"])
+    CTX = {**CTX, "groupEmail": "all@x.org", "alsoInvite": ["neighbors@example.org",
+                                                           "pat@example.com"]}
+
+    def test_read(self):
+        assert js("parseFooter(f).alsoInvite", f=self.FOOTER) == [
+            "neighbors@example.org", "pat@example.com"]
+
+    def test_invited_with_the_audience(self):
+        change = patch({"summary": "Town hall"}, self.CTX)
+        assert [a["email"] for a in change["patch"]["attendees"]] == [
+            ALL_EVENTS, "all@x.org", "neighbors@example.org", "pat@example.com"]
+        assert change["sendUpdates"] == "all"
+
+    def test_only_missing_ones_added_and_emailed(self):
+        event = {"summary": "Town hall", "attendees": [
+            {"email": ALL_EVENTS}, {"email": "all@x.org"}, {"email": "Pat@Example.com"}]}
+        change = patch(event, self.CTX)
+        assert change["patch"]["attendees"][-1] == {"email": "neighbors@example.org"}
+        assert len(change["patch"]["attendees"]) == 4 and change["sendUpdates"] == "all"
+
+    def test_not_with_no_invite(self):
+        change = patch({"summary": "Town hall [no invite]"}, self.CTX)
+        assert change["patch"]["attendees"] == [{"email": ALL_EVENTS}]
+        assert change["sendUpdates"] == "none"

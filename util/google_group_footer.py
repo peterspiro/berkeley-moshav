@@ -14,7 +14,22 @@ the group:
     Meeting ID 812 3456 7890, passcode 123456
 
 The calendar and Zoom lines appear only once the group has a calendar and
-a meeting room. The meeting ID and passcode are for members who join by
+a meeting room. A community-wide calendar's admin group's footer also
+links the doc holding its rooms' Zoom host key, and names the calendar's audience, the everybody group its events
+invite and its reminders go to (the group_meetings Apps Script reads it,
+and knows the group for an admin group by it):
+
+    Zoom host key: https://docs.google.com/document/d/<id>/edit
+    Calendar audience: all.members@berkeleymoshav.org
+    Also invite: other-list@example.org, someone@example.com
+
+The "Also invite" line, if any, names more addresses (any domain) that
+every event on the calendar invites along with the audience.
+
+An admin group made without a Zoom room (add_new_group.py --no-zoom) has
+"Zoom meeting: none" in place of its room's lines, and no host key line; the
+scripts then never give it a room.
+ The meeting ID and passcode are for members who join by
 typing them into Zoom rather than clicking the link (which already lets
 anyone in, so showing the passcode exposes nothing more).
 
@@ -78,6 +93,9 @@ _FOLDER_URL_RE = re.compile(_DRIVE_URL_RE)
 
 _CALENDAR_LABEL = "Google calendar"
 _ZOOM_LABEL = "Zoom meeting"
+_AUDIENCE_LABEL = "Calendar audience"
+_ALSO_INVITE_LABEL = "Also invite"
+_HOST_KEY_LABEL = "Zoom host key"
 
 _CALENDAR_URL_PREFIX = "https://calendar.google.com/calendar/u/0?cid="
 _CALENDAR_LINK_RE = re.compile(
@@ -85,8 +103,14 @@ _CALENDAR_LINK_RE = re.compile(
     + r"([A-Za-z0-9%+/_=-]+)"
 )
 _ZOOM_LINK_RE = re.compile(re.escape(_ZOOM_LABEL) + r":\s*(https://\S+)")
+_NO_ZOOM_LINE = f"{_ZOOM_LABEL}: none"
+_NO_ZOOM_RE = re.compile(r"^" + re.escape(_ZOOM_LABEL) + r":\s*none\s*$",
+                         re.MULTILINE | re.IGNORECASE)
 _ZOOM_DETAILS_RE = re.compile(r"^Meeting ID [\d ]+, passcode (\S+)$", re.MULTILINE)
 _MEETING_ID_IN_URL_RE = re.compile(r"/j/(\d+)")
+_AUDIENCE_RE = re.compile(re.escape(_AUDIENCE_LABEL) + r":\s*(\S+@\S+)")
+_ALSO_INVITE_RE = re.compile(r"^" + re.escape(_ALSO_INVITE_LABEL) + r":(.*)$", re.MULTILINE)
+_HOST_KEY_RE = re.compile(re.escape(_HOST_KEY_LABEL) + r":\s*(https://\S+)")
 
 
 def drive_folder_url(item_id: str) -> str:
@@ -141,10 +165,15 @@ def build_footer_block(
     gather_group_id: str, item_id: str, base_url: str, group_name: str,
     item_type: str = ITEM_TYPE_FOLDER, calendar_id: str | None = None,
     zoom_url: str | None = None, zoom_passcode: str | None = None,
+    audience: str | None = None, host_key_url: str | None = None, no_zoom: bool = False,
+    also_invite: list[str] | None = None,
 ) -> str:
     """The managed block, from FOOTER_MARKER on. The calendar and Zoom
-    lines are left out when calendar_id / zoom_url is None, and the
-    meeting ID and passcode line when zoom_passcode is."""
+    lines are left out when calendar_id / zoom_url is None, the meeting ID
+    and passcode line when zoom_passcode is, and the host key and audience
+    lines when host_key_url / audience is. With no_zoom (and no zoom_url),
+    "Zoom meeting: none" says the group is to have no room. also_invite
+    (addresses) gives an "Also invite" line, after the audience's."""
     lines = [
         FOOTER_MARKER,
         f"{group_name}'s:",
@@ -155,6 +184,14 @@ def build_footer_block(
         lines.append(f"{_CALENDAR_LABEL}: {calendar_url(calendar_id)}")
     if zoom_url:
         lines += _zoom_lines(zoom_url, zoom_passcode)
+    elif no_zoom:
+        lines.append(_NO_ZOOM_LINE)
+    if host_key_url:
+        lines.append(f"{_HOST_KEY_LABEL}: {host_key_url}")
+    if audience:
+        lines.append(f"{_AUDIENCE_LABEL}: {audience}")
+    if also_invite:
+        lines.append(f"{_ALSO_INVITE_LABEL}: {', '.join(also_invite)}")
     return "\n".join(lines)
 
 
@@ -220,6 +257,44 @@ def parse_footer_zoom_passcode(footer_text: str | None) -> str | None:
     return m.group(1) if m else None
 
 
+def parse_footer_audience(footer_text: str | None) -> str | None:
+    """Extract the address on a footer's "Calendar audience" line (an
+    admin group's), if any."""
+    m = _AUDIENCE_RE.search(_managed_text(footer_text))
+    return m.group(1).lower() if m else None
+
+
+def parse_footer_also_invite(footer_text: str | None) -> list[str]:
+    """The addresses on a footer's "Also invite" line (an admin group's),
+    lowercase, in order; [] if it has none."""
+    m = _ALSO_INVITE_RE.search(_managed_text(footer_text))
+    return parse_addresses(m.group(1)) if m else []
+
+
+def parse_addresses(text: str) -> list[str]:
+    """The email addresses in text, separated by commas or spaces,
+    lowercase, each once, in order."""
+    out = []
+    for part in re.split(r"[,\s]+", text or ""):
+        part = part.strip().lower()
+        if "@" in part and part not in out:
+            out.append(part)
+    return out
+
+
+def parse_footer_host_key_url(footer_text: str | None) -> str | None:
+    """Extract the link on a footer's "Zoom host key" line (an admin
+    group's), if any."""
+    m = _HOST_KEY_RE.search(_managed_text(footer_text))
+    return m.group(1) if m else None
+
+
+def parse_footer_no_zoom(footer_text: str | None) -> bool:
+    """True if a footer says "Zoom meeting: none": the group (an admin
+    group's calendar) is to have no Zoom room."""
+    return bool(_NO_ZOOM_RE.search(_managed_text(footer_text)))
+
+
 def replace_footer_zoom(footer_text: str, zoom_url: str, zoom_passcode: str) -> str:
     """footer_text with the managed block's "Zoom meeting" link and its
     meeting ID and passcode line replaced. Raises ValueError if the block
@@ -245,24 +320,37 @@ def footer_updates(
     current_settings: dict, gather_group_id: str, item_id: str, base_url: str,
     group_name: str, item_type: str = ITEM_TYPE_FOLDER, calendar_id: str | None = None,
     zoom_url: str | None = None, zoom_passcode: str | None = None,
+    audience: str | None = None, host_key_url: str | None = None,
+    no_zoom: bool | None = None, also_invite: list[str] | None = None,
 ) -> dict:
     """Return {field: new_value} for the customFooterText /
     includeCustomFooter settings, given the group's current settings (a
     Groups Settings API groups().get() result). Pure — no API calls.
 
-    A calendar_id or zoom_url left as None keeps whatever calendar or Zoom
-    link (and passcode) the footer already has, so a caller that doesn't
-    know them never drops them."""
+    A calendar_id, zoom_url, audience, or host_key_url left as None keeps
+    whatever calendar or Zoom link (and passcode), audience, or host key
+    link the footer already has, so a caller that doesn't know them never
+    drops them. Likewise no_zoom left as None keeps a "Zoom meeting: none"
+    line, unless a zoom_url is given, and also_invite left as None keeps
+    the "Also invite" addresses ([] removes them)."""
     current_footer = current_settings.get("customFooterText") or ""
     prefix, existing_block = split_footer(current_footer)
     if calendar_id is None:
         calendar_id = parse_footer_calendar_id(existing_block)
+    if no_zoom is None:
+        no_zoom = zoom_url is None and parse_footer_no_zoom(existing_block)
     if zoom_url is None:
         zoom_url = parse_footer_zoom_url(existing_block)
         zoom_passcode = parse_footer_zoom_passcode(existing_block)
+    if audience is None:
+        audience = parse_footer_audience(existing_block)
+    if host_key_url is None:
+        host_key_url = parse_footer_host_key_url(existing_block)
+    if also_invite is None:
+        also_invite = parse_footer_also_invite(existing_block)
     desired_block = build_footer_block(
         gather_group_id, item_id, base_url, group_name, item_type, calendar_id, zoom_url,
-        zoom_passcode,
+        zoom_passcode, audience, host_key_url, no_zoom, also_invite,
     )
 
     updates = {}
@@ -277,6 +365,8 @@ def compute_group_footer_updates(
     settings_service, gemail: str, gather_group_id: str, item_id: str, base_url: str,
     group_name: str, item_type: str = ITEM_TYPE_FOLDER, calendar_id: str | None = None,
     zoom_url: str | None = None, zoom_passcode: str | None = None,
+    audience: str | None = None, host_key_url: str | None = None,
+    no_zoom: bool | None = None, also_invite: list[str] | None = None,
 ) -> dict:
     """footer_updates() for the group's current settings, fetched from the
     API. Read-only — safe to call from a dry run. Raises if the group
@@ -284,7 +374,7 @@ def compute_group_footer_updates(
     current = settings_service.groups().get(groupUniqueId=gemail).execute()
     return footer_updates(
         current, gather_group_id, item_id, base_url, group_name, item_type, calendar_id, zoom_url,
-        zoom_passcode,
+        zoom_passcode, audience, host_key_url, no_zoom, also_invite,
     )
 
 
@@ -322,10 +412,19 @@ def describe_footer_updates(current_footer: str | None, updates: dict) -> str:
                 parts.append(f"Gather link -> {new_gather.group(1)}")
             if parse_footer_calendar_id(old_block) != parse_footer_calendar_id(new_block):
                 parts.append("calendar link")
+            if parse_footer_no_zoom(old_block) != parse_footer_no_zoom(new_block):
+                parts.append("no Zoom room" if parse_footer_no_zoom(new_block) else
+                             "Zoom: none removed")
             if parse_footer_zoom_url(old_block) != parse_footer_zoom_url(new_block):
                 parts.append("Zoom link")
             elif parse_footer_zoom_passcode(old_block) != parse_footer_zoom_passcode(new_block):
                 parts.append("Zoom passcode")
+            if parse_footer_host_key_url(old_block) != parse_footer_host_key_url(new_block):
+                parts.append("host key link")
+            if parse_footer_audience(old_block) != parse_footer_audience(new_block):
+                parts.append("calendar audience")
+            if parse_footer_also_invite(old_block) != parse_footer_also_invite(new_block):
+                parts.append("also invite")
             if not parts:
                 old_header = _HEADER_RE.search(old_block)
                 new_name = _HEADER_RE.search(new_block).group(1)
@@ -344,14 +443,17 @@ def ensure_group_footer(
     settings_service, gemail: str, gather_group_id: str, item_id: str, base_url: str,
     group_name: str, item_type: str = ITEM_TYPE_FOLDER, calendar_id: str | None = None,
     zoom_url: str | None = None, zoom_passcode: str | None = None,
+    audience: str | None = None, host_key_url: str | None = None,
+    no_zoom: bool | None = None, also_invite: list[str] | None = None,
 ) -> dict:
     """Apply the group's auto-managed footer block, preserving any other
-    footer content (and, when calendar_id / zoom_url is None, the existing
-    calendar / Zoom link). Return dict of {field: new_value} for changed
-    fields."""
+    footer content (and, when calendar_id / zoom_url / audience /
+    host_key_url is None, the existing calendar / Zoom link / audience /
+    host key link). Return dict of
+    {field: new_value} for changed fields."""
     updates = compute_group_footer_updates(
         settings_service, gemail, gather_group_id, item_id, base_url, group_name, item_type,
-        calendar_id, zoom_url, zoom_passcode,
+        calendar_id, zoom_url, zoom_passcode, audience, host_key_url, no_zoom, also_invite,
     )
     if updates:
         settings_service.groups().update(groupUniqueId=gemail, body=updates).execute()

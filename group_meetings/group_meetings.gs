@@ -35,6 +35,16 @@
  * ALERT_EMAIL, the Technology Circle) once per conflict, asking them to agree
  * which meeting moves (see overlapMessage in event_rules.gs).
  *
+ * A community-wide calendar's admin group (its footer names the calendar's
+ * audience: see parseFooter in event_rules.gs) is handled the same way,
+ * except that its events invite the audience (an everybody group) instead
+ * of the admin group, and get no FAQ line; their reminders go to the
+ * audience, with replies to the admin group; and its clash emails name the
+ * calendar. Its events also invite the addresses on the footer's "Also
+ * invite" line, if any (they get no reminders). An event marked
+ * "[no invite]" invites nobody, and gets no reminder unless it has a
+ * reminder tag.
+ *
  * Which calendar and room are a group's comes from the group's own email
  * footer (written by update_groups.py), read hourly,
  * so new groups are picked up without redeploying.
@@ -64,13 +74,17 @@ const MIN_GAP_MINUTES = 15;
 // The number each Zoom user that owns rooms (see ROOM_USERS in
 // util/zoom_utils.py) goes by in event descriptions, next to its name in
 // Zoom; any other owner is shown by name or email alone.
+// community-zoom-hosts@ (COMMUNITY_ROOMS_USER) owns the community-wide
+// calendars' rooms.
 const ZOOM_USER_NUMBERS = {
   'circle-zoom-hosts@berkeleymoshav.org': '1',
   'berkeley@urbanmoshav.org': '2',
+  'community-zoom-hosts@berkeleymoshav.org': '3',
 };
 
 // Script Properties keys.
 const PROP_GROUPS = 'groups';                // JSON [{ email, name, calendarId, zoomUrl, passcode,
+                                             //         audience, alsoInvite, calendarName?,
                                              //         agendaUrl?, reminders?, staleAgendaUrl? }]
 const PROP_OTHER_CALENDARS = 'otherCalendars'; // JSON [{ id, name }], see refreshOtherCalendars
 const PROP_SYNC_PREFIX = 'syncToken:';       // + calendar ID
@@ -133,20 +147,23 @@ function alertInvitationCopy(event, group) {
 
   const organizer = event.organizer.email;
   const when = formatWhen(event.start);
+  const name = group.calendarName || group.name;
+  const who = group.audience ? 'the community' : 'the group';
   MailApp.sendEmail({
     to: organizer,
     cc: ALERT_EMAIL,
-    subject: `Your meeting "${event.summary || '(untitled)'}" on ${when} won't get ${group.name}'s Zoom room`,
+    subject: `Your meeting "${event.summary || '(untitled)'}" on ${when} won't get ${name}'s Zoom room`,
     body:
       `Hi,\n\n` +
       `You created "${event.summary || '(untitled)'}" (${when}) on your own calendar and ` +
-      `invited the ${group.name} calendar. The group's calendar only gets a copy of an ` +
-      `invitation like that, so its Zoom room link can't be added and the group isn't ` +
-      `invited.\n\n` +
-      `To fix it, create the meeting on the ${group.name} calendar itself (there's a link ` +
-      `to it at the bottom of every message to the group's email list), or, if you can't ` +
-      `add events to that calendar, ask someone who can to create it there. Then delete ` +
-      `your original or remove the group calendar from its guests.\n\n` +
+      `invited the ${name} calendar. The ${group.audience ? '' : 'group\'s '}calendar only ` +
+      `gets a copy of an invitation like that, so its Zoom room link can't be added and ` +
+      `${who} isn't invited.\n\n` +
+      `To fix it, create the meeting on the ${name} calendar itself (there's a link ` +
+      `to it at the bottom of every message to ${group.audience ? 'its admins\'' : 'the group\'s'} ` +
+      `email list), or, if you can't add events to that calendar, ask someone who can to ` +
+      `create it there. Then delete your original or remove the ${name} calendar from its ` +
+      `guests.\n\n` +
       `This message was sent automatically.\n`,
   });
   console.log(`${group.email}: alerted ${organizer} about invitation copy "${event.summary}"`);
@@ -193,14 +210,19 @@ function checkOverlaps(groups) {
         for (const id of zoomIdsInEvent(event)) {
           const room = roomOwner(id);
           if (!room) continue;  // not a meeting in our Zoom account
-          meetings.push({
+          meetings.push(Object.assign({
             // A fixed-time Zoom meeting is one meeting wherever it appears;
             // a room hosts many, told apart by their calendar events.
             key: room.type === 3 ? `${event.iCalUID}@${start}` : `zoom:${id}@${start}`,
             owner: room.owner, start, end,
             title: event.summary || '(untitled)',
             groups: [group.email], names: [group.name],
-          });
+          }, group.audience ? {
+            // A community-wide calendar's: its admins are greeted, and the
+            // calendar named as where it is (see overlapMessage).
+            names: [`${group.calendarName} admins`], calendars: [group.calendarName],
+            community: true,
+          } : {}));
           break;
         }
       }
@@ -239,7 +261,8 @@ function explainReminders(onlyGroup) {
     const setting = group.reminders === undefined || group.reminders === null
       ? (group.agendaUrl ? 'its agenda doc has no Remind before meetings row' : 'no agenda doc')
       : `agenda doc says "${group.reminders}"`;
-    lines.push(`${group.name} <${group.email}> (${setting}; read hourly):`);
+    const to = group.audience ? `; reminders go to ${group.audience}` : '';
+    lines.push(`${group.name} <${group.email}> (${setting}${to}; read hourly):`);
     let count = 0;
     let pageToken;
     do {
@@ -335,13 +358,16 @@ function handleEvent(event, group, groups) {
   }
   if (lower((event.organizer || {}).email) !== lower(group.calendarId)) return;
 
+  // A community-wide calendar's events invite its audience, not its
+  // admins, and the FAQ is for group meetings only.
   const change = computeEventPatch(event, {
     zoomUrl: group.zoomUrl,
     passcode: group.passcode,
     zoomUser: groupZoomUser(group),
-    groupEmail: group.email,
+    groupEmail: group.audience || group.email,
+    alsoInvite: group.alsoInvite || [],
     allEventsCalendarId: ALL_EVENTS_CALENDAR_ID,
-    faqUrl: MEETINGS_FAQ_URL,
+    faqUrl: group.audience ? null : MEETINGS_FAQ_URL,
     agendaUrl: group.agendaUrl || null,
     staleAgendaUrl: group.staleAgendaUrl || null,
   });
@@ -502,6 +528,7 @@ function refreshGroups() {
         const docId = addresses.map(a => agendaDocs[a]).find(Boolean);
         const email = g.email.toLowerCase();
         const group = Object.assign({ email, name: g.name }, links);
+        if (links.audience) group.calendarName = adminCalendarName(g.name);
         if (docId) {
           group.agendaUrl = `https://docs.google.com/document/d/${docId}/edit`;
           group.reminders = reminderSetting(docId, previous.get(email));
@@ -516,9 +543,12 @@ function refreshGroups() {
   for (const g of groups) {
     const old = previous.get(g.email);
     if (old && (old.zoomUrl !== g.zoomUrl || old.passcode !== g.passcode ||
-                old.calendarId !== g.calendarId || old.agendaUrl !== g.agendaUrl)) {
+                old.calendarId !== g.calendarId || old.agendaUrl !== g.agendaUrl ||
+                (old.audience || null) !== g.audience ||
+                (old.alsoInvite || []).join() !== g.alsoInvite.join())) {
       PropertiesService.getScriptProperties().deleteProperty(PROP_SYNC_PREFIX + old.calendarId);
-      console.log(`${g.email}: Zoom room, calendar, or agenda doc changed; rechecking its events.`);
+      console.log(`${g.email}: Zoom room, calendar, agenda doc, or audience changed; ` +
+                  'rechecking its events.');
     }
   }
   setJson(PROP_GROUPS, groups);
@@ -623,8 +653,9 @@ function roomOwner(meetingId) {
  * Email each group about its meetings whose reminder is due (see
  * dueReminderLeads in event_rules.gs): events the group calendar organizes
  * (not invitation copies, or all-day events) starting within
- * MAX_REMINDER_LEAD_MS. Each reminder is sent once; a meeting moved to
- * another time gets its reminders again.
+ * MAX_REMINDER_LEAD_MS. A community-wide calendar's go to its audience,
+ * with replies to its admin group. Each reminder is sent once; a meeting
+ * moved to another time gets its reminders again.
  */
 function sendDueReminders(groups) {
   const sent = getJson(PROP_REMINDERS_SENT, {});
@@ -662,6 +693,7 @@ function sendGroupReminders(group, sent, now) {
         lead: due[0], agendaUrl: group.agendaUrl || null,
         zoomUrl: group.zoomUrl, passcode: group.passcode,
         source: setting.source, error: setting.error,
+        audience: group.audience || null, calendarName: group.calendarName || null,
       });
       MailApp.sendEmail({
         to: message.to, replyTo: group.email, subject: message.subject,

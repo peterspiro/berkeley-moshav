@@ -2,7 +2,8 @@
  * Group Meetings — pure rules (no Apps Script services), so they can be
  * tested under Node (tests/test_group_meetings_rules.py).
  *
- *   - reading a group's footer (calendar ID, Zoom link, passcode);
+ *   - reading a group's footer (calendar ID, Zoom link, passcode, and, for
+ *     a community-wide calendar's admin group, the calendar's audience);
  *   - deciding what to change on a group-calendar event (Zoom details,
  *     invitations);
  *   - recognizing invitation-only copies;
@@ -18,6 +19,13 @@ const CALENDAR_LINK_RE =
   /Google calendar:\s*https:\/\/calendar\.google\.com\/calendar\/u\/0\?cid=([A-Za-z0-9%+\/_=-]+)/;
 const ZOOM_LINK_RE = /Zoom meeting:\s*(https:\/\/\S+)/;
 const ZOOM_DETAILS_RE = /^Meeting ID [\d ]+, passcode (\S+)$/m;
+const AUDIENCE_RE = /Calendar audience:\s*(\S+@\S+)/;
+// More addresses every event on a community calendar invites.
+const ALSO_INVITE_RE = /^Also invite:(.*)$/m;
+// The end of a community-wide calendar's admin group's name (see
+// ADMIN_LIST_SUFFIX in util/gdrive_config.py): "Community Meetings Admins"
+// runs the Community Meetings calendar.
+const ADMIN_NAME_RE = /\s+Admins\s*$/i;
 const MEETING_ID_IN_URL_RE = /\/j\/(\d+)/;
 const ANY_ZOOM_ID_RE = /zoom\.us\/j\/(\d+)/g;
 const OTHER_MEETING_LINK_RE = /(?:[\w.-]*zoom\.us\/j\/\d+|meet\.google\.com\/[a-z-]+)/gi;
@@ -26,6 +34,9 @@ const BASE64_ALPHABET =
   'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 
 const NO_ZOOM_MARKER = '[no zoom]';
+// An event that shouldn't invite the group (or a community-wide calendar's
+// audience), nor, unless it has a reminder tag, remind them.
+const NO_INVITE_MARKER = '[no invite]';
 const ZOOM_BLOCK_END = '(Added automatically from the group\'s Zoom room.)';
 // The block, whether written with plain-text or HTML line breaks.
 const ZOOM_BLOCK_RE =
@@ -77,6 +88,14 @@ const DURATION_PART_RE = new RegExp(
   String.raw`\s*(\d+(?:\.\d+)?|half an?|${Object.keys(NUMBER_WORDS).join('|')})\s*` +
   String.raw`(minutes?|mins?|m|hours?|hrs?|h|days?|d|weeks?|wks?|w)(?![a-z])\s*`, 'y');
 
+/**
+ * The name of the community-wide calendar a Google Group named name runs
+ * ("Community Meetings Admins" -> "Community Meetings").
+ */
+function adminCalendarName(name) {
+  return (name || '').replace(ADMIN_NAME_RE, '');
+}
+
 /** Decode base64 (standard or URL-safe, padding optional) to a string, or null. */
 function base64ToString(text) {
   const s = text.replace(/-/g, '+').replace(/_/g, '/').replace(/=+$/, '');
@@ -121,9 +140,12 @@ function base64ToString(text) {
  *     "Agenda and minutes:" lines that link its last one (staleAgendaUrl),
  *     since that doc was trashed or deleted; lines linking any other doc
  *     are kept.
- *   - Guests: the all-events calendar and the group's Google Group.
- * sendUpdates is 'all' when the group is newly invited (so members get the
- * invitation), else 'none'.
+ *   - Guests: the all-events calendar and the group's Google Group (for a
+ *     community-wide calendar, ctx.groupEmail is its audience), and the
+ *     addresses in ctx.alsoInvite, unless the event is marked "[no invite]"
+ *     (then neither the group nor those; a guest already invited stays).
+ * sendUpdates is 'all' when the group or one of those is newly invited (so
+ * they get the invitation), else 'none'.
  */
 function computeEventPatch(event, ctx) {
   const patch = {};
@@ -180,14 +202,18 @@ function computeEventPatch(event, ctx) {
   const attendees = event.attendees || [];
   const emails = new Set(attendees.map(a => lower(a.email)));
   const added = [];
-  for (const email of [ctx.allEventsCalendarId, ctx.groupEmail]) {
-    if (email && !emails.has(lower(email))) added.push({ email });
+  const invitees = hasNoInviteMarker(event) ? [] : [ctx.groupEmail].concat(ctx.alsoInvite || []);
+  for (const email of [ctx.allEventsCalendarId].concat(invitees)) {
+    if (email && !emails.has(lower(email))) {
+      added.push({ email });
+      emails.add(lower(email));
+    }
   }
   if (added.length) patch.attendees = attendees.concat(added);
 
   if (!Object.keys(patch).length) return null;
-  const invitesGroup = added.some(a => lower(a.email) === lower(ctx.groupEmail));
-  return { patch, sendUpdates: invitesGroup ? 'all' : 'none' };
+  const invites = added.some(a => lower(a.email) !== lower(ctx.allEventsCalendarId));
+  return { patch, sendUpdates: invites ? 'all' : 'none' };
 }
 
 function conflictFingerprint(c) {
@@ -287,8 +313,15 @@ function formatMeetingId(id) {
   return id;
 }
 
+function hasNoInviteMarker(event) {
+  return plainText(lower(event.summary) + ' ' + lower(event.description)).includes(NO_INVITE_MARKER);
+}
+
+/** True if the event's title or description says "[no zoom]", in any
+ * case, and whatever formatting or non-breaking spaces the description's
+ * HTML has (see plainText). */
 function hasNoZoomMarker(event) {
-  return (lower(event.summary) + ' ' + lower(event.description)).includes(NO_ZOOM_MARKER);
+  return plainText(lower(event.summary) + ' ' + lower(event.description)).includes(NO_ZOOM_MARKER);
 }
 
 /** True if the event's location or description links some meeting
@@ -339,9 +372,12 @@ function meetingIdFromUrl(url) {
 
 /** Combine two sightings of the same meeting, keeping every group named. */
 function mergeMeetings(x, y) {
-  const groups = [...new Set([...(x.groups || []), ...(y.groups || [])])];
-  const names = [...new Set([...(x.names || []), ...(y.names || [])])];
-  return Object.assign({}, x, { groups, names, title: x.title || y.title });
+  const union = key => [...new Set([...(x[key] || []), ...(y[key] || [])])];
+  const merged = Object.assign({}, x, { groups: union('groups'), names: union('names'),
+                                        title: x.title || y.title });
+  if (x.calendars || y.calendars) merged.calendars = union('calendars');
+  if (x.community || y.community) merged.community = true;
+  return merged;
 }
 
 /**
@@ -373,8 +409,13 @@ function otherOwnedCalendars(items, account, skipIds) {
  *     Circle are asked to agree which moves;
  *   - two Zoom meetings: the Technology Circle is asked to move one.
  * Each email lists the options: moving a group's room to another Zoom user
- * (unless both meetings are one group's or neither is), holding one meeting
- * on a personal or work Zoom account, and moving one to another time.
+ * (unless both meetings are one group's or neither is, or one is a
+ * community-wide calendar's), holding one meeting on a personal or work
+ * Zoom account, and moving one to another time.
+ *
+ * A community-wide calendar's meeting (community: true) names its admin
+ * group in names ("Community Meetings admins", greeted) and its calendar
+ * in calendars ("Community Meetings", where the meeting is).
  * Each email links the all-events calendar (opts.allEventsUrl) for finding
  * a free time. opts.formatRange(startMs, endMs) formats a meeting's time;
  * opts.minGapMinutes is the gap meetings should leave.
@@ -385,18 +426,24 @@ function overlapMessage(c, opts) {
   const groupEmails = [...new Set([...(c.a.groups || []), ...(c.b.groups || [])])];
   const names = [...new Set([...(c.a.names || []), ...(c.b.names || [])])];
   const zoomOnly = [c.a, c.b].filter(m => !(m.groups || []).length).length;
+  const community = [c.a, c.b].some(m => m.community);
+  // Where each group's meetings are: its calendar, named like the group, or
+  // a community-wide calendar's own name.
+  const calendarsOf = m => m.calendars || m.names || [];
+  const cals = [...new Set([...calendarsOf(c.a), ...calendarsOf(c.b)])];
+  const groupCalendar = community ? 'calendar' : 'group calendar';
   const spacing = overlap ? '' : `, leaving at least ${opts.minGapMinutes} minutes between them`;
 
   const findTime = `To find a free time, check the All Berkeley Moshav Events calendar, ` +
     `which shows every group's meetings:\n${opts.allEventsUrl}`;
-  const moveRoom = rooms => `- Request the Tech Circle to move ${rooms} to our second ` +
-    `Zoom user account.  This may or may not be possible, depending on your meeting ` +
-    `schedule.`;
+  const moveRoom = rooms => community ? null : `- Request the Tech Circle to move ${rooms} ` +
+    `to our second Zoom user account.  This may or may not be possible, depending on your ` +
+    `meeting schedule.`;
   const ownAccount = how => `- Hold one of these meetings on a personal or work Zoom ` +
     `account instead: ${how}.`;
   const onCalendar = `replace the Zoom link in its calendar event with that account's ` +
-    `link, and delete the group room's "Join Zoom meeting" details from the event's ` +
-    `description`;
+    `link, and delete the ${community ? '' : 'group '}room's "Join Zoom meeting" details ` +
+    `from the event's description`;
   const inZoom = 'schedule it on that account and delete it from our Zoom account';
 
   let to, cc, greeting, options;
@@ -410,8 +457,8 @@ function overlapMessage(c, opts) {
   } else if (zoomOnly === 1) {
     to = groupEmails.concat([opts.alertEmail]); cc = [];
     greeting = joinNames([opts.techName].concat(names));
-    const group = joinNames(names);
-    const where = names.length === 1 ? `the ${names[0]} calendar` : 'its group calendar';
+    const group = joinNames(cals);
+    const where = cals.length === 1 ? `the ${cals[0]} calendar` : `its ${groupCalendar}`;
     options = [
       moveRoom(names.length === 1 ? `the ${names[0]}'s Zoom room` : "one of the groups' Zoom rooms"),
       ownAccount(`for the ${group} meeting, ${onCalendar}; for the other meeting, ${inZoom}`),
@@ -424,7 +471,7 @@ function overlapMessage(c, opts) {
     greeting = names[0];
     options = [
       ownAccount(onCalendar),
-      `- Move one of them to another time on the ${names[0]} calendar${spacing}. ${findTime}`,
+      `- Move one of them to another time on the ${cals[0]} calendar${spacing}. ${findTime}`,
     ];
   } else {
     to = groupEmails; cc = [opts.alertEmail];
@@ -433,14 +480,14 @@ function overlapMessage(c, opts) {
       moveRoom(`one of your ${names.length === 2 ? 'two ' : ''}groups' Zoom rooms`),
       ownAccount(onCalendar),
       `- Agree between you to move one of these meetings, and change its time on its ` +
-        `group calendar${spacing}. ${findTime}`,
+        `${groupCalendar}${spacing}. ${findTime}`,
     ];
   }
-  options = `Your options are:\n${options.join('\n')}`;
+  options = `Your options are:\n${options.filter(Boolean).join('\n')}`;
 
   const line = m => {
-    const where = (m.names || []).length
-      ? joinNames(m.names) : 'a meeting scheduled in our Zoom account';
+    const where = m.calendars ? `${joinNames(m.calendars)} calendar`
+      : (m.names || []).length ? joinNames(m.names) : 'a meeting scheduled in our Zoom account';
     return `  - "${m.title}" (${where}), ${opts.formatRange(m.start, m.end)}`;
   };
   const what = overlap ? 'overlap'
@@ -464,8 +511,12 @@ function overlapMessage(c, opts) {
 }
 
 /**
- * The managed links in a group's footer: { calendarId, zoomUrl, passcode },
- * each null if absent. Only the auto-managed block is read.
+ * The managed links in a group's footer: { calendarId, zoomUrl, passcode,
+ * audience, alsoInvite }, each null if absent ([] for alsoInvite). Only the
+ * auto-managed block is read. An audience (the everybody group a
+ * community-wide calendar's events invite and its reminders go to) marks a
+ * community-wide calendar's admin group; alsoInvite are more addresses its
+ * events invite (but don't remind).
  */
 function parseFooter(footerText) {
   const text = footerText || '';
@@ -474,10 +525,18 @@ function parseFooter(footerText) {
   const cal = block.match(CALENDAR_LINK_RE);
   const zoom = block.match(ZOOM_LINK_RE);
   const details = block.match(ZOOM_DETAILS_RE);
+  const audience = block.match(AUDIENCE_RE);
+  const also = block.match(ALSO_INVITE_RE);
+  const alsoInvite = [];
+  for (const part of (also ? also[1] : '').split(/[,\s]+/)) {
+    if (part.includes('@') && !alsoInvite.includes(lower(part))) alsoInvite.push(lower(part));
+  }
   return {
     calendarId: cal ? base64ToString(decodeURIComponent(cal[1])) : null,
     zoomUrl: zoom ? zoom[1] : null,
     passcode: details ? details[1] : null,
+    audience: audience ? lower(audience[1]) : null,
+    alsoInvite,
   };
 }
 
@@ -514,10 +573,11 @@ function parseReminderLeads(text) {
 
 /** An event description's text without its HTML: tags removed (a line
  * break kept as one), and the entities Calendar writes (such as the
- * &nbsp; its editor puts between words) decoded. */
+ * &nbsp; its editor puts between words) decoded, a non-breaking space
+ * becoming an ordinary one. */
 function plainText(html) {
   return (html || '').replace(/<br\s*\/?>|<\/(?:p|div|li)>/gi, '\n').replace(/<[^>]*>/g, '')
-    .replace(/&nbsp;|&#160;/gi, ' ').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>')
+    .replace(/&nbsp;|&#160;|\u00a0/gi, ' ').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>')
     .replace(/&quot;/gi, '"').replace(/&#39;|&apos;/gi, "'").replace(/&amp;/gi, '&');
 }
 
@@ -539,7 +599,9 @@ function reminderKey(calendarId, event, startMs, lead) {
  * When an event's reminders go out: { leads, source, error }. A tag in the
  * event ("[remind 2 hours]", "[no reminder]") wins; then the group's
  * setting (the text of its agenda doc's Remind before meetings row, null if it
- * has none, '' if it's empty); then DEFAULT_REMINDER_LEADS. source is 'event', 'group', or
+ * has none, '' if it's empty); then DEFAULT_REMINDER_LEADS. An event
+ * marked "[no invite]" with no reminder tag gets none (source 'event'), as
+ * the group (or audience) wasn't invited. source is 'event', 'group', or
  * 'default'; error says why a tag or setting that couldn't be read was
  * passed over, naming which.
  */
@@ -550,6 +612,10 @@ function reminderLeads(event, groupSetting) {
     const parsed = /^no/i.test(tag[1]) ? { leads: [] } : parseReminderLeads(tag[2]);
     if (parsed.leads) return { leads: parsed.leads, source: 'event' };
     errors.push(`the event's ${tag[0]} tag: ${parsed.error}`);
+  }
+  if (hasNoInviteMarker(event)) {
+    return Object.assign({ leads: [], source: 'event' },
+                         errors.length ? { error: errors.join('; ') } : {});
   }
   if (groupSetting !== null && groupSetting !== undefined && groupSetting.trim()) {
     const parsed = parseReminderLeads(groupSetting);
@@ -567,7 +633,9 @@ function reminderLeads(event, groupSetting) {
  * A reminder email to a group about one of its meetings: { to, subject,
  * body }. opts: { groupEmail, groupName, when (the meeting's time, as
  * text), lead (ms), agendaUrl, zoomUrl, passcode (the group's room),
- * source (from reminderLeads), error }.
+ * source (from reminderLeads), error, audience, calendarName }. With
+ * audience, the meeting is a community-wide calendar's (calendarName), and
+ * the reminder goes to its audience instead.
  */
 function reminderMessage(event, opts) {
   const title = event.summary || '(untitled)';
@@ -586,6 +654,20 @@ function reminderMessage(event, opts) {
     lines.push(`  ${AGENDA_TEXT} ${opts.agendaUrl}`);
   }
   if (event.htmlLink) lines.push(`  Calendar event: ${event.htmlLink}`);
+
+  if (opts.audience) {
+    const problem = opts.error
+      ? `\n\n(Couldn't read ${opts.error}, so this reminder went out at the usual time.)` : '';
+    return {
+      to: opts.audience,
+      subject: `Reminder: "${title}", ${opts.when}`,
+      body:
+        `Hi everyone,\n\n` +
+        `A reminder of this community event:\n\n${lines.join('\n')}\n\n` +
+        `This reminder was sent automatically, ${formatLead(opts.lead)} before the ` +
+        `event, for the ${opts.calendarName} calendar. Replies go to its admins.${problem}\n`,
+    };
+  }
 
   const how = opts.agendaUrl
     ? `To change when ${opts.groupName} meetings get reminders, or to turn them off, ` +

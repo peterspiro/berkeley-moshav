@@ -266,3 +266,95 @@ def test_all_events_shared_with_everybody_groups_given_to_a_single_group_run():
         lambda: LinkedResources(), False, {}, {}, everybody_groups=everybody)
     shares = [(w[1], w[2]) for w in cal.writes if w[0] == "acl_insert" and w[1] == "ae"]
     assert shares == [("ae", {"role": "reader", "scope": {"type": "group", "value": "all@berkeleymoshav.org"}})]
+
+
+ADMIN = {"6": {"name": "Community Meetings Admins", "kind": "squad", "availability": "closed"}}
+ADMIN_EMAILS = {"6": "community-meetings-admins@x.org"}
+
+
+def test_admin_group_room_under_the_community_zoom_user():
+    cal = FakeCalendarService({"ae": "All Berkeley Moshav Events"})
+    zoom = FakeZoom()
+    cals, urls = {}, {}
+    m.ensure_group_meeting_rooms(
+        _Directory(), _Settings({}), cal, zoom, ADMIN, {"6": "F6"}, ADMIN_EMAILS,
+        lambda: LinkedResources(), False, cals, urls,
+    )
+    assert set(cals) == set(urls) == {"6"}
+    (meeting,) = zoom.meetings.values()
+    assert meeting["host_email"] == "community-zoom-hosts@berkeleymoshav.org"
+    assert meeting["topic"] == "Community Meetings Zoom Room"
+    names = [w[1]["summary"] for w in cal.writes if w[0] == "create"]
+    assert names == ["Community Meetings"]
+
+
+def test_footer_step_names_an_admin_groups_audience_and_host_key():
+    old = build_footer_block("6", "F6", "https://g", "Community Meetings Admins")
+    settings = _Settings({"community-meetings-admins@x.org": old})
+    audiences = {}
+    m.ensure_group_footers(settings, "https://g", ADMIN, {"6": "F6"}, {"6": ITEM_TYPE_FOLDER},
+                           ADMIN_EMAILS, False, audience_by_group_id=audiences)
+    footer = settings.updated["community-meetings-admins@x.org"]["customFooterText"]
+    assert footer.endswith(
+        f"\nZoom host key: {mr.COMMUNITY_HOST_KEY_DOC_URL}"
+        "\nCalendar audience: all.members@berkeleymoshav.org")
+    assert audiences == {"6": "all.members@berkeleymoshav.org"}
+
+
+def test_footer_step_keeps_an_admin_groups_own_audience():
+    old = build_footer_block("6", "F6", "https://g", "Community Meetings Admins",
+                             audience="everyone@x.org", host_key_url=mr.COMMUNITY_HOST_KEY_DOC_URL)
+    settings = _Settings({"community-meetings-admins@x.org": old})
+    audiences = {}
+    m.ensure_group_footers(settings, "https://g", ADMIN, {"6": "F6"}, {"6": ITEM_TYPE_FOLDER},
+                           ADMIN_EMAILS, False, audience_by_group_id=audiences)
+    assert settings.updated == {}
+    assert audiences == {"6": "everyone@x.org"}
+
+
+def test_footer_step_gives_circles_no_audience():
+    old = build_footer_block("1", "F1", "https://g", "Technology Circle")
+    settings = _Settings({"tech@x.org": old})
+    m.ensure_group_footers(settings, "https://g", {"1": GROUPS["1"]}, FOLDERS,
+                           {"1": ITEM_TYPE_FOLDER}, EMAILS, False)
+    assert settings.updated == {}
+
+
+def test_admin_group_without_zoom_gets_no_room(capsys):
+    footer = build_footer_block("6", "F6", "https://g", "Community Meetings Admins",
+                                calendar_id="c6", no_zoom=True, audience="all@x.org")
+    cal = FakeCalendarService({"ae": "All Berkeley Moshav Events", "c6": "Community Meetings"})
+    zoom = FakeZoom()
+    cals, rooms = {}, {}
+    m.ensure_group_meeting_rooms(
+        _Directory(), _Settings({"community-meetings-admins@x.org": footer}), cal, zoom, ADMIN,
+        {"6": "F6"}, ADMIN_EMAILS, lambda: LinkedResources(), False, cals, rooms,
+    )
+    assert cals == {"6": "c6"} and rooms == {"6": None}
+    assert zoom.writes == []
+    assert "no Zoom room (its footer says none)" in capsys.readouterr().out
+
+
+def test_footer_step_keeps_no_zoom_and_adds_no_host_key():
+    old = build_footer_block("6", "F6", "https://g", "Community Meetings Admins",
+                             calendar_id="c6", no_zoom=True, audience="all@x.org")
+    settings = _Settings({"community-meetings-admins@x.org": old})
+    m.ensure_group_footers(settings, "https://g", ADMIN, {"6": "F6"}, {"6": ITEM_TYPE_FOLDER},
+                           ADMIN_EMAILS, False, {"6": "c6"}, {"6": None})
+    assert settings.updated == {}
+
+
+def test_footer_step_sets_and_keeps_also_invite():
+    from util.google_group_footer import parse_footer_also_invite
+    old = build_footer_block("6", "F6", "https://g", "Community Meetings Admins",
+                             audience="all@x.org", host_key_url=mr.COMMUNITY_HOST_KEY_DOC_URL,
+                             also_invite=["old@example.org"])
+    settings = _Settings({"community-meetings-admins@x.org": old})
+    m.ensure_group_footers(settings, "https://g", ADMIN, {"6": "F6"}, {"6": ITEM_TYPE_FOLDER},
+                           ADMIN_EMAILS, False)
+    assert settings.updated == {}
+    m.ensure_group_footers(settings, "https://g", ADMIN, {"6": "F6"}, {"6": ITEM_TYPE_FOLDER},
+                           ADMIN_EMAILS, False,
+                           also_invite_by_group_id={"6": ["a@example.org", "b@example.com"]})
+    footer = settings.updated["community-meetings-admins@x.org"]["customFooterText"]
+    assert parse_footer_also_invite(footer) == ["a@example.org", "b@example.com"]
