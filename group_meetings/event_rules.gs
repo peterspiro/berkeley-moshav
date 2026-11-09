@@ -406,7 +406,8 @@ function otherOwnedCalendars(items, account, skipIds) {
  *   - two group meetings: the groups are asked to agree which moves (cc the
  *     Technology Circle);
  *   - a group meeting and a Zoom meeting: the group and the Technology
- *     Circle are asked to agree which moves;
+ *     Circle are asked to agree which moves (if the group is the Technology
+ *     Circle, it's greeted once and asked to move one);
  *   - two Zoom meetings: the Technology Circle is asked to move one.
  * Each email lists the options: moving a group's room to another Zoom user
  * (unless both meetings are one group's or neither is, or one is a
@@ -455,14 +456,21 @@ function overlapMessage(c, opts) {
       `- Move one of them to another time in Zoom${spacing}. ${findTime}`,
     ];
   } else if (zoomOnly === 1) {
-    to = groupEmails.concat([opts.alertEmail]); cc = [];
-    greeting = joinNames([opts.techName].concat(names));
+    to = [...new Set(groupEmails.concat([opts.alertEmail]))]; cc = [];
+    // The Technology Circle is greeted once, even when the group meeting is
+    // its own; then there's no one else to agree with or ask.
+    const others = names.filter(n => n !== opts.techName);
+    greeting = joinNames([opts.techName].concat(others));
     const group = joinNames(cals);
     const where = cals.length === 1 ? `the ${cals[0]} calendar` : `its ${groupCalendar}`;
+    const room = names.length === 1 ? `the ${names[0]}'s Zoom room` : "one of the groups' Zoom rooms";
     options = [
-      moveRoom(names.length === 1 ? `the ${names[0]}'s Zoom room` : "one of the groups' Zoom rooms"),
+      others.length ? moveRoom(room)
+        : `- Move ${room} to our second Zoom user account.  This may or may not be ` +
+          `possible, depending on your meeting schedule.`,
       ownAccount(`for the ${group} meeting, ${onCalendar}; for the other meeting, ${inZoom}`),
-      `- Agree between you which meeting moves to another time${spacing}. The ${group} ` +
+      `- ${others.length ? 'Agree between you which meeting moves' : 'Move one of them'} ` +
+        `to another time${spacing}. The ${group} ` +
         `meeting can be moved on ${where}; the other meeting can be moved in Zoom. ` +
         findTime,
     ];

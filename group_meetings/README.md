@@ -73,7 +73,8 @@ Apps Script that looks after every group's Google calendar (the calendars
   Circle to move a group's Zoom room to the second Zoom user. The email has an HTML version, so it isn't broken into
   short lines. `calendaring-alerts@`
   (the Technology Circle) is copied, or, when one of the meetings was
-  scheduled directly in Zoom, asked to agree too.
+  scheduled directly in Zoom, asked to agree too (or, when the other is the
+  Technology Circle's own meeting, greeted once and asked to move one).
 
 An event on a group calendar marked **`[no invite]`** (in its title or
 description) doesn't get the group as a guest, nor a reminder unless it also
