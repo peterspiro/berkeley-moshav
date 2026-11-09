@@ -594,19 +594,22 @@ def main(
                 gdisplay, list_address, manager.first_name, sender.first_name if sender else "")
 
         if dry_run:
-            if idempotent and (existing_folder_id or google_group_exists or existing_gather_id):
-                reused = ", ".join(filter(None, [
-                    "Drive folder" if existing_folder_id else "",
-                    "Google Group" if google_group_exists else "",
-                    "Gather group" if existing_gather_id else "",
-                ]))
-                print(f"[dry-run] Would reuse existing: {reused}.")
+            # Without -i, any of these existing has already stopped the run.
             where = (f" in '{PARENT_FOLDER_NAMES[kind]}'" if kind in PARENT_FOLDER_NAMES else "")
-            print(f"[dry-run] Would create Drive folder '{folder_name}'{where}, Google Group "
-                  f"'{gdisplay}' <{gemail}>, and Gather group '{gdisplay}' "
-                  f"(type={group_type.label}).")
-            print(f"[dry-run] Would add {manager.full_name} <{manager.email}> as a manager "
-                  "of the new Gather group.")
+            items = [
+                (existing_folder_id, f"Drive folder '{folder_name}'{where}"),
+                (google_group_exists, f"Google Group '{gdisplay}' <{gemail}>"),
+                (existing_gather_id, f"Gather group '{gdisplay}' (type={group_type.label})"),
+            ]
+            reused = [what for exists, what in items if exists]
+            created = [what for exists, what in items if not exists]
+            if reused:
+                print(f"[dry-run] Would reuse the existing {', '.join(reused)}.")
+            if created:
+                print(f"[dry-run] Would create {', '.join(created)}.")
+            gather_group = "existing" if existing_gather_id else "new"
+            print(f"[dry-run] Would make {manager.full_name} <{manager.email}> a manager "
+                  f"of the {gather_group} Gather group, if they aren't already.")
             if alias_email:
                 print(f"[dry-run] Would add alias '{alias_email}' to the Google Group and "
                       f"set the Gather group's mailing list to '{list_local}@{DOMAIN}'.")
