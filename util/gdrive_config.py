@@ -8,6 +8,7 @@ import json
 import re
 from collections import deque
 from pathlib import Path
+from typing import Callable
 
 from util.gather_utils import _check_submit_errors, log, screenshot, select2_choose
 from util.google_group_footer import ITEM_TYPE_FOLDER, ITEM_TYPE_SHARED_DRIVE
@@ -358,32 +359,82 @@ def scrape_gdrive_config(page, base_url: str) -> list[dict]:
     return entries
 
 
-def check_single_link_per_group(config_entries: list[dict]) -> None:
-    """Raise ValueError if any Gather group is linked to more than one
-    Drive item (folder and/or shared drive) on /gdrive/config.
+def choose_membership_links(
+    config_entries: list[dict],
+    footer_item_id: Callable[[str], str | None],
+    item_id_to_google_file_id: dict[str, str] | None = None,
+) -> tuple[list[dict], dict[str, list[dict]], dict[str, list[dict]]]:
+    """Pick, for each Gather group, the one /gdrive/config entry its
+    membership follows: groups_drive_sync.gs mirrors a single item's
+    permissions into a group's Google Group, so a group linked to several
+    Drive items (say, the Full Community group, with Viewer access to the
+    whole Shared Drive and Contributor access to one folder in it) needs
+    one of them chosen as its own. The others only give its members access.
 
-    Membership sync mirrors a single item's permissions into a group, so a
-    group tied to two items is ambiguous — fail loudly rather than silently
-    pick one. The message lists every offending group and its linked items."""
+    For a group with several entries, the chosen one is:
+      1. the entry for the item its Google Group's footer already links
+         (footer_item_id(group_id), the item groups_drive_sync.gs follows),
+         when one of the entries is known to be that item (by the row's
+         google_file_id, or item_id_to_google_file_id, by default
+         gdrive_item_map.json's); otherwise
+      2. its only shared drive, if exactly one entry is a shared drive.
+    footer_item_id is only called for groups with several entries.
+
+    Returns (chosen, extras, ambiguous): chosen is one entry per group
+    (in config_entries' order), for every group but the ambiguous ones;
+    extras is {group_id: [other entries]} for groups whose link was chosen
+    from several; ambiguous is {group_id: [entries]} for groups with
+    several entries and no way to choose (see ambiguous_links_message)."""
+    if item_id_to_google_file_id is None:
+        item_id_to_google_file_id = {
+            item_id: file_id for file_id, item_id in load_gdrive_item_map().items()}
+
     by_group: dict[str, list[dict]] = {}
     for entry in config_entries:
         by_group.setdefault(entry["group_id"], []).append(entry)
 
-    offenders = []
-    for group_id, group_entries in sorted(by_group.items()):
-        if len(group_entries) > 1:
-            group_name = group_entries[0].get("group_name") or ""
-            items = ", ".join(
-                f"{e['folder_name']!r} ({e['item_type']})" for e in group_entries
-            )
-            offenders.append(f"{group_name!r} (group_id={group_id}) → {items}")
+    primary: dict[str, dict] = {}
+    extras: dict[str, list[dict]] = {}
+    ambiguous: dict[str, list[dict]] = {}
+    for group_id, entries in by_group.items():
+        if len(entries) == 1:
+            primary[group_id] = entries[0]
+            continue
+        footer_id = footer_item_id(group_id)
+        choice = None
+        if footer_id:
+            choice = next((e for e in entries
+                           if (e["google_file_id"]
+                               or item_id_to_google_file_id.get(e["item_id"])) == footer_id),
+                          None)
+        if choice is None:
+            drives = [e for e in entries if e["item_type"] == ITEM_TYPE_SHARED_DRIVE]
+            if len(drives) == 1:
+                choice = drives[0]
+        if choice is None:
+            ambiguous[group_id] = entries
+        else:
+            primary[group_id] = choice
+            extras[group_id] = [e for e in entries if e is not choice]
 
-    if offenders:
-        raise ValueError(
-            "Each Gather group may be linked to at most one Drive folder or "
-            "shared drive, but these are linked to several:\n  "
-            + "\n  ".join(offenders)
-        )
+    chosen = [e for e in config_entries if primary.get(e["group_id"]) is e]
+    return chosen, extras, ambiguous
+
+
+def ambiguous_links_message(ambiguous: dict[str, list[dict]]) -> str:
+    """The error for groups linked to several Drive items with none of
+    them chosen (see choose_membership_links), listing each group and its
+    items, and how to fix it."""
+    lines = []
+    for group_id, entries in sorted(ambiguous.items()):
+        group_name = entries[0].get("group_name") or ""
+        items = ", ".join(f"{e['folder_name']!r} ({e['item_type']})" for e in entries)
+        lines.append(f"{group_name!r} (group_id={group_id}) → {items}")
+    return ("These Gather groups are linked to several Drive items, and it isn't "
+            "clear which one their membership follows (their Google Group's footer "
+            "links none of them, and they aren't linked to exactly one shared "
+            "drive). Write the right item's link into the group's footer, or "
+            "remove the extra links on /gdrive/config:\n  " + "\n  ".join(lines))
 
 
 _DUMP_DIR = Path("debug/gdrive_config_row_dumps")

@@ -51,9 +51,11 @@ excluding hidden groups:
       "Google Docs folder" for a group linked to a folder, or "Shared
       Drive" for a group linked to a shared drive on /gdrive/config; the
       former syncs the folder's Content managers into the group, the latter
-      the shared drive's Viewers. A group linked to more than one item is a
-      hard error. Any other footer content is preserved, and so are the
-      block's "Google calendar" and "Zoom meeting" links; the block is only
+      the shared drive's Viewers. A group linked to more than one item
+      follows the one its footer already links, or else its only shared
+      drive (the others only give its members access); one linked to
+      several with neither is a hard error. Any other footer content is
+      preserved, and so are the block's "Google calendar" and "Zoom meeting" links; the block is only
       touched when Gather itself currently implies a (possibly different)
       pairing for that email. The block also carries the group's
       "Google calendar" and "Zoom meeting" links from step 0d.
@@ -148,7 +150,8 @@ from util.gdrive_config import (
     DEFAULT_DRIVE_ID,
     calendar_name_for_group,
     add_group_access_to_gdrive_item,
-    check_single_link_per_group,
+    ambiguous_links_message,
+    choose_membership_links,
     create_drive_folder,
     create_gdrive_item,
     dump_gdrive_config_row_html,
@@ -408,6 +411,43 @@ def _group_info_entry(group_id: str, detail) -> dict:
         "list_name": detail.list_name,
         "list_domain": detail.list_domain,
     }
+
+
+def choose_config_entries(
+    config_entries: list[dict], settings_service, email_by_group_id: dict[str, str],
+    target_id: str | None,
+) -> list[dict]:
+    """Return config_entries with one entry per group: the Drive item its
+    membership follows, for a group linked to several (see
+    util.gdrive_config.choose_membership_links), each of whose extra links
+    is logged. Raises ValueError if a group being worked on (every group,
+    or with -g the one named) is linked to several items and none can be
+    chosen; any other such group is left out, with a warning."""
+    def footer_item_id(group_id: str) -> str | None:
+        email = email_by_group_id.get(group_id)
+        if not email:
+            return None
+        try:
+            link = fetch_footer_link(settings_service, email)
+        except Exception as e:
+            log("WARN", "drive_links", email, f"couldn't read footer: {e}")
+            return None
+        return link[0] if link else None
+
+    chosen, extras, ambiguous = choose_membership_links(config_entries, footer_item_id)
+    for group_id, others in extras.items():
+        main = next(e for e in chosen if e["group_id"] == group_id)
+        log("INFO", "drive_links", main["group_name"],
+            f"membership follows {main['folder_name']!r}; also linked to "
+            + ", ".join(repr(e["folder_name"]) for e in others))
+    blocking = {gid: es for gid, es in ambiguous.items()
+                if target_id is None or gid == target_id}
+    if blocking:
+        raise ValueError(ambiguous_links_message(blocking))
+    for group_id, entries in ambiguous.items():
+        log("WARN", "drive_links", entries[0]["group_name"],
+            "linked to several Drive items, none of them chosen; left out")
+    return chosen
 
 
 def fetch_documents_url_by_group_id(
@@ -1330,13 +1370,15 @@ def main(base_url: str, email: str, password: str, dry_run: bool,
             log("INFO", "list_shared_drives", f"{len(drives)} shared drive(s) found")
             return drives
 
-        config_entries = scrape_gdrive_config(page, base_url)
-        check_single_link_per_group(config_entries)
-        folder_owner = {e["folder_name"]: e["group_id"] for e in config_entries}
-        folder_name_by_group_id = {e["group_id"]: e["folder_name"] for e in config_entries}
-
         checked_email_ids: set[str] = set()
         email_by_group_id = build_email_by_group_id(group_info, checked_email_ids)
+
+        all_config_entries = scrape_gdrive_config(page, base_url)
+        # Every linked item counts as taken, extra links included.
+        folder_owner = {e["folder_name"]: e["group_id"] for e in all_config_entries}
+        config_entries = choose_config_entries(
+            all_config_entries, settings_service, email_by_group_id, target_id)
+        folder_name_by_group_id = {e["group_id"]: e["folder_name"] for e in config_entries}
 
         (documents_url_by_group_id, linked_group_ids,
          google_file_id_by_group_id, item_type_by_group_id) = (
