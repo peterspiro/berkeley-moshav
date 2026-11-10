@@ -608,6 +608,34 @@ class TestOverlapMessage:
                 "meeting can be moved on the Finance Circle calendar; the other meeting can "
                 "be moved in Zoom.") in msg["body"]
 
+    def test_tech_circle_meeting_and_zoom_meeting(self):
+        msg = message(group_meeting("Tech meeting", "Technology Circle", 0, 60),
+                      zoom_meeting("Meal Circle", 0, 120))
+        assert msg["to"] == ["technology@x.org", "alerts@x.org"]
+        body = msg["body"]
+        assert body.startswith("Hi Technology Circle,\n")
+        assert "Request the Tech Circle" not in body
+        assert ("- Move the Technology Circle's Zoom room to our second Zoom user "
+                "account.") in body
+        assert "Agree between you" not in body
+        assert ("- Move one of them to another time. The Technology Circle meeting can be "
+                "moved on the Technology Circle calendar; the other meeting can be moved "
+                "in Zoom.") in body
+
+    def test_joint_tech_circle_meeting_and_zoom_meeting(self):
+        joint = group_meeting("Joint", "Technology Circle", 0, 60)
+        joint["groups"].append("finance@x.org")
+        joint["names"].append("Finance Circle")
+        msg = message(joint, zoom_meeting("B", 30, 90))
+        assert msg["body"].startswith("Hi Technology Circle and Finance Circle,\n")
+        assert "- Agree between you which meeting moves" in msg["body"]
+
+    def test_alert_list_as_group_address_is_not_repeated(self):
+        tech = group_meeting("Tech meeting", "Technology Circle", 0, 60)
+        tech["groups"] = ["alerts@x.org"]
+        msg = message(tech, zoom_meeting("B", 30, 90))
+        assert msg["to"] == ["alerts@x.org"]
+
     def test_two_zoom_meetings(self):
         msg = message(zoom_meeting("A", 0, 60), zoom_meeting("B", 30, 90))
         assert msg["to"] == ["alerts@x.org"] and msg["cc"] == []
