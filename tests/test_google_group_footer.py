@@ -1,6 +1,6 @@
 """
-Unit tests for util.google_group_footer and the single-link validation in
-util.gdrive_config — the folder/shared-drive distinction the Groups–Drive
+Unit tests for util.google_group_footer and the choice, in util.gdrive_config,
+of the Drive item a group linked to several follows — the folder/shared-drive distinction the Groups–Drive
 sync depends on.
 
 All names, emails, and IDs are fictional.
@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from util.gdrive_config import check_single_link_per_group
+from util.gdrive_config import ambiguous_links_message, choose_membership_links
 from util.google_group_footer import (
     FOOTER_MARKER,
     ITEM_TYPE_FOLDER,
@@ -559,44 +559,81 @@ class TestEnsureGroupFooters:
         assert svc.updated == {}
 
 
-def _entry(group_id, folder_name, item_type, group_name="Grp"):
+def _entry(group_id, folder_name, item_type, group_name="Grp",
+           item_id=None, google_file_id=None):
     return dict(
         folder_name=folder_name, group_id=group_id, group_name=group_name,
-        item_type=item_type, item_id=None, google_file_id=None,
+        item_type=item_type, item_id=item_id, google_file_id=google_file_id,
     )
 
 
-class TestCheckSingleLinkPerGroup:
-    def test_ok_when_each_group_has_one_item(self):
+def _no_footer(group_id):
+    return None
+
+
+class TestChooseMembershipLinks:
+    def test_one_item_per_group_is_kept(self):
         entries = [
             _entry("1", "Alpha Circle", ITEM_TYPE_FOLDER),
             _entry("2", "Beta Drive", ITEM_TYPE_SHARED_DRIVE),
         ]
-        check_single_link_per_group(entries)  # no raise
+        called = []
+        chosen, extras, ambiguous = choose_membership_links(
+            entries, lambda gid: called.append(gid), {})
+        assert chosen == entries
+        assert extras == {} and ambiguous == {}
+        assert called == []  # footers are only read for groups with several links
 
-    def test_empty_is_ok(self):
-        check_single_link_per_group([])
+    def test_empty(self):
+        assert choose_membership_links([], _no_footer, {}) == ([], {}, {})
 
-    def test_raises_when_group_linked_to_two_items(self):
-        entries = [
-            _entry("1", "Alpha Circle", ITEM_TYPE_FOLDER, "Alpha"),
-            _entry("1", "Alpha Drive", ITEM_TYPE_SHARED_DRIVE, "Alpha"),
-        ]
-        with pytest.raises(ValueError) as exc:
-            check_single_link_per_group(entries)
-        assert "Alpha" in str(exc.value)
-        assert "group_id=1" in str(exc.value)
+    def test_only_shared_drive_is_chosen_over_folders(self):
+        # The Full Community group: Viewer on the Shared Drive, Contributor
+        # on one folder in it.
+        drive = _entry("1", "Berkeley Moshav", ITEM_TYPE_SHARED_DRIVE, "Full Community")
+        folder = _entry("1", "Community Projects", ITEM_TYPE_FOLDER, "Full Community")
+        other = _entry("2", "Beta Circle", ITEM_TYPE_FOLDER)
+        chosen, extras, ambiguous = choose_membership_links(
+            [folder, other, drive], _no_footer, {})
+        assert chosen == [other, drive]
+        assert extras == {"1": [folder]}
+        assert ambiguous == {}
 
-    def test_raises_lists_all_offenders(self):
+    def test_footer_item_wins_by_row_link(self):
+        drive = _entry("1", "Drive", ITEM_TYPE_SHARED_DRIVE, google_file_id="D1")
+        folder = _entry("1", "Folder", ITEM_TYPE_FOLDER, google_file_id="F1")
+        chosen, extras, _ = choose_membership_links(
+            [drive, folder], lambda gid: "F1", {})
+        assert chosen == [folder]
+        assert extras == {"1": [drive]}
+
+    def test_footer_item_wins_by_item_map(self):
+        a = _entry("1", "A", ITEM_TYPE_FOLDER, item_id="11")
+        b = _entry("1", "B", ITEM_TYPE_FOLDER, item_id="12")
+        chosen, extras, ambiguous = choose_membership_links(
+            [a, b], lambda gid: "FB", {"11": "FA", "12": "FB"})
+        assert chosen == [b]
+        assert extras == {"1": [a]}
+        assert ambiguous == {}
+
+    def test_footer_linking_neither_falls_back_to_shared_drive(self):
+        drive = _entry("1", "Drive", ITEM_TYPE_SHARED_DRIVE, google_file_id="D1")
+        folder = _entry("1", "Folder", ITEM_TYPE_FOLDER, google_file_id="F1")
+        chosen, _, _ = choose_membership_links([folder, drive], lambda gid: "X", {})
+        assert chosen == [drive]
+
+    def test_ambiguous_without_footer_or_single_shared_drive(self):
         entries = [
             _entry("1", "A1", ITEM_TYPE_FOLDER, "GroupA"),
             _entry("1", "A2", ITEM_TYPE_FOLDER, "GroupA"),
-            _entry("2", "B1", ITEM_TYPE_FOLDER, "GroupB"),
+            _entry("2", "B1", ITEM_TYPE_SHARED_DRIVE, "GroupB"),
             _entry("2", "B2", ITEM_TYPE_SHARED_DRIVE, "GroupB"),
-            _entry("3", "C1", ITEM_TYPE_FOLDER, "GroupC"),  # fine, only one
+            _entry("3", "C1", ITEM_TYPE_FOLDER, "GroupC"),
         ]
-        with pytest.raises(ValueError) as exc:
-            check_single_link_per_group(entries)
-        msg = str(exc.value)
-        assert "GroupA" in msg and "GroupB" in msg
-        assert "GroupC" not in msg
+        chosen, extras, ambiguous = choose_membership_links(entries, _no_footer, {})
+        assert chosen == [entries[4]]
+        assert extras == {}
+        assert ambiguous == {"1": entries[:2], "2": entries[2:4]}
+        msg = ambiguous_links_message(ambiguous)
+        assert "GroupA" in msg and "GroupB" in msg and "GroupC" not in msg
+        assert "group_id=1" in msg and "'A2' (folder)" in msg

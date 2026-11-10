@@ -148,7 +148,13 @@ that starting access: a circle can be restricted so only some members edit
 A group linked to a shared drive has a "Shared Drive:" line instead of
 "Google Docs folder:". `groups_drive_sync.gs` reads that footer to know which
 item's permissions to copy into the group, so a new group starts syncing as
-soon as its footer is written, with no redeploy. Rewriting the block keeps any
+soon as its footer is written, with no redeploy. A group can be linked to more than one
+Drive item in Gather, such as the Full Community group, a Viewer of the
+whole Shared Drive and a Contributor to one folder in it; its membership
+follows only the one its footer links (for a new footer, its only shared
+drive), and the others just give its members access. `update_groups.py`
+stops if it can't tell which one that is, and `audit_group_memberships.py`
+reports it. Rewriting the block keeps any
 calendar and Zoom links already in it, along with anything written above it.
 
 The footers are also where the `circle_agendas` Apps Script finds the groups

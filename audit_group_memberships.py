@@ -18,7 +18,9 @@ For every circle/working group/club in Gather (hidden and deactivated
 groups skipped), it reports:
 
   * Setup problems: no linked folder/shared drive (or one whose Drive ID
-    can't be resolved, or more than one); no mailing list, a malformed
+    can't be resolved, or several with none chosen: a group linked to
+    several follows the one its footer links, or else its only shared
+    drive); no mailing list, a malformed
     one, or one naming a Google Group that doesn't exist; a Google Group
     footer that's missing its Drive link or links to a different item than
     /gdrive/config does (so groups_drive_sync.gs copies the wrong members).
@@ -87,6 +89,7 @@ from util.gather_utils import (
 )
 from util.gdrive_config import (
     DEFAULT_DRIVE_ID,
+    choose_membership_links,
     list_shared_drives,
     scrape_gdrive_config,
     walk_drive_folders,
@@ -475,15 +478,22 @@ def main(base_url: str, email: str, password: str, credentials_path: str,
             email_by_group_id[gid] = list_email
 
         # Linked Drive items.
-        config_entries = [e for e in scrape_gdrive_config(page, base_url)
-                          if e["group_id"] in states]
-        entries_by_group: dict[str, list[dict]] = {}
-        for entry in config_entries:
-            entries_by_group.setdefault(entry["group_id"], []).append(entry)
-        multi_linked = {gid for gid, es in entries_by_group.items() if len(es) > 1}
-        for gid in multi_linked:
-            names = ", ".join(repr(e["folder_name"]) for e in entries_by_group[gid])
-            states[gid].problems.append(f"linked to more than one Drive item ({names})")
+        def footer_item_id(gid: str) -> str | None:
+            try:
+                link = fetch_footer_link(settings_service, email_by_group_id[gid])
+            except Exception:
+                return None  # reported below, when the footer is checked
+            return link[0] if link else None
+
+        config_entries, extra_links, multi_linked = choose_membership_links(
+            [e for e in scrape_gdrive_config(page, base_url) if e["group_id"] in states],
+            lambda gid: footer_item_id(gid) if gid in email_by_group_id else None)
+        entries_by_group = {e["group_id"]: e for e in config_entries}
+        for gid, entries in multi_linked.items():
+            names = ", ".join(repr(e["folder_name"]) for e in entries)
+            states[gid].problems.append(
+                f"linked to more than one Drive item ({names}), and neither its footer "
+                "nor a single shared drive among them says which its membership follows")
 
         @functools.cache
         def get_drive_folders() -> list[dict]:
@@ -495,7 +505,7 @@ def main(base_url: str, email: str, password: str, credentials_path: str,
 
         _, linked_ids, file_id_by_gid, type_by_gid = fetch_documents_url_by_group_id(
             page, base_url, drive_id,
-            [e for e in config_entries if e["group_id"] not in multi_linked],
+            config_entries,
             get_drive_folders, get_shared_drives, settings_service, email_by_group_id,
         )
 
@@ -507,10 +517,13 @@ def main(base_url: str, email: str, password: str, credentials_path: str,
         if gid not in linked_ids:
             state.problems.append("no linked folder or shared drive")
             continue
-        entry = entries_by_group[gid][0]
+        entry = entries_by_group[gid]
         item_type = type_by_gid.get(gid, entry["item_type"])
         kind = "shared drive" if item_type == ITEM_TYPE_SHARED_DRIVE else "folder"
         state.item_label = f"{kind} {entry['folder_name']!r}"
+        if gid in extra_links:
+            state.item_label += " (also linked to " + ", ".join(
+                repr(e["folder_name"]) for e in extra_links[gid]) + ")"
         item_id = file_id_by_gid.get(gid)
         if not item_id:
             state.problems.append(f"couldn't find the Drive ID of linked {kind} "
