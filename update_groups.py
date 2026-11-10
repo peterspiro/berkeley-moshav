@@ -55,8 +55,8 @@ excluding hidden groups:
       follows the one its footer already links, or else its only shared
       drive (the others only give its members access); one linked to
       several with neither is a hard error. Any other footer content is
-      preserved, and so are the block's "Google calendar" and "Zoom meeting" links; the block is only
-      touched when Gather itself currently implies a (possibly different)
+      preserved, and so are the block's "Google calendar" and "Zoom
+      meeting" links; the block is only touched when Gather itself currently implies a (possibly different)
       pairing for that email. The block also carries the group's
       "Google calendar" and "Zoom meeting" links from step 0d.
   0f. Writes every Gather member's name, by email address (their Gather
