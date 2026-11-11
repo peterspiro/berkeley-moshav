@@ -40,6 +40,11 @@
  *      to see whether a copied chip still refers to a definition its doc
  *      has.
  *
+ * runChecklistProbe and runChecklistProbeLater test whether a script can
+ * tell a checked checklist item (or one struck through by hand) from an
+ * unchecked one, in a copy of a circle agenda doc (CHECKLIST_PROBE_DOC_ID),
+ * and whether copy() keeps the check and the strikethrough; see them below.
+ *
  * Each step that inserts something marks it with PROBE_MARK. A step that
  * fails is reported and the rest still run.
  *
@@ -51,6 +56,9 @@
 const PROBE_SOURCE_DOC_ID = '18sHlQd8IzQlJ-2rEwO9undQSg79-_MCjCnKhmHm81M4';
 const BLANK_MEETING_TAB = 'Blank meeting';
 const TEST_NAMES = ['Alice Example', 'Bob Example', 'Carol Example'];
+// The circle agenda doc runChecklistProbe copies (it only reads it): set it
+// to one's ID before running it.
+const CHECKLIST_PROBE_DOC_ID = '';
 
 function runProbe() {
   runSteps('Agenda probe', [
@@ -521,6 +529,223 @@ function runNewTabProbeLater() {
   logLink('Scratch doc:', 'https://docs.google.com/document/d/' + docId + '/edit?tab=' + tabId);
 }
 
+
+// ── runChecklistProbe ────────────────────────────────────────────────────────
+
+// Adds a checklist of three items, marked PROBE_MARK, to the Notes cell of
+// the Action Items Accountability row of a copy of a circle agenda doc
+// (CHECKLIST_PROBE_DOC_ID), with the Docs API's BULLET_CHECKBOX, as
+// Accountability's checklist is made. Then says what to do to them by hand
+// before running runChecklistProbeLater.
+function runChecklistProbe() {
+  if (!CHECKLIST_PROBE_DOC_ID) {
+    throw new Error('Set CHECKLIST_PROBE_DOC_ID to the ID of a circle agenda doc first.');
+  }
+  const copy = copyDoc(CHECKLIST_PROBE_DOC_ID,
+    'Agenda checklist probe ' + new Date().toISOString().slice(0, 16));
+  const docId = copy.getId();
+  logLink('Working on a copy:', copy.getUrl());
+
+  const doc = Docs.Documents.get(docId, {includeTabsContent: true});
+  let found = null;
+  for (const tab of allApiTabs(doc.tabs)) {
+    walkTableRows(tab.documentTab.body.content, row => {
+      const description = row.tableCells[COL.description];
+      if (!found && description && cellText(description).trim().startsWith('Action Items Accountability')) {
+        found = {tab, row};
+      }
+    });
+    if (found) break;
+  }
+  if (!found) throw new Error('No Action Items Accountability row found in the copy.');
+
+  const tabId = found.tab.tabProperties.tabId;
+  const index = found.row.tableCells[COL.notes].content[0].startIndex;
+  const text = CHECKLIST_PROBE_ITEMS.map((item, i) => PROBE_MARK + ' ' + (i + 1) + ': ' + item)
+    .join('\n') + '\n';
+  // The inserted lines take the cell's first paragraph's bullet, which is
+  // removed before the checklist is made; that paragraph, after them, is
+  // left alone.
+  const range = {startIndex: index, endIndex: index + text.length - 1, tabId};
+  Docs.Documents.batchUpdate({requests: [
+    {insertText: {location: {index, tabId}, text}},
+    {deleteParagraphBullets: {range}},
+    {createParagraphBullets: {range, bulletPreset: 'BULLET_CHECKBOX'}},
+  ]}, docId);
+  PropertiesService.getScriptProperties()
+    .setProperty('checklistProbe', JSON.stringify({docId, tabId}));
+
+  const url = 'https://docs.google.com/document/d/' + docId + '/edit?tab=' + tabId;
+  const lines = [
+    'Copy of ' + CHECKLIST_PROBE_DOC_ID + ', made ' + new Date(),
+    'Added a checklist of three items (marked ' + PROBE_MARK + ') to the Notes cell of ' +
+      'Action Items Accountability in the tab "' + found.tab.tabProperties.title + '": ' + url,
+    'NOW BY HAND: check item 1; select all of item 2\'s text and strike it through ' +
+      '(Format → Text → Strikethrough), leaving it unchecked; leave item 3 alone. ' +
+      'Then run runChecklistProbeLater.',
+  ];
+  writeReport(docId, lines);
+  Logger.log(lines.join('\n'));
+  logLink('The checklist is in:', url);
+}
+
+// Run after runChecklistProbe and the changes by hand it asks for. Reports
+// everything the Docs API and Apps Script return for each of the three
+// items; then copies each, with copy(), into the Follow-up cell of the same
+// row, and reports whether the copies came out the same.
+function runChecklistProbeLater() {
+  const saved = PropertiesService.getScriptProperties().getProperty('checklistProbe');
+  if (!saved) throw new Error('Run runChecklistProbe first.');
+  const {docId, tabId} = JSON.parse(saved);
+  const lines = ['Later run, ' + new Date() + ':', '',
+    'Expected: item 1 checked, item 2 struck through by hand (unchecked), item 3 neither.'];
+
+  const originals = checklistProbeDescribe(docId, tabId, COL.notes);
+  if (originals.length !== CHECKLIST_PROBE_ITEMS.length) {
+    lines.push('Found ' + originals.length + ' of the ' + CHECKLIST_PROBE_ITEMS.length +
+      ' items in the Notes cell, so stopped. Were they edited or moved?');
+    writeReport(docId, lines);
+    Logger.log(lines.join('\n'));
+    return;
+  }
+  for (const item of originals) lines.push('', ...checklistProbeLines('Item ' + item.n, item));
+
+  lines.push('', '== Copies');
+  try {
+    const doc = DocumentApp.openById(docId);
+    const items = checklistProbeListItems(doc.getTab(tabId).asDocumentTab().getBody(), COL.notes);
+    const target = items[0].getParent().asTableCell().getParentRow().getCell(COL.followUp);
+    items.forEach((item, i) => target.insertListItem(i, item.copy()));
+    doc.saveAndClose();
+    lines.push('Copied each item with copy() into the Follow-up cell of the same row, ' +
+      'at its top. CHECK BY HAND: is the copy of item 1 checked, and is the copy of item 2 ' +
+      'struck through (and unchecked)?');
+
+    const copies = checklistProbeDescribe(docId, tabId, COL.followUp);
+    for (const copy of copies) {
+      const original = originals.find(o => o.n === copy.n);
+      lines.push('', ...checklistProbeLines('Copy of item ' + copy.n, copy));
+      lines.push('Compared with item ' + copy.n + ':');
+      for (const key of Object.keys(copy.compare)) {
+        lines.push('  ' + key + ': ' +
+          (copy.compare[key] === original.compare[key] ? 'same' : 'DIFFERENT'));
+      }
+    }
+  } catch (e) {
+    lines.push('FAILED: ' + e.message);
+  }
+
+  writeReport(docId, lines);
+  Logger.log(lines.join('\n'));
+  logLink('Report written at the end of the copy\'s first tab:',
+    'https://docs.google.com/document/d/' + docId + '/edit');
+}
+
+// The text of the probe's three checklist items.
+const CHECKLIST_PROBE_ITEMS = ['check this one', 'strike this one through', 'leave this one'];
+
+// The probe's items in one column of their row (COL.notes, where they were
+// added, or COL.followUp, where they were copied), sorted by number, as
+// both APIs see them: {n, api, apps, compare}. api is what the Docs API
+// returns (the paragraph's bullet, its list's nesting level, the paragraph
+// style, and the text style of each run); apps is what Apps Script returns
+// (the list item's glyph type, list ID, and attributes, and each text run's
+// attributes); compare holds those as JSON, without the indices and IDs that
+// differ wherever an item is, for comparing a copy with its original.
+function checklistProbeDescribe(docId, tabId, column) {
+  const tab = allApiTabs(Docs.Documents.get(docId, {includeTabsContent: true}).tabs)
+    .find(t => t.tabProperties.tabId === tabId);
+  const lists = tab.documentTab.lists || {};
+  const api = {};
+  walkTableRows(tab.documentTab.body.content, row => {
+    const cell = row.tableCells[column];
+    for (const se of (cell && cell.content) || []) {
+      const n = se.paragraph && checklistProbeNumber(paraText(se.paragraph));
+      if (!n) continue;
+      const para = se.paragraph;
+      const list = para.bullet && lists[para.bullet.listId];
+      api[n] = {
+        bullet: para.bullet || null,
+        nestingLevel: list
+          ? list.listProperties.nestingLevels[para.bullet.nestingLevel || 0] : null,
+        paragraphStyle: para.paragraphStyle || null,
+        runs: (para.elements || []).map(pe => ({
+          content: pe.textRun ? pe.textRun.content : '(not a text run: ' +
+            Object.keys(pe).filter(k => k !== 'startIndex' && k !== 'endIndex').join(', ') + ')',
+          textStyle: pe.textRun ? pe.textRun.textStyle : null,
+        })),
+      };
+    }
+  });
+
+  const body = DocumentApp.openById(docId).getTab(tabId).asDocumentTab().getBody();
+  return checklistProbeListItems(body, column).map(item => {
+    const n = checklistProbeNumber(item.getText());
+    const text = item.editAsText();
+    const value = text.getText();
+    const starts = text.getTextAttributeIndices();
+    const apps = {
+      glyphType: String(item.getGlyphType()),
+      listId: item.getListId(),
+      attributes: item.getAttributes(),
+      runs: starts.map((start, i) => ({
+        text: value.slice(start, i + 1 < starts.length ? starts[i + 1] : value.length),
+        attributes: text.getAttributes(start),
+      })),
+    };
+    const a = api[n] || {};
+    const bullet = a.bullet ? {...a.bullet} : null;
+    if (bullet) delete bullet.listId;
+    return {n, api: a, apps, compare: {
+      'Docs API bullet (but its list ID)': JSON.stringify(bullet),
+      'Docs API nesting level': JSON.stringify(a.nestingLevel),
+      'Docs API paragraph style': JSON.stringify(a.paragraphStyle),
+      'Docs API runs\' text styles': JSON.stringify((a.runs || []).map(r => r.textStyle)),
+      'Apps Script glyph type': apps.glyphType,
+      'Apps Script attributes': JSON.stringify(apps.attributes),
+      'Apps Script runs\' attributes': JSON.stringify(apps.runs.map(r => r.attributes)),
+    }};
+  }).sort((x, y) => x.n - y.n);
+}
+
+// A described item (from checklistProbeDescribe) as report lines.
+function checklistProbeLines(title, item) {
+  const a = item.api;
+  return [
+    '== ' + title + (a.bullet ? '' : ' (the Docs API didn\'t find it)'),
+    'Docs API bullet: ' + JSON.stringify(a.bullet),
+    'Docs API nesting level: ' + JSON.stringify(a.nestingLevel),
+    'Docs API paragraph style: ' + JSON.stringify(a.paragraphStyle),
+    ...(a.runs || []).map((r, i) => 'Docs API run ' + (i + 1) + ' ' +
+      JSON.stringify(r.content) + ': ' + JSON.stringify(r.textStyle)),
+    'Apps Script glyph type: ' + item.apps.glyphType + ', list ID: ' + item.apps.listId,
+    'Apps Script attributes: ' + JSON.stringify(item.apps.attributes),
+    ...item.apps.runs.map((r, i) => 'Apps Script run ' + (i + 1) + ' ' +
+      JSON.stringify(r.text) + ': ' + JSON.stringify(r.attributes)),
+  ];
+}
+
+// The probe's list items in one column of their row, in Apps Script.
+function checklistProbeListItems(body, column) {
+  const items = [];
+  let found = null;
+  while ((found = body.findText(PROBE_MARK + ' [0-9]:', found))) {
+    let el = found.getElement();
+    while (el && el.getType() !== DocumentApp.ElementType.LIST_ITEM) el = el.getParent();
+    if (!el) continue;
+    const cell = el.getParent();
+    if (cell.getType() !== DocumentApp.ElementType.TABLE_CELL) continue;
+    const row = cell.asTableCell().getParentRow();
+    if (row.getChildIndex(cell) === column) items.push(el.asListItem());
+  }
+  return items;
+}
+
+// An item's number, from the start of its text ("⟦probe⟧ 2: ..."), or 0.
+function checklistProbeNumber(text) {
+  const match = text.trim().match(/^⟦probe⟧ ([0-9]):/);
+  return match ? Number(match[1]) : 0;
+}
 
 // ── Helpers only the probes used ─────────────────────────────────────────────
 // (Moved here from circle_agendas/doc_helpers.gs when the probes were

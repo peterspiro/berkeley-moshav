@@ -1,9 +1,10 @@
 # Circle agenda probes
 
-The probes in `agenda_probe.gs` were run, before the circle agenda docs
-were built, on copies of Sociocracy For All's
+The first probes in `agenda_probe.gs` were run, before the circle agenda
+docs were built, on copies of Sociocracy For All's
 public template (`PROBE_SOURCE_DOC_ID`), which they only read; their
-results are in the plan. Each copies it to your My Drive, changes only the
+results are in the plan. `runChecklistProbe` works on a copy of a circle
+agenda doc instead. Each copies it to your My Drive, changes only the
 copy, and writes what it found at the end of the copy, under "Probe
 report". What they insert is marked `⟦probe⟧`.
 
@@ -68,6 +69,34 @@ table, and a working dropdown.
 
 Then run **`runNewTabProbeLater`**, a separate run on the same scratch doc,
 to see whether DocumentApp sees the tab once the run that added it is over.
+
+### `runChecklistProbe` (not yet run)
+
+Tests again whether a script can tell which Action Items Accountability
+items are done, so that the unchecked ones could be carried over to the
+next meeting: the first probe found that a checked box isn't readable.
+Set `CHECKLIST_PROBE_DOC_ID` to the ID of a circle agenda doc (which it
+only reads) and run **`runChecklistProbe`**. It copies the doc to your My
+Drive and, with the Docs API's `BULLET_CHECKBOX` (as Accountability's
+checklist is made), adds three items to the Notes cell of the Action Items
+Accountability row in the first of the copy's tabs that has one. The log, and
+the report at the end of the copy's first tab, link the tab. Then, by hand:
+
+1. Check item 1.
+2. Select all of item 2's text and strike it through (Format → Text →
+   Strikethrough), leaving it unchecked.
+3. Leave item 3 alone.
+
+Then run **`runChecklistProbeLater`**. For each item, it reports
+everything the Docs API returns (the paragraph's bullet, its list's
+nesting level, the paragraph style, and every run's text style) and
+everything Apps Script returns (the list item's glyph type, list ID, and
+attributes, and every text run's attributes). Then it copies each item
+with `copy()` into the Follow-up cell of the same row, reports the same
+for each copy, and says which of those are the same as in the original
+(leaving out the indices and list IDs, which differ wherever an item is).
+To check by hand: is the copy of item 1 checked, and is the copy of item 2
+struck through and unchecked?
 
 ## Running them again
 

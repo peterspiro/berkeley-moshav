@@ -326,7 +326,7 @@ status line as "calendar (members can view, not edit)".
 | `archive/` | One-off scripts and plans that are no longer in use, kept for reference |
 | `archive/data_import/` | Scripts that were used to populate Gather from the community's spreadsheets and website |
 | `archive/google_setup/` | Scripts that were used to set up the Google Groups and Drive links for the existing groups |
-| `archive/circle_agendas/` | The probes that were run to see what Apps Script can do to an agenda doc, before the docs were built |
+| `archive/circle_agendas/` | The probes run to see what Apps Script can do to an agenda doc, mostly before the docs were built |
 | `archive/cleanup/` | Scripts that were used to undo earlier approaches (old wiki pages, Mailman lists, Drive group permissions) |
 | `debug/` | Created at run time for logs and screenshots; not in git |
 
@@ -691,8 +691,13 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
   copy of Sociocracy For All's template: copying agenda rows and whole
   meetings (from the same tab, another tab, or another doc), adding an
   attendance checklist, inserting person and date chips, and adding tabs.
-  Each reported which smart chips and checked boxes survived. See
-  `archive/circle_agendas/README.md`.
+  Each reported which smart chips and checked boxes survived. It also has
+  `runChecklistProbe`, not yet run, which works on a copy of a circle
+  agenda doc: it adds a checklist to Action Items Accountability and, once
+  one item is checked and one struck through by hand, reports everything
+  the Docs API and Apps Script return for each, to see whether a script can
+  tell which action items are done, and whether `copy()` keeps the check.
+  See `archive/circle_agendas/README.md`.
 
 #### `archive/cleanup/`
 
