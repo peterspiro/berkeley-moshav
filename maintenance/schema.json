@@ -1,0 +1,251 @@
+{
+ "choice_lists": {
+  "systems": [
+   "Plumbing",
+   "HVAC & ventilation",
+   "Electrical & lighting",
+   "Windows & exterior doors",
+   "Interior doors & hardware",
+   "Appliances",
+   "Cabinets & counters",
+   "Floors",
+   "Walls & paint",
+   "Roof & envelope",
+   "Fire & life safety",
+   "Elevator",
+   "Access & intercom",
+   "Site & landscape",
+   "Other"
+  ]
+ },
+ "tables": [
+  {
+   "name": "Locations",
+   "description": "Each unit and each common area.",
+   "fields": [
+    {"name": "Name", "type": "text"},
+    {"name": "Kind", "type": "select", "choices": ["Unit", "Common"]},
+    {"name": "Floor", "type": "number"},
+    {"name": "Stack", "type": "number"},
+    {"name": "Plan type", "type": "text"},
+    {"name": "Closing date", "type": "date"}
+   ],
+   "views": []
+  },
+  {
+   "name": "People",
+   "description": "Members and circle volunteers, copied from Gather's directory.",
+   "fields": [
+    {"name": "Name", "type": "text"},
+    {"name": "Email", "type": "email"},
+    {"name": "Phone", "type": "phone"},
+    {"name": "Location", "type": "link", "table": "Locations", "inverse": "People"},
+    {"name": "Circle member", "type": "checkbox"},
+    {"name": "Coordinator", "type": "checkbox"},
+    {"name": "Gather ID", "type": "text"},
+    {"name": "Moved out", "type": "checkbox"}
+   ],
+   "views": []
+  },
+  {
+   "name": "Requests",
+   "description": "Everything a member reports or asks. One row per problem per place.",
+   "fields": [
+    {"name": "Number", "type": "autoNumber"},
+    {"name": "Title", "type": "text"},
+    {"name": "Description", "type": "longText"},
+    {"name": "Photos", "type": "attachments"},
+    {"name": "Location", "type": "link", "table": "Locations", "inverse": "Requests"},
+    {"name": "Room", "type": "select", "choices": ["Kitchen", "Bath", "Bedroom", "Living", "Entry", "Balcony", "Laundry", "n/a"]},
+    {"name": "Type", "type": "select", "choices": ["Repair or defect", "How do I…?", "Suggestion"]},
+    {"name": "System", "type": "select", "choices": "@systems"},
+    {"name": "Component", "type": "link", "table": "Assets", "inverse": "Requests"},
+    {"name": "Urgency", "type": "select", "choices": ["Emergency", "Urgent (days)", "Routine"]},
+    {"name": "Reporter name", "type": "text"},
+    {"name": "Reporter email", "type": "email"},
+    {"name": "Reporter phone", "type": "phone"},
+    {"name": "Reporter", "type": "link", "table": "People", "inverse": "Requests reported"},
+    {"name": "May enter if I'm out", "type": "checkbox"},
+    {"name": "Access notes", "type": "longText"},
+    {"name": "Status", "type": "select", "choices": ["New", "Triaged", "Waiting on builder", "Waiting on vendor", "Waiting on volunteer", "Scheduled", "Done, to confirm", "Closed", "Duplicate", "Declined"]},
+    {"name": "Owner", "type": "link", "table": "People", "inverse": "Requests owned"},
+    {"name": "Responsibility", "type": "select", "choices": ["Builder warranty", "Manufacturer warranty", "HOA", "Unit owner", "Unknown"]},
+    {"name": "Warranty", "type": "link", "table": "Warranties", "inverse": "Requests"},
+    {"name": "Claim by", "type": "date"},
+    {"name": "Vendor", "type": "link", "table": "Organizations", "inverse": "Requests"},
+    {"name": "Visit", "type": "dateTime"},
+    {"name": "Duplicate of", "type": "link", "table": "Requests", "inverse": "Duplicates"},
+    {"name": "Resolution", "type": "longText"},
+    {"name": "Closed on", "type": "date"},
+    {"name": "Member-visible status", "type": "text"},
+    {"name": "Submitted", "type": "createdTime"},
+    {"name": "Label", "type": "formula", "formula": "\"R-\" & {Number} & IF({Title}, \" \" & {Title})"}
+   ],
+   "views": [
+    {"name": "Triage", "type": "grid"},
+    {"name": "Board", "type": "kanban"},
+    {"name": "By owner", "type": "grid"},
+    {"name": "Patterns", "type": "grid"},
+    {"name": "Status page", "type": "grid"},
+    {"name": "Request form", "type": "form"}
+   ]
+  },
+  {
+   "name": "Updates",
+   "description": "What happened to each request and claim: one row per event.",
+   "fields": [
+    {"name": "Number", "type": "autoNumber"},
+    {"name": "Request", "type": "link", "table": "Requests", "inverse": "Updates"},
+    {"name": "Claim", "type": "link", "table": "Claims", "inverse": "Updates"},
+    {"name": "When", "type": "dateTime"},
+    {"name": "By", "type": "link", "table": "People", "inverse": "Updates written"},
+    {"name": "By name", "type": "text"},
+    {"name": "Kind", "type": "select", "choices": ["Note", "Call", "Email", "Visit", "Status change", "Photo"]},
+    {"name": "Text", "type": "longText"},
+    {"name": "Attachments", "type": "attachments"},
+    {"name": "Tell the reporter", "type": "checkbox"},
+    {"name": "Logged", "type": "createdTime"}
+   ],
+   "views": [
+    {"name": "Quick update form", "type": "form"}
+   ]
+  },
+  {
+   "name": "Claims",
+   "description": "Each claim made to a warrantor. A claim can cover many requests.",
+   "fields": [
+    {"name": "Number", "type": "autoNumber"},
+    {"name": "Title", "type": "text"},
+    {"name": "Requests", "type": "link", "table": "Requests", "inverse": "Claims"},
+    {"name": "Warranty", "type": "link", "table": "Warranties", "inverse": "Claims"},
+    {"name": "Warrantor", "type": "link", "table": "Organizations", "inverse": "Claims"},
+    {"name": "Scope", "type": "select", "choices": ["Unit", "Common element", "Systemic"]},
+    {"name": "Status", "type": "select", "choices": ["Drafting", "Submitted", "Acknowledged", "Scheduled", "Work done", "Accepted", "Disputed", "Denied", "Withdrawn"]},
+    {"name": "Submitted on", "type": "date"},
+    {"name": "Submitted how", "type": "select", "choices": ["Email", "Letter", "In person", "Phone", "Other"]},
+    {"name": "Sent to", "type": "text"},
+    {"name": "Their reference", "type": "text"},
+    {"name": "Acknowledged on", "type": "date"},
+    {"name": "Response", "type": "longText"},
+    {"name": "Promised by", "type": "date"},
+    {"name": "Work done on", "type": "date"},
+    {"name": "Accepted by", "type": "link", "table": "People", "inverse": "Claims accepted"},
+    {"name": "Accepted on", "type": "date"},
+    {"name": "Claim by", "type": "date"},
+    {"name": "Folder", "type": "url"},
+    {"name": "Label", "type": "formula", "formula": "\"C-\" & {Number} & IF({Title}, \" \" & {Title})"}
+   ],
+   "views": [
+    {"name": "Waiting on builder", "type": "grid"}
+   ]
+  },
+  {
+   "name": "Warranties",
+   "description": "Every warranty and statutory period, each with its own clock.",
+   "fields": [
+    {"name": "Name", "type": "text"},
+    {"name": "Warrantor", "type": "link", "table": "Organizations", "inverse": "Warranties"},
+    {"name": "Held by", "type": "select", "choices": ["Association", "Each owner", "Unknown"]},
+    {"name": "Systems", "type": "multiSelect", "choices": "@systems"},
+    {"name": "Assets", "type": "link", "table": "Assets", "inverse": "Warranties"},
+    {"name": "Scope", "type": "select", "choices": ["Unit", "Common"]},
+    {"name": "Clock starts", "type": "select", "choices": ["One date for the building", "Each unit's closing", "Unknown"]},
+    {"name": "Building start date", "type": "date"},
+    {"name": "Term (months)", "type": "number"},
+    {"name": "Document", "type": "url"},
+    {"name": "How to claim", "type": "longText"},
+    {"name": "Notes", "type": "longText"}
+   ],
+   "views": []
+  },
+  {
+   "name": "Organizations",
+   "description": "The builder, subcontractors, manufacturers, vendors, consultants.",
+   "fields": [
+    {"name": "Company", "type": "text"},
+    {"name": "Role", "type": "select", "choices": ["General contractor", "Subcontractor", "Manufacturer", "Service vendor", "Consultant", "Utility"]},
+    {"name": "Trades", "type": "multiSelect", "choices": "@systems"},
+    {"name": "Contact name", "type": "text"},
+    {"name": "Phone", "type": "phone"},
+    {"name": "Email", "type": "email"},
+    {"name": "After-hours phone", "type": "phone"},
+    {"name": "Licence", "type": "text"},
+    {"name": "Our contact", "type": "link", "table": "People", "inverse": "Contact for"},
+    {"name": "Under contract until", "type": "date"},
+    {"name": "Notes", "type": "longText"}
+   ],
+   "views": [
+    {"name": "By trade", "type": "grid"}
+   ]
+  },
+  {
+   "name": "Assets",
+   "description": "What needs maintaining: equipment, unit fixtures (one row per model), shutoffs.",
+   "fields": [
+    {"name": "Name", "type": "text"},
+    {"name": "Kind", "type": "select", "choices": ["Equipment", "Unit fixture or appliance", "Shutoff", "Building element"]},
+    {"name": "System", "type": "select", "choices": "@systems"},
+    {"name": "Location", "type": "link", "table": "Locations", "inverse": "Assets"},
+    {"name": "Make", "type": "text"},
+    {"name": "Model", "type": "text"},
+    {"name": "Serial", "type": "text"},
+    {"name": "Installed by", "type": "link", "table": "Organizations", "inverse": "Assets installed"},
+    {"name": "Manual", "type": "url"},
+    {"name": "Photo", "type": "attachments"},
+    {"name": "Where exactly", "type": "text"},
+    {"name": "Notes", "type": "longText"}
+   ],
+   "views": []
+  },
+  {
+   "name": "Maintenance plans",
+   "description": "What recurs: each maintenance task, inspection, and test.",
+   "fields": [
+    {"name": "Task", "type": "text"},
+    {"name": "Asset", "type": "link", "table": "Assets", "inverse": "Maintenance plans"},
+    {"name": "Kind", "type": "select", "choices": ["Maintenance", "Inspection", "Test"]},
+    {"name": "Every (months)", "type": "number"},
+    {"name": "Season", "type": "multiSelect", "choices": ["Spring", "Summer", "Fall", "Winter"]},
+    {"name": "Done by", "type": "select", "choices": ["Volunteers", "Vendor"]},
+    {"name": "Vendor", "type": "link", "table": "Organizations", "inverse": "Maintenance plans"},
+    {"name": "Required by", "type": "select", "choices": ["Warranty", "Code", "Manufacturer", "Good practice"]},
+    {"name": "Procedure", "type": "link", "table": "Guides", "inverse": "Maintenance plans"},
+    {"name": "Owner", "type": "link", "table": "People", "inverse": "Maintenance plans owned"},
+    {"name": "First due", "type": "date"}
+   ],
+   "views": []
+  },
+  {
+   "name": "Maintenance work",
+   "description": "Each occurrence of a maintenance plan.",
+   "fields": [
+    {"name": "Number", "type": "autoNumber"},
+    {"name": "Plan", "type": "link", "table": "Maintenance plans", "inverse": "Work"},
+    {"name": "Due", "type": "date"},
+    {"name": "Status", "type": "select", "choices": ["Due", "Scheduled", "Done", "Skipped"]},
+    {"name": "Scheduled for", "type": "dateTime"},
+    {"name": "Done on", "type": "date"},
+    {"name": "Done by", "type": "text"},
+    {"name": "Notes", "type": "longText"},
+    {"name": "Photos", "type": "attachments"},
+    {"name": "Found", "type": "link", "table": "Requests", "inverse": "Found during"}
+   ],
+   "views": []
+  },
+  {
+   "name": "Guides",
+   "description": "An index of the Building Handbook's docs.",
+   "fields": [
+    {"name": "Title", "type": "text"},
+    {"name": "Kind", "type": "select", "choices": ["Emergency", "How to", "Maintenance procedure"]},
+    {"name": "Doc", "type": "url"},
+    {"name": "Video", "type": "url"},
+    {"name": "Systems", "type": "multiSelect", "choices": "@systems"},
+    {"name": "Assets", "type": "link", "table": "Assets", "inverse": "Guides"},
+    {"name": "Reviewed on", "type": "date"},
+    {"name": "Requests answered", "type": "link", "table": "Requests", "inverse": "Answered by"}
+   ],
+   "views": []
+  }
+ ]
+}

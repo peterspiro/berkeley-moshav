@@ -66,6 +66,14 @@ a meeting, add an agenda item, and update a meeting's times); a meeting's
 announcing that its agenda is ready. It also keeps the Circle Structure (see
 above and `circle_agendas/structure.gs`).
 
+The repo also holds the start of the **maintenance tracker**, an Airtable
+base for the Maintenance & Warranty Circle to track repair requests,
+warranty claims, contacts, equipment, and maintenance schedules for the
+building (see `maintenance-tracker-plan.md`). So far there's the base's
+structure, kept as a file in `maintenance/` and applied by
+`maintenance_base.py`; the views and forms are made by hand (see
+`maintenance/README.md`), and the emails and reminders aren't built yet.
+
 The repo also keeps, in `archive/`, the one-off scripts that were used to
 migrate the community into Gather (members, households, groups, photos) and
 to set up the Google side, along with cleanup scripts from that migration.
@@ -217,6 +225,22 @@ playwright install chromium
   require them so rooms made by hand match. The scripts give every room a
   six-digit passcode, which Zoom rejects if passcodes must contain letters.
 
+- **Airtable API** (for `maintenance_base.py` only): in Airtable's
+  [Builder Hub](https://airtable.com/create/tokens), signed in as the
+  workspace's owner, create a personal access token with the scopes
+  `data.records:read`, `data.records:write`, `schema.bases:read`, and
+  `schema.bases:write`, and access to the maintenance bases it should
+  reach. Put it in a file named `airtable_credentials` in the repo root
+  (git-ignored; `chmod 600`):
+  ```
+  token = pat...
+  ```
+  A Claude Code cloud session uses a token that reaches only the test base,
+  saved on its environment as a network secret for `api.airtable.com`, not
+  in a file; there, set `AIRTABLE_TOKEN=proxy-injected`, and the session's
+  network puts the real token in. Base IDs aren't kept anywhere: the
+  script finds a base by its name.
+
 Run scripts from the repo root, e.g. `python add_new_group.py ...` or
 `python archive/data_import/parse_households.py ...`. Every script
 supports `-h` for its options, and most support `-n`/`--dry-run`. Logs and
@@ -321,6 +345,7 @@ status line as "calendar (members can view, not edit)".
 | `calendar_notifications/` | Apps Script project that announces and gatekeeps events on the shared community calendar |
 | `group_meetings/` | Apps Script project that adds Zoom rooms and guests to group calendar events, and warns about overlapping meetings |
 | `circle_agendas/` | Apps Script project for the circle agenda docs (building them, and the web app their links run) and the Circle Structure sheet and doc |
+| `maintenance/` | The maintenance tracker's Airtable base as files: its tables and fields, its starting rows, and the checklist of views to make by hand |
 | `util/` | Shared Python modules used by the scripts |
 | `tests/` | Unit tests (`pytest`) |
 | `archive/` | One-off scripts and plans that are no longer in use, kept for reference |
@@ -489,6 +514,16 @@ status line as "calendar (members can view, not edit)".
   `[Members]` link, and the rows under them, are listed and skipped.
 - **`change_group_email_alias.py`** gives a group's Google Group a new, usually
   shorter, address and moves the Gather group's email list over to it.
+- **`maintenance_base.py`** keeps the maintenance tracker's Airtable base in
+  step with `maintenance/schema.json`: `diff` shows what the base lacks,
+  `apply` creates the missing tables and fields and adds missing options to
+  select fields, and `seed` loads the starting rows in
+  `maintenance/seed.json` (the building's 36 units). It never deletes or
+  retypes anything, and lists what must be done by hand: the views and
+  forms, which Airtable's API can't make, and anything in the base that
+  disagrees with the file. It works on the test base, "Building Maintenance
+  (test)", unless given `--real`, which asks you to type the real base's
+  name before changing it.
 - **`setup.sh`** installs and starts a local Gather development instance, for
   trying scripts out safely before running them against the real site.
 
@@ -651,7 +686,12 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
   calendars, and copying them to its calendar or deleting them
 - **`zoom_utils.py`**: the Zoom API, the standard room settings, and which
   Zoom users own rooms
-- **`credentials.py`**: reading `~/.gather` and `zoom_credentials`
+- **`credentials.py`**: reading `~/.gather`, `zoom_credentials`, and the
+  Airtable token
+- **`airtable.py`**: Airtable's API: a base's tables and fields, and its
+  records, with notes on what the API can't do
+- **`airtable_schema.py`**: reading and checking `maintenance/schema.json`,
+  and working out what a base lacks compared with it
 - **`member_names.py`**: members' short names by email address, from the Gather
   directory, written to `admin@`'s Drive for the circle agenda docs
 - **`circle_agenda_docs.py`**: creating a circle's or working group's agenda
@@ -718,7 +758,7 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
   the tests found
 - `maintenance-tracker-plan.md`: design of the Maintenance & Warranty
   Circle's Airtable-based tracker (repair requests, warranty claims,
-  contacts, equipment, and maintenance schedules); nothing is built yet
+  contacts, equipment, and maintenance schedules), and what's built so far
 - `archive/gather-sandbox-plan.md` and `archive/gather-import-plan.md`: plans
   for the local Gather test instance and the member import
 

@@ -3,7 +3,10 @@
 A design for the system the Maintenance & Warranty Circle will use to
 track the new 36-unit building: members' repair requests, warranty claims,
 subcontractor contacts, equipment, maintenance and inspection schedules, and
-how-to and emergency knowledge. Nothing here is built yet.
+how-to and emergency knowledge.
+
+Built so far (phase 1's code): the base's structure as a file, the script
+that applies it, and the 36 units, tried on the test base. See "Phases".
 
 It will be developed in Claude Code on the web, which shapes the design more
 than anything else: see "What goes where" and "Developing it in Claude Code
@@ -37,7 +40,7 @@ groups); work orders for a property manager.
 | Thing | Kept in | Why |
 |---|---|---|
 | Records (requests, claims, contacts, equipment, schedules) | Airtable | Relational, with forms, kanban and grouped views the circle can change themselves |
-| Views, the member form, interfaces | Airtable, built by hand from a checklist | Airtable's API can't create them (to confirm, see "Phase 0") |
+| Views, the member form, interfaces | Airtable, built by hand from a checklist | Airtable's API can't create them |
 | The base's tables and fields | `maintenance/schema.json` in this repo, applied by a script | So a session can change the schema, review it as a diff, and try it on a test base |
 | All logic: emails, reminders, calendar, pattern reports, backups | A `maintenance_tracker` Apps Script project, running as `admin@berkeleymoshav.org` | Airtable automations can't be kept in git, tested, or made by the API, and are rationed by plan; Apps Script is what the repo's other timers already use, and it can send mail and write calendars and Drive as `admin@` |
 | Documents (O&M manuals, as-builts, warranties, claim letters) | The circle's Drive folder | The community's access rules already apply there; Airtable holds links |
@@ -51,7 +54,9 @@ formulas that carry logic a test should cover.
 
 ## The base
 
-One base, "Building Maintenance". Ten tables. Field names here are the ones
+One base, "Building Maintenance". Eleven tables. `maintenance/schema.json`
+is now the exact list of fields and options, where it differs from the
+names below. Field names here are the ones
 the schema file will use; select options are listed where they matter.
 
 ### Locations
@@ -340,7 +345,7 @@ browser signed in to Airtable, no Google sign-in. So:
   through Airtable's metadata API and prints the difference (`diff`), makes
   the base match by adding tables, fields, and options (`apply`; it never
   deletes or retypes, only reports), and loads starting rows such as the 36
-  units and the System list (`seed`). `util/airtable.py` is the small client
+  units (`seed`). It finds a base by its name, so no base ID is kept. `util/airtable.py` is the small client
   under it (paging, batches of 10, the rate limit).
 - **Two bases.** "Building Maintenance" and "Building Maintenance (test)",
   made by the same script. Sessions get an Airtable personal access token
@@ -437,16 +442,19 @@ own account.
 
 Move-in is soon, so the order is by what's lost if it's late.
 
-0. **Set up and confirm** (a day). Book the attorney (see below). Make the
-   workspace and both bases' tokens. Confirm against Airtable's API
-   documentation, or by trying on the test base: which field types the
-   metadata API can create (formula, rollup, and lookup fields may have to be
-   made by hand; the design needs none of them); that it can't create views
-   or forms; the plan's API call allowance.
-1. **Intake, before move-in.** Schema file and `maintenance_base.py`;
-   Locations, People, Requests, Updates, Organizations; the request form,
-   Triage, Board, and Mine views; the status page. Ask the builder to name
-   who receives claims. Usable by hand from here.
+0. **Set up and confirm.** Done: the workspace, the test base, and its
+   token. Tried on the test base: the API creates tables and every field
+   type the design uses, formulas and links included; it can't create views
+   or forms, delete or retype anything, or add a select option directly
+   (the script adds one by writing a record that uses it, and deleting the
+   record). Still to do: book the attorney (see below), and check the
+   plan's monthly API call allowance before the Apps Script's timer runs.
+1. **Intake, before move-in.** Done: the schema file (all eleven tables), `maintenance_base.py`, the units, and the
+   checklist of views in `maintenance/README.md`. To do: the common areas'
+   rows in Locations; People, from Gather (`sync_maintenance_people.py`);
+   the views, request form, and status page, by hand or with Claude Code
+   locally; the real base. Ask the builder to name who receives claims.
+   Usable by hand from there.
 2. **Emails and backup.** The Apps Script's acknowledgments, urgent alerts,
    status emails, weekly digest, and the daily Drive backup.
 3. **Claims.** Claims and Warranties, loaded from the warranty binder;

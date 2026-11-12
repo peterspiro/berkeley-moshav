@@ -1,0 +1,89 @@
+# The maintenance tracker's Airtable base
+
+The Maintenance & Warranty Circle's tracker is an Airtable base, "Building
+Maintenance". `../maintenance-tracker-plan.md` is its design. This folder
+holds what the base is made from:
+
+- **`schema.json`**: every table, field, and select option, and the views
+  each table should have. `util/airtable_schema.py` describes the format.
+- **`seed.json`**: starting rows, so far the building's 36 units.
+
+`maintenance_base.py`, in the repo root, makes a base match these files.
+There are two bases: the real one, and "Building Maintenance (test)" for
+trying changes, which is the one the script works on unless given `--real`.
+
+## Changing the base's structure
+
+Change `schema.json`, not the base, so the two bases stay alike:
+
+```bash
+python maintenance_base.py diff
+```
+
+```bash
+python maintenance_base.py apply
+```
+
+Try it on the test base, then repeat both with `--real`. To add a table,
+field, or option, add it to the file. Airtable's API can't delete or rename
+a table or field, change a field's type, or remove an option: do those by
+hand in both bases, and change the file to match, so `diff` is clean again.
+
+A field or option added in Airtable by hand shows in `diff` under "Notes"
+until it's added to the file.
+
+## Setting up a base
+
+1. In Airtable, signed in as the workspace's owner, create an empty base
+   with the base's name. Delete its starting "Table 1" once the script has
+   made the others.
+2. Give the script's personal access token access to the base (see
+   README.md, "Setup").
+3. Run `python maintenance_base.py apply` and then
+   `python maintenance_base.py seed` (with `--real` for the real base).
+4. Make the views below by hand. `diff` lists the ones still missing.
+
+### Views to make by hand
+
+The API can't create views. Each is named exactly as here, since `diff`
+(and later the tracker's daily check) looks for them by name.
+
+**Requests**
+
+| View | Type | Set up as |
+|---|---|---|
+| Triage | Grid | Filter: Status is New. Sort: Submitted, oldest first. Show Description, Photos, Location, Room, Type, System, Urgency, the reporter fields, then Title, Component, Responsibility, Owner, Status |
+| Board | Kanban | Stacked by Status. Filter: Status isn't Closed, Duplicate, or Declined. Cards show Label, Location, Owner, Urgency |
+| By owner | Grid | Grouped by Owner. Filter as Board |
+| Patterns | Grid | Grouped by System, then Component. Show Location, Room, Submitted, Status. Sort by Location |
+| Status page | Grid | Show only Number, Location, System, Title, Member-visible status, Submitted, Closed on. Filter: Status isn't Duplicate or Declined, and Closed on is empty or within the past month. Then **Share view** to make its link. No other field may be shown: it's public to anyone with the link |
+| Request form | Form | See below |
+
+The **Request form** has, in order: Reporter name, Reporter email, Reporter
+phone, Location, Room, Type, System, Urgency, Description, Photos, May
+enter if I'm out, Access notes. Reporter name, Reporter email, Location,
+Type, and Description are required. Leave out every other field, Title
+above all: the circle writes it at triage, and it's what the status page
+shows. Its opening text says what to do in an emergency instead of filling
+in the form, with the after-hours number and a link to the emergency guide.
+
+**Updates**
+
+| View | Type | Set up as |
+|---|---|---|
+| Quick update form | Form | Request, Kind, By name, When, Text, Attachments, Tell the reporter. For circle volunteers only: its Request field shows the list of requests to anyone with the link |
+
+**Claims**
+
+| View | Type | Set up as |
+|---|---|---|
+| Waiting on builder | Grid | Filter: Status is Submitted, Acknowledged, or Scheduled. Sort: Submitted on, oldest first. Show Label, Requests, Status, Submitted on, Promised by, Claim by |
+
+**Organizations**
+
+| View | Type | Set up as |
+|---|---|---|
+| By trade | Grid | Grouped by Trades. Show Company, Role, Contact name, Phone, After-hours phone, Our contact |
+
+The status page's and forms' links aren't kept in this repo, which is
+public.

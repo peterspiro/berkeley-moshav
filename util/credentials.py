@@ -1,3 +1,4 @@
+import os
 import sys
 from pathlib import Path
 
@@ -63,3 +64,22 @@ def load_zoom_credentials(path: Path = ZOOM_CREDENTIALS_FILE) -> dict[str, str]:
     zoom_credentials file — the Zoom Server-to-Server OAuth app's
     credentials (see README.md)."""
     return read_key_value_file(path, _ZOOM_KEYS)
+
+
+# The project's Airtable personal access token, kept like zoom_credentials.
+AIRTABLE_CREDENTIALS_FILE = Path(__file__).parent.parent / "airtable_credentials"
+AIRTABLE_TOKEN_VARIABLE = "AIRTABLE_TOKEN"
+
+
+def load_airtable_token(path: Path = AIRTABLE_CREDENTIALS_FILE) -> str:
+    """Return the Airtable personal access token: the AIRTABLE_TOKEN
+    environment variable if it's set, or else `token` from the repo's
+    airtable_credentials file (see README.md).
+
+    The variable is for a Claude Code cloud session, whose network proxy
+    puts the real token into each request to Airtable: there, set it to any
+    placeholder, such as `proxy-injected`."""
+    token = os.environ.get(AIRTABLE_TOKEN_VARIABLE)
+    if token:
+        return token
+    return read_key_value_file(path, ("token",))["token"]
