@@ -1,6 +1,6 @@
 # Plan: Maintenance & warranty tracker (Airtable)
 
-A design for the system the Maintenance & Warranty committee will use to
+A design for the system the Maintenance & Warranty Circle will use to
 track the new 36-unit building: members' repair requests, warranty claims,
 subcontractor contacts, equipment, maintenance and inspection schedules, and
 how-to and emergency knowledge. Nothing here is built yet.
@@ -12,7 +12,8 @@ on the web".
 ## Goals
 
 - **One intake channel.** A member reports a problem, or asks how to work
-  something, on one form, from a phone, with photos, without an account.
+  something, on one form, from a phone, tablet, or computer, with photos,
+  without an account.
 - **Evidence from day one.** Every defect is logged with its date, place,
   and photos, and what was said and done about it afterwards, in a record
   that survives a disputed claim (and survives Airtable).
@@ -24,7 +25,7 @@ on the web".
 - **Claims are tracked to sign-off**, against each warranty's deadline.
 - **Patterns show up**: the same component failing in several units, or
   along one plumbing stack, is noticed and claimed as one systemic problem.
-- **Members can see status themselves**, without asking the committee.
+- **Members can see status themselves**, without asking the circle.
 - **Scheduled maintenance and inspections** come due on their own, including
   the inspection before the one-year warranty ends.
 
@@ -35,14 +36,14 @@ groups); work orders for a property manager.
 
 | Thing | Kept in | Why |
 |---|---|---|
-| Records (requests, claims, contacts, equipment, schedules) | Airtable | Relational, with forms, kanban and grouped views the committee can change themselves |
+| Records (requests, claims, contacts, equipment, schedules) | Airtable | Relational, with forms, kanban and grouped views the circle can change themselves |
 | Views, the member form, interfaces | Airtable, built by hand from a checklist | Airtable's API can't create them (to confirm, see "Phase 0") |
 | The base's tables and fields | `maintenance/schema.json` in this repo, applied by a script | So a session can change the schema, review it as a diff, and try it on a test base |
 | All logic: emails, reminders, calendar, pattern reports, backups | A `maintenance_tracker` Apps Script project, running as `admin@berkeleymoshav.org` | Airtable automations can't be kept in git, tested, or made by the API, and are rationed by plan; Apps Script is what the repo's other timers already use, and it can send mail and write calendars and Drive as `admin@` |
-| Documents (O&M manuals, as-builts, warranties, claim letters) | The committee's Drive folder | The community's access rules already apply there; Airtable holds links |
+| Documents (O&M manuals, as-builts, warranties, claim letters) | The circle's Drive folder | The community's access rules already apply there; Airtable holds links |
 | How-to and emergency guides | Google Docs in a "Building Handbook" folder everyone can view | Members already have Drive access; Airtable indexes them |
 | Members and their units | Gather, copied to Airtable | Gather stays the directory |
-| The committee, its email list, folder, and calendar | A Gather group made by `add_new_group.py`, like every other | Its Google Group is where alerts go |
+| The circle, its email list, folder, and calendar | A Gather group made by `add_new_group.py`, like every other | Its Google Group is where alerts go |
 
 The rule: **Airtable holds data and the screens people use; everything that
 acts on the data is code in this repo.** No Airtable automations, and no
@@ -66,9 +67,9 @@ house rooms, mechanical rooms, site).
 
 ### People
 
-Members and committee volunteers, copied from Gather's directory (see
+Members and circle volunteers, copied from Gather's directory (see
 "Links to the rest of the setup"). `Name`, `Email`, `Phone`, `Location`
-(link), `Committee member` (checkbox), `Gather ID`.
+(link), `Circle member` (checkbox), `Gather ID`.
 
 Owners and contacts are links to People, not Airtable's collaborator field,
 so a volunteer can own a request without holding a paid Airtable seat.
@@ -77,7 +78,13 @@ so a volunteer can own a request without holding a paid Airtable seat.
 
 Everything a member reports or asks. One row per problem per place.
 
-- `ID` (autonumber, shown as R-0123), `Title`, `Description`, `Photos`
+- `ID` (autonumber, shown as R-0123), `Description` and `Photos` (the
+  member's own words and pictures)
+- `Title`: written at triage, not by the member, because it's the only
+  description the status page shows. It names the thing and the fault
+  ("Bath fan rattles"), never a person, a health matter, or when anyone is
+  away. Until triage it's empty, and the status page shows only that the
+  request was received.
 - `Location` (link), `Room` (Kitchen, Bath, Bedroom, Living, Entry, Balcony,
   Laundry, n/a)
 - `Type`: Repair or defect / How do I…? / Suggestion
@@ -97,6 +104,8 @@ Everything a member reports or asks. One row per problem per place.
 - `Owner` (link to People), `Responsibility`: Builder warranty /
   Manufacturer warranty / HOA / Unit owner / Unknown
 - `Claim` (link), `Vendor` (link to Organizations), `Visit` (date and time)
+- `Warranty` (link, set at triage) and `Claim by` (a date the script works
+  out from it; see Warranties)
 - `Duplicate of` (link to Requests), `Resolution`, `Closed on`
 - `Submitted` (created time; never edited)
 - `Member-visible status` (text the script writes; what the public view shows)
@@ -123,11 +132,21 @@ systemic problem) and a request can be re-claimed.
 - `Scope`: Unit / Common element / Systemic
 - `Status`: Drafting → Submitted → Acknowledged → Scheduled → Work done →
   Accepted. Also Disputed, Denied, Withdrawn.
-- `Submitted on`, `Submitted how` (the builder's required channel),
+- `Submitted on`, `Submitted how`, `Sent to` (the person it went to),
   `Their reference`, `Acknowledged on`, `Response`, `Promised by`,
   `Work done on`, `Accepted by` (link to People), `Accepted on`
-- `Claim by` (the warranty's expiry, copied by the script; the date that
-  must not be missed), `Folder` (Drive link to the letter and evidence)
+- `Claim by` (the earliest of its requests' dates, set by the script; the
+  date that must not be missed), `Folder` (Drive link to the letter and
+  evidence)
+
+The builder has no claims process of its own, so the circle's record is the
+process, and has to show by itself that notice was given and when. Every
+claim goes in writing, by email from one address (the circle's list, or a
+`warranty@` address) to the person the builder names, with the claim's
+number in the subject and its requests and photos attached; the script
+drafts that email from the claim's rows, and the sent message is filed in
+the claim's folder. Ask the builder early, in writing, to name that person
+and agree that email to them counts as notice (see "For the attorney").
 
 ### Warranties
 
@@ -136,10 +155,20 @@ workmanship warranty, each manufacturer's (roof, HVAC, elevator,
 appliances, windows), and the longer periods state law gives for particular
 defects.
 
-`Name`, `Warrantor`, `Covers` (System, and links to Assets), `Scope` (Unit /
-Common), `Starts` (and `Starts per unit`, a checkbox, if it runs from each
-closing), `Term`, `Expires`, `Document` (Drive link), `How to claim`,
-`Notice required by`.
+`Name`, `Warrantor`, `Held by` (Association / Each owner / Unknown),
+`Covers` (System, and links to Assets), `Scope` (Unit / Common), `Clock
+starts` (One date for the building / Each unit's closing / Unknown),
+`Building start date`, `Term` (months), `Document` (Drive link), `How to
+claim`.
+
+It isn't known yet whether each warranty runs from one date for the
+building or from each unit's closing, and the design doesn't need to know.
+The deadline is worked out per request, by the script: the warranty's start
+for that request's location, plus its term. While `Clock starts` is
+Unknown, it uses the earliest date it could be (the building's date or the
+unit's closing, whichever is first), so a warning can come early but never
+late. When the answer is known, changing that one field moves every
+deadline.
 
 ### Organizations
 
@@ -151,6 +180,11 @@ Service vendor / Consultant / Utility), `Trades` (the System list),
 `Contact name`, `Phone`, `Email`, `After-hours phone`, `Licence`,
 `Our contact` (link to People: the one person who deals with them),
 `Under contract until`, `Notes`.
+
+Contacts will be collected over time, so nothing requires these fields.
+While `Our contact` is empty, the coordinator is the contact. The
+coordinator will rotate, so who it is now is data, a `Coordinator` checkbox
+on People, not something written into the script or the views.
 
 ### Assets
 
@@ -209,12 +243,16 @@ requests it settled, which shows what's worth writing next).
   it's closed (asking them to reply if it isn't fixed).
 - The **status page**: a read-only shared view of open and recently closed
   requests showing number, location, system, title, member-visible status,
-  and dates. No reporter, no photos, no internal notes. See "Open
-  questions" for whether a link-only view is private enough.
+  and dates. No reporter, no description, no photos, no internal notes.
+  Anyone with its link can open it, which is accepted for now. What it
+  shows of a request is the triager's `Title` and the script's
+  `Member-visible status`, never anything a member typed, so personal
+  details in a description don't reach it. The unit number beside a fault
+  is the exposure that remains.
 - The **Building Handbook** folder, and laminated one-page emergency cards
   in each unit and at each shutoff, printed from its docs.
 
-**The committee**
+**The circle**
 
 - **Triage** (New requests, oldest first): set System, Component,
   Responsibility, Owner; mark duplicates. A named coordinator does this
@@ -226,7 +264,7 @@ requests it settled, which shows what's worth writing next).
 - **Contacts**: Organizations by trade, with after-hours numbers.
 - A **quick update form** (on Updates), for a volunteer on a phone, or
   without a seat, to log a call or a visit against a request.
-- The **weekly digest** email to the committee's list: new requests, ones
+- The **weekly digest** email to the circle's list: new requests, ones
   with no owner, ones not touched in 14 days, claims past their promised
   date, warranties expiring in 90 days, maintenance due, and patterns (below).
 
@@ -241,7 +279,7 @@ Gmail, Calendar, and Drive stays thin.
 Every 10 minutes:
 
 - **New requests**: match the reporter to People by email; email the
-  acknowledgment; for Emergency or Urgent, email the committee's list at
+  acknowledgment; for Emergency or Urgent, email the circle's list at
   once. A "handled" field on each row, not a timestamp cursor, records what's
   been done, so a failed run repeats nothing and misses nothing.
 - **Status changes**: add the Updates row, set `Member-visible status` and
@@ -253,10 +291,11 @@ Every 10 minutes:
 
 Daily:
 
-- **Claim deadlines**: copy each claim's `Claim by` from its warranty; warn
-  the list of unclaimed warranty requests as an expiry nears (90, 30, 7 days).
+- **Claim deadlines**: work out each warranty request's `Claim by` (see
+  Warranties) and each claim's from its requests; warn the list of
+  unclaimed warranty requests as a deadline nears (90, 30, 7 days).
 - **Backup**: write every table as JSON, and every new photo and attachment,
-  to a dated folder in the committee's Drive. Airtable's attachment links
+  to a dated folder in the circle's Drive. Airtable's attachment links
   expire and its history is limited by plan; the Drive copy is the evidence
   file, and what makes leaving Airtable possible.
 - **Checks**: email `calendaring-alerts@`-style warnings (to a
@@ -271,7 +310,7 @@ constants in `tracker_rules.gs`.
 
 ## Links to the rest of the setup
 
-- **The committee** is a Gather group made with `add_new_group.py`, so it
+- **The circle** is a Gather group made with `add_new_group.py`, so it
   has its list, folder, calendar, and Zoom room like any circle.
 - **People** are copied from Gather by a Python script,
   `sync_maintenance_people.py`, run by hand when members change (Gather has
@@ -281,14 +320,14 @@ constants in `tracker_rules.gs`.
   household records carry the unit number, or Locations needs a one-time
   mapping.
 - **The maintenance calendar** is a separate calendar owned by `admin@`,
-  not the committee's group calendar: `group_meetings` treats every event on
+  not the circle's group calendar: `group_meetings` treats every event on
   a group calendar as a meeting, and would give a filter change a Zoom room
   and a reminder. But `group_meetings` also invites the all-events calendar
   to events on `admin@`'s *other* calendars, so it needs a small change to
   leave this one alone (a skip list, or a marker in the calendar's
   description). Work that affects everyone (a water shutoff, a fire alarm
   test) is announced by hand on the community calendar.
-- **Emails** go from `admin@` with replies to the committee's list, as the
+- **Emails** go from `admin@` with replies to the circle's list, as the
   calendar emails do.
 
 ## Developing it in Claude Code on the web
@@ -318,12 +357,19 @@ browser signed in to Airtable, no Google sign-in. So:
   token in a git-ignored `airtable_credentials` file beside
   `zoom_credentials`. The Apps Script has its own token for the real base,
   with the two `data.records` scopes only, in Script Properties.
-- **What a session can't do** is listed in
-  `maintenance_tracker/README.md` as a checklist for a person: creating the
-  workspace and tokens; building each view, form, and the status page's
-  share link in Airtable's UI; `clasp push`; installing the timers. The
-  script's daily check names any view the checklist calls for that's
-  missing, so the hand-built parts can't silently drift.
+- **Nothing that opens the base is in the repo**, which is public: no
+  tokens, base IDs, form or status page links, calendar IDs, or phone
+  numbers. The schema file names tables and fields, not IDs. The scripts
+  read IDs and links from Script Properties and the git-ignored credentials
+  file. Rows drafted from the handover (contacts, serial numbers) aren't
+  committed either.
+- **What a cloud session can't do** is listed in
+  `maintenance_tracker/README.md` as a checklist: creating the workspace
+  and tokens; building each view, the forms, and the status page's share
+  link in Airtable's UI; `clasp push`; installing the timers. The script's
+  daily check names any view the checklist calls for that's missing, so
+  those parts can't silently drift. Most of the checklist can be done by
+  Claude Code on your own computer instead of by hand (see below).
 - **Tests** follow the repo's pattern: `tracker_rules.gs` under Node,
   the Python against a fake Airtable in `tests/`, all in `python -m pytest`.
   A session finishes a change by running them, then running the script's
@@ -334,7 +380,40 @@ browser signed in to Airtable, no Google sign-in. So:
   session, have it draft the rows as CSV in the test base, and review them
   before `seed` loads them into the real one.
 
-## Plan and cost
+### What's better done in Claude Code on your own computer
+
+Claude Code run locally (the CLI or desktop app) has what a cloud session
+lacks: a browser signed in to Airtable, the Google and Gather sign-ins the
+other scripts use, and `clasp`. That covers most of the checklist above:
+
+- **Views, forms, and the status page.** Claude can build them by driving
+  Airtable's UI in your browser, working down the checklist while you
+  watch. Do it that way, as a one-off, rather than as a Playwright script
+  like the Gather ones: there are about a dozen views and two forms, made
+  once, and a script against Airtable's UI would cost more to keep working
+  than it saves. The daily check still tells you if one goes missing.
+- **Deploying the Apps Script**: `clasp push`, running the function that
+  installs the timers, and setting Script Properties.
+- **Applying the schema to the real base**, with the real token on your
+  machine.
+- **Anything using Gather or Google**: `sync_maintenance_people.py` (Gather
+  login), making the circle's group with `add_new_group.py`, and creating
+  the maintenance calendar and handbook folder.
+- **Loading the handover**, reading the PDFs where they are in Drive or on
+  disk instead of uploading them to a session.
+- **Trying it end to end**: submitting the real form in a browser and
+  checking the acknowledgment arrives.
+
+The cost is the safety the cloud gives for free. A local session can reach
+the real base, so "sessions only touch the test base" becomes a habit
+instead of a guarantee: keep the real token out of the environment except
+when applying a reviewed change.
+
+A workable split: write and test the code, schema, and rules in cloud
+sessions against the test base; do setup and each deployment in a local
+session.
+
+## Plan and cost## Plan and cost
 
 Start on Airtable's Free plan to build and try it. It won't last the
 warranty year: its limit of about 1,000 records per base covers every table
@@ -344,9 +423,9 @@ records, attachment storage, editor seats, and API calls (the Free plan's
 monthly API allowance, reported as 1,000 calls, is far too few for a
 10-minute timer).
 
-The Team plan is reported at about $20 per editor a month, billed yearly,
+The Team plan is reported at about \$20 per editor a month, billed yearly,
 with 50,000 records per base. Only people who edit the base directly need a
-seat: the coordinator and two or three triagers, so roughly $700 to $1,000 a
+seat: the coordinator and two or three triagers, so roughly \$700 to \$1,000 a
 year. Other volunteers use the quick update form and the emails. Check
 current prices and limits on Airtable's pricing page before buying; the
 figures above come from third-party summaries that don't fully agree.
@@ -358,7 +437,7 @@ own account.
 
 Move-in is soon, so the order is by what's lost if it's late.
 
-0. **Decide and confirm** (a day). The open questions below. Make the
+0. **Set up and confirm** (a day). Book the attorney (see below). Make the
    workspace and both bases' tokens. Confirm against Airtable's API
    documentation, or by trying on the test base: which field types the
    metadata API can create (formula, rollup, and lookup fields may have to be
@@ -366,7 +445,8 @@ Move-in is soon, so the order is by what's lost if it's late.
    or forms; the plan's API call allowance.
 1. **Intake, before move-in.** Schema file and `maintenance_base.py`;
    Locations, People, Requests, Updates, Organizations; the request form,
-   Triage, Board, and Mine views; the status page. Usable by hand from here.
+   Triage, Board, and Mine views; the status page. Ask the builder to name
+   who receives claims. Usable by hand from here.
 2. **Emails and backup.** The Apps Script's acknowledgments, urgent alerts,
    status emails, weekly digest, and the daily Drive backup.
 3. **Claims.** Claims and Warranties, loaded from the warranty binder;
@@ -379,28 +459,72 @@ Move-in is soon, so the order is by what's lost if it's late.
    report of every open and unclaimed item per warranty; an export of the
    evidence file for the attorney.
 
-## Open questions
+## Decided
 
-- **Is a link-only status page private enough?** It shows unit numbers and
-  what's wrong in them to anyone who has the link. The alternative is for the
-  script to write the same columns to a Google Sheet in the Shared Drive,
-  which only the community can open. More work, and the safer choice.
-- **Should the form be open to anyone with the link?** Airtable forms can't
-  check who's submitting. The risk is junk, not exposure; the script can
-  flag a reporter email that isn't in People.
-- **What does the builder require?** Its claim channel, form, and deadlines
-  decide the Claims fields and whether claim letters can be generated.
-  Likewise when each warranty's clock starts: per unit at closing, or for
-  the building.
-- **Unit and common-element warranties**: does the committee handle both,
-  or do owners claim for their own units, with the committee only tracking?
-- **Who is the coordinator**, and who are each vendor's single contacts?
-- **Does the repo stay private?** Base IDs and form links aren't secrets
-  like tokens, but a public repo shouldn't carry the status page's link.
-- **Legal advice.** Defect-claim deadlines and procedures are set by state
-  law as well as the warranty documents; a construction-defect attorney
-  should review the Warranties table and the claim process in the first
-  months, not at month 11.
+- **The status page is link-only** for now. If that proves too open, the
+  script can write the same columns to a Google Sheet in the Shared Drive,
+  which only the community can open.
+- **The form is open to anyone with its link.** The risk is junk, not
+  exposure; the script flags a reporter email that isn't in People.
+- **The circle handles both** unit and common-element claims.
+- **The builder has no claims process**, so the circle sets one (see
+  Claims).
+- **The coordinator will rotate**, and vendors' contacts will be filled in
+  over time (see Organizations).
+- **The repo is public** (see "Developing it in Claude Code on the web").
+
+## Still unknown
+
+- **When each warranty's clock starts.** The design works either way (see
+  Warranties); the answer only moves the dates.
+- **Whether email to a named person counts as notice** to the builder, and
+  who that person is.
+
+## For the attorney
+
+This isn't legal advice, and which of these matter depends on documents
+not seen here. They're the points where the tracker's design depends on a
+legal answer, so they're worth an early consultation with a
+construction-defect attorney, not one in month 11.
+
+1. **Who holds each warranty, and against whom.** If the units were sold
+   by a developer, each owner likely holds the unit warranties and the
+   association the common-element ones. If the community's own entity was
+   the developer, the claims run under its construction contract with the
+   general contractor instead, with different terms and remedies. This
+   fills in `Held by` and `Warrantor`.
+2. **The circle acting for owners.** Since the circle will make unit claims
+   too, whether it needs each owner's written authorization, and what the
+   association's documents require before it claims for common elements.
+3. **Every deadline, not only the one-year warranty.** California's Right
+   to Repair Act (Civil Code section 895 onward) sets different periods for
+   different kinds of defect in new homes sold to buyers, some much shorter
+   than its ten-year outer limit, and manufacturers' warranties have their
+   own. Each becomes a Warranties row.
+4. **When each clock starts**: close of escrow for each unit, substantial
+   completion, or the certificate of occupancy.
+5. **What counts as notice**, given the builder has no process: to whom,
+   in what form, and whether email is enough or the contracts require a
+   letter. That statute also has a procedure a builder can require before
+   any lawsuit (written notice, then fixed times for it to acknowledge,
+   inspect, and offer a repair); whether it applies, and whether the
+   circle's claim emails satisfy it.
+6. **Maintenance the owners must do.** A builder can defend a claim by
+   showing the owners didn't follow its or the manufacturers' maintenance
+   recommendations. Which ones are required, and what record proves they
+   were done, decides which Maintenance plans are marked `Required by`
+   Warranty.
+7. **What accepting a repair gives up.** Whether signing off a repair, or
+   a form the builder asks for, waives anything; what `Accepted` should
+   mean; and what to do about a repair that fails again.
+8. **When the builder doesn't answer or refuses**: how long to wait, and
+   what the next step is. This sets the digest's "past promised date" rule.
+9. **What to keep, and what not to write.** What the evidence file should
+   hold; that advice from the attorney stays out of Airtable and anything
+   members can open; and whether volunteers' guesses about cause or fault in
+   Updates could hurt a claim.
+10. **Damage and insurance.** When a defect causes damage (a leak), what
+    must be reported to which insurer and how soon, alongside the claim.
 
 ## Background
 

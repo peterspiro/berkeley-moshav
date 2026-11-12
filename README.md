@@ -717,7 +717,7 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
 - `circle-agendas-plan.md`: design of the circle agenda docs, and what
   the tests found
 - `maintenance-tracker-plan.md`: design of the Maintenance & Warranty
-  committee's Airtable-based tracker (repair requests, warranty claims,
+  Circle's Airtable-based tracker (repair requests, warranty claims,
   contacts, equipment, and maintenance schedules); nothing is built yet
 - `archive/gather-sandbox-plan.md` and `archive/gather-import-plan.md`: plans
   for the local Gather test instance and the member import
