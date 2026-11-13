@@ -8,7 +8,7 @@
  *     (categorizeRecording);
  *   - finding the calendar event it came from;
  *   - the "Recording:" line for an event's description, and a sheet's rows;
- *   - the email about recordings that couldn't be categorized;
+ *   - the email reporting what a run did with each recording;
  *   - the months a backfill steps through.
  */
 
@@ -123,6 +123,18 @@ function categorizeRecording(rec, ctx) {
   return { dest: null, rule: 'no rule matched its title' };
 }
 
+/** How a recording was assigned, from categorizeRecording's rule, as the
+ * report says it; a reason it couldn't be is given as it is. */
+function describeRule(rule) {
+  return {
+    room: 'held in its Zoom room',
+    guests: 'its calendar event invites it',
+    'recurring title': "its title is a recurring meeting's",
+    'group name': "its title holds the group's name",
+    keyword: `its title says ${COMMUNITY_KEYWORDS.map(k => `"${k}"`).join(' or ')}`,
+  }[rule] || rule;
+}
+
 /** "1:05", the length of a meeting of this many minutes. */
 function formatLength(minutes) {
   const m = Math.max(0, Math.round(minutes || 0));
@@ -232,6 +244,55 @@ function recordingRow(rec, title) {
           formatLength(rec.minutes), rec.topic, rec.id];
 }
 
+/**
+ * The email about a run's recordings: { to, subject, body }. items: [{
+ * title, when, topic, host, url, rule (categorizeRecording's), sheet (its
+ * name), sheetUrl, unassigned, moved (moved off the Unassigned tab),
+ * event and doc (what happened to them, or null for no agenda doc) }].
+ * opts: { alertEmail, backfill (true for a backfill run's) }. Unassigned
+ * recordings come first, with how to assign them.
+ */
+function recordingsReport(items, opts) {
+  const sorted = items.filter(i => i.unassigned).concat(items.filter(i => !i.unassigned));
+  const unassigned = items.filter(i => i.unassigned).length;
+  const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+  const lines = sorted.map(i => {
+    const out = [`- "${i.title}", ${i.when}`];
+    if (i.unassigned) {
+      out.push(`  UNASSIGNED: ${i.sheet} (${describeRule(i.rule)})`,
+               `  Zoom topic: ${i.topic || '(none)'}; Zoom user: ${i.host}`);
+    } else {
+      out.push(`  Sheet: ${i.sheet} (${i.moved ? 'moved off the Unassigned tab'
+                                               : describeRule(i.rule)})`);
+    }
+    if (i.event) out.push(`  Calendar event: ${i.event}`);
+    if (i.doc) out.push(`  Agenda doc: ${i.doc}`);
+    out.push(`  Recording: ${i.url || '(no share link: is sharing on in Zoom?)'}`);
+    return out.join('\n');
+  });
+  const sheets = [];
+  for (const i of sorted) {
+    const name = i.sheet.replace(/ \(already listed\)$/, '').replace(/, .* tab$/, '');
+    if (!sheets.some(s => s.name === name)) sheets.push({ name, url: i.sheetUrl });
+  }
+  const how = unassigned
+    ? `\n\nTo list an unassigned recording in a group's sheet, type the group's name (or ` +
+      `"community") in its Group column on the ${UNASSIGNED_TAB} tab; it's moved within the ` +
+      'hour.'
+    : '';
+  return {
+    to: opts.alertEmail,
+    subject: `${opts.backfill ? 'Recordings backfill: ' : ''}${plural(items.length, 'Zoom recording')} ` +
+      `linked` + (unassigned ? `, ${unassigned} unassigned` : ''),
+    body:
+      `Hi,\n\n` +
+      `${opts.backfill ? 'This run of the recordings backfill' : 'This hour\'s run'} ` +
+      `processed ${plural(items.length, 'recording')}:\n\n${lines.join('\n')}${how}\n\n` +
+      `The sheets:\n${sheets.map(s => `- ${s.name}: ${s.url}`).join('\n')}\n\n` +
+      `This message was sent automatically.\n`,
+  };
+}
+
 /** The name of a group's recordings sheet. */
 function recordingsSheetName(groupName) {
   return `${groupName} Meeting Recordings`;
@@ -263,35 +324,6 @@ function shareBase(url) {
 /** A title's words, in lower case, separated by single spaces. */
 function titleWords(title) {
   return lower(plainText(title || '')).replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
-}
-
-/**
- * The email about recordings that couldn't be categorized: { to, subject,
- * body }. items: [{ title, when, topic, host, url, why }]. opts: {
- * alertEmail, sheetUrl (the community sheet), backfill (true for a
- * backfill run's summary) }.
- */
-function uncategorizedMessage(items, opts) {
-  const lines = items.map(i =>
-    `- "${i.title}", ${i.when}\n  Zoom topic: ${i.topic || '(none)'}; Zoom user: ${i.host}\n` +
-    `  ${i.url}\n  Why: ${i.why}`);
-  const one = items.length === 1;
-  return {
-    to: opts.alertEmail,
-    subject: one
-      ? `Recording not listed for any group: "${items[0].title}"`
-      : `${items.length} recordings not listed for any group`,
-    body:
-      `Hi,\n\n` +
-      (opts.backfill ? 'The recordings backfill found ' : 'Zoom has ') +
-      (one ? 'a recording' : `${items.length} recordings`) +
-      ` that couldn't be matched to a group or to the community-wide meetings, so ` +
-      `${one ? 'it is' : 'they are'} on the ${UNASSIGNED_TAB} tab of the community recordings ` +
-      `sheet:\n${opts.sheetUrl}\n\n${lines.join('\n')}\n\n` +
-      `To list one in a group's sheet, type the group's name (or "community") in its Group ` +
-      `column; it's moved within the hour.\n\n` +
-      `This message was sent automatically.\n`,
-  };
 }
 
 /** A Zoom recording UUID as a path segment: one starting with "/" or

@@ -375,10 +375,15 @@ downloaded, so Apps Script's size limits don't matter.
   - **in a Google Sheet**: a row (date, time, title, link, passcode,
     length, Zoom topic, and Zoom's ID for the recording, hidden, so no
     recording is listed twice).
-- **Backfill** (`backfillRecordings`, run by hand, sheets only): steps
+- **Backfill** (`backfillRecordings`, run by hand): does the same for
+  older recordings (events, agenda docs, and sheets, a meeting with no
+  agenda tab not being tried again), stepping
   month by month (Zoom lists at most a month at a time) through every Zoom
   user's recordings from `BACKFILL_FROM`, saving its place so a run stopped
-  by Apps Script's 6-minute limit carries on when run again.
+  by Apps Script's 6-minute limit carries on when run again. Past events
+  are safe to change: `sendUpdates: none` sends no guest an update, Google
+  account or not (unlike moving a series to another calendar in Google
+  Calendar, which sends one per past occurrence to guests outside Google).
   `backfillRecordingsDryRun` logs where each recording would go and changes
   nothing. Recordings made on personal or work Zoom accounts can't be
   reached.
@@ -404,11 +409,13 @@ downloaded, so Apps Script's size limits don't matter.
      words; the longest name wins.
   5. Its title contains "listening session" or "ask me anything", in any
      case: the community sheet.
-  6. Otherwise uncategorized: a row on the Unassigned tab, and an email to
-     `calendaring-alerts@` (one per recording from the hourly run; one
-     summary per backfill run). Typing a group's name or address, or
-     "community", in a row's Group column moves it to that sheet on the
-     next hourly run.
+  6. Otherwise uncategorized: a row on the Unassigned tab. Typing a
+     group's name or address, or "community", in a row's Group column
+     moves it to that sheet (and its agenda doc) on the next hourly run.
+- **Report**: each run (hourly or backfill) that processed at least one
+  recording emails `calendaring-alerts@` how each was assigned, by which
+  rule, and what happened to its event and agenda doc; unassigned ones
+  first.
 - **Zoom scopes**: `cloud_recording:read:list_user_recordings:admin` and
   `cloud_recording:read:list_recording_files:admin`. Recordings must be
   shareable (the account's cloud recording sharing setting); older ones

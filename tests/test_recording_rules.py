@@ -225,18 +225,54 @@ class TestSheets:
                             ("", None)]:
             assert js("overrideDestination(t, groups)", t=typed, groups=GROUPS) == dest, typed
 
-    def test_alert(self):
-        item = {"title": "Potluck", "when": "Sat Oct 31, 7:05 PM–8:05 PM", "topic": "P",
-                "host": "z@x.org", "url": "https://zoom.us/rec/share/abc", "why": "no rule"}
-        one = js("uncategorizedMessage([i], {alertEmail: 'a@x.org', sheetUrl: 'https://s'})",
-                 i=item)
-        assert one["to"] == "a@x.org"
-        assert one["subject"] == 'Recording not listed for any group: "Potluck"'
-        assert "https://s" in one["body"] and "Why: no rule" in one["body"]
-        two = js("uncategorizedMessage([i, i], {alertEmail: 'a', sheetUrl: 's', backfill: true})",
-                 i=item)
-        assert two["subject"] == "2 recordings not listed for any group"
-        assert "backfill found 2 recordings" in two["body"]
+
+
+class TestReport:
+    ITEM = {"title": "Finance Circle", "when": "Sat Oct 31, 7:05 PM\u20138:05 PM", "topic": "F",
+            "host": "z@x.org", "url": "https://zoom.us/rec/share/abc", "rule": "room",
+            "sheet": "Finance Circle Meeting Recordings", "sheetUrl": "https://s/fin",
+            "unassigned": False, "event": "link added", "doc": "no tab for 2026-10-31"}
+    LOST = {**ITEM, "title": "Potluck", "rule": "no rule matched its title", "unassigned": True,
+            "sheet": "Community Meeting Recordings, Unassigned tab", "sheetUrl": "https://s/com",
+            "event": "no event found", "doc": None}
+
+    def report(self, items, backfill=False):
+        return js("recordingsReport(items, {alertEmail: 'a@x.org', backfill: b})",
+                  items=items, b=backfill)
+
+    def test_says_how_each_was_assigned(self):
+        r = self.report([self.ITEM])
+        assert r["to"] == "a@x.org"
+        assert r["subject"] == "1 Zoom recording linked"
+        body = r["body"]
+        assert "Sheet: Finance Circle Meeting Recordings (held in its Zoom room)" in body
+        assert "Calendar event: link added" in body
+        assert "Agenda doc: no tab for 2026-10-31" in body
+        assert "- Finance Circle Meeting Recordings: https://s/fin" in body
+        assert "Group column" not in body
+
+    def test_unassigned_first_with_how_to_assign(self):
+        r = self.report([self.ITEM, self.LOST], backfill=True)
+        assert r["subject"] == "Recordings backfill: 2 Zoom recordings linked, 1 unassigned"
+        body = r["body"]
+        assert body.index("Potluck") < body.index('"Finance Circle"')
+        assert ("UNASSIGNED: Community Meeting Recordings, Unassigned tab "
+                "(no rule matched its title)") in body
+        assert "Agenda doc" not in body.split('"Finance Circle"')[0]
+        assert "Group column" in body
+        assert "- Community Meeting Recordings: https://s/com" in body
+
+    def test_moved_and_already_listed(self):
+        moved = {**self.ITEM, "moved": True, "event": None, "doc": None,
+                 "sheet": "Garden Club Meeting Recordings (already listed)"}
+        body = self.report([moved])["body"]
+        assert "(already listed) (moved off the Unassigned tab)" in body
+        assert "- Garden Club Meeting Recordings: https://s/fin" in body
+
+    def test_describe_rule(self):
+        assert js("describeRule('keyword')") == \
+            'its title says "listening session" or "ask me anything"'
+        assert js("describeRule('something else')") == "something else"
 
 
 def test_month_windows():

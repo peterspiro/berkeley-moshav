@@ -9,8 +9,8 @@
  * RECORDINGS_LOOKBACK_DAYS days that has finished processing, and hasn't
  * been handled, gets:
  *   1. a "Recording:" line in the description of the calendar event it
- *      came from (the one occurrence of a series), sending no email, if the
- *      event's calendar is one this account owns;
+ *      came from (the one occurrence of a series), if the event's calendar
+ *      is one this account owns; sendUpdates 'none' sends no guest an email;
  *   2. for a group with an agenda doc, a "Recording:" line in the doc's
  *      tab for that meeting (titled with its date), below its "Time" line;
  *      a meeting with no tab yet is tried again hourly for DOC_RETRY_DAYS;
@@ -18,15 +18,16 @@
  *      "<Group> Meeting Recordings" in the group's Drive item, or
  *      "Community Meeting Recordings" in the Shared Drive's Meeting Admin
  *      folder, each made when first needed; one that can't be categorized
- *      goes on the community sheet's Unassigned tab, and ALERT_EMAIL gets
- *      an email about it.
+ *      goes on the community sheet's Unassigned tab.
  * Then a group typed in an Unassigned row's Group column moves that row to
- * the group's sheet, and the choice is kept for later runs.
+ * the group's sheet (and its agenda doc), and the choice is kept for later
+ * runs. If the run processed any recording, ALERT_EMAIL gets a report of
+ * how each was assigned and what was linked (see recordingsReport).
  *
- * backfillRecordings, run by hand, lists every older recording (from
- * BACKFILL_FROM) in the sheets only, a month at a time, carrying on where
- * it stopped when run again; backfillRecordingsDryRun only logs where each
- * would go.
+ * backfillRecordings, run by hand, does the same for every older
+ * recording (from BACKFILL_FROM), a month at a time, carrying on where it
+ * stopped when run again, with a report per run;
+ * backfillRecordingsDryRun only logs where each would go.
  */
 
 // The community's Shared Drive (DEFAULT_DRIVE_ID in util/gdrive_config.py)
@@ -57,9 +58,9 @@ const PROP_BACKFILL_DRY_RUN = 'recordingsBackfillDryRun';
 
 /**
  * Add a recording's line to its meeting's tab in an agenda doc. Returns
- * 'done' (added, or there already), 'no tab' (none titled with the date),
- * or 'ambiguous' (more than one tab, or more than one meeting on the
- * group's calendar that day).
+ * 'added', 'already there', 'no tab' (none titled with the date), or
+ * 'ambiguous' (more than one tab, or more than one meeting on the group's
+ * calendar that day).
  */
 function addRecordingToDoc(entry) {
   const doc = DocumentApp.openById(entry.docId);
@@ -67,7 +68,7 @@ function addRecordingToDoc(entry) {
   if (!tabs.length) return 'no tab';
   if (tabs.length > 1 || meetingsOnDay(entry.calendarId, entry.date) > 1) return 'ambiguous';
   const body = tabs[0].asDocumentTab().getBody();
-  if (body.getText().includes(shareBase(entry.url))) return 'done';
+  if (body.getText().includes(shareBase(entry.url))) return 'already there';
   let index = 0;
   for (let i = 0; i < body.getNumChildren(); i++) {
     const el = body.getChild(i);
@@ -81,22 +82,25 @@ function addRecordingToDoc(entry) {
   para.appendText(entry.url).setLinkUrl(entry.url);
   if (entry.passcode) para.appendText(` (passcode ${entry.passcode})`).setLinkUrl(null);
   doc.saveAndClose();
-  return 'done';
+  return 'added';
 }
 
-/** Add a recording's line to its calendar event, if the event's organizer
- * is a calendar this account owns; sends no email. */
+/**
+ * Add a recording's line to its calendar event, if the event's organizer
+ * is a calendar this account owns. sendUpdates 'none' sends no email to
+ * any guest, Google or not, past occurrence or not. Returns what happened,
+ * for the report.
+ */
 function addRecordingToEvent(event, rec, ctx) {
   const organizer = (event.organizer || {}).email || '';
   if (!ctx.ownedCalendarIds.has(lower(organizer))) {
-    console.log(`"${event.summary}": organized by ${organizer || 'someone else'}, so its ` +
-                'event gets no recording link.');
-    return;
+    return `organized by ${organizer || 'someone else'}, so not changed`;
   }
   const description = addRecordingLine(event.description, rec);
-  if (description === null) return;
+  if (description === null) return 'already linked';
   Calendar.Events.patch({ description }, organizer, event.id, { sendUpdates: 'none' });
   console.log(`"${event.summary}": added its recording's link.`);
+  return 'link added';
 }
 
 /** Every tab of a doc (DocumentApp), child tabs included. */
@@ -108,8 +112,9 @@ function allDocTabs(doc) {
 /**
  * Move each Unassigned row whose Group column names a group (or
  * "community") to that sheet, keeping the choice (so the backfill lists
- * the recording there too); a row naming no group is told so in its Why
- * column.
+ * the recording there too), adding it to the group's agenda doc, if it has
+ * one, and to the report; a row naming no group is told so in its Why
+ * column. (Its calendar event got its line when it was first handled.)
  */
 function applyUnassignedChoices(ctx) {
   const book = findRecordingsBook(COMMUNITY);
@@ -146,6 +151,34 @@ function applyUnassignedChoices(ctx) {
     }
     ctx.choices[id] = dest;
     moved.push(i + 2);
+    const [, start, title, url, passcode, , topic, host] = row;
+    const group = ctx.byEmail.get(dest);
+    const docId = group && group.agendaUrl
+      ? (group.agendaUrl.match(GOOGLE_DOC_ID_RE) || [])[1] : null;
+    let doc = null;
+    if (docId && url && start instanceof Date) {
+      const date = Utilities.formatDate(start, TIME_ZONE, 'yyyy-MM-dd');
+      const entry = { docId, calendarId: group.calendarId, url: String(url),
+                      passcode: String(passcode || ''), date,
+                      until: Date.now() + DOC_RETRY_DAYS * DAY_MS };
+      try {
+        const result = addRecordingToDoc(entry);
+        if (result === 'no tab') ctx.docQueue.push(entry);
+        doc = { added: 'link added', 'already there': 'already linked',
+                'no tab': `no tab for ${date}; tried again hourly for ${DOC_RETRY_DAYS} days`,
+                ambiguous: `more than one meeting on ${date}, so not added` }[result];
+      } catch (err) {
+        doc = `couldn't add it (${err.message})`;
+      }
+    }
+    ctx.report.push({
+      title: String(title), topic: String(topic), host: String(host), url: String(url),
+      when: start instanceof Date ? Utilities.formatDate(start, TIME_ZONE, 'EEE MMM d, h:mm a')
+        : String(start),
+      rule: 'chosen on the Unassigned tab', moved: true, unassigned: false,
+      sheet: group ? recordingsSheetName(group.name) : COMMUNITY_SHEET_NAME,
+      sheetUrl: tab.book.getUrl(), event: null, doc,
+    });
   });
   if (!moved.length) return;
   flushRecordingRows(ctx);
@@ -190,27 +223,31 @@ function createRecordingsBook(owner, ctx) {
 
 /**
  * The calendar event a recording came from (see recordingEvent): for a
- * group's room, on the group's calendar; otherwise on the all-events
+ * group's room, on the group's calendar; otherwise (or if it isn't there,
+ * as for a meeting from before the group had a calendar) on the all-events
  * calendar (which every managed calendar's events invite) or another
  * calendar this account owns (where older meetings are). null if none.
  */
 function findRecordingEvent(rec, ctx) {
   const room = ctx.groups.find(g => g.zoomUrl && meetingIdFromUrl(g.zoomUrl) === rec.meetingId);
-  const calendars = room ? [room.calendarId] : [ALL_EVENTS_CALENDAR_ID, ...ctx.otherCalendarIds];
-  const events = [];
-  for (const id of calendars) {
-    try {
-      const resp = Calendar.Events.list(id, {
-        singleEvents: true, maxResults: 250,
-        timeMin: new Date(rec.start).toISOString(),
-        timeMax: new Date(rec.start + EARLY_START_MS + 1000).toISOString(),
-      });
-      events.push(...(resp.items || []));
-    } catch (err) {
-      console.error(`Couldn't read calendar ${id}, to find "${rec.topic}": ${err}`);
+  const search = calendars => {
+    const events = [];
+    for (const id of calendars) {
+      try {
+        const resp = Calendar.Events.list(id, {
+          singleEvents: true, maxResults: 250,
+          timeMin: new Date(rec.start).toISOString(),
+          timeMax: new Date(rec.start + EARLY_START_MS + 1000).toISOString(),
+        });
+        events.push(...(resp.items || []));
+      } catch (err) {
+        console.error(`Couldn't read calendar ${id}, to find "${rec.topic}": ${err}`);
+      }
     }
-  }
-  return recordingEvent(rec, events);
+    return recordingEvent(rec, events);
+  };
+  return (room && search([room.calendarId])) ||
+    search([ALL_EVENTS_CALENDAR_ID, ...ctx.otherCalendarIds]);
 }
 
 /** The recordings sheet for a group (by address) or COMMUNITY, or null. */
@@ -262,11 +299,11 @@ function layOutRecordingsTab(sheet, headings) {
 
 /**
  * Queue a recording's row for its sheet (where.dest's, or the Unassigned
- * tab's), unless the sheet lists it already. One for the Unassigned tab is
- * added to ctx.uncategorized, for the alert. A group whose sheet can't be
+ * tab's), unless the sheet lists it already. A group whose sheet can't be
  * made has its recording put on the Unassigned tab instead, saying why.
+ * Returns { key, rule, added, sheet (its name, for the report), sheetUrl }.
  */
-function listRecording(rec, title, when, where, ctx) {
+function listRecording(rec, title, where, ctx) {
   const key = where.dest || UNASSIGNED;
   let tab;
   try {
@@ -274,21 +311,22 @@ function listRecording(rec, title, when, where, ctx) {
   } catch (err) {
     if (key === UNASSIGNED) throw err;
     console.error(`Couldn't use ${key}'s recordings sheet: ${err.message}`);
-    return listRecording(rec, title, when,
+    return listRecording(rec, title,
                          { dest: null, rule: `couldn't use ${key}'s sheet: ${err.message}` }, ctx);
   }
-  if (tab.ids.has(rec.id)) return;
+  const group = ctx.byEmail.get(key);
+  const result = {
+    key, rule: where.rule, added: !tab.ids.has(rec.id), sheetUrl: tab.book.getUrl(),
+    sheet: key === UNASSIGNED ? `${COMMUNITY_SHEET_NAME}, ${UNASSIGNED_TAB} tab`
+      : group ? recordingsSheetName(group.name) : COMMUNITY_SHEET_NAME,
+  };
+  if (!result.added) return result;
   tab.ids.add(rec.id);
   const row = recordingRow(rec, title);
-  if (key === UNASSIGNED) {
-    // Group, When, Title, Recording, Passcode, Length, Zoom topic, Zoom user, Why, Recording ID.
-    (ctx.rows[key] = ctx.rows[key] || []).push(
-      [''].concat(row.slice(0, 6), [rec.host, where.rule, rec.id]));
-    ctx.uncategorized.push({ title, when, topic: rec.topic, host: rec.host, url: rec.url,
-                             why: where.rule });
-  } else {
-    (ctx.rows[key] = ctx.rows[key] || []).push(row);
-  }
+  // Group, When, Title, Recording, Passcode, Length, Zoom topic, Zoom user, Why, Recording ID.
+  (ctx.rows[key] = ctx.rows[key] || []).push(key === UNASSIGNED
+    ? [''].concat(row.slice(0, 6), [rec.host, where.rule, rec.id]) : row);
+  return result;
 }
 
 /** The ID of the Shared Drive's Meeting Admin folder, or null. */
@@ -326,19 +364,22 @@ function newRecordingsContext(groups) {
     ownedCalendarIds: new Set(groups.map(g => lower(g.calendarId)).concat(other.map(lower))),
     choices: getJson(PROP_RECORDING_CHOICES, {}),
     titles: null,     // see recurringTitlesFor
-    sheets: {},       // destination or UNASSIGNED -> { sheet, headings, ids }
+    sheets: {},       // destination or UNASSIGNED -> { book, sheet, headings, ids }
     rows: {},         // destination or UNASSIGNED -> rows waiting to be written
-    docs: [],         // agenda doc lines to add
-    uncategorized: [],
+    docQueue: [],     // agenda doc lines to try again next hour
+    report: [],       // what this run did, for the email (see recordingsReport)
     counts: {},       // a dry run's: destination's name -> recordings
   };
 }
 
 /**
  * Handle one recording (an item of a Zoom user's recordings, hosted by
- * host): find its event, decide its sheet, and queue its row; unless
- * opts.backfill, add its line to its event and queue its agenda doc line.
- * With opts.dryRun, only log where it would go.
+ * host): find its event, decide its sheet, add its line to the event and
+ * to its meeting's tab in the group's agenda doc, and queue its row. A
+ * meeting with no tab yet is queued to try again hourly, unless
+ * opts.backfill. Returns the recording's item for the report (see
+ * recordingsReport), or null if nothing changed (it was handled before).
+ * With opts.dryRun, only logs where it would go, and returns null.
  */
 function processRecording(m, host, ctx, opts) {
   const rec = recordingFromZoom(opts.dryRun ? m : recordingDetails(m), host);
@@ -349,30 +390,55 @@ function processRecording(m, host, ctx, opts) {
   });
   const title = (event && event.summary) || rec.topic || '(untitled)';
   const when = formatRange(rec.start, rec.start + rec.minutes * 60 * 1000);
+  const group = where.dest && where.dest !== COMMUNITY ? ctx.byEmail.get(where.dest) : null;
+  const docId = group && group.agendaUrl ? (group.agendaUrl.match(GOOGLE_DOC_ID_RE) || [])[1] : null;
   if (opts.dryRun) {
-    const group = where.dest && ctx.byEmail.get(where.dest);
     const name = where.dest === COMMUNITY ? COMMUNITY_SHEET_NAME
       : group ? recordingsSheetName(group.name) : UNASSIGNED_TAB;
     ctx.counts[name] = (ctx.counts[name] || 0) + 1;
-    console.log(`${when} "${title}" (${rec.host}) -> ${name} (${where.rule})`);
-    return;
+    console.log(`${when} "${title}" (${rec.host}) -> ${name} (${describeRule(where.rule)}); ` +
+                `${event ? 'event found' : 'no event found'}` +
+                (docId ? '; group has an agenda doc' : ''));
+    return null;
   }
+
   if (!rec.url) {
     console.warn(`The recording of "${title}" (${when}) has no share link; is cloud recording ` +
                  'sharing on in Zoom?');
   }
-  if (!opts.backfill && event && rec.url) addRecordingToEvent(event, rec, ctx);
-  const group = where.dest && where.dest !== COMMUNITY ? ctx.byEmail.get(where.dest) : null;
-  const docId = group && group.agendaUrl ? (group.agendaUrl.match(GOOGLE_DOC_ID_RE) || [])[1] : null;
-  if (!opts.backfill && docId && rec.url) {
-    const start = event ? Date.parse(event.start.dateTime) : rec.start;
-    ctx.docs.push({
-      docId, calendarId: group.calendarId, url: rec.url, passcode: rec.passcode,
-      date: Utilities.formatDate(new Date(start), TIME_ZONE, 'yyyy-MM-dd'),
-      until: Date.now() + DOC_RETRY_DAYS * DAY_MS,
-    });
+  const eventResult = !event ? 'no event found' : !rec.url ? 'no share link'
+    : addRecordingToEvent(event, rec, ctx);
+
+  let docResult = null;
+  if (docId) {
+    const date = Utilities.formatDate(
+      new Date(event ? Date.parse(event.start.dateTime) : rec.start), TIME_ZONE, 'yyyy-MM-dd');
+    const entry = { docId, calendarId: group.calendarId, url: rec.url, passcode: rec.passcode,
+                    date, until: Date.now() + DOC_RETRY_DAYS * DAY_MS };
+    let result;
+    try {
+      result = rec.url ? addRecordingToDoc(entry) : 'no share link';
+    } catch (err) {
+      console.error(`Couldn't add a recording to agenda doc ${docId}: ${err}`);
+      result = `couldn't add it (${err.message})`;
+      if (!opts.backfill) ctx.docQueue.push(entry);
+    }
+    if (result === 'no tab' && !opts.backfill) ctx.docQueue.push(entry);
+    docResult = {
+      added: 'link added', 'already there': 'already linked',
+      'no tab': `no tab for ${date}` +
+        (opts.backfill ? '' : `; tried again hourly for ${DOC_RETRY_DAYS} days`),
+      ambiguous: `more than one meeting on ${date}, so not added`,
+    }[result] || result;
   }
-  listRecording(rec, title, when, where, ctx);
+
+  const listed = listRecording(rec, title, where, ctx);
+  if (!listed.added && eventResult !== 'link added' && docResult !== 'link added') return null;
+  return {
+    title, when, topic: rec.topic, host: rec.host, url: rec.url, rule: listed.rule,
+    sheet: listed.sheet + (listed.added ? '' : ' (already listed)'), sheetUrl: listed.sheetUrl,
+    unassigned: listed.key === UNASSIGNED, event: eventResult, doc: docResult,
+  };
 }
 
 /** A recording with its share link and passcode, from Zoom's details of
@@ -448,14 +514,14 @@ function resetRecordingsBackfill() {
 }
 
 /**
- * Add the agenda doc lines waiting from earlier runs and this one (see
- * addRecordingToDoc); a meeting whose tab isn't there yet waits until its
- * entry's time is up.
+ * Try again the agenda doc lines waiting from earlier runs (see
+ * addRecordingToDoc), then keep those still waiting, until their entry's
+ * time is up, with this run's (ctx.docQueue).
  */
 function retryRecordingDocs(ctx) {
   const now = Date.now();
   const waiting = [];
-  for (const entry of getJson(PROP_RECORDING_DOCS, []).concat(ctx.docs)) {
+  for (const entry of getJson(PROP_RECORDING_DOCS, [])) {
     let result;
     try {
       result = addRecordingToDoc(entry);
@@ -463,31 +529,31 @@ function retryRecordingDocs(ctx) {
       console.error(`Couldn't add a recording to agenda doc ${entry.docId}: ${err}`);
       result = 'no tab';
     }
-    if (result === 'done') console.log(`Agenda doc ${entry.docId}: added the ${entry.date} recording.`);
+    if (result === 'added') console.log(`Agenda doc ${entry.docId}: added the ${entry.date} recording.`);
     if (result === 'ambiguous') {
       console.log(`Agenda doc ${entry.docId}: more than one meeting on ${entry.date}, so its ` +
                   'recording is only on the calendar and in the sheet.');
     }
     if (result === 'no tab' && entry.until > now) waiting.push(entry);
   }
-  setJson(PROP_RECORDING_DOCS, waiting);
+  setJson(PROP_RECORDING_DOCS, waiting.concat(ctx.docQueue));
 }
 
 /**
  * The backfill: steps through each month from BACKFILL_FROM, and each Zoom
- * user, listing the user's recordings (Zoom gives at most a month at a
- * time) in the sheets only (no events or docs), saving its place after
+ * user, handling the user's recordings (Zoom gives at most a month at a
+ * time) as the hourly run does (see processRecording), except that a
+ * meeting with no agenda doc tab isn't tried again; saves its place after
  * each; stops after BACKFILL_RUN_MS, or at a list Zoom won't give, to be
- * run again. At the end of a run,
- * ALERT_EMAIL gets one email listing the recordings it put on the
- * Unassigned tab. With dryRun, only logs where each would go (with its own
- * place).
+ * run again. At the end of a run that changed anything, ALERT_EMAIL gets
+ * the report (see sendRecordingsReport). With dryRun, only logs where each
+ * would go (with its own place).
  */
 function runBackfill(dryRun) {
   withLock(() => {
     const started = Date.now();
     const key = dryRun ? PROP_BACKFILL_DRY_RUN : PROP_BACKFILL;
-    const progress = getJson(key, null) || { month: 0, user: 0, listed: 0, unassigned: 0 };
+    const progress = getJson(key, null) || { month: 0, user: 0, processed: 0, unassigned: 0 };
     if (progress.done) {
       console.log(`The ${dryRun ? 'dry run' : 'backfill'} is done; run resetRecordingsBackfill ` +
                   'to start it again.');
@@ -516,18 +582,21 @@ function runBackfill(dryRun) {
           stopped = true;
           break;
         }
+        const items = [];
         for (const m of list) {
           if (!recordingReady(m)) continue;
           try {
-            processRecording(m, user.email, ctx, { backfill: true, dryRun });
+            const item = processRecording(m, user.email, ctx, { backfill: true, dryRun });
+            if (item) items.push(item);
           } catch (err) {
             console.error(`Couldn't handle the recording of "${m.topic}" (${m.start_time}): ${err}`);
           }
         }
         if (!dryRun) {
-          const before = Object.values(ctx.rows).reduce((n, rows) => n + rows.length, 0);
           flushRecordingRows(ctx);
-          progress.listed += before;
+          ctx.report.push(...items);
+          progress.processed += items.length;
+          progress.unassigned += items.filter(i => i.unassigned).length;
         }
         progress.user++;
         setJson(key, progress);
@@ -538,7 +607,6 @@ function runBackfill(dryRun) {
         setJson(key, progress);
       }
     }
-    progress.unassigned += ctx.uncategorized.length;
     if (!stopped) progress.done = true;
     setJson(key, progress);
 
@@ -546,29 +614,35 @@ function runBackfill(dryRun) {
       const counts = Object.keys(ctx.counts).sort()
         .map(name => `  ${name}: ${ctx.counts[name]}`).join('\n');
       console.log(`This run's recordings, by sheet:\n${counts || '  none'}`);
-    } else if (ctx.uncategorized.length) {
-      const message = uncategorizedMessage(ctx.uncategorized, {
-        alertEmail: ALERT_EMAIL, backfill: true, sheetUrl: ctx.sheets[UNASSIGNED].book.getUrl(),
-      });
-      MailApp.sendEmail({ to: message.to, subject: message.subject, body: message.body,
-                          htmlBody: textToHtml(message.body) });
+    } else {
+      sendRecordingsReport(ctx, true);
     }
     const where = progress.month < months.length ? months[progress.month].month : 'the end';
     console.log(stopped
       ? `Stopped at ${where}; run ${dryRun ? 'backfillRecordingsDryRun' : 'backfillRecordings'} ` +
         'again to carry on.'
       : `The ${dryRun ? 'dry run' : 'backfill'} is done.` +
-        (dryRun ? '' : ` ${progress.listed} recording(s) listed, ${progress.unassigned} of ` +
-                       `them on the ${UNASSIGNED_TAB} tab.`));
+        (dryRun ? '' : ` ${progress.processed} recording(s) processed, ${progress.unassigned} ` +
+                       `of them on the ${UNASSIGNED_TAB} tab.`));
   });
+}
+
+/** Email ALERT_EMAIL the run's report (see recordingsReport), if it
+ * processed any recording. */
+function sendRecordingsReport(ctx, backfill) {
+  if (!ctx.report.length) return;
+  const message = recordingsReport(ctx.report, { alertEmail: ALERT_EMAIL, backfill });
+  MailApp.sendEmail({ to: message.to, subject: message.subject, body: message.body,
+                      htmlBody: textToHtml(message.body) });
+  console.log(`Emailed the report on ${ctx.report.length} recording(s).`);
 }
 
 /**
  * Every hour (from hourly): handle each finished recording of the last
- * RECORDINGS_LOOKBACK_DAYS days not handled yet (see processRecording),
- * emailing ALERT_EMAIL about each that can't be categorized; then add
- * waiting agenda doc lines, and move the Unassigned rows given a group.
- * A recording that fails is tried again next hour.
+ * RECORDINGS_LOOKBACK_DAYS days not handled yet (see processRecording);
+ * move the Unassigned rows given a group; try again the agenda doc lines
+ * still waiting; then, if any recording was processed (or moved), email
+ * ALERT_EMAIL the report. A recording that fails is tried again next hour.
  */
 function syncRecordings(groups) {
   const ctx = newRecordingsContext(groups);
@@ -577,32 +651,27 @@ function syncRecordings(groups) {
   for (const id of Object.keys(seen)) if (seen[id] < now) delete seen[id];
   const from = isoDay(now - RECORDINGS_LOOKBACK_DAYS * DAY_MS);
   const to = isoDay(now + DAY_MS);
-  const alerts = [];
   for (const user of zoomList('/users', 'users')) {
     for (const m of userRecordings(user, from, to)) {
       if (seen[m.uuid] || !recordingReady(m)) continue;
+      const queued = ctx.docQueue.length;
       try {
-        processRecording(m, user.email, ctx, {});
+        const item = processRecording(m, user.email, ctx, {});
         flushRecordingRows(ctx);
-        alerts.push(...ctx.uncategorized);
+        if (item) ctx.report.push(item);
         seen[m.uuid] = now + RECORDINGS_SEEN_DAYS * DAY_MS;
       } catch (err) {
         console.error(`Couldn't handle the recording of "${m.topic}" (${m.start_time}): ${err}`);
+        // It's all tried again next hour.
         ctx.rows = {};
+        ctx.docQueue.length = queued;
       }
-      ctx.uncategorized = [];
     }
   }
   setJson(PROP_RECORDINGS_SEEN, seen);
-  for (const item of alerts) {
-    const message = uncategorizedMessage([item], {
-      alertEmail: ALERT_EMAIL, sheetUrl: ctx.sheets[UNASSIGNED].book.getUrl(),
-    });
-    MailApp.sendEmail({ to: message.to, subject: message.subject, body: message.body,
-                        htmlBody: textToHtml(message.body) });
-  }
-  retryRecordingDocs(ctx);
   applyUnassignedChoices(ctx);
+  retryRecordingDocs(ctx);
+  sendRecordingsReport(ctx, false);
 }
 
 /** A Zoom user's recordings from one day to another ('yyyy-MM-dd', at most

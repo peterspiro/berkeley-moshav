@@ -561,10 +561,12 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
   was held in, its event's guests, its title matching a recurring
   meeting's or holding a group's name, or "listening session" or "ask me
   anything" in its title (community-wide); one that matches none goes on
-  the community sheet's Unassigned tab, with an email to
-  `calendaring-alerts@`, and a group typed in its Group column moves it.
-  Run by hand, `backfillRecordings` lists older recordings, a month at a
-  time, in the sheets only. Its rules are in
+  the community sheet's Unassigned tab, and a group typed in its Group
+  column moves it. Each run that processed a recording emails
+  `calendaring-alerts@` a report of how each was assigned and what was
+  linked. Events are changed sending no email to their guests. Run by
+  hand, `backfillRecordings` does the same for older recordings, a month
+  at a time. Its rules are in
   `group_meetings/recording_rules.gs`, tested under Node.
 
 - **`circle_agendas/`** builds each circle's agenda doc (on a timer, and a

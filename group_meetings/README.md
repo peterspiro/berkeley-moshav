@@ -167,22 +167,38 @@ Which sheet is the first of these that decides (`categorizeRecording` in
    the community sheet.
 
 A recording none of these decide goes on the community sheet's
-**Unassigned** tab, and `calendaring-alerts@` gets an email about it. Type a
-group's name or address (or `community`) in its row's **Group** column: the
-next hourly run moves the row to that sheet, and remembers the choice, so
-the backfill puts it there too. A name it doesn't recognize is noted in
-the row's Why column.
+**Unassigned** tab. Type a group's name or address (or `community`) in its
+row's **Group** column: the next hourly run moves the row to that sheet
+(adding the recording to the group's agenda doc, if it has one), and
+remembers the choice, so the backfill puts it there too. A name it doesn't
+recognize is noted in the row's Why column.
 
-**Backfill.** To list older recordings (sheets only: events and agenda docs
-aren't changed), run **`backfillRecordingsDryRun`** from the editor first:
-it logs where each recording would go, and a count per sheet, changing
-nothing. Then run **`backfillRecordings`**. Each steps month by month,
+**Report.** Each run that processed at least one recording (found a new
+one, or added a link or row for one, or moved one off the Unassigned tab)
+emails `calendaring-alerts@` one report: for each recording, the sheet it
+went to and why (held in its room, its event invites the group, its title
+matches a recurring meeting's or holds the group's name, a keyword, or why
+it's unassigned), and what happened to its calendar event and agenda doc
+(link added, already linked, no event found, no tab for that date, ...),
+with the unassigned ones first, and links to the sheets.
+
+**No emails to guests.** Every change to an event is made with the
+Calendar API's `sendUpdates: none`, which sends no update to any guest,
+whether a Google account or not, and whatever occurrence it is. (Moving a
+series to another calendar in Google Calendar is different: that changes
+its organizer, and Calendar sends the change to guests outside Google.)
+
+**Backfill.** To handle older recordings as the hourly run does (their
+events, agenda docs, and sheets; a meeting with no agenda doc tab isn't
+tried again), run **`backfillRecordingsDryRun`** from the editor first:
+it logs where each recording would go, whether it found its event, and a
+count per sheet, changing nothing. Then run **`backfillRecordings`**. Each
+steps month by month,
 from January 2020 (`BACKFILL_FROM` in `recordings.gs`), through every Zoom
 user's recordings, stopping after about 4½ minutes (Apps Script stops a
 run at 6), or at a month Zoom won't list (it logs why); run it again until
-it logs that it's done. At the end of each
-run, `calendaring-alerts@` gets one email listing the recordings it put on
-the Unassigned tab. Running it again lists nothing twice;
+it logs that it's done. Each run that processed anything emails the
+report. Running it again adds nothing twice;
 **`resetRecordingsBackfill`** makes the next run start from the beginning.
 A backfill run holds the lock the triggers use, so they skip while it
 runs. Recordings made on personal or work Zoom accounts can't be reached.
@@ -198,7 +214,7 @@ link is logged, and listed without one.
 - `event_rules.gs` — the rules themselves, with no Apps Script calls, tested
   under Node by `tests/test_group_meetings_rules.py`
 - `recordings.gs` — the recording links: Zoom's recordings, the events,
-  agenda docs and sheets they're added to, and the backfill
+  agenda docs and sheets they're added to, the report, and the backfill
 - `recording_rules.gs` — the recording links' rules, with no Apps Script
   calls, tested under Node by `tests/test_recording_rules.py`
 - `appsscript.json` — advanced services and OAuth scopes
