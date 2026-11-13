@@ -39,8 +39,10 @@ until it's added to the file.
    made the others.
 2. Give the script's personal access token access to the base (see
    README.md, "Setup").
-3. Run `python maintenance_base.py apply` and then
-   `python maintenance_base.py seed` (with `--real` for the real base).
+3. Run `python maintenance_base.py apply`, then
+   `python maintenance_base.py seed`, then
+   `python sync_maintenance_people.py` (each with `--real` for the real
+   base).
 4. Make Label the primary field of Requests and of Claims (below).
 5. Make the views and the two forms below by hand. `diff` lists what's
    still to do, except the forms.
@@ -77,15 +79,21 @@ whether they exist, and says nothing about them.
 
 A published form lets anyone with its link pick from the rows of each
 table it links to, and Airtable warns of this when the form is published.
-Airtable's "Limit record selection to a view" isn't the answer: it's a
-setting of the field, not of the form, so it would limit what the circle
-can pick in the base too. Instead:
+So in the form builder, each linked field is set to show only its table's
+primary field: select the field, and in the sidebar's **Appearance**
+section, cut its **Fields** list down to that one.
 
-- The request form's Location field is left unlimited: every unit and
-  common area should be there to pick. Check in a private browser window
-  that the published form shows only each location's name.
-- The quick update form's Request field is filtered, in the form builder,
-  to requests whose Status isn't Closed, Duplicate, or Declined.
+- The request form's Location field shows only Name ("Unit 411"), and
+  offers every unit and common area.
+- The quick update form's Request field shows only Label, and is filtered
+  there to requests whose Status isn't Closed, Duplicate, or Declined.
+
+After publishing or changing a form, open it in a private browser window
+and check what each linked field's list shows.
+
+Airtable's "Limit record selection to a view" isn't used: it's a setting
+of the field, not of the form, so it would limit what the circle can pick
+in the base too.
 
 The **Request form** has, in order: Reporter name, Reporter email, Reporter
 phone, Location, Room, Type, System, Urgency, Description, Photos, May

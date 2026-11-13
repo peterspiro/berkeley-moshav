@@ -71,7 +71,8 @@ base for the Maintenance & Warranty Circle to track repair requests,
 warranty claims, contacts, equipment, and maintenance schedules for the
 building (see `maintenance-tracker-plan.md`). So far there's the base's
 structure, kept as a file in `maintenance/` and applied by
-`maintenance_base.py`; the views and forms are made by hand (see
+`maintenance_base.py`, and `sync_maintenance_people.py`, which copies the
+members in from Gather; the views and forms are made by hand (see
 `maintenance/README.md`), and the emails and reminders aren't built yet.
 
 The repo also keeps, in `archive/`, the one-off scripts that were used to
@@ -225,7 +226,8 @@ playwright install chromium
   require them so rooms made by hand match. The scripts give every room a
   six-digit passcode, which Zoom rejects if passcodes must contain letters.
 
-- **Airtable API** (for `maintenance_base.py` only): in Airtable's
+- **Airtable API** (for `maintenance_base.py` and
+  `sync_maintenance_people.py` only): in Airtable's
   [Builder Hub](https://airtable.com/create/tokens), signed in as the
   workspace's owner, create a personal access token with the scopes
   `data.records:read`, `data.records:write`, `schema.bases:read`, and
@@ -527,6 +529,14 @@ status line as "calendar (members can view, not edit)".
   them. It works on the test base, "Building Maintenance
   (test)", unless given `--real`, which asks you to type the real base's
   name before changing it.
+- **`sync_maintenance_people.py`** copies the adults in the Gather directory
+  into the maintenance tracker's People table: name, email addresses,
+  phone, and unit, as a link to its Locations row. It matches people by
+  Gather ID, adds and updates them, and marks as moved out anyone whose
+  departure date has passed or who's gone from the directory; it deletes
+  nobody, and leaves alone the fields the circle sets in Airtable and rows
+  added there by hand. Like `maintenance_base.py`, it works on the test
+  base unless given `--real`.
 - **`setup.sh`** installs and starts a local Gather development instance, for
   trying scripts out safely before running them against the real site.
 
@@ -693,6 +703,8 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
   Airtable token
 - **`airtable.py`**: Airtable's API: a base's tables and fields, and its
   records, with notes on what the API can't do
+- **`maintenance_people.py`**: the maintenance tracker's People rows from
+  the Gather directory, and what's changed since the last sync
 - **`airtable_schema.py`**: reading and checking `maintenance/schema.json`,
   and working out what a base lacks compared with it
 - **`member_names.py`**: members' short names by email address, from the Gather

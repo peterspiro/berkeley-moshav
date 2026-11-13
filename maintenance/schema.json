@@ -38,6 +38,7 @@
    "fields": [
     {"name": "Name", "type": "text"},
     {"name": "Email", "type": "email"},
+    {"name": "Other email", "type": "email"},
     {"name": "Phone", "type": "phone"},
     {"name": "Location", "type": "link", "table": "Locations", "inverse": "People"},
     {"name": "Circle member", "type": "checkbox"},
