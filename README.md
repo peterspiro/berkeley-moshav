@@ -533,7 +533,8 @@ status line as "calendar (members can view, not edit)".
   into the maintenance tracker's People table: name, email addresses,
   phone, and unit, as a link to its Locations row. A person's Name there
   is only first name and last initial ("Dana S"), or the full name where
-  two adults would share that, since the request form shows the list to
+  two adults would share that or a row left by someone who's gone already
+  has it, since the request form shows the list to
   anyone with its link; Full name holds the rest. It matches people by
   Gather ID, adds and updates them, and marks as moved out anyone whose
   departure date has passed or who's gone from the directory; it deletes

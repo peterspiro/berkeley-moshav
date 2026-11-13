@@ -44,15 +44,16 @@ from maintenance_base import REAL_BASE, TEST_BASE
 from util.airtable import Airtable, AirtableError
 from util.credentials import load_airtable_token, load_credentials
 from util.gather_utils import close_log, fetch_all_gather_users, init_log, launch_browser, log, login
-from util.maintenance_people import KEY, changes, people_rows
+from util.maintenance_people import KEY, changes, other_names, people_rows
 
 
 def sync(client, base: str, users, dry_run: bool, today: date, out=print) -> None:
     """Bring People in `base` up to date with the directory's `users`."""
     locations = {r["fields"]["Name"]: r["id"]
                  for r in client.list_records(base, "Locations", ["Name"]) if r["fields"].get("Name")}
-    rows, warnings = people_rows(users, locations, today)
-    to_write, lines = changes(rows, client.list_records(base, "People"))
+    records = client.list_records(base, "People")
+    rows, warnings = people_rows(users, locations, today, other_names(users, records))
+    to_write, lines = changes(rows, records)
     for line in lines + warnings:
         out(line)
     out(f"{len(rows)} adult(s) in the directory; {len(to_write)} row(s) "

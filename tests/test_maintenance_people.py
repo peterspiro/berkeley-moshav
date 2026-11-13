@@ -94,6 +94,23 @@ def test_names_are_only_as_long_as_tells_people_apart():
     assert people_rows([SAM, kid], LOCATIONS, TODAY)[0][0]["Name"] == "Sam L"
 
 
+def test_newcomer_doesnt_take_the_name_of_a_row_left_behind():
+    # Dana Smith was removed from Gather; her row stays, as "Dana S".
+    client = _applied(load_schema())
+    quiet = lambda line: None
+    sync_maintenance_people.sync(client, "app", [DANA], dry_run=False, today=TODAY, out=quiet)
+    sync_maintenance_people.sync(client, "app", [], dry_run=False, today=TODAY, out=quiet)
+    client.upsert_records("app", "People", "Name", [{"Name": "Sam L"}])  # added by hand
+    stone = _user("10", "Dana", "Stone")
+    sync_maintenance_people.sync(client, "app", [stone, SAM], dry_run=False, today=TODAY, out=quiet)
+    names = sorted(r["fields"]["Name"] for r in client.list_records("app", "People"))
+    assert names == ["Dana S", "Dana Stone", "Sam L", "Sam Lee"]
+    # Her own row doesn't count against her if she comes back.
+    sync_maintenance_people.sync(client, "app", [DANA], dry_run=False, today=TODAY, out=quiet)
+    dana = next(r["fields"] for r in client.list_records("app", "People") if r["fields"].get("Gather ID") == "1")
+    assert dana["Name"] == "Dana S"
+
+
 def test_unit_suffix_falls_back_to_the_unit_and_unknown_units_warn():
     assert location_name("411A", LOCATIONS) == "Unit 411"
     assert location_name("", LOCATIONS) is None

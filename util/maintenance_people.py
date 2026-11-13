@@ -9,7 +9,8 @@ others (Circle member, Coordinator) are the circle's to set in Airtable.
 
 A person's Name, the table's primary field, is as short as will tell them
 apart: first name and last initial ("Dana S"), or the full name where two
-adults would share that. It's what the request form's list of reporters
+adults would share that, or where a row that isn't in the directory (someone
+who's left, or was added by hand) already has it. It's what the request form's list of reporters
 shows to anyone with the form's link, so it gives away no more than it
 must; Full name holds the rest.
 
@@ -48,24 +49,36 @@ def location_name(unit: str, locations: dict[str, str]) -> str | None:
     return None
 
 
-def display_names(adults: list[GatherUser]) -> dict[str, str]:
+def display_names(adults: list[GatherUser], taken: list[str] = ()) -> dict[str, str]:
     """User ID -> the name each adult is listed by: first name and last
-    initial, without a period, or the full name for those who'd share it."""
+    initial, without a period, or the full name for those who'd share it
+    with each other or with a name in `taken`."""
     def short(u):
         first = u.first_name or u.full_name.split()[0]
         return f"{first} {u.last_name[0]}" if u.last_name else first
     counts = Counter(short(u).casefold() for u in adults)
+    counts.update({name.casefold() for name in taken})
     return {u.user_id: short(u) if counts[short(u).casefold()] == 1 else u.full_name
             for u in adults}
 
 
-def people_rows(users: list[GatherUser], locations: dict[str, str],
-                today: date) -> tuple[list[dict], list[str]]:
+def other_names(users: list[GatherUser], records: list[dict]) -> list[str]:
+    """The names of People's rows that aren't anyone in the directory:
+    people who've been removed from Gather, whose rows stay, and people
+    added in Airtable by hand. Nobody new is given a name one of them has."""
+    ids = {u.user_id for u in users}
+    return [r["fields"]["Name"] for r in records
+            if r["fields"].get("Name") and r["fields"].get(KEY) not in ids]
+
+
+def people_rows(users: list[GatherUser], locations: dict[str, str], today: date,
+                taken: list[str] = ()) -> tuple[list[dict], list[str]]:
     """The People row for each adult in the directory, as Airtable fields,
-    and warnings. `locations` is {Locations row name: record ID}."""
+    and warnings. `locations` is {Locations row name: record ID}; `taken`
+    is other_names()."""
     rows, warnings = [], []
     adults = [u for u in users if not u.child and u.full_name]
-    names = display_names(adults)
+    names = display_names(adults, taken)
     for u in adults:
         place = location_name(u.unit, locations)
         # A unit that isn't a number ("Consultants") is Gather's way of
