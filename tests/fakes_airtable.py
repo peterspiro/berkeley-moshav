@@ -71,6 +71,11 @@ class FakeAirtable:
             raise AirtableError(f"DUPLICATE_OR_EMPTY_FIELD_NAME {name}")
         next(f for f in table["fields"] if f["id"] == field_id)["name"] = name
 
+    def change_primary_by_hand(self, table_name, field_name):
+        """What a person does in Airtable's UI; the API can't."""
+        table = next(t for t in self._tables if t["name"] == table_name)
+        table["primaryFieldId"] = next(f["id"] for f in table["fields"] if f["name"] == field_name)
+
     def add_select_choices(self, base, table_id, field, choices, multiple):
         self.calls.append(("add_select_choices", field))
         f = next(f for f in self._table(table_id)["fields"] if f["name"] == field)

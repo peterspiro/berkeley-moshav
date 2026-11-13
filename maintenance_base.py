@@ -14,9 +14,10 @@ missing:
             units), adding rows that are missing and updating the others.
 
 It never deletes or retypes anything; Airtable's API can't. What it can't
-do is listed under "By hand": the views and forms, which have to be made in
-Airtable (see maintenance/README.md), and anything in the base that
-disagrees with the file.
+do is listed under "By hand": the views and forms, and making a formula a
+table's primary field, which have to be done in Airtable (see
+maintenance/README.md), and anything in the base that disagrees with the
+file.
 
 It works on the test base, "Building Maintenance (test)", unless told
 otherwise: --real picks "Building Maintenance", and asks you to type the

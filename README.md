@@ -520,8 +520,9 @@ status line as "calendar (members can view, not edit)".
   select fields, and `seed` loads the starting rows in
   `maintenance/seed.json` (the building's 36 units). It never deletes or
   retypes anything, and lists what must be done by hand: the views and
-  forms, which Airtable's API can't make, and anything in the base that
-  disagrees with the file. It works on the test base, "Building Maintenance
+  forms, and making a formula a table's primary field (so a request shows
+  as "R-3 Bath fan rattles" wherever it's linked), none of which Airtable's
+  API can do, and anything in the base that disagrees with the file. It works on the test base, "Building Maintenance
   (test)", unless given `--real`, which asks you to type the real base's
   name before changing it.
 - **`setup.sh`** installs and starts a local Gather development instance, for

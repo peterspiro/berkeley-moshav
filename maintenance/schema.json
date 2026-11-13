@@ -50,6 +50,7 @@
   {
    "name": "Requests",
    "description": "Everything a member reports or asks. One row per problem per place.",
+   "primary": "Label",
    "fields": [
     {"name": "Number", "type": "autoNumber"},
     {"name": "Title", "type": "text"},
@@ -113,6 +114,7 @@
   {
    "name": "Claims",
    "description": "Each claim made to a warrantor. A claim can cover many requests.",
+   "primary": "Label",
    "fields": [
     {"name": "Number", "type": "autoNumber"},
     {"name": "Title", "type": "text"},

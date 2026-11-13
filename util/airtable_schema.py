@@ -8,9 +8,15 @@ Each field has a `type`, one of FIELD_TYPES' keys. A `select` or
 `choice_lists` as "@name". A `link` field names the `table` it links to and
 the name of its `inverse`, the field Airtable makes in that table to show
 the link from the other side; a link is declared once, on either side. A
-`formula` field gives its `formula`, with field names in braces. A table's
-first field is its primary field. `views` are the views each table should
-have: the API can't make them, so they're only checked.
+`formula` field gives its `formula`, with field names in braces. `views` are
+the views each table should have: the API can't make them, so they're only
+checked.
+
+A table is created with its first field as its primary field, the one
+Airtable shows wherever a record is linked or picked. The API can make only
+a plain field primary, so a table that should show a formula there (a
+request as "R-3 Bath fan rattles", not "3") names it as its `primary`, and
+plan() asks for the change to be made by hand.
 
 plan() never proposes deleting or retyping anything, since the API can do
 neither; what doesn't match is reported for a person to look at.
@@ -99,6 +105,8 @@ def schema_problems(schema: dict) -> list[str]:
             continue
         if t["fields"][0]["type"] not in PRIMARY_TYPES:
             problems.append(f"{where}: its first (primary) field must be one of {PRIMARY_TYPES}.")
+        if "primary" in t and t["primary"] not in [f["name"] for f in t["fields"]]:
+            problems.append(f"{where}: its primary, {t['primary']!r}, isn't one of its fields.")
         seen = set()
         for f in t["fields"]:
             at = f"{where}.{f['name']}"
@@ -175,16 +183,20 @@ def plan(schema: dict, tables: list[dict]) -> Plan:
 
     for t in schema["tables"]:
         name, primary = t["name"], t["fields"][0]
+        shown = t.get("primary", primary["name"])  # what should end up primary
         have = actual.get(name)
         have_fields = {f["name"]: f for f in have["fields"]} if have else {}
         if not have:
             p.actions.append({"do": "create_table", "table": name, "primary": primary,
                               "description": t.get("description", "")})
             have_fields = {primary["name"]: None}  # made with the table
+            if shown != primary["name"]:
+                p.by_hand.append(f"{name}: make {shown!r} the primary field "
+                                 f"(it's {primary['name']!r}).")
         else:
             first = next(f for f in have["fields"] if f["id"] == have["primaryFieldId"])
-            if first["name"] != primary["name"]:
-                p.by_hand.append(f"{name}: make {primary['name']!r} the primary field "
+            if first["name"] != shown:
+                p.by_hand.append(f"{name}: make {shown!r} the primary field "
                                  f"(it's {first['name']!r}).")
 
         for f in t["fields"]:

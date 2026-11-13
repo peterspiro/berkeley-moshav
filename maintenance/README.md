@@ -41,7 +41,17 @@ until it's added to the file.
    README.md, "Setup").
 3. Run `python maintenance_base.py apply` and then
    `python maintenance_base.py seed` (with `--real` for the real base).
-4. Make the views below by hand. `diff` lists the ones still missing.
+4. Make Label the primary field of Requests and of Claims (below).
+5. Make the views below by hand. `diff` lists what's still to do.
+
+### Primary fields to change by hand
+
+Airtable shows a record by its primary field wherever it's linked or
+picked, so a request should show as "R-3 Bath fan rattles", not "3". The
+API can create a table only with a plain primary field, so Requests and
+Claims are made with Number as theirs. In each, open the Label field's menu
+and choose **Change primary field** (or the table's primary field's menu,
+if that's where Airtable offers it). Do this before making the views.
 
 ### Views to make by hand
 
@@ -53,10 +63,10 @@ The API can't create views. Each is named exactly as here, since `diff`
 | View | Type | Set up as |
 |---|---|---|
 | Triage | Grid | Filter: Status is New. Sort: Submitted, oldest first. Show Description, Photos, Location, Room, Type, System, Urgency, the reporter fields, then Title, Component, Responsibility, Owner, Status |
-| Board | Kanban | Stacked by Status. Filter: Status isn't Closed, Duplicate, or Declined. Cards show Label, Location, Owner, Urgency |
+| Board | Kanban | Stacked by Status. Filter: Status isn't Closed, Duplicate, or Declined. Cards show Location, Owner, Urgency |
 | By owner | Grid | Grouped by Owner. Filter as Board |
 | Patterns | Grid | Grouped by System, then Component. Show Location, Room, Submitted, Status. Sort by Location |
-| Status page | Grid | Show only Number, Location, System, Title, Member-visible status, Submitted, Closed on. Filter: Status isn't Duplicate or Declined, and Closed on is empty or within the past month. Then **Share view** to make its link. No other field may be shown: it's public to anyone with the link |
+| Status page | Grid | Show only Label (the request's number and the title written at triage), Location, System, Member-visible status, Submitted, Closed on. Filter: Status isn't Duplicate or Declined, and Closed on is empty or within the past month. Then **Share view** to make its link. No other field may be shown: it's public to anyone with the link |
 | Request form | Form | See below |
 
 The **Request form** has, in order: Reporter name, Reporter email, Reporter
@@ -77,7 +87,7 @@ in the form, with the after-hours number and a link to the emergency guide.
 
 | View | Type | Set up as |
 |---|---|---|
-| Waiting on builder | Grid | Filter: Status is Submitted, Acknowledged, or Scheduled. Sort: Submitted on, oldest first. Show Label, Requests, Status, Submitted on, Promised by, Claim by |
+| Waiting on builder | Grid | Filter: Status is Submitted, Acknowledged, or Scheduled. Sort: Submitted on, oldest first. Show Requests, Status, Submitted on, Promised by, Claim by |
 
 **Organizations**
 

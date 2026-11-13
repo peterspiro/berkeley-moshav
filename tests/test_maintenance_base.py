@@ -111,6 +111,7 @@ def test_choice_list_is_filled_in(tmp_path):
     (_schema(_table("A", {"name": "X", "type": "link", "table": "B", "inverse": "As"})), "isn't in the file"),
     (_schema(_table("A", {"name": "X", "type": "link", "table": "A"})), "inverse"),
     (_schema(_table("A", {"name": "X", "type": "formula"})), "formula"),
+    (_schema({**_table("A"), "primary": "Label"}), "isn't one of its fields"),
     # The inverse would land on a field B already has, or on another inverse.
     (_schema(_table("A", {"name": "X", "type": "link", "table": "B", "inverse": "Name"}), _table("B")),
      "already a field"),
@@ -136,8 +137,9 @@ def test_apply_builds_the_whole_schema_file_and_is_then_in_step():
     client = _applied(schema)
     p = plan(schema, client.tables("app"))
     assert p.actions == []
-    # Only the views, which the API can't make, are left.
-    assert p.by_hand and all("view" in line for line in p.by_hand)
+    # Only what the API can't do is left: the views, and making a formula
+    # the primary field.
+    assert p.by_hand and all("view" in line or "primary" in line for line in p.by_hand)
     assert p.notes == []
     wanted = expected_fields(schema)
     for t in client.tables("app"):
@@ -209,6 +211,22 @@ def test_nothing_is_deleted_or_retyped_only_reported():
     assert any("'Triage'" in line for line in p.by_hand)
     assert any("'Extra'" in n for n in p.notes)
     assert any("old" in n for n in p.notes)
+
+
+def test_formula_primary_is_asked_for_by_hand_until_made():
+    # A request shows as "R-3 Bath fan rattles" wherever it's linked, not "3".
+    schema = load_schema()
+    assert {t["name"] for t in schema["tables"] if t.get("primary") == "Label"} == {"Requests", "Claims"}
+    client = FakeAirtable()
+    wanted = ["Requests: make 'Label' the primary field (it's 'Number').",
+              "Claims: make 'Label' the primary field (it's 'Number')."]
+    # Asked for before the table exists, and after apply.
+    assert all(line in plan(schema, client.tables("app")).by_hand for line in wanted)
+    maintenance_base.apply(client, "app", schema, out=lambda line: None)
+    assert all(line in plan(schema, client.tables("app")).by_hand for line in wanted)
+    client.change_primary_by_hand("Requests", "Label")
+    client.change_primary_by_hand("Claims", "Label")
+    assert not any("primary" in line for line in plan(schema, client.tables("app")).by_hand)
 
 
 def test_wrong_primary_field_is_reported():
