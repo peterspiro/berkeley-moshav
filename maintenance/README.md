@@ -43,7 +43,8 @@ until it's added to the file.
    `python maintenance_base.py seed`, then
    `python sync_maintenance_people.py` (each with `--real` for the real
    base).
-4. Make Label the primary field of Requests and of Claims (below).
+4. Make Label the primary field of Requests and of Claims, and New the
+   default of Requests' Status (both below).
 5. Make the views and the two forms below by hand. `diff` lists what's
    still to do, except the forms.
 
@@ -56,6 +57,13 @@ Claims are made with Number as theirs. In each, open the Label field's menu
 and choose **Change primary field** (or the table's primary field's menu,
 if that's where Airtable offers it). Do this before making the views.
 
+### A new request's status
+
+A request arrives from the form with no Status, since the form doesn't ask
+for one. In Requests, edit the Status field and set its default to New, so
+that a new request starts there. Triage also shows requests whose Status is
+empty, so that none can be missed if the default is ever lost.
+
 ### Views to make by hand
 
 The API can't create views. Each is named exactly as here, since `diff`
@@ -67,7 +75,7 @@ whether they exist, and says nothing about them.
 
 | View | Type | Set up as |
 |---|---|---|
-| Triage | Grid | Filter: Status is New. Sort: Submitted, oldest first. Show Description, Photos, Location, Room, Type, System, Urgency, Reporter name, Reporter email, Reporter phone, Reporter, then Title, Component, Responsibility, Owner, Status |
+| Triage | Grid | Filter: Status is New, or Status is empty. Sort: Submitted, oldest first. Show Description, Photos, Location, Room, Type, System, Urgency, Reporter name, Reporter email, Reporter phone, Reporter, then Title, Component, Responsibility, Owner, Status |
 | Board | Kanban | Stacked by Status. Filter: Status isn't Closed, Duplicate, or Declined. Cards show Location, Owner, Urgency |
 | By owner | Grid | Grouped by Owner. Filter as Board |
 | Patterns | Grid | Grouped by System, then Component. Show Location, Room, Submitted, Status. Sort by Location |
