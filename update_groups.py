@@ -419,8 +419,8 @@ def choose_config_entries(
 ) -> list[dict]:
     """Return config_entries with one entry per group: the Drive item its
     membership follows, for a group linked to several (see
-    util.gdrive_config.choose_membership_links), each of whose extra links
-    is logged. Raises ValueError if a group being worked on (every group,
+    util.gdrive_config.choose_membership_links). The extra links of each
+    group being worked on are logged. Raises ValueError if a group being worked on (every group,
     or with -g the one named) is linked to several items and none can be
     chosen; any other such group is left out, with a warning."""
     def footer_item_id(group_id: str) -> str | None:
@@ -436,6 +436,8 @@ def choose_config_entries(
 
     chosen, extras, ambiguous = choose_membership_links(config_entries, footer_item_id)
     for group_id, others in extras.items():
+        if target_id is not None and group_id != target_id:
+            continue
         main = next(e for e in chosen if e["group_id"] == group_id)
         log("INFO", "drive_links", main["group_name"],
             f"membership follows {main['folder_name']!r}; also linked to "
