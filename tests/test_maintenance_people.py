@@ -85,6 +85,10 @@ def test_unit_suffix_falls_back_to_the_unit_and_unknown_units_warn():
     rows, warnings = people_rows([_user("4", "Pat", "Roe", unit="999")], LOCATIONS, TODAY)
     assert rows[0]["Location"] == []
     assert warnings == ["Pat Roe: no Locations row for unit '999'."]
+    # Someone Gather places in a unit that isn't a number doesn't live in
+    # the building: copied without a location, and without a warning.
+    rows, warnings = people_rows([_user("6", "Con", "Sultant", unit="Consultants")], LOCATIONS, TODAY)
+    assert rows[0]["Location"] == [] and warnings == []
 
 
 def test_moved_out_once_the_departure_date_has_passed():

@@ -13,7 +13,9 @@ Nobody is deleted, since requests link to people: someone whose departure
 date has passed, or who's no longer in the directory, is marked Moved out.
 The Circle member and Coordinator boxes, and rows added in Airtable by
 hand for people outside the community, are left alone. A member whose unit
-has no row in Locations is listed, and copied without one.
+number has no row in Locations is listed, and copied without one; someone
+whose unit in Gather isn't a number (such as "Consultants") is copied
+without one, and not listed.
 
 It works on the test base, "Building Maintenance (test)", unless given
 --real (see maintenance_base.py). The test base then holds real members'

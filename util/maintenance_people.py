@@ -50,7 +50,9 @@ def people_rows(users: list[GatherUser], locations: dict[str, str],
         if u.child or not u.full_name:
             continue
         place = location_name(u.unit, locations)
-        if u.unit and not place:
+        # A unit that isn't a number ("Consultants") is Gather's way of
+        # placing someone who doesn't live in the building: no warning.
+        if u.unit[:1].isdigit() and not place:
             warnings.append(f"{u.full_name}: no Locations row for unit {u.unit!r}.")
         other = u.google_email if u.google_email != u.email else ""
         rows.append({
