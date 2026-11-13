@@ -519,10 +519,12 @@ status line as "calendar (members can view, not edit)".
   `apply` creates the missing tables and fields and adds missing options to
   select fields, and `seed` loads the starting rows in
   `maintenance/seed.json` (the building's 36 units). It never deletes or
-  retypes anything, and lists what must be done by hand: the views and
-  forms, and making a formula a table's primary field (so a request shows
-  as "R-3 Bath fan rattles" wherever it's linked), none of which Airtable's
-  API can do, and anything in the base that disagrees with the file. It works on the test base, "Building Maintenance
+  retypes anything, and lists what must be done by hand: the views, and
+  making a formula a table's primary field (so a request shows as "R-3
+  Bath fan rattles" wherever it's linked), neither of which Airtable's API
+  can do, and anything in the base that disagrees with the file. The forms
+  are made by hand too, but the API doesn't show them, so it can't check
+  them. It works on the test base, "Building Maintenance
   (test)", unless given `--real`, which asks you to type the real base's
   name before changing it.
 - **`setup.sh`** installs and starts a local Gather development instance, for

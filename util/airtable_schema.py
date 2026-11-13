@@ -10,7 +10,8 @@ the name of its `inverse`, the field Airtable makes in that table to show
 the link from the other side; a link is declared once, on either side. A
 `formula` field gives its `formula`, with field names in braces. `views` are
 the views each table should have: the API can't make them, so they're only
-checked.
+checked. Forms aren't listed: the API doesn't show the ones made with
+Airtable's form builder, so it can't tell whether they exist.
 
 A table is created with its first field as its primary field, the one
 Airtable shows wherever a record is linked or picked. The API can make only

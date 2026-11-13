@@ -87,8 +87,7 @@
     {"name": "Board", "type": "kanban"},
     {"name": "By owner", "type": "grid"},
     {"name": "Patterns", "type": "grid"},
-    {"name": "Status page", "type": "grid"},
-    {"name": "Request form", "type": "form"}
+    {"name": "Status page", "type": "grid"}
    ]
   },
   {
@@ -107,9 +106,7 @@
     {"name": "Tell the reporter", "type": "checkbox"},
     {"name": "Logged", "type": "createdTime"}
    ],
-   "views": [
-    {"name": "Quick update form", "type": "form"}
-   ]
+   "views": []
   },
   {
    "name": "Claims",

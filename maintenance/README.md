@@ -42,7 +42,8 @@ until it's added to the file.
 3. Run `python maintenance_base.py apply` and then
    `python maintenance_base.py seed` (with `--real` for the real base).
 4. Make Label the primary field of Requests and of Claims (below).
-5. Make the views below by hand. `diff` lists what's still to do.
+5. Make the views and the two forms below by hand. `diff` lists what's
+   still to do, except the forms.
 
 ### Primary fields to change by hand
 
@@ -56,7 +57,9 @@ if that's where Airtable offers it). Do this before making the views.
 ### Views to make by hand
 
 The API can't create views. Each is named exactly as here, since `diff`
-(and later the tracker's daily check) looks for them by name.
+(and later the tracker's daily check) looks for them by name. The two forms
+are the exception: the API doesn't show forms at all, so `diff` can't tell
+whether they exist, and says nothing about them.
 
 **Requests**
 
