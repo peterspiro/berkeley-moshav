@@ -28,6 +28,9 @@
  * 24 hours before; a group can change that, or turn reminders off, in its
  * agenda doc's Remind before meetings row, and one meeting can be changed with a
  * tag in its description (see reminderLeads in event_rules.gs).
+ * Every hour (hourly), new Zoom recordings get links on their calendar
+ * events, in the group's agenda doc, and in a recordings sheet (see
+ * recordings.gs).
  * Then, if anything changed, and every hour regardless (hourly), it looks for
  * meetings in the next OVERLAP_WEEKS weeks in rooms owned by the same Zoom
  * user (a Zoom user can run only one meeting at a time) that overlap or are
@@ -83,9 +86,10 @@ const ZOOM_USER_NUMBERS = {
 };
 
 // Script Properties keys.
-const PROP_GROUPS = 'groups';                // JSON [{ email, name, calendarId, zoomUrl, passcode,
-                                             //         audience, alsoInvite, calendarName?,
-                                             //         agendaUrl?, reminders?, staleAgendaUrl? }]
+const PROP_GROUPS = 'groups';                // JSON [{ email, name, aliases, calendarId, zoomUrl,
+                                             //         passcode, audience, alsoInvite, driveId,
+                                             //         calendarName?, agendaUrl?, reminders?,
+                                             //         staleAgendaUrl? }]
 const PROP_OTHER_CALENDARS = 'otherCalendars'; // JSON [{ id, name }], see refreshOtherCalendars
 const PROP_SYNC_PREFIX = 'syncToken:';       // + calendar ID
 const PROP_COPY_ALERTS = 'copyAlerts';       // JSON { iCalUID: forgetAfterMs }
@@ -394,7 +398,8 @@ function handleOtherEvent(event, cal) {
 /**
  * Every hour: re-read footers, the account's other calendars, and Zoom's
  * meetings (including which user owns each room, since a room can be
- * transferred to another Zoom user), then check overlaps.
+ * transferred to another Zoom user), then check overlaps, and add links to
+ * new recordings (see syncRecordings in recordings.gs).
  */
 function hourly() {
   withLock(() => {
@@ -403,6 +408,11 @@ function hourly() {
     recheckZoomUsers(groups);
     refreshZoomMeetings();
     checkOverlaps(groups);
+    try {
+      syncRecordings(groups);
+    } catch (err) {
+      console.error(`Couldn't add the recordings' links: ${err}`);
+    }
   });
 }
 
@@ -527,7 +537,8 @@ function refreshGroups() {
         const addresses = [g.email, ...(g.aliases || [])].map(a => a.toLowerCase());
         const docId = addresses.map(a => agendaDocs[a]).find(Boolean);
         const email = g.email.toLowerCase();
-        const group = Object.assign({ email, name: g.name }, links);
+        const aliases = (g.aliases || []).map(a => a.toLowerCase());
+        const group = Object.assign({ email, name: g.name, aliases }, links);
         if (links.audience) group.calendarName = adminCalendarName(g.name);
         if (docId) {
           group.agendaUrl = `https://docs.google.com/document/d/${docId}/edit`;

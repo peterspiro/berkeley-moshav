@@ -114,9 +114,93 @@ read hourly, so new groups need no redeploy. When a group's room link changes
 or that user is renamed in Zoom, its upcoming events are updated within the
 hour.
 
+## Recording links
+
+**Every hour**, each Zoom cloud recording of the last 7 days (in any Zoom
+user's account) whose files have all finished processing gets its share
+link and passcode put where members look. (Zoom usually finishes within an
+hour or two of a meeting ending, so a link appears an hour or so after
+that.) Each is handled once:
+
+- **Its calendar event**: a `Recording: <link> (passcode …)` line at the
+  top of the description of the one occurrence it came from (the series'
+  others are untouched), sending no email. The event is the one whose
+  location or description links the recording's Zoom meeting, and which
+  starts at most 45 minutes after the recording does and hadn't ended by
+  then: on the group's calendar, for a recording in a group's room; else on
+  the all-events calendar or another calendar `admin@` owns. Only an event
+  one of the account's calendars organizes can be changed. The all-events
+  calendar shows the line too.
+- **Its agenda doc**, for a group with one: the same line, linked, below
+  the "Time …" line of the meeting's tab (the one titled with its date). A
+  meeting with no tab yet is tried again every hour for 14 days. A group
+  with more than one meeting that day gets none, since the tabs can't be
+  told apart.
+- **A sheet**: a row (when, title, link, passcode, length, Zoom topic, and,
+  hidden, Zoom's ID for the recording, so none is listed twice), in
+  - the group's **"<Group> Meeting Recordings"**, made in its Drive item
+    (from its footer) when it first has a recording, so it's shared like
+    the rest of the group's files; or
+  - **"Community Meeting Recordings"**, made in the Shared Drive's Meeting
+    Admin folder, which gives `all.members@` view access, for community-wide
+    meetings.
+
+  The sheets are found by a Drive property, so they can be renamed or
+  moved.
+
+Which sheet is the first of these that decides (`categorizeRecording` in
+`recording_rules.gs`):
+
+1. Held in a group's room: that group's. In a community calendar's room:
+   the community sheet.
+2. Its calendar event invites an audience (`all.members@`): the community
+   sheet. Or it invites exactly one group (its email list, an alias, or its
+   calendar): that group's.
+3. Its title (the event's, then the Zoom topic), ignoring case and extra
+   spaces, is the title of a recurring meeting on a group's calendar (that
+   group's) or a community calendar (the community sheet). If it's on
+   calendars leading to different sheets, the recording is uncategorized.
+4. Its title holds a group's name as whole words (for a community
+   calendar's admin group, the calendar's name: the community sheet). The
+   longest name wins; a tie decides nothing.
+5. Its title holds "listening session" or "ask me anything", in any case:
+   the community sheet.
+
+A recording none of these decide goes on the community sheet's
+**Unassigned** tab, and `calendaring-alerts@` gets an email about it. Type a
+group's name or address (or `community`) in its row's **Group** column: the
+next hourly run moves the row to that sheet, and remembers the choice, so
+the backfill puts it there too. A name it doesn't recognize is noted in
+the row's Why column.
+
+**Backfill.** To list older recordings (sheets only: events and agenda docs
+aren't changed), run **`backfillRecordingsDryRun`** from the editor first:
+it logs where each recording would go, and a count per sheet, changing
+nothing. Then run **`backfillRecordings`**. Each steps month by month,
+from January 2020 (`BACKFILL_FROM` in `recordings.gs`), through every Zoom
+user's recordings, stopping after about 4½ minutes (Apps Script stops a
+run at 6), or at a month Zoom won't list (it logs why); run it again until
+it logs that it's done. At the end of each
+run, `calendaring-alerts@` gets one email listing the recordings it put on
+the Unassigned tab. Running it again lists nothing twice;
+**`resetRecordingsBackfill`** makes the next run start from the beginning.
+A backfill run holds the lock the triggers use, so they skip while it
+runs. Recordings made on personal or work Zoom accounts can't be reached.
+
+**Zoom settings.** Recordings must be shareable: in the Zoom web portal's
+account settings, under Recording, turn on cloud recording sharing, and
+leave "only authenticated users can view" off (members mostly have no
+account in ours). Recordings made before sharing was turned on may need it
+turned on one by one (Recordings, then Share). A recording with no share
+link is logged, and listed without one.
+
 - `group_meetings.gs` — triggers, Calendar/Groups/Zoom calls, emails
 - `event_rules.gs` — the rules themselves, with no Apps Script calls, tested
   under Node by `tests/test_group_meetings_rules.py`
+- `recordings.gs` — the recording links: Zoom's recordings, the events,
+  agenda docs and sheets they're added to, and the backfill
+- `recording_rules.gs` — the recording links' rules, with no Apps Script
+  calls, tested under Node by `tests/test_recording_rules.py`
 - `appsscript.json` — advanced services and OAuth scopes
 
 ## Deploy with clasp
@@ -147,8 +231,11 @@ and add the three values from the repo's `zoom_credentials` file:
 | `ZOOM_CLIENT_SECRET` | `client_secret` |
 
 The Zoom app also needs the `user:read:list_users:admin` ("View users") scope
-for this, to find every Zoom user's scheduled meetings (see the main
-README.md).
+for this, to find every Zoom user's scheduled meetings, and, for the
+recording links, `cloud_recording:read:list_user_recordings:admin` and
+`cloud_recording:read:list_recording_files:admin` (see the main README.md).
+Until it has those, the hourly run logs an error for the recordings and
+carries on with everything else.
 
 ### One-time authorization and triggers
 
@@ -173,7 +260,8 @@ the all-events calendar too.
 
 When a change adds a permission to `appsscript.json` (reading Drive, for
 the agenda docs' links, did, and so did reading the agenda docs, for their
-Remind before meetings row), run any function in the editor after the
+Remind before meetings row, and so did the recording links, which create
+sheets, edit them, and edit agenda docs), run any function in the editor after the
 push, such as `hourly`, and allow it: the triggers run with the
 permissions allowed so far, and fail without the new one.
 
@@ -198,6 +286,11 @@ permissions allowed so far, and fail without the new one.
    `[remind 2 hours]` in an event's description, or set the group's
    agenda doc's Remind before meetings row to "none" (then wait for `hourly`, or
    run it), to check those.
+
+6. Record a short meeting in a test group's room, with its event on the
+   group's calendar. An hour or so after it ends, the event should have a
+   "Recording:" line, the group's agenda doc (if it has a tab for that day)
+   too, and the group's "Meeting Recordings" sheet a row.
 
 Run **`syncAll`** or **`hourly`** from the editor to force a pass, and read
 **Executions** for the log. A run that changed and sent nothing logs

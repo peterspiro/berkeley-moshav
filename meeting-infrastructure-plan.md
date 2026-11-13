@@ -348,11 +348,78 @@ footer's audience line (`group_meetings`) and by their folder being in
 "Meeting Admin" (`circle_agendas`). `add_new_group.py` takes it from
 `-t a`, since admin groups' names carry no type ending.
 
+## Recording links
+
+Until recordings are copied into Drive (the recording archive, below),
+links to them in Zoom are put where members already look. Built in
+`group_meetings` (`recordings.gs`, with its rules in `recording_rules.gs`),
+since that project already signs in to Zoom and runs hourly; nothing is
+downloaded, so Apps Script's size limits don't matter.
+
+- **Hourly, for new recordings** (the last 7 days', once every file of a
+  recording has finished processing, usually within an hour or two of the
+  meeting ending), each Zoom session's share link and passcode go:
+  - **on its calendar event**: a "Recording:" line at the top of the
+    description of the one occurrence it came from (a recurring series'
+    other occurrences are untouched), sending no email. The event is the
+    one, on a group calendar or a calendar `admin@` owns, whose location or
+    description links the recording's Zoom meeting and whose time covers
+    the recording's start (from 45 minutes before the event to its end).
+    Since the all-events calendar is a guest of these events, the line shows
+    there too; that's fine, as few members subscribe to it.
+  - **in the group's agenda doc**, if it has one: a "Recording:" line below
+    the "Time …" line of the meeting's tab (the tab titled with its date).
+    A meeting with no tab yet is retried hourly for 14 days, in case one is
+    added. A group with more than one meeting that day is skipped, as the
+    tab can't be told apart.
+  - **in a Google Sheet**: a row (date, time, title, link, passcode,
+    length, Zoom topic, and Zoom's ID for the recording, hidden, so no
+    recording is listed twice).
+- **Backfill** (`backfillRecordings`, run by hand, sheets only): steps
+  month by month (Zoom lists at most a month at a time) through every Zoom
+  user's recordings from `BACKFILL_FROM`, saving its place so a run stopped
+  by Apps Script's 6-minute limit carries on when run again.
+  `backfillRecordingsDryRun` logs where each recording would go and changes
+  nothing. Recordings made on personal or work Zoom accounts can't be
+  reached.
+- **Sheets**: one per group (circle, working group, club, ...), "<Group>
+  Meeting Recordings", made in the group's Drive item the first time it has
+  a recording, so it's shared with the group like everything else there;
+  and one "Community Meeting Recordings" in the Shared Drive's Meeting Admin
+  folder (which gives `all.members@` view access), holding every
+  community-wide meeting, plus an **Unassigned** tab.
+- **Which sheet** (the first rule that decides; see `categorizeRecording`):
+  1. Held in a group's room: that group; in a community calendar's room:
+     the community sheet.
+  2. Its calendar event invites an audience (`all.members@`): the community
+     sheet; otherwise, if it invites one group (its email list or its
+     calendar): that group.
+  3. Its title (the event's, then the Zoom topic) is, ignoring case and
+     extra spaces, the title of a recurring meeting on a group calendar
+     (that group) or a community calendar (the community sheet). A title on
+     calendars leading to different sheets decides nothing more:
+     uncategorized.
+  4. Its title contains a group's name (for a community calendar's admin
+     group, the calendar's name, meaning the community sheet), as whole
+     words; the longest name wins.
+  5. Its title contains "listening session" or "ask me anything", in any
+     case: the community sheet.
+  6. Otherwise uncategorized: a row on the Unassigned tab, and an email to
+     `calendaring-alerts@` (one per recording from the hourly run; one
+     summary per backfill run). Typing a group's name or address, or
+     "community", in a row's Group column moves it to that sheet on the
+     next hourly run.
+- **Zoom scopes**: `cloud_recording:read:list_user_recordings:admin` and
+  `cloud_recording:read:list_recording_files:admin`. Recordings must be
+  shareable (the account's cloud recording sharing setting); older ones
+  may need sharing turned on one by one.
+
 ## Not built yet
 
 ### 1. Recording archive
 Copy Zoom cloud recordings into the matching group's Drive folder, then let
-Zoom delete them.
+Zoom delete them. Zapier or Make is the likely way; when it's done, the
+recording links above should point to the Drive copies.
 - Match recordings to groups by meeting topic ("<Group> Meeting Room"); a
   community-wide calendar's ("<Calendar> Zoom Room") go to its admin
   group's folder.

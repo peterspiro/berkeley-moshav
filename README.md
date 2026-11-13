@@ -56,7 +56,10 @@ Python scripts:
   warnings about meetings that would clash over a Zoom
   user, and about meetings set up as invitations from someone's own calendar.
   It also invites the all-events calendar to the events created on the admin
-  account's other calendars, including the shared community calendar.
+  account's other calendars, including the shared community calendar. And
+  it puts links to Zoom's cloud recordings on their calendar events, in
+  circles' agenda docs, and in a recordings sheet for each group and one
+  for community-wide meetings.
 
 A fourth, **`circle_agendas`**, will run the circle agenda docs (see
 `circle-agendas-plan.md`): it builds each circle's agenda doc from a blank
@@ -200,6 +203,8 @@ playwright install chromium
   | `meeting:delete:meeting:admin` | Delete a meeting | Deleting a meeting that matches a group's name, when you choose to |
   | `meeting:read:list_past_instances:admin` | View a past meeting's instances | Warning about rooms unused for 300 days, before Zoom deletes them at 365 |
   | `user:read:list_users:admin` | View users | Finding every Zoom user's scheduled meetings, to offer ones matching a group's name, and to check for overlaps (`group_meetings`) |
+  | `cloud_recording:read:list_user_recordings:admin` | View a user's recordings | Finding new and older cloud recordings, to link them (`group_meetings`) |
+  | `cloud_recording:read:list_recording_files:admin` | View a meeting's recordings | Reading a recording's share link and passcode (`group_meetings`) |
 
   If its creator's role is later reduced, Zoom removes those scopes, so
   transfer the app to another admin first. Put its credentials in a file
@@ -319,7 +324,7 @@ status line as "calendar (members can view, not edit)".
 | `.` (root) | The scripts used day to day to create and maintain groups, plus setup files and design notes |
 | `groups_drive_sync/` | Apps Script project that syncs each Google Group's membership from its Drive item |
 | `calendar_notifications/` | Apps Script project that announces and gatekeeps events on the shared community calendar |
-| `group_meetings/` | Apps Script project that adds Zoom rooms and guests to group calendar events, and warns about overlapping meetings |
+| `group_meetings/` | Apps Script project that adds Zoom rooms and guests to group calendar events, warns about overlapping meetings, and links Zoom recordings |
 | `circle_agendas/` | Apps Script project for the circle agenda docs (building them, and the web app their links run) and the Circle Structure sheet and doc |
 | `util/` | Shared Python modules used by the scripts |
 | `tests/` | Unit tests (`pytest`) |
@@ -546,6 +551,21 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
   in `group_meetings/event_rules.gs`, tested under Node. See
   `group_meetings/README.md` for deployment, including the Zoom credentials
   it reads from Script Properties.
+- **`group_meetings/recordings.gs`**, in the same project, links Zoom's
+  cloud recordings, hourly: each new recording gets a "Recording:" line
+  (share link and passcode) on the one calendar event it came from, in its
+  meeting's tab of the group's agenda doc, if there's one, and a row in a
+  sheet: the group's "<Group> Meeting Recordings", in its Drive item, or
+  "Community Meeting Recordings", in the Shared Drive's Meeting Admin
+  folder, each made when first needed. Which sheet comes from the room it
+  was held in, its event's guests, its title matching a recurring
+  meeting's or holding a group's name, or "listening session" or "ask me
+  anything" in its title (community-wide); one that matches none goes on
+  the community sheet's Unassigned tab, with an email to
+  `calendaring-alerts@`, and a group typed in its Group column moves it.
+  Run by hand, `backfillRecordings` lists older recordings, a month at a
+  time, in the sheets only. Its rules are in
+  `group_meetings/recording_rules.gs`, tested under Node.
 
 - **`circle_agendas/`** builds each circle's agenda doc (on a timer, and a
   preview by hand from the Apps Script editor), is the web app behind the links in an agenda
@@ -725,6 +745,7 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
 python -m pytest
 ```
 
-The tests of `group_meetings/event_rules.gs` and
+The tests of `group_meetings/event_rules.gs`,
+`group_meetings/recording_rules.gs`, and
 `circle_agendas/agenda_rules.gs` run them under Node, and are
 skipped if `node` isn't installed.

@@ -58,7 +58,7 @@ class TestParseFooter:
             zoom_passcode="123456")
         assert js("parseFooter(f)", f=footer) == {
             "calendarId": CAL, "zoomUrl": URL, "passcode": "123456", "audience": None,
-            "alsoInvite": []}
+            "alsoInvite": [], "driveId": "F"}
 
     def test_calendar_id_with_plus_and_slash(self):
         footer = build_footer_block("1", "F", "https://g", "X", calendar_id="a?>")
@@ -66,7 +66,8 @@ class TestParseFooter:
 
     def test_no_links(self):
         assert js("parseFooter(null)") == {"calendarId": None, "zoomUrl": None, "passcode": None,
-                                           "audience": None, "alsoInvite": []}
+                                           "audience": None, "alsoInvite": [],
+                                           "driveId": None}
 
     def test_reads_an_admin_groups_audience(self):
         footer = build_footer_block(
@@ -1022,7 +1023,7 @@ class TestCalendarWithoutZoom:
     def test_no_room_read(self):
         assert js("parseFooter(f)", f=self.FOOTER) == {
             "calendarId": CAL, "zoomUrl": None, "passcode": None, "audience": "all@x.org",
-            "alsoInvite": []}
+            "alsoInvite": [], "driveId": "F"}
 
     def test_event_gets_only_guests(self):
         links = js("parseFooter(f)", f=self.FOOTER)

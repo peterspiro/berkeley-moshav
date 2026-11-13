@@ -20,6 +20,10 @@ const CALENDAR_LINK_RE =
 const ZOOM_LINK_RE = /Zoom meeting:\s*(https:\/\/\S+)/;
 const ZOOM_DETAILS_RE = /^Meeting ID [\d ]+, passcode (\S+)$/m;
 const AUDIENCE_RE = /Calendar audience:\s*(\S+@\S+)/;
+// The group's Drive item: a folder, or a shared drive (see
+// util/google_group_footer.py); either's ID can be a file's parent.
+const DRIVE_LINK_RE =
+  /(?:Google Docs folder|Shared Drive):\s*https:\/\/drive\.google\.com\/drive\/folders\/([\w-]+)/;
 // More addresses every event on a community calendar invites.
 const ALSO_INVITE_RE = /^Also invite:(.*)$/m;
 // The end of a community-wide calendar's admin group's name (see
@@ -520,7 +524,7 @@ function overlapMessage(c, opts) {
 
 /**
  * The managed links in a group's footer: { calendarId, zoomUrl, passcode,
- * audience, alsoInvite }, each null if absent ([] for alsoInvite). Only the
+ * audience, alsoInvite, driveId }, each null if absent ([] for alsoInvite). Only the
  * auto-managed block is read. An audience (the everybody group a
  * community-wide calendar's events invite and its reminders go to) marks a
  * community-wide calendar's admin group; alsoInvite are more addresses its
@@ -535,6 +539,7 @@ function parseFooter(footerText) {
   const details = block.match(ZOOM_DETAILS_RE);
   const audience = block.match(AUDIENCE_RE);
   const also = block.match(ALSO_INVITE_RE);
+  const drive = block.match(DRIVE_LINK_RE);
   const alsoInvite = [];
   for (const part of (also ? also[1] : '').split(/[,\s]+/)) {
     if (part.includes('@') && !alsoInvite.includes(lower(part))) alsoInvite.push(lower(part));
@@ -545,6 +550,7 @@ function parseFooter(footerText) {
     passcode: details ? details[1] : null,
     audience: audience ? lower(audience[1]) : null,
     alsoInvite,
+    driveId: drive ? drive[1] : null,
   };
 }
 
