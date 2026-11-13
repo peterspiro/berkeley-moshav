@@ -30,7 +30,9 @@
     {"name": "Plan type", "type": "text"},
     {"name": "Closing date", "type": "date"}
    ],
-   "views": []
+   "views": [
+    {"name": "Form choices", "type": "grid"}
+   ]
   },
   {
    "name": "People",
@@ -87,7 +89,8 @@
     {"name": "Board", "type": "kanban"},
     {"name": "By owner", "type": "grid"},
     {"name": "Patterns", "type": "grid"},
-    {"name": "Status page", "type": "grid"}
+    {"name": "Status page", "type": "grid"},
+    {"name": "Form choices", "type": "grid"}
    ]
   },
   {
