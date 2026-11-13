@@ -62,7 +62,7 @@ The API can't create views. Each is named exactly as here, since `diff`
 
 | View | Type | Set up as |
 |---|---|---|
-| Triage | Grid | Filter: Status is New. Sort: Submitted, oldest first. Show Description, Photos, Location, Room, Type, System, Urgency, the reporter fields, then Title, Component, Responsibility, Owner, Status |
+| Triage | Grid | Filter: Status is New. Sort: Submitted, oldest first. Show Description, Photos, Location, Room, Type, System, Urgency, Reporter name, Reporter email, Reporter phone, Reporter, then Title, Component, Responsibility, Owner, Status |
 | Board | Kanban | Stacked by Status. Filter: Status isn't Closed, Duplicate, or Declined. Cards show Location, Owner, Urgency |
 | By owner | Grid | Grouped by Owner. Filter as Board |
 | Patterns | Grid | Grouped by System, then Component. Show Location, Room, Submitted, Status. Sort by Location |
@@ -94,6 +94,12 @@ in the form, with the after-hours number and a link to the emergency guide.
 | View | Type | Set up as |
 |---|---|---|
 | By trade | Grid | Grouped by Trades. Show Company, Role, Contact name, Phone, After-hours phone, Our contact |
+
+Reporter, in Triage, is the link to the member in People. The member types
+the other three reporter fields on the form; Reporter will be filled in from
+the email address by the tracker's script, once that's built. Until then
+it's empty unless the triager links it. An empty Reporter after that means
+the email address isn't a member's.
 
 The status page's and forms' links aren't kept in this repo, which is
 public.
