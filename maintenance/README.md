@@ -72,33 +72,25 @@ whether they exist, and says nothing about them.
 | Status page | Grid | Show only Label (the request's number and the title written at triage), Location, System, Member-visible status, Submitted, Closed on. Filter: Status isn't Duplicate or Declined, and Closed on is empty or within the past month. Then **Share view** to make its link. No other field may be shown: it's public to anyone with the link |
 | Request form | Form | See below |
 
-| Form choices | Grid | Only for the quick update form's Request field (see "What a form's link shows"). Show Label and no other field. Filter: Status isn't Closed, Duplicate, or Declined |
-
-**Locations**
-
-| View | Type | Set up as |
-|---|---|---|
-| Form choices | Grid | Only for the request form's Location field. Show Name and no other field. No filter. Sort by Name |
 
 #### What a form's link shows
 
 A published form lets anyone with its link pick from the rows of each
 table it links to, and Airtable warns of this when the form is published.
-So each linked field on a form is limited to a view made for that purpose
-alone, which shows the one field a person needs to choose by. In the form
-builder, open the linked field's settings, turn on **Limit record selection
-to a view**, and choose that table's "Form choices" view; if it offers a
-choice of fields to show for each record, show only the first.
+Airtable's "Limit record selection to a view" isn't the answer: it's a
+setting of the field, not of the form, so it would limit what the circle
+can pick in the base too. Instead:
 
-Don't use a "Form choices" view for anything else, or point a form at a
-view made for another purpose: a field added to such a view later for the
-circle's convenience would be shown to the public.
+- The request form's Location field is left unlimited: every unit and
+  common area should be there to pick. Check in a private browser window
+  that the published form shows only each location's name.
+- The quick update form's Request field is filtered, in the form builder,
+  to requests whose Status isn't Closed, Duplicate, or Declined.
 
 The **Request form** has, in order: Reporter name, Reporter email, Reporter
 phone, Location, Room, Type, System, Urgency, Description, Photos, May
 enter if I'm out, Access notes. Reporter name, Reporter email, Location,
-Type, and Description are required. Location is limited to Locations'
-"Form choices" view. Leave out every other field, Title
+Type, and Description are required. Leave out every other field, Title
 above all: the circle writes it at triage, and it's what the status page
 shows. Its opening text says what to do in an emergency instead of filling
 in the form, with the after-hours number and a link to the emergency guide.
@@ -107,7 +99,7 @@ in the form, with the after-hours number and a link to the emergency guide.
 
 | View | Type | Set up as |
 |---|---|---|
-| Quick update form | Form | Request, Kind, By name, When, Text, Attachments, Tell the reporter. Request is limited to Requests' "Form choices" view. For circle volunteers only: even so, its Request field shows each open request's number and title to anyone with the link |
+| Quick update form | Form | Request, Kind, By name, When, Text, Attachments, Tell the reporter. Request is filtered to open requests (see "What a form's link shows"). For circle volunteers only: its Request field shows each open request's number and title to anyone with the link |
 
 **Claims**
 
