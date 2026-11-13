@@ -73,8 +73,9 @@ house rooms, mechanical rooms, site).
 ### People
 
 Members and circle volunteers, copied from Gather's directory (see
-"Links to the rest of the setup"). `Name`, `Email`, `Phone`, `Location`
-(link), `Circle member` (checkbox), `Gather ID`.
+"Links to the rest of the setup"). `Name` (only as much as tells people
+apart, "Dana S", since the request form shows it), `Full name`, `Email`,
+`Phone`, `Location` (link), `Circle member` (checkbox), `Gather ID`.
 
 Owners and contacts are links to People, not Airtable's collaborator field,
 so a volunteer can own a request without holding a paid Airtable seat.
@@ -103,8 +104,9 @@ Everything a member reports or asks. One row per problem per place.
 - `Component` (link to a short Components list kept in Assets, see below;
   filled in at triage, not by the member)
 - `Urgency`: Emergency / Urgent (days) / Routine
-- `Reporter name`, `Reporter email`, `Reporter phone` (typed on the form),
-  `Reporter` (link to People, matched by email by the script)
+- `Reporter` (link to People, picked on the form), and `Reporter name`,
+  `Reporter email`, `Reporter phone` (typed there by someone not in the
+  list; the script links Reporter if the email is a member's)
 - `May enter if I'm out` (checkbox), `Access notes`
 - `Status`: New → Triaged → Waiting on builder / Waiting on vendor /
   Waiting on volunteer → Scheduled → Done, to confirm → Closed. Also
@@ -243,9 +245,9 @@ requests it settled, which shows what's worth writing next).
   description, photos, and permission to enter. Its first lines say what to
   do in an emergency *instead of* filling in a form (shut off the water,
   call the after-hours number) and link the emergency guide.
-  It picks the location from a Locations view, but takes the reporter's name
-  as typed: linking to People would show the member list to anyone with the
-  form's link.
+  A member picks themselves from the People list, which shows anyone with
+  the form's link only short names ("Dana S"); someone not in it types
+  their name, email, and phone instead.
 - An **acknowledgment email** with their request's number, and an email
   whenever an update is marked "Tell the reporter", a visit is scheduled, or
   it's closed (asking them to reply if it isn't fixed).

@@ -7,17 +7,24 @@ and to the member who's looking into it. Gather stays the directory: the
 fields in SYNCED_FIELDS are overwritten from it on each sync, and the
 others (Circle member, Coordinator) are the circle's to set in Airtable.
 
+A person's Name, the table's primary field, is as short as will tell them
+apart: first name and last initial ("Dana S"), or the full name where two
+adults would share that. It's what the request form's list of reporters
+shows to anyone with the form's link, so it gives away no more than it
+must; Full name holds the rest.
+
 A person is matched by their Gather ID. Nobody is ever deleted, since
 requests link to them: someone with a departure date that has passed, or
 who's no longer in the directory, is marked Moved out. Rows without a
 Gather ID, added by hand for people outside the community, are left alone.
 """
 
+from collections import Counter
 from datetime import date
 
 from util.gather_utils import GatherUser
 
-SYNCED_FIELDS = ("Name", "Email", "Other email", "Phone", "Location", "Gather ID", "Moved out")
+SYNCED_FIELDS = ("Name", "Full name", "Email", "Other email", "Phone", "Location", "Gather ID", "Moved out")
 KEY = "Gather ID"
 
 
@@ -41,14 +48,25 @@ def location_name(unit: str, locations: dict[str, str]) -> str | None:
     return None
 
 
+def display_names(adults: list[GatherUser]) -> dict[str, str]:
+    """User ID -> the name each adult is listed by: first name and last
+    initial, without a period, or the full name for those who'd share it."""
+    def short(u):
+        first = u.first_name or u.full_name.split()[0]
+        return f"{first} {u.last_name[0]}" if u.last_name else first
+    counts = Counter(short(u).casefold() for u in adults)
+    return {u.user_id: short(u) if counts[short(u).casefold()] == 1 else u.full_name
+            for u in adults}
+
+
 def people_rows(users: list[GatherUser], locations: dict[str, str],
                 today: date) -> tuple[list[dict], list[str]]:
     """The People row for each adult in the directory, as Airtable fields,
     and warnings. `locations` is {Locations row name: record ID}."""
     rows, warnings = [], []
-    for u in users:
-        if u.child or not u.full_name:
-            continue
+    adults = [u for u in users if not u.child and u.full_name]
+    names = display_names(adults)
+    for u in adults:
         place = location_name(u.unit, locations)
         # A unit that isn't a number ("Consultants") is Gather's way of
         # placing someone who doesn't live in the building: no warning.
@@ -56,7 +74,8 @@ def people_rows(users: list[GatherUser], locations: dict[str, str],
             warnings.append(f"{u.full_name}: no Locations row for unit {u.unit!r}.")
         other = u.google_email if u.google_email != u.email else ""
         rows.append({
-            "Name": u.full_name,
+            "Name": names[u.user_id],
+            "Full name": u.full_name,
             "Email": u.email or None,
             "Other email": other or None,
             "Phone": u.phone or None,

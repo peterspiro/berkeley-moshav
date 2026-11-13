@@ -48,13 +48,16 @@ def test_schema_file_holds_no_airtable_ids():
     assert not re.search(r"\b(app|tbl|fld|viw|rec)[A-Za-z0-9]{14}\b", text)
 
 
-def test_request_form_cannot_show_the_member_list():
-    # A form shows a linked table's rows to anyone with its link, so the
-    # reporter is typed, and matched to People by the script.
-    fields = {f["name"]: f for t in load_schema()["tables"] if t["name"] == "Requests"
-              for f in t["fields"]}
+def test_request_form_can_take_a_reporter_picked_or_typed():
+    # A member picks themselves from People, whose primary field (all the
+    # form's link shows) is a short name; anyone else types their details.
+    tables = {t["name"]: t for t in load_schema()["tables"]}
+    fields = {f["name"]: f for f in tables["Requests"]["fields"]}
+    assert (fields["Reporter"]["type"], fields["Reporter"]["table"]) == ("link", "People")
     assert fields["Reporter name"]["type"] == "text"
     assert fields["Reporter email"]["type"] == "email"
+    assert tables["People"]["fields"][0]["name"] == "Name" and "primary" not in tables["People"]
+    assert "Full name" in [f["name"] for f in tables["People"]["fields"]]
 
 
 def test_seed_file_has_the_36_units():

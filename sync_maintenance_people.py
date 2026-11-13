@@ -3,7 +3,10 @@
 Copies the community's members from Gather into the maintenance tracker's
 People table in Airtable.
 
-Each adult in the Gather directory gets a row in People: their name, email
+Each adult in the Gather directory gets a row in People: their name (as
+Name, only first name and last initial, "Dana S", unless two adults would
+share that, since the request form's list of reporters shows it to anyone
+with the form's link; and in full as Full name), email
 addresses (their Gather email, and their Google Email if it's different),
 phone (mobile, or else home), and their unit, as a link to its row in
 Locations. Run it when members join, move, or leave; it adds new people

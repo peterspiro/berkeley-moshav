@@ -71,12 +71,27 @@ def test_rows_are_adults_with_unit_linked():
     rows, warnings = people_rows([DANA, SAM, KID], LOCATIONS, TODAY)
     assert warnings == []
     assert rows == [
-        {"Name": "Dana Smith", "Email": "dana@example.org", "Other email": "dana.s@gmail.com",
+        {"Name": "Dana S", "Full name": "Dana Smith",
+         "Email": "dana@example.org", "Other email": "dana.s@gmail.com",
          "Phone": "510-555-0101", "Location": ["recB"], "Gather ID": "1", "Moved out": False},
         # A Google Email that's the same as the email isn't repeated.
-        {"Name": "Sam Lee", "Email": "sam@example.org", "Other email": None,
+        {"Name": "Sam L", "Full name": "Sam Lee", "Email": "sam@example.org", "Other email": None,
          "Phone": None, "Location": ["recA"], "Gather ID": "2", "Moved out": False},
     ]
+
+
+def test_names_are_only_as_long_as_tells_people_apart():
+    # The request form shows these to anyone with its link.
+    users = [DANA, SAM, KID, _user("10", "Dana", "Stone"), _user("11", "Dana", "Reyes"),
+             _user("12", "sam", "lowe"), GatherUser("13", "Cher", "", "Cher")]
+    names = {r["Full name"]: r["Name"] for r in people_rows(users, LOCATIONS, TODAY)[0]}
+    assert names == {
+        # Two would be "Dana S", and two "Sam L" (whatever the capitals).
+        "Dana Smith": "Dana Smith", "Dana Stone": "Dana Stone", "Dana Reyes": "Dana R",
+        "Sam Lee": "Sam Lee", "sam lowe": "sam lowe", "Cher": "Cher"}
+    # A child of the same name doesn't lengthen an adult's: only adults are listed.
+    kid = _user("14", "Sam", "Lang", child=True)
+    assert people_rows([SAM, kid], LOCATIONS, TODAY)[0][0]["Name"] == "Sam L"
 
 
 def test_unit_suffix_falls_back_to_the_unit_and_unknown_units_warn():
@@ -104,7 +119,7 @@ def test_changes_add_update_and_mark_moved_out():
     rows, _ = people_rows([DANA, SAM], LOCATIONS, TODAY)
     records = [
         # Dana as she is, as Airtable returns her: empty fields left out.
-        {"id": "r1", "fields": {"Name": "Dana Smith", "Email": "dana@example.org",
+        {"id": "r1", "fields": {"Name": "Dana S", "Full name": "Dana Smith", "Email": "dana@example.org",
                                 "Other email": "dana.s@gmail.com", "Phone": "510-555-0101",
                                 "Location": ["recB"], "Gather ID": "1", "Circle member": True}},
         # Gone from the directory.
@@ -114,11 +129,11 @@ def test_changes_add_update_and_mark_moved_out():
         {"id": "r4", "fields": {"Name": "Outside Helper"}},
     ]
     to_write, lines = changes(rows, records)
-    assert lines == ["Add Sam Lee.", "Mark Old Timer as moved out (not in the directory)."]
+    assert lines == ["Add Sam L.", "Mark Old Timer as moved out (not in the directory)."]
     assert to_write == [rows[1], {"Gather ID": "9", "Moved out": True}]
     records[0]["fields"]["Phone"] = "old"
     records[0]["fields"]["Location"] = ["recA"]
-    assert changes(rows, records)[1][0] == "Update Dana Smith: Phone, Location."
+    assert changes(rows, records)[1][0] == "Update Dana S: Phone, Location."
 
 
 def test_sync_writes_people_and_keeps_the_circles_own_fields():
@@ -142,7 +157,7 @@ def test_sync_writes_people_and_keeps_the_circles_own_fields():
     lines = []
     sync_maintenance_people.sync(client, "app", [SAM], dry_run=False, today=TODAY, out=lines.append)
     people = {r["fields"]["Name"]: r["fields"] for r in client.list_records("app", "People")}
-    assert people["Dana Smith"]["Moved out"] is True and people["Dana Smith"]["Coordinator"] is True
-    assert people["Dana Smith"]["Email"] == "dana@example.org"
-    assert "Sam Lee" in people
+    assert people["Dana S"]["Moved out"] is True and people["Dana S"]["Coordinator"] is True
+    assert people["Dana S"]["Email"] == "dana@example.org"
+    assert "Sam L" in people
     assert lines[-1] == "1 adult(s) in the directory; 2 row(s) written."

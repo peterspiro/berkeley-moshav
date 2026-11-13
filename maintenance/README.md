@@ -93,6 +93,11 @@ section, cut its **Fields** list down to that one.
 
 - The request form's Location field shows only Name ("Unit 411"), and
   offers every unit and common area.
+- The request form's Reporter field shows only Name, which
+  `sync_maintenance_people.py` keeps as short as tells people apart ("Dana
+  S"), and is filtered there to people whose Moved out isn't ticked. Anyone
+  with the form's link can read that list; nothing else about a person is
+  shown.
 - The quick update form's Request field shows only Label, and is filtered
   there to requests whose Status isn't Closed, Duplicate, or Declined.
 
@@ -103,10 +108,14 @@ Airtable's "Limit record selection to a view" isn't used: it's a setting
 of the field, not of the form, so it would limit what the circle can pick
 in the base too.
 
-The **Request form** has, in order: Reporter name, Reporter email, Reporter
-phone, Location, Room, Type, System, Urgency, Description, Photos, May
-enter if I'm out, Access notes. Reporter name, Reporter email, Location,
-Type, and Description are required. Leave out every other field, Title
+The **Request form** has, in order: Reporter, Reporter name, Reporter
+email, Reporter phone, Location, Room, Type, System, Urgency, Description,
+Photos, May enter if I'm out, Access notes. Location, Type, and Description
+are required. A member picks themselves in Reporter and skips the three
+fields after it, which are for someone who isn't in the list: show them
+only when Reporter is empty, and require Reporter name and Reporter email
+then, if the form builder allows; otherwise leave all four optional, and
+say so in their help text. Leave out every other field, Title
 above all: the circle writes it at triage, and it's what the status page
 shows. Its opening text says what to do in an emergency instead of filling
 in the form, with the after-hours number and a link to the emergency guide.
@@ -129,11 +138,10 @@ in the form, with the after-hours number and a link to the emergency guide.
 |---|---|---|
 | By trade | Grid | Grouped by Trades. Show Company, Role, Contact name, Phone, After-hours phone, Our contact |
 
-Reporter, in Triage, is the link to the member in People. The member types
-the other three reporter fields on the form; Reporter will be filled in from
-the email address by the tracker's script, once that's built. Until then
-it's empty unless the triager links it. An empty Reporter after that means
-the email address isn't a member's.
+Reporter, in Triage, is the link to the member in People, which a member
+picks on the form. Someone who isn't in the list types the other three
+reporter fields instead; the tracker's script, once it's built, will link
+Reporter for them if their email address is a member's after all.
 
 The status page's and forms' links aren't kept in this repo, which is
 public.

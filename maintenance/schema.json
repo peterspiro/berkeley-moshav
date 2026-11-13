@@ -37,6 +37,7 @@
    "description": "Members and circle volunteers, copied from Gather's directory.",
    "fields": [
     {"name": "Name", "type": "text"},
+    {"name": "Full name", "type": "text"},
     {"name": "Email", "type": "email"},
     {"name": "Other email", "type": "email"},
     {"name": "Phone", "type": "phone"},
