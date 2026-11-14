@@ -62,6 +62,23 @@ Claims are made with Number as theirs. In each, open the Label field's menu
 and choose **Change primary field** (or the table's primary field's menu,
 if that's where Airtable offers it). Do this before making the views.
 
+### Triaging
+
+Triage is done in the expanded record (click a row's expand icon, or press
+space), which stacks a request's fields on one screen and steps to the next
+with the arrows at its top. The Triage view is set up for that:
+
+- Its fields are in the order triage reads them, which the expanded record
+  follows: first what the member said (Description, Photos, Urgency, Type,
+  In my unit, Location, Room, Reporter, Reporter name, Reporter email,
+  Reporter phone, May enter if I'm out, Access notes), then what the circle
+  fills in (Title, System, Component, Responsibility, Owner, Status). Status
+  is last: changing it takes the request out of Triage.
+- Its grid is only the queue to choose from, so most fields are hidden
+  there (they still show in the expanded record). Shown: Label, Urgency,
+  Location, Submitted, and, as the screen has room, Description, Photos,
+  Type, System.
+
 ### A new request's status
 
 A request arrives from the form with no Status, since the form doesn't ask
@@ -80,7 +97,7 @@ whether they exist, and says nothing about them.
 
 | View | Type | Set up as |
 |---|---|---|
-| Triage | Grid | Filter: Status is New, or Status is empty. Sort: Submitted, oldest first. Show Description, Photos, In my unit, Location, Room, Type, System, Urgency, Reporter name, Reporter email, Reporter phone, Reporter, then Title, Component, Responsibility, Owner, Status |
+| Triage | Grid | Filter: Status is New, or Status is empty. Sort: Submitted, oldest first. See "Triaging" below for its fields |
 | Board | Kanban | Stacked by Status. Filter: Status isn't Closed, Duplicate, or Declined. Cards show Location, Owner, Urgency |
 | By owner | Grid | Grouped by Owner. Filter as Board |
 | Patterns | Grid | Grouped by System, then Component. Show Location, Room, Submitted, Status. Sort by Location |
