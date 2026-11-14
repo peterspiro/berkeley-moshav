@@ -44,6 +44,9 @@ const MAX_ATTACHMENTS_PER_RUN = 100;
 const BATCH = 10;  // records per Airtable write
 
 const PROP_LAST_RUN = 'lastRun';  // ISO time the last processRequests began
+const PROP_BACKUP_FOLDER = 'backupFolderId';  // set by backupFolder
+const BACKUP_FOLDER_NAME = 'Building Maintenance backup';
+const FOLDER_TYPE = 'application/vnd.google-apps.folder';
 
 /** Calls Airtable's API; returns the parsed response, or throws with what it said. */
 function airtable(method, path, payload) {
@@ -66,36 +69,52 @@ function airtable(method, path, payload) {
 /**
  * Saves every table to Drive, as a JSON file each in a folder named for
  * today, and copies each photo and attachment not already there into an
- * "Attachments" folder (Airtable's own links to them expire). The folder is
- * BACKUP_FOLDER_ID; without it, nothing is saved.
+ * "Attachments" folder (Airtable's own links to them expire). It all goes
+ * in a folder the script makes for itself (see backupFolder).
  */
 function backup() {
-  const folderId = setting('BACKUP_FOLDER_ID', true);
-  if (!folderId) {
-    console.log('No BACKUP_FOLDER_ID: nothing backed up.');
-    return;
-  }
-  const root = DriveApp.getFolderById(folderId);
+  const root = backupFolder();
   const today = Utilities.formatDate(new Date(), TIME_ZONE, 'yyyy-MM-dd');
-  const day = subfolder(root, today);
-  const attachments = subfolder(root, 'Attachments');
-  let copied = 0, waiting = 0;
+  const day = driveFolder(root, today);
+  const attachments = driveFolder(root, 'Attachments');
+  const saved = driveChildren(day), copied = driveChildren(attachments);
+  let added = 0, waiting = 0;
   TABLES.forEach(table => {
     const records = listRecords(table);
     const name = `${table}.json`;
-    const old = day.getFilesByName(name);
-    while (old.hasNext()) old.next().setTrashed(true);
-    day.createFile(name, JSON.stringify(records, null, 1), 'application/json');
+    // A second run in a day replaces the first's file.
+    if (saved[name]) Drive.Files.update({ trashed: true }, saved[name]);
+    Drive.Files.create({ name: name, parents: [day], mimeType: 'application/json' },
+                       Utilities.newBlob(JSON.stringify(records, null, 1), 'application/json', name));
     records.forEach(record => attachmentsIn(record).forEach(a => {
       const fileName = `${a.id} ${a.filename}`;
-      if (attachments.getFilesByName(fileName).hasNext()) return;
-      if (copied >= MAX_ATTACHMENTS_PER_RUN) { waiting++; return; }
-      attachments.createFile(UrlFetchApp.fetch(a.url).getBlob().setName(fileName));
-      copied++;
+      if (copied[fileName]) return;
+      if (added >= MAX_ATTACHMENTS_PER_RUN) { waiting++; return; }
+      Drive.Files.create({ name: fileName, parents: [attachments] },
+                         UrlFetchApp.fetch(a.url).getBlob().setName(fileName));
+      copied[fileName] = true;
+      added++;
     }));
   });
-  console.log(`Backed up ${TABLES.length} tables to ${today}; ${copied} attachment(s) copied` +
+  console.log(`Backed up ${TABLES.length} tables to ${today}; ${added} attachment(s) copied` +
               (waiting ? `, ${waiting} left for the next run.` : '.'));
+}
+
+/**
+ * The ID of the folder the backup goes in: one the script makes, the first
+ * time, in the My Drive of the account it runs as, and remembers. The
+ * script is allowed only the Drive files it creates itself
+ * (appsscript.json's drive.file scope), not the rest of the account's
+ * Drive, so it can't use a folder a person made.
+ */
+function backupFolder() {
+  const props = PropertiesService.getScriptProperties();
+  let id = props.getProperty(PROP_BACKUP_FOLDER);
+  if (!id) {
+    id = Drive.Files.create({ name: BACKUP_FOLDER_NAME, mimeType: FOLDER_TYPE }).id;
+    props.setProperty(PROP_BACKUP_FOLDER, id);
+  }
+  return id;
 }
 
 /** What the rules need from outside a record (see tracker_rules.gs). */
@@ -133,6 +152,27 @@ function daily() {
     }
   });
   if (failure) throw failure;
+}
+
+/** The files and folders in a Drive folder that aren't in the trash: { name: ID }. */
+function driveChildren(folderId) {
+  const children = {};
+  let pageToken = null;
+  do {
+    const page = Drive.Files.list({
+      q: `'${folderId}' in parents and trashed = false`,
+      fields: 'nextPageToken, files(id, name)', pageSize: 1000, pageToken: pageToken,
+    });
+    (page.files || []).forEach(f => { children[f.name] = f.id; });
+    pageToken = page.nextPageToken;
+  } while (pageToken);
+  return children;
+}
+
+/** The ID of the folder named `name` in a Drive folder, created if it isn't there. */
+function driveFolder(parentId, name) {
+  return driveChildren(parentId)[name] ||
+    Drive.Files.create({ name: name, mimeType: FOLDER_TYPE, parents: [parentId] }).id;
 }
 
 /** Run once, by hand, after deploying: (re)creates the timers. */
@@ -259,12 +299,6 @@ function setting(name, optional) {
   const value = PropertiesService.getScriptProperties().getProperty(name) || '';
   if (!value && !optional) throw new Error(`Set the Script Property ${name} (see README.md).`);
   return value;
-}
-
-/** The folder named `name` in `parent`, created if it isn't there. */
-function subfolder(parent, name) {
-  const found = parent.getFoldersByName(name);
-  return found.hasNext() ? found.next() : parent.createFolder(name);
 }
 
 /** Changes records, [{ id, fields }], in a table. */

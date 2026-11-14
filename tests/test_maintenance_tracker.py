@@ -326,11 +326,22 @@ def test_form_links_are_written_where_missing_or_stale():
 def test_backup_saves_every_table_and_each_attachment_once():
     photo = {"id": "att1", "url": "https://files.example/1", "filename": "leak.jpg"}
     state = tables([request(Photos=[photo])])
-    props = {**PROPS, "BACKUP_FOLDER_ID": "folder1"}
-    out = run(state, "backup", "backup", props=props)
-    [day] = [k for k in out["drive"] if re.fullmatch(r"\d{4}-\d\d-\d\d/", k)]
-    assert sorted(out["drive"][day]) == sorted(f"{t}.json" for t in state)
-    saved = json.loads(out["drive"][day]["Requests.json"])
+    # Twice in a day: the second run's files replace the first's.
+    out = run(state, "backup", "backup")
+    # In a folder the script made for itself, which it remembers.
+    [folder] = out["drive"]
+    assert folder == "Building Maintenance backup/" and out["props"]["backupFolderId"]
+    backup = out["drive"][folder]
+    [day] = [k for k in backup if re.fullmatch(r"\d{4}-\d\d-\d\d/", k)]
+    assert sorted(backup[day]) == sorted(f"{t}.json" for t in state)
+    saved = json.loads(backup[day]["Requests.json"])
     assert saved[0]["fields"]["Description"] == "Tap drips"
-    assert out["drive"]["Attachments/"] == {"att1 leak.jpg": "bytes of https://files.example/1"}
-    assert run(state, "backup")["drive"] == {}  # no folder set: nothing saved
+    assert backup["Attachments/"] == {"att1 leak.jpg": "bytes of https://files.example/1"}
+
+
+def test_script_may_touch_only_the_drive_files_it_makes():
+    manifest = json.loads((PROJECT / "appsscript.json").read_text())
+    drive = [s for s in manifest["oauthScopes"] if "drive" in s]
+    assert drive == ["https://www.googleapis.com/auth/drive.file"]
+    # DriveApp needs the whole of Drive; the script uses the Drive service instead.
+    assert "DriveApp" not in (PROJECT / "maintenance_tracker.gs").read_text().replace("DriveApp needs", "")

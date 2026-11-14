@@ -58,35 +58,31 @@ function reply(code, body) {
   return { getResponseCode: () => code, getContentText: () => JSON.stringify(body) };
 }
 
-function folder(name) {
-  const self = {
-    name: name, folders: [], files: [],
-    getFoldersByName: n => iterator(self.folders.filter(f => f.name === n)),
-    createFolder: n => { const f = folder(n); self.folders.push(f); return f; },
-    getFilesByName: n => iterator(self.files.filter(f => f.name === n && !f.trashed)),
-    createFile: (a, content) => {
-      const file = typeof a === 'string' ? { name: a, content: content } : { name: a.name, content: a.content };
-      file.setTrashed = t => { file.trashed = t; };
-      self.files.push(file);
-      return file;
-    },
-  };
-  return self;
-}
+// Drive, as the advanced service's Files: only what the script itself created.
+const driveFiles = [];
+const Files = {
+  create: (resource, blob) => {
+    const file = Object.assign({ id: `file${nextId++}`, parents: ['myDrive'] }, resource);
+    if (blob) file.content = blob.content;
+    driveFiles.push(file);
+    return file;
+  },
+  update: (resource, id) => Object.assign(driveFiles.find(f => f.id === id), resource),
+  list: args => {
+    const parent = /^'([^']+)' in parents and trashed = false$/.exec(args.q)[1];
+    return { files: driveFiles.filter(f => f.parents[0] === parent && !f.trashed) };
+  },
+};
 
-function iterator(items) {
-  let i = 0;
-  return { hasNext: () => i < items.length, next: () => items[i++] };
-}
-
-function tree(f) {
+function tree(parent) {
   const out = {};
-  f.files.filter(x => !x.trashed).forEach(x => { out[x.name] = x.content; });
-  f.folders.forEach(x => { out[x.name + '/'] = tree(x); });
+  driveFiles.filter(f => f.parents[0] === parent && !f.trashed).forEach(f => {
+    if (f.mimeType === 'application/vnd.google-apps.folder') out[f.name + '/'] = tree(f.id);
+    else out[f.name] = f.content;
+  });
   return out;
 }
 
-const root = folder('root');
 const ctx = vm.createContext({
   console: { log: () => {}, error: () => {} },
   Intl: Intl, JSON: JSON, Date: Date,
@@ -101,8 +97,11 @@ const ctx = vm.createContext({
     setProperty: (k, v) => { props[k] = v; },
   }) },
   LockService: { getScriptLock: () => ({ tryLock: () => true, releaseLock: () => {} }) },
-  DriveApp: { getFolderById: id => { if (id !== props.BACKUP_FOLDER_ID) throw new Error('no folder'); return root; } },
-  Utilities: { formatDate: (d, tz) => new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(d) },
+  Drive: { Files: Files },
+  Utilities: {
+    formatDate: (d, tz) => new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(d),
+    newBlob: (content, type, name) => ({ content: content, name: name }),
+  },
   ScriptApp: {},
 });
 ['tracker_rules.gs', 'maintenance_tracker.gs'].forEach(f =>
@@ -113,6 +112,6 @@ if (input.values) Object.keys(input.values).forEach(k => { ctx[k] = input.values
 if (input.expr) result = vm.runInContext(`JSON.stringify(${input.expr})`, ctx);
 (input.run || []).forEach(name => vm.runInContext(`${name}()`, ctx));
 process.stdout.write(JSON.stringify({
-  tables: tables, mails: mails, props: props, drive: tree(root), calls: calls,
+  tables: tables, mails: mails, props: props, drive: tree('myDrive'), calls: calls,
   result: result === undefined || result === null ? null : JSON.parse(result),
 }));

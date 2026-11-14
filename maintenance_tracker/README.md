@@ -31,7 +31,9 @@ Airtable base ("Building Maintenance") without anyone doing it. It runs as
   - **Backup** (`backup`): every table is saved as a JSON file in a folder
     named for the day, and each photo and attachment not yet copied is
     saved to an "Attachments" folder (Airtable's own links to them expire),
-    up to 100 a run. This is the evidence file if a claim is disputed.
+    up to 100 a run. This is the evidence file if a claim is disputed. It
+    goes in a folder the script makes for itself, "Building Maintenance
+    backup", in `admin@`'s My Drive (see "The backup folder").
 
 Emails go from `admin@`, named "Berkeley Moshav Maintenance", with replies
 going to the circle's list. A member is emailed at the address Gather has
@@ -68,8 +70,25 @@ which is public.
 | `STATUS_PAGE_URL` | The public link to the Requests table's "Status page" view, which members open to see where requests stand: in Airtable, open that view, choose **Share and sync**, and create a link to the view. Optional: emails then leave it out |
 | `TRIAGE_URL` | The Triage view's address in Airtable, for the circle's alerts. Optional |
 | `EMERGENCY_NOTE` | A line added to the end of each acknowledgment, saying what to do in an emergency. Optional |
-| `BACKUP_FOLDER_ID` | The ID of the Drive folder the backup goes in. Optional: without it, nothing is backed up |
 | `SEND_ALL_MAIL_TO` | For trying it out: while it's set, every email goes to this address instead, with who it was for in the subject. Delete it to go live |
+
+## The backup folder
+
+The script asks for permission only for the Drive files it creates itself,
+not for the rest of `admin@`'s Drive. So it can't be pointed at a folder a
+person made: the first time `backup` runs, it makes "Building Maintenance
+backup" at the top of `admin@`'s My Drive, and remembers it (in the Script
+Property `backupFolderId`, which it sets itself).
+
+The folder holds every table in full: members' contact details, photos
+taken in their homes, and the circle's notes. Leave it where it is, shared
+with nobody, or with the particular people who need it. Don't move it into
+the community's Shared Drive, which every member can view. It can be
+renamed, or moved within My Drive.
+
+To start a fresh backup, as when changing from the test base to the real
+one, delete the `backupFolderId` property; the next run makes a new folder
+of the same name, so rename or delete the old one first.
 
 ## Deploying
 
@@ -99,12 +118,13 @@ Then in the Apps Script editor:
 2. Run `processRequests` by hand, and approve what it asks permission for.
    Each request in the base that hasn't been acknowledged gets its email
    (to you, while `SEND_ALL_MAIL_TO` is set).
-3. Run `daily` by hand, to check the form links and the backup.
+3. Run `daily` by hand, to check the form links and the backup (look for
+   "Building Maintenance backup" in `admin@`'s My Drive).
 4. Run `installTriggers` to start the timers.
 
 To move to the real base, change `AIRTABLE_TOKEN` and `AIRTABLE_BASE_ID`
 (and the form, status page, and Triage links, which are the real base's
-own), and delete `SEND_ALL_MAIL_TO` when the circle is ready for members to
+own), delete `backupFolderId` (see "The backup folder"), and delete `SEND_ALL_MAIL_TO` when the circle is ready for members to
 be emailed.
 
 ## How much it asks of Airtable
