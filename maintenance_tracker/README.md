@@ -50,6 +50,28 @@ Airtable base ("Building Maintenance") without anyone doing it. It runs as
     each. When either is full, Airtable accepts no more, and the request
     form stops working for members.
 
+- **Every Sunday**, with the housekeeping (`sendDigest`): the **weekly
+  digest** is emailed to the circle's list. Each section is left out when
+  it's empty, and nothing is sent when no request is open or new:
+  - **New this week**: requests that arrived in the last 7 days.
+  - **To triage**: requests still New, and how long they've waited.
+  - **No owner**: open, triaged requests with nobody assigned.
+  - **Scheduled, but with no visit time**; and **Visit has passed**:
+    still Scheduled 2 days after its visit.
+  - **Done, and waiting to be confirmed**: for 7 days or more, so the
+    circle can close them.
+  - **Gone quiet**: triaged or waiting on someone, with no update or
+    change of status for 14 days.
+  - **Repeats**: among repairs and defects of the last 180 days, the same
+    component (or, where none is set, the same system and room) in 3 or
+    more places; and plumbing, or roof and envelope, in 2 or more places
+    in one stack of units. A sign of a defect to claim once, for the
+    building.
+  - Then how many requests are open, by status, and how full the base is.
+
+  Run `sendDigest` by hand to send it now. The thresholds are constants at
+  the top of `tracker_rules.gs`.
+
 Emails go from `admin@`, named "Berkeley Moshav Maintenance", with replies
 going to the circle's list. A member is emailed at the address Gather has
 for them; someone who typed their details, at the address they typed.
@@ -59,8 +81,7 @@ Acknowledged on and Status noted in Requests, Told reporter on in Updates.
 Don't edit those. To have the script treat a request as new again, clear
 its Acknowledged on.
 
-Not built yet: the weekly digest and patterns, claim deadlines, the
-maintenance calendar, and the check that the base's views are all there
+Not built yet: claim deadlines, the maintenance calendar, and the check that the base's views are all there
 (run `python maintenance_base.py diff` for that).
 
 ## Files
@@ -172,13 +193,16 @@ What it does on each plan (`PLANS` in `tracker_rules.gs`):
 | Looks for new requests and changes of status | every 2 hours | every 10 minutes |
 | Looks for updates to pass on | every 6 hours | every 10 minutes |
 | Form links, backup, and the check of how full the base is | Sundays | daily |
+| The weekly digest | Sundays | Sundays |
 | Warns the circle at 70%, 85%, 95% of | 1,000 records, 1 GB | 50,000 records, 20 GB |
 
 On the Free plan, then, a reporter's acknowledgment and the circle's alert
 about an urgent request can come up to 2 hours after the request. The
 form's own page should say what to do in an emergency.
 
-With nothing happening, the Free pace is about 540 calls a month. Each new
+With nothing happening, the Free pace is about 530 calls a month (the
+housekeeping reads each table once, for the form links, the backup, and
+the digest together). Each new
 request or change of status adds one or two, and the first of them in any
 6 hours two more (People and Locations are then kept for 6 hours, so a
 change made to them in Airtable can take that long to be noticed).

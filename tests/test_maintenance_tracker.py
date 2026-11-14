@@ -97,7 +97,7 @@ def test_every_field_and_table_the_script_names_is_in_the_schema():
     statuses = next(f["choices"] for t in schema["tables"] if t["name"] == "Requests"
                     for f in t["fields"] if f["name"] == "Status")
     # The member-status table's keys are Status options, not fields.
-    used = {u.replace("\\'", "'") for u in used} - set(statuses)
+    used = {u.replace("\\'", "'") for u in used} - set(statuses) - {t["name"] for t in schema["tables"]}
     assert used <= fields, sorted(used - fields)
     listed = re.search(r"const TABLES = \[(.*?)\];", (PROJECT / "maintenance_tracker.gs").read_text(), re.S)
     assert re.findall(r"'([^']+)'", listed.group(1)) == [t["name"] for t in schema["tables"]]
@@ -424,6 +424,153 @@ def test_backup_warns_the_circle_as_the_base_fills():
     assert again["mails"] == []
     emptied = run(tables(), "backup", props=out["props"])
     assert emptied["mails"] == [] and emptied["props"]["usageWarned"] == "0"
+
+
+# --- the weekly digest -------------------------------------------------------
+
+NOW = "2026-11-15T20:00:00.000Z"  # a Sunday, noon in the building
+
+
+def days_ago(n):
+    from datetime import datetime, timedelta, timezone
+    then = datetime(2026, 11, 15, 20, 0, tzinfo=timezone.utc) - timedelta(days=n)
+    return then.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
+
+def digest_of(requests, updates=(), assets=(), locations=None, plan="free"):
+    data = tables(requests, updates)
+    data["Assets"] = list(assets)
+    if locations is not None:
+        data["Locations"] = locations
+    return rule("digest(d, new Date(n), c)", d=data, n=NOW,
+                c={"timeZone": "America/Los_Angeles", "triageUrl": "https://airtable.example/triage", "plan": plan})
+
+
+def old(number, status, age=30, **fields):
+    return request(number, Status=status, Submitted=days_ago(age), Location=["loc411"], **fields)
+
+
+def section(body, title):
+    """The lines under a section's heading, without their indent."""
+    lines = body.split("\n")
+    start = next(i for i, l in enumerate(lines) if l.startswith(title))
+    out = []
+    for l in lines[start + 1:]:
+        if not l.startswith("  "):
+            break
+        out.append(l.strip())
+    return out
+
+
+def test_digest_is_nothing_when_nothing_is_open_or_new():
+    assert digest_of([]) is None
+    assert digest_of([old(1, "Closed"), old(2, "Declined")]) is None
+
+
+def test_digest_sections():
+    requests = [
+        request(1, Status="New", Submitted=days_ago(2), Location=["loc411"], Description="Tap  drips\nbadly"),
+        old(2, "New", 9, Title="Door sticks"),
+        old(3, "Triaged", 5, Title="Fan rattles"),                      # no owner; new this week
+        old(4, "Scheduled", 20, Title="No time", Owner=["pDana"]),
+        old(5, "Scheduled", 20, Title="Missed", Owner=["pDana"], Visit=days_ago(3)),
+        old(6, "Scheduled", 40, Title="Booked", Owner=["pDana"], Visit=days_ago(-10)),
+        old(7, "Done, to confirm", 30, Title="Fixed?", Owner=["pDana"]),
+        old(8, "Waiting on builder", 60, Title="Stalled", Owner=["pDana"]),
+        old(9, "Waiting on vendor", 60, Title="Moving", Owner=["pDana"]),
+        old(10, "Closed", 3, Title="Quick one"),
+    ]
+    updates = [{"id": "u1", "fields": {"Request": ["req7"], "Logged": days_ago(8)}},
+               {"id": "u2", "fields": {"Request": ["req8"], "Logged": days_ago(15)}},
+               {"id": "u3", "fields": {"Request": ["req9"], "Logged": days_ago(13)}}]
+    mail = digest_of(requests, updates)
+    assert mail["subject"] == "Maintenance digest: 3 new, 2 to triage, 9 open"
+    body = mail["body"]
+    assert section(body, "New this week (3)") == [
+        "R-3 Unit 411: Fan rattles - Triaged", "R-10 Unit 411: Quick one - Closed", "R-1 Unit 411: Tap drips badly"]
+    assert section(body, "To triage (2)") == [
+        "R-2 Unit 411: Door sticks - waiting 9 days", "R-1 Unit 411: Tap drips badly - waiting 2 days"]
+    assert section(body, "No owner (1)") == ["R-3 Unit 411: Fan rattles - Triaged"]
+    assert section(body, "Scheduled, but with no visit time (1)") == ["R-4 Unit 411: No time (Dana S)"]
+    assert section(body, "Visit has passed") == ["R-5 Unit 411: Missed (Dana S) - visit was Thu, Nov 12, 12:00 PM"]
+    assert section(body, "Done, and waiting to be confirmed") == ["R-7 Unit 411: Fixed? (Dana S) - for 8 days"]
+    # Not the scheduled ones, which have their own sections, nor the one touched 13 days ago.
+    assert section(body, "Gone quiet") == ["R-8 Unit 411: Stalled (Dana S) - Waiting on builder, 15 days"]
+    assert "Repeats" not in body
+    assert ("Open requests: 9 (2 New, 1 Triaged, 1 Waiting on builder, 1 Waiting on vendor, "
+            "3 Scheduled, 1 Done, to confirm)") in body
+    assert "The base holds 17 of the 1,000 records its plan allows, and 0 MB of 1,024 MB of attachments." in body
+    assert body.endswith("Triage: https://airtable.example/triage")
+
+
+def test_digest_with_nothing_needing_attention():
+    mail = digest_of([old(1, "Triaged", 10, Title="In hand", Owner=["pDana"])])
+    assert mail["subject"] == "Maintenance digest: 1 open"
+    assert mail["body"].startswith("Nothing needs attention this week.\n\nOpen requests: 1 (1 Triaged)")
+
+
+def test_digest_repeats():
+    locations = [{"id": f"loc{n}", "fields": {"Name": f"Unit {n}", "Stack": n % 100}}
+                 for n in (204, 304, 404, 211, 311, 108)] + [{"id": "locRoof", "fields": {"Name": "Roof"}}]
+    assets = [{"id": "fan", "fields": {"Name": "Bath fan FV-08"}}]
+
+    def at(number, unit, **fields):
+        base = {"Status": "Triaged", "Submitted": days_ago(20), "Location": [f"loc{unit}"]}
+        return request(number, **{**base, **fields})
+
+    requests = [
+        # One fan model in three units (two requests from one of them), whatever the room.
+        at(1, 204, Component=["fan"], System="HVAC & ventilation", Room="Bath"),
+        at(2, 211, Component=["fan"], System="HVAC & ventilation", Room="Bath"),
+        at(3, 211, Component=["fan"], System="HVAC & ventilation", Room="Laundry"),
+        at(4, 108, Component=["fan"], System="HVAC & ventilation", Status="Closed"),
+        # The same system and room in three units, with no component set.
+        at(5, 204, System="Electrical & lighting", Room="Kitchen"),
+        at(6, 311, System="Electrical & lighting", Room="Kitchen"),
+        at(7, 108, System="Electrical & lighting", Room="Kitchen"),
+        # Plumbing twice in stack 4: enough, for plumbing. Electrical twice in stack 11: not.
+        at(8, 304, System="Plumbing", Room="Bath"),
+        at(9, 404, System="Plumbing", Room="Kitchen"),
+        # Not counted: a duplicate, a question, one that's too old, one in only two places.
+        at(10, 304, Component=["fan"], Status="Duplicate"),
+        at(11, 404, Component=["fan"], Type="How do I…?"),
+        at(12, 311, Component=["fan"], Submitted=days_ago(200)),
+        at(13, 204, System="Floors", Room="Entry"), at(14, 211, System="Floors", Room="Entry"),
+    ]
+    body = digest_of(requests, assets=assets, locations=locations)["body"]
+    assert section(body, "Repeats: the same thing in several places (3)") == [
+        "Bath fan FV-08: 3 places - Unit 108 (R-4); Unit 204 (R-1); Unit 211 (R-2, R-3)",
+        "Electrical & lighting, Kitchen: 3 places - Unit 108 (R-7); Unit 204 (R-5); Unit 311 (R-6)",
+        "Plumbing in stack 4: 2 places - Unit 304 (R-8); Unit 404 (R-9)",
+    ]
+
+
+def test_digest_is_due_on_sundays_once():
+    tz = "America/Los_Angeles"
+    assert rule("digestDue(new Date(n), null, tz)", n=NOW, tz=tz)
+    assert not rule("digestDue(new Date(n), l, tz)", n=NOW, l="2026-11-15T11:00:00.000Z", tz=tz)  # 3 am that day
+    assert rule("digestDue(new Date(n), l, tz)", n=NOW, l=days_ago(7), tz=tz)
+    assert not rule("digestDue(new Date(n), null, tz)", n="2026-11-16T20:00:00.000Z", tz=tz)       # a Monday
+    # Sunday evening here is already Monday in UTC.
+    assert rule("digestDue(new Date(n), null, tz)", n="2026-11-16T04:00:00.000Z", tz=tz)
+
+
+def test_send_digest_emails_the_circle():
+    out = run(tables([request(1, Submitted=days_ago(1), Location=["loc411"])]), "sendDigest")
+    [mail] = out["mails"]
+    assert mail["to"] == CIRCLE and mail["subject"].startswith("Maintenance digest: ")
+    assert out["props"]["lastDigest"]
+    assert run(tables(), "sendDigest")["mails"] == []
+
+
+def test_housekeeping_reads_each_table_once():
+    out = run(tables(people=[{"id": "p2", "fields": {"Name": "Sam L"}}]), "housekeeping")
+    gets = [c for c in out["calls"] if c.startswith("get ")]
+    assert sorted(gets) == sorted(f"get {t}" for t in out["tables"])
+    # The backup has the link that the same run wrote.
+    [folder] = out["drive"].values()
+    [day] = [v for k, v in folder.items() if k != "Attachments/"]
+    assert "prefill_Reporter=Sam+L" in day["People.json"]
 
 
 # --- form links --------------------------------------------------------------

@@ -497,7 +497,8 @@ Move-in is soon, so the order is by what's lost if it's late.
    urgent alerts, reporter matching, "In my unit", status emails and the
    status page's wording, updates passed on, form links, and the daily
    backup; tried against the test base with the emails captured. To do:
-   deploying it (`maintenance_tracker/README.md`), and the weekly digest.
+   deploying it against the real base (`maintenance_tracker/README.md`).
+   The weekly digest, with its repeats (phase 5's patterns), is built too.
 3. **Claims.** Claims and Warranties, loaded from the warranty binder;
    deadline warnings; the Waiting on builder view.
 4. **Maintenance.** Assets and plans from the O&M manuals; occurrences; the

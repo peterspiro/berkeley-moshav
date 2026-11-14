@@ -24,6 +24,17 @@ const PLANS = {
   team: { checkEveryMinutes: 10, updatesEveryHours: 0, housekeepingWeekly: false,
           recordLimit: 50000, attachmentLimitBytes: 20 * 1024 * 1024 * 1024 },
 };
+// The weekly digest (see digest).
+const OPEN_STATUSES = ['New', 'Triaged', 'Waiting on builder', 'Waiting on vendor', 'Waiting on volunteer',
+                       'Scheduled', 'Done, to confirm'];
+const DAY_MS = 24 * 60 * 60 * 1000;
+const QUIET_DAYS = 14;          // an open request with nothing happening for this long has gone quiet
+const CONFIRM_DAYS = 7;         // "Done, to confirm" for this long can probably be closed
+const VISIT_PASSED_DAYS = 2;    // a visit this long ago should have been marked done
+const REPEAT_WINDOW_DAYS = 180; // repeats are looked for among requests this recent
+const REPEAT_PLACES = 3;        // the same thing wrong in this many places is a repeat
+const STACK_PLACES = 2;         // or in this many places in one stack, for STACK_SYSTEMS
+const STACK_SYSTEMS = ['Plumbing', 'Roof & envelope'];
 // The circle is warned as the base passes each of these shares of a limit.
 const USAGE_LEVELS = [70, 85, 95];
 // What the status page says for each Status. A status that isn't here
@@ -60,6 +71,14 @@ function acknowledgmentEmail(request, ctx) {
   return { to: who.email, subject: `Request ${requestNumber(request)} received`, body: lines.join('\n') };
 }
 
+/** The size of every attachment in the base, in bytes, counting one linked from two records once. */
+function attachmentBytes(data) {
+  const sizes = {};
+  Object.keys(data).forEach(table => data[table].forEach(record =>
+    attachmentsIn(record).forEach(a => { sizes[a.id] = a.size; })));
+  return Object.keys(sizes).reduce((sum, id) => sum + sizes[id], 0);
+}
+
 /** A record's attachments, from every attachment field: [{ id, url, filename, size }]. */
 function attachmentsIn(record) {
   const found = [];
@@ -70,6 +89,147 @@ function attachmentsIn(record) {
     }
   });
   return found;
+}
+
+/**
+ * The weekly digest for the circle: what came in, what needs someone, and
+ * what's repeating across the building, as { subject, body }; null if
+ * there's nothing open and nothing new. `data` is every table's records,
+ * { table: [records] }; `ctx` needs timeZone, triageUrl, and plan.
+ *
+ * Its sections, each left out when empty:
+ *  - New this week: requests submitted in the last 7 days.
+ *  - To triage: requests still New.
+ *  - No owner: open, triaged requests with nobody assigned.
+ *  - Scheduled without a time, and visits that have passed (by
+ *    VISIT_PASSED_DAYS) with the request still Scheduled.
+ *  - Waiting to be confirmed: "Done, to confirm" for CONFIRM_DAYS.
+ *  - Gone quiet: other open requests (triaged, or waiting on someone)
+ *    with no update or change of status for QUIET_DAYS.
+ *  - Repeats (see digestRepeats).
+ * Then how many requests are open, by status, and how full the base is.
+ */
+function digest(data, now, ctx) {
+  const requests = data['Requests'] || [];
+  const names = {}, people = {};
+  (data['Locations'] || []).forEach(l => { names[l.id] = l.fields['Name']; });
+  (data['People'] || []).forEach(p => { people[p.id] = p.fields['Name']; });
+  const lastTouched = {};
+  (data['Updates'] || []).forEach(u => {
+    const when = new Date(u.fields['Logged'] || u.fields['When'] || 0).getTime();
+    (u.fields['Request'] || []).forEach(id => { lastTouched[id] = Math.max(lastTouched[id] || 0, when); });
+  });
+  const status = r => r.fields['Status'] || 'New';
+  const days = ms => Math.floor((now.getTime() - ms) / DAY_MS);
+  const submitted = r => new Date(r.fields['Submitted'] || 0).getTime();
+  const idle = r => days(Math.max(submitted(r), lastTouched[r.id] || 0));
+  const line = (r, note) => {
+    const place = (r.fields['Location'] || []).map(id => names[id]).filter(Boolean).join(', ');
+    const what = r.fields['Title'] || String(r.fields['Description'] || '').trim().replace(/\s+/g, ' ').slice(0, 60);
+    const owner = people[(r.fields['Owner'] || [])[0]];
+    return `  ${requestNumber(r)}${place ? ' ' + place : ''}${what ? ': ' + what : ''}` +
+           `${owner ? ' (' + owner + ')' : ''}${note ? ' - ' + note : ''}`;
+  };
+  const ago = n => (n === 0 ? 'today' : n === 1 ? '1 day' : `${n} days`);
+  const byAge = (a, b) => submitted(a) - submitted(b);
+
+  const open = requests.filter(r => OPEN_STATUSES.indexOf(status(r)) >= 0).sort(byAge);
+  const fresh = requests.filter(r => days(submitted(r)) < 7).sort(byAge);
+  if (!open.length && !fresh.length) return null;
+
+  const visit = r => (r.fields['Visit'] ? new Date(r.fields['Visit']).getTime() : null);
+  const triage = open.filter(r => status(r) === 'New');
+  const unowned = open.filter(r => status(r) !== 'New' && !(r.fields['Owner'] || []).length);
+  const noTime = open.filter(r => status(r) === 'Scheduled' && !visit(r));
+  const passed = open.filter(r => status(r) === 'Scheduled' && visit(r) && days(visit(r)) >= VISIT_PASSED_DAYS);
+  const confirm = open.filter(r => status(r) === 'Done, to confirm' && idle(r) >= CONFIRM_DAYS);
+  // New, Scheduled, and "Done, to confirm" requests are each covered above.
+  const quiet = open.filter(r => ['New', 'Scheduled', 'Done, to confirm'].indexOf(status(r)) < 0 &&
+    idle(r) >= QUIET_DAYS);
+
+  const sections = [
+    ['New this week', fresh.map(r => line(r, status(r) === 'New' ? '' : status(r)))],
+    ['To triage', triage.map(r => line(r, days(submitted(r)) ? `waiting ${ago(days(submitted(r)))}` : 'arrived today'))],
+    ['No owner', unowned.map(r => line(r, status(r)))],
+    ['Scheduled, but with no visit time', noTime.map(r => line(r))],
+    ['Visit has passed: mark it done, or give it a new time',
+     passed.map(r => line(r, `visit was ${formatVisit(r.fields['Visit'], ctx.timeZone)}`))],
+    ['Done, and waiting to be confirmed: close them?', confirm.map(r => line(r, `for ${ago(idle(r))}`))],
+    [`Gone quiet: nothing for ${QUIET_DAYS} days or more`, quiet.map(r => line(r, `${status(r)}, ${ago(idle(r))}`))],
+    ['Repeats: the same thing in several places', digestRepeats(data, now)],
+  ].filter(section => section[1].length);
+
+  const lines = [];
+  sections.forEach(section => { lines.push(`${section[0]} (${section[1].length})`); section[1].forEach(l => lines.push(l)); lines.push(''); });
+  if (!sections.length) lines.push('Nothing needs attention this week.', '');
+  const counts = OPEN_STATUSES.map(st => [st, open.filter(r => status(r) === st).length]).filter(c => c[1]);
+  lines.push(`Open requests: ${open.length}` + (counts.length ? ` (${counts.map(c => `${c[1]} ${c[0]}`).join(', ')})` : ''));
+  const tableCounts = {};
+  Object.keys(data).forEach(t => { tableCounts[t] = data[t].length; });
+  const usage = usageReport(tableCounts, attachmentBytes(data), ctx.plan);
+  lines.push(`The base holds ${usage.records.toLocaleString('en-US')} of the ${usage.recordLimit.toLocaleString('en-US')} records its plan allows` +
+             `, and ${Math.round(usage.bytes / 1048576).toLocaleString('en-US')} MB of ${Math.round(usage.byteLimit / 1048576).toLocaleString('en-US')} MB of attachments.`);
+  if (ctx.triageUrl) lines.push('', `Triage: ${ctx.triageUrl}`);
+  const head = [fresh.length ? `${fresh.length} new` : '', triage.length ? `${triage.length} to triage` : '',
+                `${open.length} open`].filter(Boolean).join(', ');
+  return { subject: `Maintenance digest: ${head}`, body: lines.join('\n') };
+}
+
+/** Whether the weekly digest is due: it's Sunday in the time zone, and it hasn't gone out today. */
+function digestDue(now, lastSentIso, timeZone) {
+  const local = d => new Intl.DateTimeFormat('en-CA', { timeZone: timeZone }).format(d);
+  const weekday = new Intl.DateTimeFormat('en-US', { timeZone: timeZone, weekday: 'long' }).format(now);
+  return weekday === 'Sunday' && !(lastSentIso && local(new Date(lastSentIso)) === local(now));
+}
+
+/**
+ * The digest's lines about repeats: among repairs and defects reported in
+ * the last REPEAT_WINDOW_DAYS (not duplicates or declined ones), the same
+ * component, or else the same system and room, in REPEAT_PLACES or more
+ * places; and, for STACK_SYSTEMS, the same system in STACK_PLACES or more
+ * places in one stack of units. Each is a sign of a defect to claim once,
+ * for the building, not place by place.
+ */
+function digestRepeats(data, now) {
+  const locations = {}, assets = {};
+  (data['Locations'] || []).forEach(l => { locations[l.id] = l.fields; });
+  (data['Assets'] || []).forEach(a => { assets[a.id] = a.fields['Name']; });
+  const recent = (data['Requests'] || []).filter(r => {
+    const f = r.fields;
+    return (f['Type'] || 'Repair or defect') === 'Repair or defect' &&
+      ['Duplicate', 'Declined'].indexOf(f['Status']) < 0 && (f['Location'] || []).length &&
+      now.getTime() - new Date(f['Submitted'] || 0).getTime() < REPEAT_WINDOW_DAYS * DAY_MS;
+  });
+  const groups = {};  // label -> { location ID: [request numbers] }
+  const add = (label, r) => {
+    const place = r.fields['Location'][0];
+    groups[label] = groups[label] || {};
+    (groups[label][place] = groups[label][place] || []).push(requestNumber(r));
+  };
+  recent.forEach(r => {
+    const f = r.fields;
+    const component = assets[(f['Component'] || [])[0]];
+    if (component) add(component, r);
+    else if (f['System'] && f['Room']) add(`${f['System']}, ${f['Room']}`, r);
+  });
+  const stacks = {};
+  recent.forEach(r => {
+    const f = r.fields, place = locations[f['Location'][0]] || {};
+    if (STACK_SYSTEMS.indexOf(f['System']) < 0 || !place['Stack']) return;
+    const label = `${f['System']} in stack ${place['Stack']}`;
+    stacks[label] = stacks[label] || {};
+    (stacks[label][f['Location'][0]] = stacks[label][f['Location'][0]] || []).push(requestNumber(r));
+  });
+  const lines = [];
+  const show = (found, least) => Object.keys(found).sort().forEach(label => {
+    const places = Object.keys(found[label]);
+    if (places.length < least) return;
+    const where = places.map(id => `${(locations[id] || {})['Name'] || '?'} (${found[label][id].join(', ')})`).sort();
+    lines.push(`  ${label}: ${places.length} places - ${where.join('; ')}`);
+  });
+  show(groups, REPEAT_PLACES);
+  show(stacks, STACK_PLACES);
+  return lines;
 }
 
 /** "Dana" from "Dana S" or "Dana Smith"; "there" if there's no name. */

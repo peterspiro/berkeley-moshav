@@ -76,8 +76,8 @@ members in from Gather; and a fifth Apps Script project,
 **`maintenance_tracker`**, which acknowledges each new request, emails the
 circle about urgent ones, tells reporters when their request's status
 changes, and backs the base up to Drive. The views and forms are made by
-hand (see `maintenance/README.md`); the weekly digest, claim deadlines, and
-maintenance calendar aren't built yet.
+hand (see `maintenance/README.md`); claim deadlines and the maintenance
+calendar aren't built yet.
 
 The repo also keeps, in `archive/`, the one-off scripts that were used to
 migrate the community into Gather (members, households, groups, photos) and
@@ -694,7 +694,10 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
     into People, saves every table and new attachment to Drive, and warns
     the circle when the base nears the records or storage its Airtable
     plan allows. On Airtable's Free plan, which rations calls to its API,
-    it runs every 2 hours and weekly instead.
+    it runs every 2 hours and weekly instead. On Sundays it emails the
+    circle a digest: what came in, what's waiting for triage, an owner, a
+    visit time, or confirmation, what's gone quiet, and what's repeating
+    across units.
   - **`maintenance_tracker/tracker_rules.gs`** holds its rules and the
     emails' wording, tested under Node.
 

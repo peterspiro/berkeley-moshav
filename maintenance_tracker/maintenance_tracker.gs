@@ -23,6 +23,7 @@
  *  - Every table, and every photo and attachment not yet copied, is saved
  *    to Drive (backup), and the circle is warned if the base is nearing
  *    what its plan allows.
+ *  - On Sundays, the circle is emailed the weekly digest (sendDigest).
  *
  * The rules, and the emails' wording, are in tracker_rules.gs. Each record
  * carries its own marker of what's been done to it ("Acknowledged on",
@@ -49,6 +50,7 @@ const BATCH = 10;  // records per Airtable write
 
 const PROP_LAST_RUN = 'lastRun';  // ISO time the last processRequests began
 const PROP_LAST_UPDATES_CHECK = 'lastUpdatesCheck';  // ISO time updates were last looked for
+const PROP_LAST_DIGEST = 'lastDigest';  // ISO time the weekly digest last went out
 const PROP_USAGE_WARNED = 'usageWarned';  // the USAGE_LEVELS level the circle was last warned of
 const CACHE_PEOPLE = 'people', CACHE_LOCATIONS = 'locations';
 const CACHE_SECONDS = 6 * 60 * 60;  // the longest the cache keeps anything
@@ -78,20 +80,21 @@ function airtable(method, path, payload) {
  * Saves every table to Drive, as a JSON file each in a folder named for
  * today, and copies each photo and attachment not already there into an
  * "Attachments" folder (Airtable's own links to them expire). It all goes
- * in a folder the script makes for itself (see backupFolder). Since it
- * reads every table anyway, it then checks how full the base is
- * (checkUsage).
+ * in a folder the script makes for itself (see backupFolder). Then checks
+ * how full the base is (checkUsage). `data` is every table's records, if
+ * the caller has read them; run by hand, it reads them itself.
  */
-function backup() {
+function backup(data) {
+  data = tableData(data);
   const root = backupFolder();
   const today = Utilities.formatDate(new Date(), TIME_ZONE, 'yyyy-MM-dd');
   const day = driveFolder(root, today);
   const attachments = driveFolder(root, 'Attachments');
   const saved = driveChildren(day), copied = driveChildren(attachments);
-  const counts = {}, sizes = {};
+  const counts = {};
   let added = 0, waiting = 0;
   TABLES.forEach(table => {
-    const records = listRecords(table);
+    const records = data[table];
     counts[table] = records.length;
     const name = `${table}.json`;
     // A second run in a day replaces the first's file.
@@ -100,7 +103,6 @@ function backup() {
                        Utilities.newBlob(JSON.stringify(records, null, 1), 'application/json', name));
     records.forEach(record => attachmentsIn(record).forEach(a => {
       const fileName = `${a.id} ${a.filename}`;
-      sizes[a.id] = a.size;
       if (copied[fileName]) return;
       if (added >= MAX_ATTACHMENTS_PER_RUN) { waiting++; return; }
       Drive.Files.create({ name: fileName, parents: [attachments] },
@@ -111,7 +113,7 @@ function backup() {
   });
   console.log(`Backed up ${TABLES.length} tables to ${today}; ${added} attachment(s) copied` +
               (waiting ? `, ${waiting} left for the next run.` : '.'));
-  checkUsage(counts, Object.keys(sizes).reduce((sum, id) => sum + sizes[id], 0));
+  checkUsage(counts, attachmentBytes(data));
 }
 
 /**
@@ -208,20 +210,27 @@ function driveFolder(parentId, name) {
 }
 
 /**
- * Once a day, or once a week on the Free plan: the form links, then the
- * backup. Each runs even if the other fails.
+ * Once a day, or once a week on the Free plan: the form links, the backup,
+ * and, on a Sunday, the digest. Every table is read once, for all three.
+ * Each step runs even if another fails.
  */
 function housekeeping() {
-  let failure = null;
-  [writeFormLinks, backup].forEach(step => {
-    try {
-      withLock(step);
-    } catch (e) {
-      console.error(`${step.name} failed: ${e && e.stack || e}`);
-      failure = failure || e;
-    }
+  withLock(() => {
+    const props = PropertiesService.getScriptProperties();
+    const data = tableData();
+    const steps = [writeFormLinks, backup];
+    if (digestDue(new Date(), props.getProperty(PROP_LAST_DIGEST), TIME_ZONE)) steps.push(sendDigest);
+    let failure = null;
+    steps.forEach(step => {
+      try {
+        step(data);
+      } catch (e) {
+        console.error(`${step.name} failed: ${e && e.stack || e}`);
+        failure = failure || e;
+      }
+    });
+    if (failure) throw failure;
   });
-  if (failure) throw failure;
 }
 
 /**
@@ -358,6 +367,20 @@ function processUpdate(update, ctx) {
 }
 
 /**
+ * Emails the circle the weekly digest (see digest in tracker_rules.gs):
+ * what came in, what needs someone, and what's repeating. On the timer it
+ * goes out on Sundays; run by hand, it goes now. `data` is every table's
+ * records, if the caller has read them.
+ */
+function sendDigest(data) {
+  const email = digest(tableData(data), new Date(),
+                       { timeZone: TIME_ZONE, triageUrl: setting('TRIAGE_URL', true), plan: plan() });
+  if (email) sendMail(Object.assign({ to: setting('CIRCLE_EMAIL') }, email));
+  else console.log('Nothing open and nothing new: no digest.');
+  PropertiesService.getScriptProperties().setProperty(PROP_LAST_DIGEST, new Date().toISOString());
+}
+
+/**
  * Sends { to, subject, body }, from the account the script runs as, with
  * replies going to the circle. While SEND_ALL_MAIL_TO is set, every email
  * goes to that address instead, saying who it was for: for trying the
@@ -379,6 +402,18 @@ function setting(name, optional) {
   const value = PropertiesService.getScriptProperties().getProperty(name) || '';
   if (!value && !optional) throw new Error(`Set the Script Property ${name} (see README.md).`);
   return value;
+}
+
+/**
+ * Every table's records, { table: [records] }: `data` itself, if it's that
+ * already; otherwise read from Airtable (as when a function that takes
+ * `data` is run by hand, or by a timer, which passes its event instead).
+ */
+function tableData(data) {
+  if (data && Array.isArray(data[TABLES[0]])) return data;
+  const read = {};
+  TABLES.forEach(table => { read[table] = listRecords(table); });
+  return read;
 }
 
 /** Changes records, [{ id, fields }], in a table. */
@@ -406,18 +441,28 @@ function withLock(fn) {
  * Writes each person's own links to the forms into People, where they're
  * missing or out of date: to the request form (REQUEST_FORM_URL), and, for
  * circle members, to the "Log an update" form (UPDATE_FORM_URL). Without
- * a form's address, its links are left alone.
+ * a form's address, its links are left alone. `data` is every table's
+ * records, if the caller has read them; its People are brought up to date
+ * too.
  */
-function writeFormLinks() {
+function writeFormLinks(data) {
   const formUrl = setting('REQUEST_FORM_URL', true), updateFormUrl = setting('UPDATE_FORM_URL', true);
   if (!formUrl && !updateFormUrl) {
     console.log('No REQUEST_FORM_URL or UPDATE_FORM_URL: no form links written.');
     return;
   }
+  const given = data && Array.isArray(data['People']);
+  const people = given ? data['People'] : listRecords('People');
   const locationNames = {};
-  listRecords('Locations').forEach(l => { locationNames[l.id] = l.fields['Name']; });
-  const changes = formLinkChanges(listRecords('People'), locationNames, formUrl, updateFormUrl);
+  (given ? data['Locations'] : listRecords('Locations')).forEach(l => { locationNames[l.id] = l.fields['Name']; });
+  const changes = formLinkChanges(people, locationNames, formUrl, updateFormUrl);
   updateRecords('People', changes);
+  changes.forEach(change => {
+    const fields = people.filter(p => p.id === change.id)[0].fields;
+    Object.keys(change.fields).forEach(k => {
+      if (change.fields[k] === null) delete fields[k]; else fields[k] = change.fields[k];
+    });
+  });
   if (changes.length) CacheService.getScriptCache().remove(CACHE_PEOPLE);
   console.log(`Form links written for ${changes.length} person(s).`);
 }
