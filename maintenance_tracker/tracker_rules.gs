@@ -91,25 +91,31 @@ function formatVisit(iso, timeZone) {
  * and the unit's rows by their primary fields.
  */
 function formLink(formUrl, personName, unitName) {
-  const enc = s => encodeURIComponent(s).replace(/%20/g, '+');
-  let link = `${formUrl}${formUrl.indexOf('?') < 0 ? '?' : '&'}prefill_Reporter=${enc(personName)}`;
-  if (unitName) link += `&prefill_Location=${enc(unitName)}`;
+  let link = prefilled(formUrl, 'Reporter', personName);
+  if (unitName) link = prefilled(link, 'Location', unitName);
   return link;
 }
 
 /**
- * The People rows whose Request form link is missing or out of date, as
- * [{ id, fields }] to write. Someone who's moved out gets none.
+ * The People rows whose own links to the forms are missing or out of date,
+ * as [{ id, fields }] to write: Request form link, for everyone who hasn't
+ * moved out, and Update form link (the "Log an update" form with By filled
+ * in), for those of them who are circle members. A link whose form's
+ * address isn't given (null) is left as it is.
  */
-function formLinkChanges(people, locationNames, formUrl) {
+function formLinkChanges(people, locationNames, formUrl, updateFormUrl) {
   const changes = [];
   people.forEach(person => {
     const f = person.fields;
+    const here = f['Name'] && !f['Moved out'];
     const unit = (f['Location'] || []).map(id => locationNames[id]).filter(Boolean)[0];
-    const wanted = f['Name'] && !f['Moved out'] ? formLink(formUrl, f['Name'], unit) : null;
-    if ((f['Request form link'] || null) !== wanted) {
-      changes.push({ id: person.id, fields: { 'Request form link': wanted } });
+    const fields = {};
+    const want = (field, link) => { if ((f[field] || null) !== link) fields[field] = link; };
+    if (formUrl) want('Request form link', here ? formLink(formUrl, f['Name'], unit) : null);
+    if (updateFormUrl) {
+      want('Update form link', here && f['Circle member'] ? prefilled(updateFormUrl, 'By', f['Name']) : null);
     }
+    if (Object.keys(fields).length) changes.push({ id: person.id, fields: fields });
   });
   return changes;
 }
@@ -149,6 +155,12 @@ function newRequestFields(request, people) {
     fields['Location'] = [person.fields['Location'][0]];
   }
   return fields;
+}
+
+/** A form's link with one more field filled in: "…?prefill_Reporter=Dana+S". */
+function prefilled(formUrl, field, value) {
+  const enc = v => encodeURIComponent(v).replace(/%20/g, '+');
+  return `${formUrl}${formUrl.indexOf('?') < 0 ? '?' : '&'}prefill_${enc(field)}=${enc(value)}`;
 }
 
 /**

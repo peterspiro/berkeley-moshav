@@ -77,7 +77,8 @@ Members and circle volunteers, copied from Gather's directory (see
 apart, "Dana S", since the request form shows it), `Full name`, `Email`,
 `Phone`, `Location` (link), `Circle member` (checkbox), `Gather ID`,
 `Request form link` (the person's own link to the form, written by the
-script; see "What people use").
+script; see "What people use"), `Update form link` (a circle member's own
+link to the "Log an update" form).
 
 Owners and contacts are links to People, not Airtable's collaborator field,
 so a volunteer can own a request without holding a paid Airtable seat.

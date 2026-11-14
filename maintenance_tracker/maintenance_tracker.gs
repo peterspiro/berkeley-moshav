@@ -18,7 +18,8 @@
  *  - An update marked "Tell the reporter" is emailed to them.
  *
  * Every day, or every week on the Free plan (housekeeping):
- *  - Each person's own link to the request form is written to People.
+ *  - Each person's own link to the request form is written to People,
+ *    and each circle member's to the "Log an update" form.
  *  - Every table, and every photo and attachment not yet copied, is saved
  *    to Drive (backup), and the circle is warned if the base is nearing
  *    what its plan allows.
@@ -400,20 +401,21 @@ function withLock(fn) {
 }
 
 /**
- * Writes each person's own link to the request form into People, where
- * it's missing or out of date. Needs REQUEST_FORM_URL; without it, nothing
- * is written.
+ * Writes each person's own links to the forms into People, where they're
+ * missing or out of date: to the request form (REQUEST_FORM_URL), and, for
+ * circle members, to the "Log an update" form (UPDATE_FORM_URL). Without
+ * a form's address, its links are left alone.
  */
 function writeFormLinks() {
-  const formUrl = setting('REQUEST_FORM_URL', true);
-  if (!formUrl) {
-    console.log('No REQUEST_FORM_URL: no form links written.');
+  const formUrl = setting('REQUEST_FORM_URL', true), updateFormUrl = setting('UPDATE_FORM_URL', true);
+  if (!formUrl && !updateFormUrl) {
+    console.log('No REQUEST_FORM_URL or UPDATE_FORM_URL: no form links written.');
     return;
   }
   const locationNames = {};
   listRecords('Locations').forEach(l => { locationNames[l.id] = l.fields['Name']; });
-  const changes = formLinkChanges(listRecords('People'), locationNames, formUrl);
+  const changes = formLinkChanges(listRecords('People'), locationNames, formUrl, updateFormUrl);
   updateRecords('People', changes);
   if (changes.length) CacheService.getScriptCache().remove(CACHE_PEOPLE);
-  console.log(`${changes.length} form link(s) written.`);
+  console.log(`Form links written for ${changes.length} person(s).`);
 }

@@ -450,6 +450,28 @@ def test_form_links_are_written_where_missing_or_stale():
     assert run(tables(people=people), "writeFormLinks", props=props)["calls"] == []
 
 
+def test_circle_members_get_a_link_to_the_update_form():
+    update_form = "https://airtable.example/update"
+    people = [
+        {"id": "p1", "fields": {"Name": "Dana S", "Circle member": True, "Request form link": "keep"}},
+        {"id": "p2", "fields": {"Name": "Sam L", "Update form link": "https://stale"}},
+        {"id": "p3", "fields": {"Name": "Old T", "Circle member": True, "Moved out": True,
+                                "Update form link": "https://stale"}},
+    ]
+    # Only the update form's address is set: the request form's links are left alone.
+    props = {**{k: v for k, v in PROPS.items() if k != "REQUEST_FORM_URL"}, "UPDATE_FORM_URL": update_form}
+    out = run(tables(people=people), "writeFormLinks", props=props)
+    fields = {p["id"]: p["fields"] for p in out["tables"]["People"]}
+    assert fields["p1"]["Update form link"] == update_form + "?prefill_By=Dana+S"
+    assert fields["p1"]["Request form link"] == "keep"
+    assert "Update form link" not in fields["p2"] and "Update form link" not in fields["p3"]
+    # Both set: one write to a person covers both links.
+    out = run(tables(people=[{"id": "p1", "fields": {"Name": "Dana S", "Circle member": True}}]),
+              "writeFormLinks", props={**PROPS, "UPDATE_FORM_URL": update_form})
+    assert set(out["tables"]["People"][0]["fields"]) >= {"Request form link", "Update form link"}
+    assert out["calls"].count("patch People") == 1
+
+
 # --- backup ------------------------------------------------------------------
 
 def test_housekeeping_writes_links_and_backs_up():

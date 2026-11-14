@@ -34,7 +34,10 @@ Airtable base ("Building Maintenance") without anyone doing it. It runs as
   - **Form links** (`writeFormLinks`): each person's own link to the request
     form, which fills in their name and unit, is written to Request form
     link in People, and rewritten when their name or unit changes. Someone
-    who's moved out has none.
+    who's moved out has none. Each person whose Circle member box is ticked
+    also gets an Update form link, to the "Log an update" form with "Who's
+    logging this?" filled in; the circle ticks those boxes, and gives each
+    volunteer their link.
   - **Backup** (`backup`): every table is saved as a JSON file in a folder
     named for the day, and each photo and attachment not yet copied is
     saved to an "Attachments" folder (Airtable's own links to them expire),
@@ -80,6 +83,7 @@ which is public.
 | `AIRTABLE_PLAN` | `team` once the workspace is on Airtable's Team plan. Unset, or anything else, means the Free plan (see "The Airtable plan") |
 | `CIRCLE_EMAIL` | The circle's email list: urgent requests go there, and replies to every email |
 | `REQUEST_FORM_URL` | The published request form's link. Optional: without it, no form links are written |
+| `UPDATE_FORM_URL` | The published "Log an update" form's link. Optional: without it, no update form links are written |
 | `STATUS_PAGE_URL` | The public link to the Requests table's "Status page" view, which members open to see where requests stand: in Airtable, open that view, choose **Share and sync**, and create a link to the view. Optional: emails then leave it out |
 | `TRIAGE_URL` | The Triage view's address in Airtable, for the circle's alerts. Optional |
 | `EMERGENCY_NOTE` | A line added to the end of each acknowledgment, saying what to do in an emergency. Optional |

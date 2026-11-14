@@ -46,7 +46,8 @@
     {"name": "Coordinator", "type": "checkbox"},
     {"name": "Gather ID", "type": "text"},
     {"name": "Moved out", "type": "checkbox"},
-    {"name": "Request form link", "type": "url"}
+    {"name": "Request form link", "type": "url"},
+    {"name": "Update form link", "type": "url"}
    ],
    "views": []
   },

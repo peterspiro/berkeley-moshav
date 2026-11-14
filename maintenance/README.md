@@ -204,7 +204,10 @@ A member's own link to the request form fills in Reporter and Location for
 them: the form's link with, for example,
 `?prefill_Reporter=Dana+S&prefill_Location=Unit+411` added, naming the
 person's and the unit's rows by their primary fields. The tracker's script
-writes each person's to Request form link in People. A link shows
+writes each person's to Request form link in People. A circle
+member's own link to the update form is the same idea, with
+`?prefill_By=Dana+S` added, written to Update form link for each person
+whose Circle member box is ticked. A link shows
 nothing the plain form doesn't.
 
 After publishing or changing a form, open it in a private browser window
