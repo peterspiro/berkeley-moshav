@@ -7,7 +7,9 @@ Each field has a `type`, one of FIELD_TYPES' keys. A `select` or
 `multiSelect` field lists its `choices`, or names a list in the file's
 `choice_lists` as "@name". A `link` field names the `table` it links to and
 the name of its `inverse`, the field Airtable makes in that table to show
-the link from the other side; a link is declared once, on either side. A
+the link from the other side; a link is declared once, on either side. One
+marked `single` holds at most one record (a request's one owner), where
+Airtable would otherwise allow several. A
 `formula` field gives its `formula`, with field names in braces. A `lookup`,
 `rollup`, or `count` field names the `link` field of its own table that it
 looks through; a lookup and a rollup also name the `field` of the linked
@@ -189,6 +191,8 @@ def airtable_field(f: dict, table_ids: dict[str, str] | None = None,
         options = {"choices": [{"name": c} for c in f["choices"]]}
     elif f["type"] == "link":
         options = {"linkedTableId": table_ids[f["table"]]}
+        if f.get("single"):
+            options["prefersSingleRecordLink"] = True
     elif f["type"] == "formula":
         options = {"formula": f["formula"]}
     elif f["type"] in ("lookup", "rollup", "count"):
@@ -288,6 +292,10 @@ def _compare_field(p, table, f, got, actual, wanted, inverse=False):
         if not target or got["options"]["linkedTableId"] != target["id"]:
             p.by_hand.append(f"{at} should link to {f['table']}.")
         elif not inverse:
+            if bool(f.get("single")) != bool(got["options"].get("prefersSingleRecordLink")):
+                p.by_hand.append(
+                    f"{at}: turn {'off' if f.get('single') else 'on'} \"Allow linking to multiple "
+                    f"records\" in the field's settings.")
             # The field Airtable made on the other side keeps its automatic
             # name if a run stopped between creating the link and naming it.
             other_id = got["options"].get("inverseLinkFieldId")

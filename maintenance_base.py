@@ -94,7 +94,16 @@ def apply(client, base: str, schema: dict, out=print) -> None:
                 if f["type"] != "count":
                     target = now[link["options"]["linkedTableId"]]["fields"]
                     field_ids["field"] = next(x["id"] for x in target if x["name"] == f["field"])
-            made = client.create_field(base, ids[table], airtable_field(f, ids, field_ids))
+            body = airtable_field(f, ids, field_ids)
+            try:
+                made = client.create_field(base, ids[table], body)
+            except AirtableError:
+                if not f.get("single"):
+                    raise
+                # In case the API won't make a link that holds one record:
+                # make it the usual way, and the plan asks for the rest by hand.
+                del body["options"]["prefersSingleRecordLink"]
+                made = client.create_field(base, ids[table], body)
             if f["type"] == "link":
                 # Airtable names the other side's field itself; give it ours.
                 client.rename_field(base, ids[f["table"]],

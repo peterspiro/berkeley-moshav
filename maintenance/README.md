@@ -201,6 +201,15 @@ file does), or what members use (the request form and the status page).
 Assets, Warranties, Maintenance plans, Maintenance work, and Guides get
 theirs when those tables come into use.
 
+### Links that hold one record
+
+Airtable lets a link field hold several records unless told otherwise. A
+request has one owner, one location, and one warranty (its deadline is
+worked out from it), and so on: `schema.json` marks those links `single`,
+and `apply` makes them so. In a base made before that, `diff` lists each
+one to change by hand: in the field's settings, turn off "Allow linking to
+multiple records".
+
 ### A new request's status
 
 A request arrives from the form with no Status, since the form doesn't ask

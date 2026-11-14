@@ -247,6 +247,36 @@ def test_claim_deadline_and_draft_are_worked_out_in_the_base():
     assert "Claim by" not in requests and "Claim by" not in claims
 
 
+def test_single_links_are_made_single_or_asked_for_by_hand():
+    schema = _schema(_table("A", {"name": "Owner", "type": "link", "table": "B", "inverse": "As", "single": True},
+                            {"name": "Helpers", "type": "link", "table": "B", "inverse": "Helped"}),
+                     _table("B"))
+    client = _applied(schema)
+    fields = {f["name"]: f for f in client.tables("app")[0]["fields"]}
+    assert fields["Owner"]["options"]["prefersSingleRecordLink"] is True
+    assert not fields["Helpers"]["options"].get("prefersSingleRecordLink")
+    assert plan(schema, client.tables("app")).in_step
+    # A base whose link allows several, as every link made before `single` does.
+    del fields["Owner"]["options"]["prefersSingleRecordLink"]
+    assert plan(schema, client.tables("app")).by_hand == [
+        'A.Owner: turn off "Allow linking to multiple records" in the field\'s settings.']
+    # And if the API refuses to make one, it's made the usual way and asked for.
+    class Fussy(FakeAirtable):
+        def create_field(self, base, table_id, field):
+            if field.get("options", {}).get("prefersSingleRecordLink"):
+                raise maintenance_base.AirtableError("no")
+            return super().create_field(base, table_id, field)
+    client = Fussy()
+    maintenance_base.apply(client, "app", schema, out=lambda line: None)
+    assert [line for line in plan(schema, client.tables("app")).by_hand if "Owner" in line]
+
+
+def test_request_holds_one_owner_one_warranty_and_one_location():
+    requests = {f["name"]: f for t in load_schema()["tables"] if t["name"] == "Requests" for f in t["fields"]}
+    for name in ("Owner", "Warranty", "Location", "Reporter", "Duplicate of"):
+        assert requests[name].get("single"), name
+
+
 def test_new_field_and_new_choices_are_added_to_an_existing_base():
     old = _schema(_table("A", {"name": "S", "type": "select", "choices": ["x"]}))
     client = _applied(old)
