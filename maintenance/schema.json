@@ -77,7 +77,6 @@
     {"name": "Owner", "type": "link", "table": "People", "inverse": "Requests owned"},
     {"name": "Responsibility", "type": "select", "choices": ["Builder warranty", "Manufacturer warranty", "HOA", "Unit owner", "Unknown"]},
     {"name": "Warranty", "type": "link", "table": "Warranties", "inverse": "Requests"},
-    {"name": "Claim by", "type": "date"},
     {"name": "Vendor", "type": "link", "table": "Organizations", "inverse": "Requests"},
     {"name": "Visit", "type": "dateTime"},
     {"name": "Duplicate of", "type": "link", "table": "Requests", "inverse": "Duplicates"},
@@ -87,6 +86,13 @@
     {"name": "Acknowledged on", "type": "dateTime"},
     {"name": "Status noted", "type": "text"},
     {"name": "Submitted", "type": "createdTime"},
+    {"name": "Warranty term", "type": "lookup", "link": "Warranty", "field": "Term (months)"},
+    {"name": "Warranty clock", "type": "rollup", "link": "Warranty", "field": "Clock starts", "formula": "ARRAYJOIN(values)"},
+    {"name": "Warranty start", "type": "rollup", "link": "Warranty", "field": "Building start date", "formula": "MIN(values)"},
+    {"name": "Unit closing", "type": "rollup", "link": "Location", "field": "Closing date", "formula": "MIN(values)"},
+    {"name": "Warranty starts", "type": "formula", "formula": "IF({Warranty clock} = \"One date for the building\", {Warranty start}, IF({Warranty clock} = \"Each unit's closing\", IF({Unit closing}, {Unit closing}, {Warranty start}), IF(AND({Unit closing}, {Warranty start}), IF(IS_BEFORE({Unit closing}, {Warranty start}), {Unit closing}, {Warranty start}), IF({Unit closing}, {Unit closing}, {Warranty start}))))"},
+    {"name": "Claim deadline", "type": "formula", "formula": "IF(AND({Warranty starts}, {Warranty term}), DATEADD({Warranty starts}, VALUE({Warranty term} & \"\"), 'months'))"},
+    {"name": "Claim line", "type": "formula", "formula": "\"R-\" & {Number} & \": \" & {Location} & IF({Room}, \", \" & {Room}) & \". \" & IF({Title}, {Title} & \". \") & \"First reported \" & DATETIME_FORMAT(SET_TIMEZONE({Submitted}, 'America/Los_Angeles'), 'MMMM D, YYYY') & \".\""},
     {"name": "Label", "type": "formula", "formula": "\"R-\" & {Number} & IF({Title}, \" \" & {Title}, IF({Location}, \" \" & {Location}))"}
    ],
    "views": [
@@ -138,8 +144,12 @@
     {"name": "Work done on", "type": "date"},
     {"name": "Accepted by", "type": "link", "table": "People", "inverse": "Claims accepted"},
     {"name": "Accepted on", "type": "date"},
-    {"name": "Claim by", "type": "date"},
     {"name": "Folder", "type": "url"},
+    {"name": "Request count", "type": "count", "link": "Requests"},
+    {"name": "Claim deadline", "type": "rollup", "link": "Requests", "field": "Claim deadline", "formula": "MIN(values)"},
+    {"name": "Request lines", "type": "rollup", "link": "Requests", "field": "Claim line", "formula": "ARRAYJOIN(values, \"\\n\")"},
+    {"name": "Warrantor contact", "type": "rollup", "link": "Warrantor", "field": "Contact name", "formula": "ARRAYJOIN(values, \", \")"},
+    {"name": "Draft", "type": "formula", "formula": "\"Subject: Warranty claim C-\" & {Number} & IF({Title}, \": \" & {Title}) & \"\\n\\n\" & IF({Warrantor contact}, \"Dear \" & {Warrantor contact}, \"To whom it may concern\") & \",\\n\\n\" & \"This is written notice of a warranty claim, made by the Maintenance & Warranty Circle of Berkeley Moshav\" & IF({Warranty}, \", under \" & {Warranty}) & \".\" & IF({Scope} = \"Systemic\", \" The same defect has appeared in each of the places listed. We ask that it be investigated and corrected as one problem, wherever it occurs in the building.\") & \"\\n\\n\" & {Request lines} & \"\\n\\n\" & \"Photographs are attached. Please reply to confirm that you have received this notice, and to say when the work will be inspected and repaired.\\n\\n\" & \"Our reference: C-\" & {Number} & \"\\n\\n\" & \"Maintenance & Warranty Circle, Berkeley Moshav\""},
     {"name": "Label", "type": "formula", "formula": "\"C-\" & {Number} & IF({Title}, \" \" & {Title})"}
    ],
    "views": [

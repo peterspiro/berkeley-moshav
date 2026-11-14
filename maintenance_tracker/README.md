@@ -62,11 +62,17 @@ Airtable base ("Building Maintenance") without anyone doing it. It runs as
     circle can close them.
   - **Gone quiet**: triaged or waiting on someone, with no update or
     change of status for 14 days.
+  - **Warranty deadline within 90 days, and no claim made**: open
+    requests whose Claim deadline is near or past, soonest first. A claim
+    that's only being drafted doesn't count as made.
+  - **Claims the builder hasn't acknowledged in 14 days**, and **claims
+    past the date the builder promised**.
   - **Repeats**: among repairs and defects of the last 180 days, the same
     component (or, where none is set, the same system and room) in 3 or
     more places; and plumbing, or roof and envelope, in 2 or more places
     in one stack of units. A sign of a defect to claim once, for the
-    building.
+    building; requests already under a claim whose Scope is Systemic
+    are left out.
   - Then how many requests are open, by status, and how full the base is.
 
   Run `sendDigest` by hand to send it now. The thresholds are constants at
@@ -81,7 +87,10 @@ Acknowledged on and Status noted in Requests, Told reporter on in Updates.
 Don't edit those. To have the script treat a request as new again, clear
 its Acknowledged on.
 
-Not built yet: claim deadlines, the maintenance calendar, and the check that the base's views are all there
+Claim deadlines and the claim letter aren't the script's work: they're
+formulas in the base (see `../maintenance/README.md`, "Warranty claims").
+
+Not built yet: the maintenance calendar, and the check that the base's views are all there
 (run `python maintenance_base.py diff` for that).
 
 ## Files

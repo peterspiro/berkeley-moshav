@@ -35,6 +35,12 @@ const REPEAT_WINDOW_DAYS = 180; // repeats are looked for among requests this re
 const REPEAT_PLACES = 3;        // the same thing wrong in this many places is a repeat
 const STACK_PLACES = 2;         // or in this many places in one stack, for STACK_SYSTEMS
 const STACK_SYSTEMS = ['Plumbing', 'Roof & envelope'];
+const DEADLINE_WARN_DAYS = 90;  // a warranty deadline this near, with no claim made, is listed
+const UNACKNOWLEDGED_DAYS = 14; // a claim the builder hasn't acknowledged in this long is listed
+// A claim in one of these statuses has been made (not just drafted, or given up).
+const CLAIM_MADE = ['Submitted', 'Acknowledged', 'Scheduled', 'Work done', 'Accepted', 'Disputed'];
+// And in one of these, the builder still owes something.
+const CLAIM_PENDING = ['Submitted', 'Acknowledged', 'Scheduled'];
 // The circle is warned as the base passes each of these shares of a limit.
 const USAGE_LEVELS = [70, 85, 95];
 // What the status page says for each Status. A status that isn't here
@@ -106,6 +112,10 @@ function attachmentsIn(record) {
  *  - Waiting to be confirmed: "Done, to confirm" for CONFIRM_DAYS.
  *  - Gone quiet: other open requests (triaged, or waiting on someone)
  *    with no update or change of status for QUIET_DAYS.
+ *  - Warranty deadlines: open requests whose Claim deadline is within
+ *    DEADLINE_WARN_DAYS, or past, and that no claim has been made for.
+ *  - Claims the builder hasn't acknowledged in UNACKNOWLEDGED_DAYS, and
+ *    claims past the date the builder promised.
  *  - Repeats (see digestRepeats).
  * Then how many requests are open, by status, and how full the base is.
  */
@@ -147,6 +157,30 @@ function digest(data, now, ctx) {
   const quiet = open.filter(r => ['New', 'Scheduled', 'Done, to confirm'].indexOf(status(r)) < 0 &&
     idle(r) >= QUIET_DAYS);
 
+  // Dates without times (deadlines, promises), as days from today in the time zone.
+  const dayNumber = iso => Date.UTC(+iso.slice(0, 4), +iso.slice(5, 7) - 1, +iso.slice(8, 10)) / DAY_MS;
+  const today = dayNumber(new Intl.DateTimeFormat('en-CA', { timeZone: ctx.timeZone }).format(now));
+  const daysUntil = iso => dayNumber(String(iso)) - today;
+  const dateText = iso => new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' })
+    .format(new Date(dayNumber(String(iso)) * DAY_MS));
+  const claims = data['Claims'] || [];
+  const claimStatus = {};
+  claims.forEach(c => { claimStatus[c.id] = c.fields['Status'] || 'Drafting'; });
+  const claimLine = (c, note) => `  C-${c.fields['Number']}${c.fields['Title'] ? ': ' + c.fields['Title'] : ''} - ${note}`;
+  const deadlines = open.filter(r => r.fields['Claim deadline'] &&
+      daysUntil(r.fields['Claim deadline']) <= DEADLINE_WARN_DAYS &&
+      !(r.fields['Claims'] || []).some(id => CLAIM_MADE.indexOf(claimStatus[id]) >= 0))
+    .sort((a, b) => daysUntil(a.fields['Claim deadline']) - daysUntil(b.fields['Claim deadline']));
+  const deadlineNote = r => {
+    const left = daysUntil(r.fields['Claim deadline']);
+    return `claim by ${dateText(r.fields['Claim deadline'])} ` +
+      (left < 0 ? `(PASSED ${ago(-left)} ago)` : left === 0 ? '(TODAY)' : `(${ago(left)} left)`);
+  };
+  const unacknowledged = claims.filter(c => c.fields['Status'] === 'Submitted' && c.fields['Submitted on'] &&
+    -daysUntil(c.fields['Submitted on']) >= UNACKNOWLEDGED_DAYS);
+  const overdue = claims.filter(c => CLAIM_PENDING.indexOf(c.fields['Status']) >= 0 && c.fields['Promised by'] &&
+    daysUntil(c.fields['Promised by']) < 0);
+
   const sections = [
     ['New this week', fresh.map(r => line(r, status(r) === 'New' ? '' : status(r)))],
     ['To triage', triage.map(r => line(r, days(submitted(r)) ? `waiting ${ago(days(submitted(r)))}` : 'arrived today'))],
@@ -156,6 +190,11 @@ function digest(data, now, ctx) {
      passed.map(r => line(r, `visit was ${formatVisit(r.fields['Visit'], ctx.timeZone)}`))],
     ['Done, and waiting to be confirmed: close them?', confirm.map(r => line(r, `for ${ago(idle(r))}`))],
     [`Gone quiet: nothing for ${QUIET_DAYS} days or more`, quiet.map(r => line(r, `${status(r)}, ${ago(idle(r))}`))],
+    [`Warranty deadline within ${DEADLINE_WARN_DAYS} days, and no claim made`, deadlines.map(r => line(r, deadlineNote(r)))],
+    [`Claims the builder hasn't acknowledged in ${UNACKNOWLEDGED_DAYS} days`,
+     unacknowledged.map(c => claimLine(c, `sent ${dateText(c.fields['Submitted on'])}`))],
+    ['Claims past the date the builder promised',
+     overdue.map(c => claimLine(c, `promised by ${dateText(c.fields['Promised by'])}`))],
     ['Repeats: the same thing in several places', digestRepeats(data, now)],
   ].filter(section => section[1].length);
 
@@ -188,15 +227,22 @@ function digestDue(now, lastSentIso, timeZone) {
  * component, or else the same system and room, in REPEAT_PLACES or more
  * places; and, for STACK_SYSTEMS, the same system in STACK_PLACES or more
  * places in one stack of units. Each is a sign of a defect to claim once,
- * for the building, not place by place.
+ * for the building, not place by place; requests already under such a
+ * claim (one whose Scope is Systemic, unless it was denied or withdrawn)
+ * are left out.
  */
 function digestRepeats(data, now) {
   const locations = {}, assets = {};
   (data['Locations'] || []).forEach(l => { locations[l.id] = l.fields; });
   (data['Assets'] || []).forEach(a => { assets[a.id] = a.fields['Name']; });
+  const systemic = {};
+  (data['Claims'] || []).forEach(c => {
+    if (c.fields['Scope'] === 'Systemic' && ['Denied', 'Withdrawn'].indexOf(c.fields['Status']) < 0) systemic[c.id] = true;
+  });
   const recent = (data['Requests'] || []).filter(r => {
     const f = r.fields;
     return (f['Type'] || 'Repair or defect') === 'Repair or defect' &&
+      !(f['Claims'] || []).some(id => systemic[id]) &&
       ['Duplicate', 'Declined'].indexOf(f['Status']) < 0 && (f['Location'] || []).length &&
       now.getTime() - new Date(f['Submitted'] || 0).getTime() < REPEAT_WINDOW_DAYS * DAY_MS;
   });

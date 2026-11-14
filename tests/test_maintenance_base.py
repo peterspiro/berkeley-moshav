@@ -185,6 +185,68 @@ def test_a_table_is_created_with_only_its_primary_field():
     assert [f["name"] for f in client.tables("app")[0]["fields"]] == ["Name", "Made", "F"]
 
 
+def _claims_like_schema():
+    return _schema(
+        _table("Warranties", {"name": "Term", "type": "number"}),
+        _table("Requests",
+               {"name": "Warranty", "type": "link", "table": "Warranties", "inverse": "Requests"},
+               {"name": "Term", "type": "lookup", "link": "Warranty", "field": "Term"},
+               {"name": "Line", "type": "formula", "formula": "{Name}"}),
+        _table("Claims",
+               {"name": "Requests", "type": "link", "table": "Requests", "inverse": "Claims"},
+               {"name": "How many", "type": "count", "link": "Requests"},
+               {"name": "Lines", "type": "rollup", "link": "Requests", "field": "Line",
+                "formula": "ARRAYJOIN(values)"}))
+
+
+def test_lookups_rollups_and_counts_are_made_through_their_links():
+    schema = _claims_like_schema()
+    client = _applied(schema)
+    tables = {t["name"]: {f["name"]: f for f in t["fields"]} for t in client.tables("app")}
+    term = tables["Requests"]["Term"]
+    assert term["type"] == "multipleLookupValues"
+    assert term["options"] == {"recordLinkFieldId": tables["Requests"]["Warranty"]["id"],
+                               "fieldIdInLinkedTable": tables["Warranties"]["Term"]["id"]}
+    lines = tables["Claims"]["Lines"]
+    assert lines["type"] == "rollup" and lines["options"] == {
+        "recordLinkFieldId": tables["Claims"]["Requests"]["id"],
+        "fieldIdInLinkedTable": tables["Requests"]["Line"]["id"], "formula": "ARRAYJOIN(values)"}
+    assert tables["Claims"]["How many"]["options"] == {"recordLinkFieldId": tables["Claims"]["Requests"]["id"]}
+    assert plan(schema, client.tables("app")).in_step
+
+
+def test_a_field_can_look_through_a_link_declared_on_the_other_side():
+    # Warranties' "Requests" is the inverse of Requests' link to it.
+    schema = _claims_like_schema()
+    schema["tables"][0]["fields"].append({"name": "Request count", "type": "count", "link": "Requests"})
+    client = _applied(schema)
+    assert plan(schema, client.tables("app")).in_step
+
+
+@pytest.mark.parametrize("field, word", [
+    ({"name": "X", "type": "lookup", "link": "Nope", "field": "Term"}, "link field"),
+    ({"name": "X", "type": "lookup", "link": "Warranty", "field": "Nope"}, "has no field"),
+    ({"name": "X", "type": "rollup", "link": "Warranty", "field": "Term"}, "formula"),
+    ({"name": "X", "type": "count", "link": "Line"}, "link field"),
+])
+def test_computed_field_problems(field, word):
+    schema = _claims_like_schema()
+    schema["tables"][1]["fields"].append(field)
+    assert any(word in p for p in schema_problems(schema))
+
+
+def test_claim_deadline_and_draft_are_worked_out_in_the_base():
+    # Live in Airtable, not by the script, so they're right at once on any plan.
+    tables = {t["name"]: {f["name"]: f for f in t["fields"]} for t in load_schema()["tables"]}
+    requests, claims = tables["Requests"], tables["Claims"]
+    assert requests["Claim deadline"]["type"] == "formula" and "DATEADD" in requests["Claim deadline"]["formula"]
+    # Unknown when the clock starts: the earlier of the two dates, so a deadline is never given late.
+    assert "IS_BEFORE({Unit closing}, {Warranty start})" in requests["Warranty starts"]["formula"]
+    assert claims["Claim deadline"]["formula"] == "MIN(values)"
+    assert "{Request lines}" in claims["Draft"]["formula"]
+    assert "Claim by" not in requests and "Claim by" not in claims
+
+
 def test_new_field_and_new_choices_are_added_to_an_existing_base():
     old = _schema(_table("A", {"name": "S", "type": "select", "choices": ["x"]}))
     client = _applied(old)

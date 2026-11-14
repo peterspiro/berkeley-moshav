@@ -437,9 +437,10 @@ def days_ago(n):
     return then.strftime("%Y-%m-%dT%H:%M:%S.000Z")
 
 
-def digest_of(requests, updates=(), assets=(), locations=None, plan="free"):
+def digest_of(requests, updates=(), assets=(), locations=None, plan="free", claims=()):
     data = tables(requests, updates)
     data["Assets"] = list(assets)
+    data["Claims"] = list(claims)
     if locations is not None:
         data["Locations"] = locations
     return rule("digest(d, new Date(n), c)", d=data, n=NOW,
@@ -543,6 +544,64 @@ def test_digest_repeats():
         "Electrical & lighting, Kitchen: 3 places - Unit 108 (R-7); Unit 204 (R-5); Unit 311 (R-6)",
         "Plumbing in stack 4: 2 places - Unit 304 (R-8); Unit 404 (R-9)",
     ]
+
+
+def claim(number, status, **fields):
+    return {"id": f"claim{number}", "fields": {"Number": number, "Status": status, **fields}}
+
+
+def test_digest_warranty_deadlines():
+    def due(number, in_days, status="Triaged", **fields):
+        # As the base's formula gives it: a date at midnight UTC.
+        deadline = days_ago(-in_days)[:10] + "T00:00:00.000Z"
+        return old(number, status, Title=f"T{number}", Owner=["pDana"], **{"Claim deadline": deadline}, **fields)
+
+    requests = [due(1, 91), due(2, 90), due(3, 12), due(4, 0), due(5, -3),
+                due(6, 5, Claims=["claim1"]),               # claimed
+                due(7, 5, Claims=["claim2"]),               # only drafted
+                due(8, 5, Claims=["claim3"]),               # withdrawn
+                due(9, 5, status="Closed"),                 # no longer open
+                old(10, "Triaged", Title="No warranty", Owner=["pDana"])]
+    claims = [claim(1, "Submitted", **{"Submitted on": days_ago(1)[:10]}), claim(2, "Drafting"), claim(3, "Withdrawn")]
+    body = digest_of(requests, claims=claims)["body"]
+    assert section(body, "Warranty deadline within 90 days, and no claim made (6)") == [
+        "R-5 Unit 411: T5 (Dana S) - claim by Nov 12, 2026 (PASSED 3 days ago)",
+        "R-4 Unit 411: T4 (Dana S) - claim by Nov 15, 2026 (TODAY)",
+        "R-7 Unit 411: T7 (Dana S) - claim by Nov 20, 2026 (5 days left)",
+        "R-8 Unit 411: T8 (Dana S) - claim by Nov 20, 2026 (5 days left)",
+        "R-3 Unit 411: T3 (Dana S) - claim by Nov 27, 2026 (12 days left)",
+        "R-2 Unit 411: T2 (Dana S) - claim by Feb 13, 2027 (90 days left)",
+    ]
+
+
+def test_digest_claims_waiting_on_the_builder():
+    claims = [
+        claim(1, "Submitted", Title="Taps", **{"Submitted on": "2026-11-01"}),          # 14 days: listed
+        claim(2, "Submitted", Title="Fans", **{"Submitted on": "2026-11-02"}),          # 13 days: not yet
+        claim(3, "Acknowledged", Title="Roof", **{"Submitted on": "2026-10-01", "Promised by": "2026-11-14"}),
+        claim(4, "Scheduled", Title="Door", **{"Promised by": "2026-11-15"}),           # today: not past
+        claim(5, "Work done", Title="Done", **{"Promised by": "2026-10-01"}),           # nothing owed
+        claim(6, "Drafting", Title="Draft", **{"Promised by": "2026-10-01"}),
+    ]
+    body = digest_of([old(1, "Triaged", Owner=["pDana"], Title="x")], claims=claims)["body"]
+    assert section(body, "Claims the builder hasn't acknowledged in 14 days (1)") == ["C-1: Taps - sent Nov 1, 2026"]
+    assert section(body, "Claims past the date the builder promised (1)") == ["C-3: Roof - promised by Nov 14, 2026"]
+
+
+def test_digest_repeats_leave_out_what_a_systemic_claim_covers():
+    locations = [{"id": f"loc{n}", "fields": {"Name": f"Unit {n}"}} for n in (201, 202, 203, 204)]
+
+    def fan(number, unit, **fields):
+        return request(number, Status="Triaged", Submitted=days_ago(5), Location=[f"loc{unit}"],
+                       System="HVAC & ventilation", Room="Bath", **fields)
+
+    requests = [fan(1, 201, Claims=["claim1"]), fan(2, 202, Claims=["claim1"]), fan(3, 203, Claims=["claim1"]),
+                fan(4, 204)]
+    for status, repeats in (("Submitted", False), ("Denied", True)):
+        body = digest_of(requests, locations=locations, claims=[claim(1, status, Scope="Systemic")])["body"]
+        assert ("Repeats" in body) == repeats
+    # A claim for one unit doesn't cover the building.
+    assert "Repeats" in digest_of(requests, locations=locations, claims=[claim(1, "Submitted", Scope="Unit")])["body"]
 
 
 def test_digest_is_due_on_sundays_once():

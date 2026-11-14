@@ -8,7 +8,12 @@ Each field has a `type`, one of FIELD_TYPES' keys. A `select` or
 `choice_lists` as "@name". A `link` field names the `table` it links to and
 the name of its `inverse`, the field Airtable makes in that table to show
 the link from the other side; a link is declared once, on either side. A
-`formula` field gives its `formula`, with field names in braces. `views` are
+`formula` field gives its `formula`, with field names in braces. A `lookup`,
+`rollup`, or `count` field names the `link` field of its own table that it
+looks through; a lookup and a rollup also name the `field` of the linked
+table they show, and a rollup the `formula` that combines its values
+("MIN(values)"). These computed fields are created in the file's order,
+after everything else, so one that uses another comes after it. `views` are
 the views each table should have: the API can't make them, so they're only
 checked. Forms aren't listed: the API doesn't show the ones made with
 Airtable's form builder, so it can't tell whether they exist.
@@ -49,12 +54,17 @@ FIELD_TYPES = {
     "multiSelect": ("multipleSelects", None),
     "link": ("multipleRecordLinks", None),
     "formula": ("formula", None),
+    "lookup": ("multipleLookupValues", None),
+    "rollup": ("rollup", None),
+    "count": ("count", None),
 }
+# Fields worked out from others.
+COMPUTED_TYPES = ("formula", "lookup", "rollup", "count")
 # Types a table's primary field can be created as.
 PRIMARY_TYPES = ("text", "autoNumber")
-# Created after every other field: links need their tables, and formulas
-# the fields they name.
-_LATER_TYPES = ("link", "formula")
+# Created after every other field: links need their tables, and computed
+# fields the fields they name.
+_LATER_TYPES = ("link",) + COMPUTED_TYPES
 
 
 class SchemaError(Exception):
@@ -125,8 +135,16 @@ def schema_problems(schema: dict) -> list[str]:
                     problems.append(f"{at} links to a table that isn't in the file: {f.get('table')!r}.")
                 if not f.get("inverse"):
                     problems.append(f"{at} needs an inverse field's name.")
-            elif f["type"] == "formula" and not f.get("formula"):
+            elif f["type"] in ("formula", "rollup") and not f.get("formula"):
                 problems.append(f"{at} needs a formula.")
+            if f["type"] in ("lookup", "rollup", "count"):
+                links = {g["name"]: g for g in expected_fields(schema).get(where, {}).values()
+                         if g["type"] == "link"}
+                link = links.get(f.get("link"))
+                if not link:
+                    problems.append(f"{at} needs the name of a link field of {where} to look through.")
+                elif f["type"] != "count" and f.get("field") not in expected_fields(schema).get(link["table"], {}):
+                    problems.append(f"{at}: {link['table']} has no field {f.get('field')!r}.")
         for f in t["fields"]:
             # An inverse another table's link puts here mustn't share a name
             # with a field of this table (or with another inverse).
@@ -159,9 +177,12 @@ class Plan:
         return not self.actions and not self.by_hand
 
 
-def airtable_field(f: dict, table_ids: dict[str, str] | None = None) -> dict:
+def airtable_field(f: dict, table_ids: dict[str, str] | None = None,
+                   field_ids: dict | None = None) -> dict:
     """The body that creates field `f` through the API. A link needs
-    `table_ids`, {table name: ID}."""
+    `table_ids`, {table name: ID}; a lookup, rollup, or count needs
+    `field_ids`, {"link": its link field's ID, "field": the looked-up
+    field's ID}."""
     kind, options = FIELD_TYPES[f["type"]]
     body = {"name": f["name"], "type": kind}
     if f["type"] in ("select", "multiSelect"):
@@ -170,6 +191,12 @@ def airtable_field(f: dict, table_ids: dict[str, str] | None = None) -> dict:
         options = {"linkedTableId": table_ids[f["table"]]}
     elif f["type"] == "formula":
         options = {"formula": f["formula"]}
+    elif f["type"] in ("lookup", "rollup", "count"):
+        options = {"recordLinkFieldId": field_ids["link"]}
+        if f["type"] != "count":
+            options["fieldIdInLinkedTable"] = field_ids["field"]
+        if f["type"] == "rollup":
+            options["formula"] = f["formula"]
     if options:
         body["options"] = options
     return body
@@ -222,8 +249,9 @@ def plan(schema: dict, tables: list[dict]) -> Plan:
             if (v["name"], v["type"]) not in have_views:
                 p.by_hand.append(f"{name}: make the {v['type']} view {v['name']!r}.")
 
-    # Links before formulas; a link whose inverse already exists was made
-    # from the other side, and deleted on this one, which a person must fix.
+    # Links before computed fields, which stay in the file's order; a link
+    # whose inverse already exists was made from the other side, and
+    # deleted on this one, which a person must fix.
     later.sort(key=lambda a: a["field"]["type"] != "link")
     for action in later:
         f = action["field"]
@@ -276,6 +304,8 @@ def describe(action: dict) -> str:
     if action["do"] == "create_field":
         f = action["field"]
         extra = f" to {f['table']} (inverse {f['inverse']!r})" if f["type"] == "link" else ""
+        if f["type"] in ("lookup", "rollup"):
+            extra = f" of {f['field']}, through {f['link']}"
         return f"Add {action['table']}.{f['name']} ({f['type']}{extra})."
     if action["do"] == "add_choices":
         return f"Add to {action['table']}.{action['field']}'s options: {', '.join(action['choices'])}."

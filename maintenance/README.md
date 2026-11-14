@@ -79,6 +79,50 @@ with the arrows at its top. The Triage view is set up for that:
   Location, Submitted, and, as the screen has room, Description, Photos,
   Type, System.
 
+### Warranty claims
+
+A request becomes a claim in four steps, all in Airtable. Nothing waits
+for the tracker's script: the dates and the letter are formulas, worked
+out as the rows are filled in.
+
+1. **Warranties** has a row for each warranty: its Warrantor, its Term
+   (months), and when its clock starts. Clock starts says whether that's
+   One date for the building (Building start date), Each unit's closing
+   (the Closing date of the request's unit in Locations; a common area's is
+   the building's date), or Unknown. While it's Unknown, the earlier of the
+   two dates is used, so a deadline is never shown later than it is; when
+   the answer is known, changing Clock starts moves every deadline.
+2. **At triage**, a request that's the builder's or a manufacturer's to fix
+   gets its Warranty (one). Its **Claim deadline** then shows: the
+   warranty's start for that place, plus its term.
+3. **A claim** is a row in Claims, linked to its Requests (several, when
+   it's one defect in several places: set Scope to Systemic), its Warranty,
+   and its Warrantor. Its Claim deadline is the earliest of its requests'.
+   Its **Draft** is the letter: a subject line, the warrantor's contact
+   (from Organizations), each request's number, place, title, and the date
+   it was first reported, and a request to confirm receipt. Read it, since
+   it uses each request's Title as written at triage; then copy it into an
+   email from the circle's address to the person the builder named, and
+   attach the requests' photos.
+4. **Once sent**, set the claim's Status to Submitted, with Submitted on,
+   Submitted how, and Sent to, and file the sent email in its Folder. As
+   the builder answers: Acknowledged on, Response, Promised by, Work done
+   on, and, when the circle accepts the work, Accepted by and Accepted on.
+
+The weekly digest lists requests whose deadline is within 90 days (or
+past) with no claim made, claims the builder hasn't acknowledged in 14
+days, and claims past their promised date. A draft doesn't count as a claim
+made.
+
+The letter's wording is the Draft field's formula in `schema.json`; it
+should be reviewed by the circle's attorney before the first claim goes
+out. To change it, change the file and paste the formula into the field in
+each base.
+
+Requests and Claims were first made with a plain date field, Claim by,
+which the formulas replace. Delete Claim by from both tables by hand in a
+base that has it; `diff` lists it under "Notes" until then.
+
 ### Interfaces for the circle
 
 Circle members work in interfaces (Airtable's Interface Designer), not in
@@ -119,7 +163,7 @@ left, the selected request on the right.
 | Owner | yes | |
 | Status | yes | Last: changing it takes the request out of the queue |
 
-  Leave out Label, Number, Claim by, Member-visible status, Acknowledged
+  Leave out Label, Number, Member-visible status, Acknowledged
   on, Status noted, and the links other tables make (Updates, Claims, and
   so on).
 
@@ -128,7 +172,7 @@ every request that isn't Closed, Duplicate, or Declined, grouped by Owner,
 with a filter for Status.
 
 - Editable: Status, Visit, Vendor, Resolution, Owner, Title, System,
-  Component, Responsibility, Warranty, Claim by.
+  Component, Responsibility, Warranty. Claim deadline is shown, read-only.
   To schedule a visit, fill in Visit: the tracker's script then sets
   Status to Scheduled and tells the reporter.
 - Read-only: everything the member entered, as in Triage, and Submitted.
@@ -139,7 +183,9 @@ with a filter for Status.
 
 **Claims**, for whoever deals with the builder. A record review layout over
 Claims, grouped by Status, oldest Submitted on first. Creating is turned
-on. Editable: every field but Label and Number. Shown with each claim: its
+on. Editable: every field but Label, Number, and the ones worked out
+(Claim deadline, Request count, Request lines, Warrantor contact, Draft,
+which are shown). Shown with each claim: its
 Requests (to link and unlink), and its Updates, with creating turned on as
 above.
 
@@ -267,7 +313,7 @@ out isn't ticked (see "What a form's link shows").
 
 | View | Type | Set up as |
 |---|---|---|
-| Waiting on builder | Grid | Filter: Status is Submitted, Acknowledged, or Scheduled. Sort: Submitted on, oldest first. Show Requests, Status, Submitted on, Promised by, Claim by |
+| Waiting on builder | Grid | Filter: Status is Submitted, Acknowledged, or Scheduled. Sort: Submitted on, oldest first. Show Requests, Status, Claim deadline, Submitted on, Promised by, Claim by |
 
 **Organizations**
 

@@ -85,7 +85,16 @@ def apply(client, base: str, schema: dict, out=print) -> None:
             ids[table] = made["id"]
         elif action["do"] == "create_field":
             f = action["field"]
-            made = client.create_field(base, ids[table], airtable_field(f, ids))
+            field_ids = None
+            if f["type"] in ("lookup", "rollup", "count"):
+                # Through a link of this table, to a field of the table it links to.
+                now = {t["id"]: t for t in client.tables(base)}
+                link = next(x for x in now[ids[table]]["fields"] if x["name"] == f["link"])
+                field_ids = {"link": link["id"]}
+                if f["type"] != "count":
+                    target = now[link["options"]["linkedTableId"]]["fields"]
+                    field_ids["field"] = next(x["id"] for x in target if x["name"] == f["field"])
+            made = client.create_field(base, ids[table], airtable_field(f, ids, field_ids))
             if f["type"] == "link":
                 # Airtable names the other side's field itself; give it ours.
                 client.rename_field(base, ids[f["table"]],

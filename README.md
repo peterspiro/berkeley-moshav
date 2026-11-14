@@ -76,8 +76,9 @@ members in from Gather; and a fifth Apps Script project,
 **`maintenance_tracker`**, which acknowledges each new request, emails the
 circle about urgent ones, tells reporters when their request's status
 changes, and backs the base up to Drive. The views and forms are made by
-hand (see `maintenance/README.md`); claim deadlines and the maintenance
-calendar aren't built yet.
+hand (see `maintenance/README.md`), where each request's warranty
+deadline and each claim's draft letter are worked out by formulas; the
+maintenance calendar isn't built yet.
 
 The repo also keeps, in `archive/`, the one-off scripts that were used to
 migrate the community into Gather (members, households, groups, photos) and
@@ -696,8 +697,9 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
     plan allows. On Airtable's Free plan, which rations calls to its API,
     it runs every 2 hours and weekly instead. On Sundays it emails the
     circle a digest: what came in, what's waiting for triage, an owner, a
-    visit time, or confirmation, what's gone quiet, and what's repeating
-    across units.
+    visit time, or confirmation, what's gone quiet, warranty deadlines
+    with no claim made, claims the builder is sitting on, and what's
+    repeating across units.
   - **`maintenance_tracker/tracker_rules.gs`** holds its rules and the
     emails' wording, tested under Node.
 
@@ -739,7 +741,8 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
 - **`maintenance_people.py`**: the maintenance tracker's People rows from
   the Gather directory, and what's changed since the last sync
 - **`airtable_schema.py`**: reading and checking `maintenance/schema.json`,
-  and working out what a base lacks compared with it
+  and working out what a base lacks compared with it (tables, fields
+  including formulas, lookups, and rollups, and select options)
 - **`member_names.py`**: members' short names by email address, from the Gather
   directory, written to `admin@`'s Drive for the circle agenda docs
 - **`circle_agenda_docs.py`**: creating a circle's or working group's agenda
