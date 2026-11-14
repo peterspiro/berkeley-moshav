@@ -65,7 +65,7 @@ which is public.
 | `AIRTABLE_BASE_ID` | The base's ID: the part of its address in Airtable that starts with `app` |
 | `CIRCLE_EMAIL` | The circle's email list: urgent requests go there, and replies to every email |
 | `REQUEST_FORM_URL` | The published request form's link. Optional: without it, no form links are written |
-| `STATUS_PAGE_URL` | The Status page view's shared link. Optional: emails then leave it out |
+| `STATUS_PAGE_URL` | The public link to the Requests table's "Status page" view, which members open to see where requests stand: in Airtable, open that view, choose **Share and sync**, and create a link to the view. Optional: emails then leave it out |
 | `TRIAGE_URL` | The Triage view's address in Airtable, for the circle's alerts. Optional |
 | `EMERGENCY_NOTE` | A line added to the end of each acknowledgment, saying what to do in an emergency. Optional |
 | `BACKUP_FOLDER_ID` | The ID of the Drive folder the backup goes in. Optional: without it, nothing is backed up |
@@ -84,7 +84,9 @@ clasp create --type standalone --title "Maintenance Tracker"
 ```
 
 That writes `.clasp.json`, naming the new project; commit it, as the other
-projects' are. Then, and after every change:
+projects' are. It also replaces `appsscript.json` with a blank one, which
+lacks the permissions the script needs: put the repo's back with
+`git restore appsscript.json`. Then, and after every change:
 
 ```bash
 clasp push
