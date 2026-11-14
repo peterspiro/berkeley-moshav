@@ -241,7 +241,24 @@ in the form, with the after-hours number and a link to the emergency guide.
 
 | View | Type | Set up as |
 |---|---|---|
-| Quick update form | Form | Request, Kind, By name, When, Text, Attachments, Tell the reporter. Request is filtered to open requests (see "What a form's link shows"). For circle volunteers only: its Request field shows each open request's number and title to anyone with the link |
+| Log an update (form) | Form | See below. For circle volunteers only: its Request field shows each open request's number and title to anyone with the link |
+
+The **"Log an update on a request"** form has these questions:
+
+| Field | Label on the form | Help text | Shown | Required |
+|---|---|---|---|---|
+| Request | Which request? | | always | yes |
+| Kind | What kind of update? | | always | yes |
+| Text | What happened? | | always | yes |
+| By | Who's logging this? | Pick your name. | always | no |
+| By name | Your name, if it's not in the list | So the record shows who logged this. | when By is empty | yes |
+| When | When did it happen? | Leave blank if it just happened. | always | no |
+| Attachments | | | always | no |
+| Tell the reporter | Tell the reporter | Emails the text above to the person who reported it, word for word. | always | no |
+
+Request shows only Label, filtered to requests that aren't Closed,
+Duplicate, or Declined; By shows only Name, filtered to people whose Moved
+out isn't ticked (see "What a form's link shows").
 
 **Claims**
 
