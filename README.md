@@ -520,7 +520,7 @@ status line as "calendar (members can view, not edit)".
   step with `maintenance/schema.json`: `diff` shows what the base lacks,
   `apply` creates the missing tables and fields and adds missing options to
   select fields, and `seed` loads the starting rows in
-  `maintenance/seed.json` (the building's 36 units). It never deletes or
+  `maintenance/seed.json` (the building's 36 units and its common areas). It never deletes or
   retypes anything, and lists what must be done by hand: the views, and
   making a formula a table's primary field (so a request shows as "R-3
   Bath fan rattles" wherever it's linked), neither of which Airtable's API

@@ -6,7 +6,8 @@ holds what the base is made from:
 
 - **`schema.json`**: every table, field, and select option, and the views
   each table should have. `util/airtable_schema.py` describes the format.
-- **`seed.json`**: starting rows, so far the building's 36 units.
+- **`seed.json`**: starting rows: the building's 36 units and its common
+  areas, for the Locations table.
 
 `maintenance_base.py`, in the repo root, makes a base match these files.
 There are two bases: the real one, and "Building Maintenance (test)" for

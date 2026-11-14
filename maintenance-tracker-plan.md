@@ -454,12 +454,12 @@ Move-in is soon, so the order is by what's lost if it's late.
    (the script adds one by writing a record that uses it, and deleting the
    record). Still to do: book the attorney (see below), and check the
    plan's monthly API call allowance before the Apps Script's timer runs.
-1. **Intake, before move-in.** Done: the schema file (all eleven tables), `maintenance_base.py`, the units, and the
-   checklist of views in `maintenance/README.md`. To do: the common areas'
-   rows in Locations; a first run of `sync_maintenance_people.py`, which
-   is written; the real base, with its views, forms, and status page (the
-   test base has them). Ask the builder to name who receives claims.
-   Usable by hand from there.
+1. **Intake, before move-in.** Done: the schema file (all eleven tables),
+   `maintenance_base.py`, the units and common areas,
+   `sync_maintenance_people.py`, and the checklist of views in
+   `maintenance/README.md`; the test base has all of it, with its views and
+   forms, and takes requests. To do: the real base, set up the same way.
+   Ask the builder to name who receives claims. Usable by hand from there.
 2. **Emails and backup.** The Apps Script's acknowledgments, urgent alerts,
    status emails, weekly digest, and the daily Drive backup.
 3. **Claims.** Claims and Warranties, loaded from the warranty binder;

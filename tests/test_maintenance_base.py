@@ -60,7 +60,7 @@ def test_request_form_can_take_a_reporter_picked_or_typed():
     assert "Full name" in [f["name"] for f in tables["People"]["fields"]]
 
 
-def test_seed_file_has_the_36_units():
+def test_seed_file_has_the_36_units_and_the_common_areas():
     seeds = json.loads((ROOT / "maintenance" / "seed.json").read_text())
     names = [r["Name"] for r in seeds["Locations"]["rows"] if r["Kind"] == "Unit"]
     assert len(names) == len(set(names)) == 36
@@ -69,6 +69,10 @@ def test_seed_file_has_the_36_units():
     assert not {"Unit 101", "Unit 107", "Unit 405"} & set(names)
     unit = next(r for r in seeds["Locations"]["rows"] if r["Name"] == "Unit 411")
     assert (unit["Floor"], unit["Stack"]) == (4, 11)
+    common = [r for r in seeds["Locations"]["rows"] if r["Kind"] == "Common"]
+    assert len(common) == 31 and len({r["Name"] for r in common} | set(names)) == 67
+    assert next(r for r in common if r["Name"] == "3rd floor walkway")["Floor"] == 3
+    assert "Floor" not in next(r for r in common if r["Name"] == "Roof")
     tables = {t["name"]: {f["name"] for f in t["fields"]} for t in load_schema()["tables"]}
     for table, spec in seeds.items():
         assert all(set(row) <= tables[table] for row in spec["rows"])

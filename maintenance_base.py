@@ -11,7 +11,7 @@ missing:
     apply   Create the missing tables and fields, and add missing options
             to select fields.
     seed    Load the starting rows in maintenance/seed.json (the building's
-            units), adding rows that are missing and updating the others.
+            units and common areas), adding rows that are missing and updating the others.
 
 It never deletes or retypes anything; Airtable's API can't. What it can't
 do is listed under "By hand": the views, and making a formula a table's
