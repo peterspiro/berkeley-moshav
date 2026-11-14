@@ -15,6 +15,11 @@ Airtable base ("Building Maintenance") without anyone doing it. It runs as
     status page, and their own link to the form. If it's an emergency or
     urgent, the circle's list is emailed at once, with the reporter's phone
     number and what they said about access.
+  - **A request given a visit time** is scheduled: filling in Visit is all
+    anyone has to do, and the script sets Status to Scheduled itself, if
+    the request is open and the time is still to come. (A time left on a
+    request that's since been moved back from Scheduled doesn't schedule
+    it again; a new time does.)
   - **A request whose Status changed**, or whose visit was moved: the change
     is added to Updates ("Status changed from Triaged to Scheduled…"); the
     status page's wording (Member-visible status) is set, or cleared for a

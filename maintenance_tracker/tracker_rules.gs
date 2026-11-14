@@ -11,6 +11,8 @@
  */
 
 const URGENT = ['Emergency', 'Urgent (days)'];
+// The statuses from which a visit's time moves a request to Scheduled.
+const SCHEDULABLE = ['New', 'Triaged', 'Waiting on builder', 'Waiting on vendor', 'Waiting on volunteer'];
 // What each Airtable plan allows, and how often the script runs to stay
 // inside it. Free allows 1,000 API calls a month for the whole workspace,
 // so there the script looks for requests every 2 hours, for updates to
@@ -228,13 +230,27 @@ function statusEmail(request, previousKey, ctx) {
 
 /**
  * What the script last saw of a request's status, kept in "Status noted":
- * the Status, and for a scheduled request its visit's time, so that moving
- * the visit counts as a change.
+ * the Status, and the visit's time if it has one ("Scheduled|2026-11-20T…"),
+ * so that setting or moving the visit counts as a change.
  */
 function statusKey(request) {
   const f = request.fields;
+  return (f['Status'] || 'New') + (f['Visit'] ? `|${f['Visit']}` : '');
+}
+
+/**
+ * Whether a change from what was noted is one to record in Updates and
+ * perhaps tell the reporter of: a change of Status, or a scheduled visit
+ * being given a time or moved. A visit time set or changed on a request
+ * that isn't scheduled (and that visitSchedules didn't schedule) is only
+ * noted.
+ */
+function statusNoteworthy(request, previousKey) {
+  const f = request.fields;
+  const before = String(previousKey || 'New').split('|');
   const status = f['Status'] || 'New';
-  return status === 'Scheduled' && f['Visit'] ? `${status}|${f['Visit']}` : status;
+  return before[0] !== status ||
+    (status === 'Scheduled' && !!f['Visit'] && (before[1] || '') !== f['Visit']);
 }
 
 /** The Updates row's text for a change of status. */
@@ -327,4 +343,19 @@ function usageWarning(report, warnedLevel, plan) {
     ? "Upgrade the workspace to the Team plan before then. Afterwards, set the script's AIRTABLE_PLAN property to team and run installTriggers again (see maintenance_tracker/README.md)."
     : 'Before then, move to a larger plan, or remove what is no longer needed.');
   return { subject: `Maintenance tracker: the Airtable base is ${report.level}% full`, body: lines.join('\n') };
+}
+
+/**
+ * Whether giving a request a visit time schedules it: the time is new or
+ * changed since the script last looked, is still to come, and the request
+ * is open and not yet scheduled. The script then sets Status to Scheduled
+ * itself, so that filling in Visit is all anyone has to do. A visit time
+ * left on a request that's been moved back from Scheduled doesn't
+ * schedule it again.
+ */
+function visitSchedules(request, previousKey, now) {
+  const f = request.fields;
+  const noted = String(previousKey || '').split('|')[1] || '';
+  return !!f['Visit'] && f['Visit'] !== noted && new Date(f['Visit']) > now &&
+    SCHEDULABLE.indexOf(f['Status'] || 'New') >= 0;
 }

@@ -129,6 +129,8 @@ with a filter for Status.
 
 - Editable: Status, Visit, Vendor, Resolution, Owner, Title, System,
   Component, Responsibility, Warranty, Claim by.
+  To schedule a visit, fill in Visit: the tracker's script then sets
+  Status to Scheduled and tells the reporter.
 - Read-only: everything the member entered, as in Triage, and Submitted.
 - Its Updates, as a list within the page, newest first, where creating is
   turned on: Kind, When, By name, Text, Attachments, Tell the reporter.

@@ -685,7 +685,8 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
     reporter linked (if they typed an email address that's a member's) and
     its location set to the reporter's unit (if they ticked "In my unit"),
     an email to the reporter saying it arrived, and, if it's an emergency
-    or urgent, an email to the circle's list. A request whose status
+    or urgent, an email to the circle's list. A request given a visit
+    time is set to Scheduled. A request whose status
     changed gets a row in Updates, its wording on the status page, and an
     email to the reporter about a visit, about work that's done, or that
     it's closed. An update marked "Tell the reporter" is emailed to them.

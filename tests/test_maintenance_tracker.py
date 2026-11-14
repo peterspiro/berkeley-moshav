@@ -266,6 +266,41 @@ def test_scheduled_visit_is_emailed_and_again_if_it_moves():
         "Visit moved to Fri, Nov 20, 5:30 PM."]
 
 
+FUTURE, PAST = "2099-03-05T18:00:00.000Z", "2020-03-05T18:00:00.000Z"
+
+
+def test_a_visit_time_schedules_the_request():
+    for status in ("Triaged", "Waiting on vendor", "New"):
+        out = status_run(status, status, Title="Tap drips", Visit=FUTURE)
+        f = one(out)
+        assert f["Status"] == "Scheduled" and f["Status noted"] == "Scheduled|" + FUTURE
+        assert f["Member-visible status"] == "Visit scheduled for Thu, Mar 5, 10:00 AM"
+        [mail] = out["mails"]
+        assert mail["subject"] == "Request R-12: visit scheduled"
+        assert one(out, "Updates")["Text"] == \
+            f"Status changed from {status} to Scheduled, for Thu, Mar 5, 10:00 AM."
+        # And that's that: the next run finds nothing to do.
+        again = run(out["tables"], "processRequests", props=out["props"])
+        assert again["mails"] == [] and len(again["tables"]["Updates"]) == 1
+
+
+def test_a_visit_time_doesnt_schedule_what_shouldnt_be():
+    # A visit that's past (one being recorded), or on a request that's finished.
+    for status, visit in (("Triaged", PAST), ("Done, to confirm", FUTURE), ("Closed", FUTURE)):
+        out = status_run(status, status, Visit=visit)
+        f = one(out)
+        assert f["Status"] == status and f["Status noted"] == f"{status}|{visit}"
+        assert out["mails"] == [] and out["tables"]["Updates"] == []
+    # A request moved back from Scheduled keeps its old visit time, and isn't scheduled again by it.
+    out = status_run("Waiting on vendor", "Scheduled|" + FUTURE, Visit=FUTURE)
+    assert one(out)["Status"] == "Waiting on vendor" and out["mails"] == []
+    assert one(out, "Updates")["Text"] == "Status changed from Scheduled to Waiting on vendor."
+    # Until it's given a new one.
+    state = out["tables"]
+    state["Requests"][0]["fields"]["Visit"] = "2099-04-01T18:00:00.000Z"
+    assert one(run(state, "processRequests", props=out["props"]))["Status"] == "Scheduled"
+
+
 def test_scheduled_without_a_time_waits_for_one():
     out = status_run("Scheduled", "Triaged")
     assert out["mails"] == [] and one(out)["Member-visible status"] == "Visit scheduled"
@@ -281,7 +316,8 @@ def test_done_asks_whether_its_fixed_and_closing_then_says_nothing():
 
 
 def test_closed_without_done_is_emailed_with_the_resolution():
-    out = status_run("Closed", "Triaged", Resolution="It was the washer.", **{"Closed on": "2026-11-02"})
+    out = status_run("Closed", "Triaged|" + PAST, Visit=PAST, Resolution="It was the washer.",
+                     **{"Closed on": "2026-11-02"})
     [mail] = out["mails"]
     assert mail["subject"] == "Request R-12 closed" and "It was the washer." in mail["body"]
     assert one(out)["Closed on"] == "2026-11-02"  # a date already there is kept

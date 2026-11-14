@@ -10,6 +10,7 @@
  *    that's a member's; its location is set to the reporter's unit, if they
  *    ticked "In my unit"; the reporter is emailed that it arrived; and the
  *    circle is emailed at once if it's an emergency or urgent.
+ *  - A request that's been given a visit time is set to Scheduled.
  *  - A request whose status changed (or whose visit moved): the change is
  *    added to Updates, the status page's wording is set, the day it closed
  *    is recorded, and the reporter is emailed about a visit, about work
@@ -313,24 +314,32 @@ function processRequests() {
   });
 }
 
-/** Records a request's change of status, and tells its reporter (see the file's comment). */
+/**
+ * Deals with a request whose status or visit time isn't what was noted
+ * (see the file's comment): schedules it, if it's been given a visit time;
+ * then records the change and tells its reporter, if it's one to record.
+ */
 function processStatusChange(request, ctx) {
   const previous = request.fields['Status noted'];
-  const fields = {
-    'Status noted': statusKey(request),
-    'Member-visible status': memberStatus(request, TIME_ZONE),
-  };
+  const fields = {};
+  if (visitSchedules(request, previous, new Date())) {
+    request.fields['Status'] = fields['Status'] = 'Scheduled';
+  }
+  fields['Status noted'] = statusKey(request);
+  fields['Member-visible status'] = memberStatus(request, TIME_ZONE);
   if (request.fields['Status'] === 'Closed' && !request.fields['Closed on']) {
     fields['Closed on'] = Utilities.formatDate(new Date(), TIME_ZONE, 'yyyy-MM-dd');
   }
-  // The marker last: if a run fails here, the next sends the email again,
-  // which is better than a visit nobody was told about.
-  const email = statusEmail(request, previous, ctx);
-  if (email) sendMail(email);
-  createRecords('Updates', [{ fields: {
-    'Request': [request.id], 'Kind': 'Status change', 'When': new Date().toISOString(),
-    'By name': 'Maintenance tracker', 'Text': statusUpdateText(previous, request, TIME_ZONE),
-  } }]);
+  if (statusNoteworthy(request, previous)) {
+    // The marker last: if a run fails here, the next sends the email again,
+    // which is better than a visit nobody was told about.
+    const email = statusEmail(request, previous, ctx);
+    if (email) sendMail(email);
+    createRecords('Updates', [{ fields: {
+      'Request': [request.id], 'Kind': 'Status change', 'When': new Date().toISOString(),
+      'By name': 'Maintenance tracker', 'Text': statusUpdateText(previous, request, TIME_ZONE),
+    } }]);
+  }
   updateRecords('Requests', [{ id: request.id, fields: fields }]);
 }
 
