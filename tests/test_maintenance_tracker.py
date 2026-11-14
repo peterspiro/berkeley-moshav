@@ -139,14 +139,16 @@ def test_new_request_from_a_member_in_their_unit():
 def test_second_run_does_nothing_and_asks_airtable_little():
     state = run(tables([request(Reporter=["pDana"], Location=["locRoof"])]), "processRequests")
     # On the Free plan, updates were looked for on the first run, and aren't due again for 6 hours.
-    again = run(state["tables"], "processRequests", props=state["props"])
+    again = run(state["tables"], "processRequests:timer", props=state["props"])
     assert again["mails"] == [] and again["calls"] == ["get Requests"]
     assert again["tables"] == state["tables"]
     later = {**state["props"], "lastUpdatesCheck": "2026-01-01T00:00:00.000Z"}
-    assert run(state["tables"], "processRequests", props=later)["calls"] == ["get Requests", "get Updates"]
+    assert run(state["tables"], "processRequests:timer", props=later)["calls"] == ["get Requests", "get Updates"]
     # On a plan with no ration of calls, they're looked for every time.
     team = {**state["props"], "AIRTABLE_PLAN": "team"}
-    assert run(state["tables"], "processRequests", props=team)["calls"] == ["get Requests", "get Updates"]
+    assert run(state["tables"], "processRequests:timer", props=team)["calls"] == ["get Requests", "get Updates"]
+    # And whenever it's run by hand, which is how it's tried out.
+    assert run(state["tables"], "processRequests", props=state["props"])["calls"] == ["get Requests", "get Updates"]
 
 
 def test_a_chosen_location_wins_over_in_my_unit():

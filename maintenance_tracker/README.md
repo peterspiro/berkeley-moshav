@@ -184,7 +184,9 @@ request or change of status adds one or two, and the first of them in any
 change made to them in Airtable can take that long to be noticed).
 `maintenance_base.py`, `sync_maintenance_people.py`, and anything done to
 the test base, if it's in the same workspace, come out of the same 1,000.
-Running a function by hand costs the same as the timer running it.
+Running a function by hand costs the same as the timer running it;
+`processRequests` run by hand also looks for updates to pass on whether
+or not they're due, so that an update can be sent at once.
 
 A request uses more than one record: the script adds a row to Updates for
 each change of status, so allow five to seven records a request.

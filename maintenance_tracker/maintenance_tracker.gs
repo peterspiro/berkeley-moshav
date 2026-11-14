@@ -284,9 +284,10 @@ function processNewRequest(request, people, ctx) {
  * (see the file's comment). Looks at the requests not yet acknowledged and
  * those changed since the last run, and, when they're due a look
  * (updatesDue), for updates to pass on; with nothing to do, that's one or
- * two calls to Airtable.
+ * two calls to Airtable. Run by hand from the editor (when there's no
+ * `event`), it looks for updates whether they're due or not.
  */
-function processRequests() {
+function processRequests(event) {
   withLock(() => {
     const props = PropertiesService.getScriptProperties();
     const began = new Date();
@@ -294,7 +295,7 @@ function processRequests() {
     const since = new Date(last ? new Date(last).getTime() - OVERLAP_MS : 0).toISOString();
     const requests = listRecords('Requests',
       `OR({Acknowledged on} = BLANK(), IS_AFTER(LAST_MODIFIED_TIME(), DATETIME_PARSE("${since}")))`);
-    const lookForUpdates = updatesDue(plan(), props.getProperty(PROP_LAST_UPDATES_CHECK), began);
+    const lookForUpdates = !event || updatesDue(plan(), props.getProperty(PROP_LAST_UPDATES_CHECK), began);
     const updates = !lookForUpdates ? []
       : listRecords('Updates', 'AND({Tell the reporter}, {Told reporter on} = BLANK())')
           .filter(u => u.fields['Tell the reporter'] && !u.fields['Told reporter on']);
@@ -307,9 +308,10 @@ function processRequests() {
       fresh.forEach(request => processNewRequest(request, people, ctx));
       changed.forEach(request => processStatusChange(request, ctx));
       updates.forEach(update => processUpdate(update, ctx));
-      console.log(`${fresh.length} new request(s), ${changed.length} status change(s), ` +
-                  `${updates.length} update(s) passed on.`);
     }
+    console.log(`${fresh.length} new request(s), ${changed.length} status change(s), ` +
+                (lookForUpdates ? `${updates.length} update(s) passed on.`
+                                : 'updates to pass on not looked for this time.'));
     props.setProperty(PROP_LAST_RUN, began.toISOString());
     if (lookForUpdates) props.setProperty(PROP_LAST_UPDATES_CHECK, began.toISOString());
   });

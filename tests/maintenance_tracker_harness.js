@@ -129,7 +129,11 @@ const ctx = vm.createContext({
 let result = null;
 if (input.values) Object.keys(input.values).forEach(k => { ctx[k] = input.values[k]; });
 if (input.expr) result = vm.runInContext(`JSON.stringify(${input.expr})`, ctx);
-(input.run || []).forEach(name => vm.runInContext(`${name}()`, ctx));
+// "name" runs a function as from the editor, by hand; "name:timer" as its timer does, with an event.
+(input.run || []).forEach(name => {
+  const [fn, how] = name.split(':');
+  vm.runInContext(how === 'timer' ? `${fn}({ triggerUid: '1' })` : `${fn}()`, ctx);
+});
 process.stdout.write(JSON.stringify({
   tables: tables, mails: mails, props: props, triggers: triggers, drive: tree('myDrive'), calls: calls,
   result: result === undefined || result === null ? null : JSON.parse(result),
