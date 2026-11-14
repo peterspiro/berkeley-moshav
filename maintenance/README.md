@@ -128,7 +128,8 @@ help text are set in the form builder; the fields keep their names.
 | Reporter phone | Your phone | Optional. Helps us arrange access. | when Reporter is empty | no |
 | In my unit | It's in my unit | If it's somewhere else, leave this unticked and choose where below. | when Reporter isn't empty | no |
 | Location | Where is it? | A unit or a common area. | when In my unit isn't ticked | yes |
-| Room, Type, System, Urgency, Description, Photos, May enter if I'm out, Access notes | | | always | Type and Description |
+| Room | Which room? | | when In my unit is ticked, or Location contains "Unit" | yes |
+| Type, System, Urgency, Description, Photos, May enter if I'm out, Access notes | | | always | Type and Description |
 
 Someone who isn't in the list has no unit on record, so isn't offered "It's
 in my unit" and always chooses a location. The tracker's script, once it's
