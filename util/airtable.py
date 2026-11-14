@@ -132,6 +132,12 @@ class Airtable:
                 "typecast": True,
             })
 
+    def update_records(self, base: str, table: str, records: list[dict]) -> None:
+        """Change the given fields of existing records: [{id, fields}]."""
+        for i in range(0, len(records), BATCH):
+            self._request("PATCH", f"{base}/{table}",
+                          json={"records": records[i:i + BATCH], "typecast": True})
+
     def delete_records(self, base: str, table: str, ids: list[str]) -> None:
         for i in range(0, len(ids), BATCH):
             self._request("DELETE", f"{base}/{table}", params={"records[]": ids[i:i + BATCH]})

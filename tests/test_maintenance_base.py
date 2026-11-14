@@ -76,7 +76,7 @@ def test_seed_file_has_the_36_units_and_the_common_areas():
     assert floors["Havdalah terrace"] == 4 and floors["Garage"] == 1
     # The stairwells, and what isn't on a floor, have none.
     assert [n for n, f in floors.items() if f is None] == [
-        "Roof", "Elevator", "Outdoor stairwell", "Indoor stairwell", "Building exterior"]
+        "Roof", "Elevator", "Stairwell - outdoor", "Stairwell - indoor", "Building exterior"]
     tables = {t["name"]: {f["name"] for f in t["fields"]} for t in load_schema()["tables"]}
     for table, spec in seeds.items():
         assert all(set(row) <= tables[table] for row in spec["rows"])
