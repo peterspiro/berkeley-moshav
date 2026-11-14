@@ -117,17 +117,25 @@ Airtable's "Limit record selection to a view" isn't used: it's a setting
 of the field, not of the form, so it would limit what the circle can pick
 in the base too.
 
-The **Request form** has, in order: Reporter, Reporter name, Reporter
-email, Reporter phone, In my unit, Location, Room, Type, System, Urgency,
-Description, Photos, May enter if I'm out, Access notes. Type and
-Description are required. In my unit is labelled "It's in my unit"; show
-Location only when it isn't ticked, and require Location then, if the form
-builder allows. The tracker's script, once it's built, will set a ticked
-request's Location to the reporter's unit; until then the triager does. A member picks themselves in Reporter and skips the three
-fields after it, which are for someone who isn't in the list: show them
-only when Reporter is empty, and require Reporter name and Reporter email
-then, if the form builder allows; otherwise leave all four optional, and
-say so in their help text. Leave out every other field, Title
+The **Request form** has these questions, in this order. The labels and
+help text are set in the form builder; the fields keep their names.
+
+| Field | Label on the form | Help text | Shown | Required |
+|---|---|---|---|---|
+| Reporter | Who's reporting? | Pick your name. Not in the list? Leave this empty and fill in your details below. | always | no |
+| Reporter name | Your name | | when Reporter is empty | yes |
+| Reporter email | Your email | We'll send updates here. | when Reporter is empty | yes |
+| Reporter phone | Your phone | Optional. Helps us arrange access. | when Reporter is empty | no |
+| In my unit | It's in my unit | | when Reporter isn't empty | no |
+| Location | Where is it? | A unit or a common area. | when In my unit isn't ticked | yes |
+| Room, Type, System, Urgency, Description, Photos, May enter if I'm out, Access notes | | | always | Type and Description |
+
+Someone who isn't in the list has no unit on record, so isn't offered "It's
+in my unit" and always chooses a location. The tracker's script, once it's
+built, will set a ticked request's Location to the reporter's unit; until
+then the triager does.
+
+Leave out every other field, Title
 above all: the circle writes it at triage, and it's what the status page
 shows. Its opening text says what to do in an emergency instead of filling
 in the form, with the after-hours number and a link to the emergency guide.
