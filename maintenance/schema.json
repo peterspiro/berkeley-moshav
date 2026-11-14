@@ -84,7 +84,7 @@
     {"name": "Closed on", "type": "date"},
     {"name": "Member-visible status", "type": "text"},
     {"name": "Submitted", "type": "createdTime"},
-    {"name": "Label", "type": "formula", "formula": "\"R-\" & {Number} & IF({Title}, \" \" & {Title})"}
+    {"name": "Label", "type": "formula", "formula": "\"R-\" & {Number} & IF({Title}, \" \" & {Title}, IF({Location}, \" \" & {Location}))"}
    ],
    "views": [
     {"name": "Triage", "type": "grid"},

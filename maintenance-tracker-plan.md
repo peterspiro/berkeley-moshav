@@ -86,7 +86,8 @@ so a volunteer can own a request without holding a paid Airtable seat.
 
 Everything a member reports or asks. One row per problem per place.
 
-- `Number` (autonumber) and `Label` (a formula: "R-123 Bath fan rattles").
+- `Number` (autonumber) and `Label` (a formula: "R-123 Bath fan rattles",
+  or, until triage gives it a title, "R-123 Unit 411").
   Label is the primary field, made so by hand, so that a request shows by
   number and title wherever it's linked or picked. Claims has the same pair.
 - `Description` and `Photos` (the

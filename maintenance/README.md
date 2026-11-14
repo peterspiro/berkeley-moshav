@@ -33,6 +33,10 @@ hand in both bases, and change the file to match, so `diff` is clean again.
 A field or option added in Airtable by hand shows in `diff` under "Notes"
 until it's added to the file.
 
+A formula is the exception both ways: the API can't change one, and `diff`
+doesn't compare one. To change a formula, change it in the file and paste
+the same formula into the field in each base.
+
 ## Setting up a base
 
 1. In Airtable, signed in as the workspace's owner, create an empty base

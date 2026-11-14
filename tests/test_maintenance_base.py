@@ -174,6 +174,8 @@ def test_apply_types_fields_and_names_inverses():
     assert tables["People"]["Requests owned"]["options"]["linkedTableId"] == ids["Requests"]
     assert tables["Requests"]["Duplicates"]["options"]["linkedTableId"] == ids["Requests"]
     assert tables["Requests"]["Label"]["options"]["formula"].startswith('"R-"')
+    # Until triage writes a title, a request shows by its location.
+    assert 'IF({Location}, " " & {Location})' in tables["Requests"]["Label"]["options"]["formula"]
 
 
 def test_a_table_is_created_with_only_its_primary_field():
