@@ -45,7 +45,8 @@
     {"name": "Circle member", "type": "checkbox"},
     {"name": "Coordinator", "type": "checkbox"},
     {"name": "Gather ID", "type": "text"},
-    {"name": "Moved out", "type": "checkbox"}
+    {"name": "Moved out", "type": "checkbox"},
+    {"name": "Request form link", "type": "url"}
    ],
    "views": []
   },
@@ -58,6 +59,7 @@
     {"name": "Title", "type": "text"},
     {"name": "Description", "type": "longText"},
     {"name": "Photos", "type": "attachments"},
+    {"name": "In my unit", "type": "checkbox"},
     {"name": "Location", "type": "link", "table": "Locations", "inverse": "Requests"},
     {"name": "Room", "type": "select", "choices": ["Kitchen", "Bath", "Bedroom", "Living", "Entry", "Balcony", "Laundry", "n/a"]},
     {"name": "Type", "type": "select", "choices": ["Repair or defect", "How do I…?", "Suggestion"]},

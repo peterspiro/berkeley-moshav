@@ -76,7 +76,7 @@ whether they exist, and says nothing about them.
 
 | View | Type | Set up as |
 |---|---|---|
-| Triage | Grid | Filter: Status is New, or Status is empty. Sort: Submitted, oldest first. Show Description, Photos, Location, Room, Type, System, Urgency, Reporter name, Reporter email, Reporter phone, Reporter, then Title, Component, Responsibility, Owner, Status |
+| Triage | Grid | Filter: Status is New, or Status is empty. Sort: Submitted, oldest first. Show Description, Photos, In my unit, Location, Room, Type, System, Urgency, Reporter name, Reporter email, Reporter phone, Reporter, then Title, Component, Responsibility, Owner, Status |
 | Board | Kanban | Stacked by Status. Filter: Status isn't Closed, Duplicate, or Declined. Cards show Location, Owner, Urgency |
 | By owner | Grid | Grouped by Owner. Filter as Board |
 | Patterns | Grid | Grouped by System, then Component. Show Location, Room, Submitted, Status. Sort by Location |
@@ -103,6 +103,13 @@ section, cut its **Fields** list down to that one.
 - The quick update form's Request field shows only Label, and is filtered
   there to requests whose Status isn't Closed, Duplicate, or Declined.
 
+A member's own link to the request form fills in Reporter and Location for
+them: the form's link with, for example,
+`?prefill_Reporter=Dana+S&prefill_Location=Unit+411` added, naming the
+person's and the unit's rows by their primary fields. The tracker's script
+will write each person's to Request form link in People. A link shows
+nothing the plain form doesn't.
+
 After publishing or changing a form, open it in a private browser window
 and check what each linked field's list shows.
 
@@ -111,9 +118,12 @@ of the field, not of the form, so it would limit what the circle can pick
 in the base too.
 
 The **Request form** has, in order: Reporter, Reporter name, Reporter
-email, Reporter phone, Location, Room, Type, System, Urgency, Description,
-Photos, May enter if I'm out, Access notes. Location, Type, and Description
-are required. A member picks themselves in Reporter and skips the three
+email, Reporter phone, In my unit, Location, Room, Type, System, Urgency,
+Description, Photos, May enter if I'm out, Access notes. Type and
+Description are required. In my unit is labelled "It's in my unit"; show
+Location only when it isn't ticked, and require Location then, if the form
+builder allows. The tracker's script, once it's built, will set a ticked
+request's Location to the reporter's unit; until then the triager does. A member picks themselves in Reporter and skips the three
 fields after it, which are for someone who isn't in the list: show them
 only when Reporter is empty, and require Reporter name and Reporter email
 then, if the form builder allows; otherwise leave all four optional, and

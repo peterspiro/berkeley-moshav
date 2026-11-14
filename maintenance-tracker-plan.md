@@ -75,7 +75,9 @@ house rooms, mechanical rooms, site).
 Members and circle volunteers, copied from Gather's directory (see
 "Links to the rest of the setup"). `Name` (only as much as tells people
 apart, "Dana S", since the request form shows it), `Full name`, `Email`,
-`Phone`, `Location` (link), `Circle member` (checkbox), `Gather ID`.
+`Phone`, `Location` (link), `Circle member` (checkbox), `Gather ID`,
+`Request form link` (the person's own link to the form, written by the
+script; see "What people use").
 
 Owners and contacts are links to People, not Airtable's collaborator field,
 so a volunteer can own a request without holding a paid Airtable seat.
@@ -94,6 +96,8 @@ Everything a member reports or asks. One row per problem per place.
   ("Bath fan rattles"), never a person, a health matter, or when anyone is
   away. Until triage it's empty, and the status page shows only that the
   request was received.
+- `In my unit` (checkbox, ticked on the form in place of choosing a
+  location; the script then sets Location to the reporter's unit)
 - `Location` (link), `Room` (Kitchen, Bath, Bedroom, Living, Entry, Balcony,
   Laundry, n/a)
 - `Type`: Repair or defect / How do I…? / Suggestion
@@ -247,7 +251,19 @@ requests it settled, which shows what's worth writing next).
   call the after-hours number) and link the emergency guide.
   A member picks themselves from the People list, which shows anyone with
   the form's link only short names ("Dana S"); someone not in it types
-  their name, email, and phone instead.
+  their name, email, and phone instead. For a problem in their own unit
+  they tick "It's in my unit" in place of choosing a location.
+- **Their own link to the form**, which opens it with Reporter and Location
+  already filled in (and still changeable), so a member with a problem at
+  home only describes it. The link is the form's with
+  `?prefill_Reporter=Dana+S&prefill_Location=Unit+411` added: the person's
+  Name in People and their unit's in Locations. The script writes each
+  person's to `Request form link` in People, and rewrites it when their
+  name or unit changes (a link made before then still opens the form, with
+  that field empty); every email the tracker sends a member includes
+  theirs, and the script can email everyone theirs once, at the start. The
+  form's own address is kept in Script Properties, not the repo. The plain
+  link stays for QR codes and for anyone without their own.
 - An **acknowledgment email** with their request's number, and an email
   whenever an update is marked "Tell the reporter", a visit is scheduled, or
   it's closed (asking them to reply if it isn't fixed).
@@ -288,8 +304,11 @@ Gmail, Calendar, and Drive stays thin.
 
 Every 10 minutes:
 
-- **New requests**: match the reporter to People by email; email the
-  acknowledgment; for Emergency or Urgent, email the circle's list at
+- **New requests**: for a reporter who typed their details, link Reporter
+  if the email is a member's; set Location to the reporter's unit if "In my
+  unit" is ticked and no location was chosen (a location that was chosen
+  wins; one that can't be worked out is left for triage, and said so in the
+  alert); email the acknowledgment; for Emergency or Urgent, email the circle's list at
   once. A "handled" field on each row, not a timestamp cursor, records what's
   been done, so a failed run repeats nothing and misses nothing.
 - **Status changes**: add the Updates row, set `Member-visible status` and
@@ -298,6 +317,8 @@ Every 10 minutes:
 - **Visits**: put each scheduled visit and maintenance occurrence on the
   maintenance calendar, and move or remove it when it changes.
 - **Maintenance work**: create the next occurrence of a plan when one is done.
+- **Form links**: write each person's `Request form link` where it's
+  missing or out of date.
 
 Daily:
 
