@@ -126,7 +126,7 @@ help text are set in the form builder; the fields keep their names.
 | Reporter name | Your name | | when Reporter is empty | yes |
 | Reporter email | Your email | We'll send updates here. | when Reporter is empty | yes |
 | Reporter phone | Your phone | Optional. Helps us arrange access. | when Reporter is empty | no |
-| In my unit | It's in my unit | | when Reporter isn't empty | no |
+| In my unit | It's in my unit | If it's somewhere else, leave this unticked and choose where below. | when Reporter isn't empty | no |
 | Location | Where is it? | A unit or a common area. | when In my unit isn't ticked | yes |
 | Room, Type, System, Urgency, Description, Photos, May enter if I'm out, Access notes | | | always | Type and Description |
 
