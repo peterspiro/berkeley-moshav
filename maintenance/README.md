@@ -79,6 +79,80 @@ with the arrows at its top. The Triage view is set up for that:
   Location, Submitted, and, as the screen has room, Description, Photos,
   Type, System.
 
+### Interfaces for the circle
+
+Circle members work in interfaces (Airtable's Interface Designer), not in
+the base. An interface shows chosen fields, lets only some be edited, and
+offers no way to delete a row. The safety comes from who is given what:
+circle members are shared the interfaces only, and the base itself is
+shared with the one or two people who maintain it. Anyone who can edit the
+base can delete rows in its grids, whatever the interfaces allow.
+
+Interfaces are made by hand; the API can't see them, so `diff` doesn't
+check them. In every one, turn off deleting records, and turn off creating
+them except where it says otherwise.
+
+**Triage**, for the coordinator. A record review layout: the queue on the
+left, the selected request on the right.
+
+- Queue: Requests whose Status is New or empty, oldest Submitted first,
+  showing Label, Urgency, Location.
+- The request, in this order:
+
+| Field | Editable | Why |
+|---|---|---|
+| Description | no | The member's own words |
+| Photos | no | |
+| Submitted | no | |
+| Reporter, Reporter name, Reporter email, Reporter phone | no | Who to ask |
+| May enter if I'm out, Access notes | no | |
+| In my unit | no | |
+| Location | yes | To set it where the script couldn't, or correct it |
+| Room | yes | |
+| Type, Urgency | yes | To correct the member's choice. An urgent request's alert has already gone |
+| Title | yes | The summary the status page shows: the thing and the fault, nothing personal |
+| System | yes | |
+| Component | yes | Once Assets has rows |
+| Responsibility | yes | |
+| Warranty | yes | Once Warranties has rows |
+| Duplicate of | yes | With Status set to Duplicate |
+| Owner | yes | |
+| Status | yes | Last: changing it takes the request out of the queue |
+
+  Leave out Label, Number, Claim by, Member-visible status, Acknowledged
+  on, Status noted, and the links other tables make (Updates, Claims, and
+  so on).
+
+**Requests**, for whoever owns a request. A record review layout over
+every request that isn't Closed, Duplicate, or Declined, grouped by Owner,
+with a filter for Status.
+
+- Editable: Status, Visit, Vendor, Resolution, Owner, Title, System,
+  Component, Responsibility, Warranty, Claim by.
+- Read-only: everything the member entered, as in Triage, and Submitted.
+- Its Updates, as a list within the page, newest first, where creating is
+  turned on: Kind, When, By name, Text, Attachments, Tell the reporter.
+  Told reporter on is shown read-only. This does on a computer what the
+  "Log an update" form does on a phone.
+
+**Claims**, for whoever deals with the builder. A record review layout over
+Claims, grouped by Status, oldest Submitted on first. Creating is turned
+on. Editable: every field but Label and Number. Shown with each claim: its
+Requests (to link and unlink), and its Updates, with creating turned on as
+above.
+
+**Contacts**. A list of Organizations grouped by Trades, with creating
+turned on and every field editable: the circle collects these over time.
+
+**Patterns**, read-only. Charts counting requests by System, by Component,
+and by Location, and a list grouped by System and Component, for the
+monthly look for repeats.
+
+No interface is needed for People (the sync keeps it), Locations (the seed
+file does), or what members use (the request form and the status page).
+Assets, Warranties, Maintenance plans, Maintenance work, and Guides get
+theirs when those tables come into use.
+
 ### A new request's status
 
 A request arrives from the form with no Status, since the form doesn't ask
