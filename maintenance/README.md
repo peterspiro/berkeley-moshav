@@ -128,7 +128,7 @@ A member's own link to the request form fills in Reporter and Location for
 them: the form's link with, for example,
 `?prefill_Reporter=Dana+S&prefill_Location=Unit+411` added, naming the
 person's and the unit's rows by their primary fields. The tracker's script
-will write each person's to Request form link in People. A link shows
+writes each person's to Request form link in People. A link shows
 nothing the plain form doesn't.
 
 After publishing or changing a form, open it in a private browser window
@@ -153,9 +153,8 @@ help text are set in the form builder; the fields keep their names.
 | Type, System, Urgency, Description, Photos, May enter if I'm out, Access notes | | | always | Type and Description |
 
 Someone who isn't in the list has no unit on record, so isn't offered "It's
-in my unit" and always chooses a location. The tracker's script, once it's
-built, will set a ticked request's Location to the reporter's unit; until
-then the triager does.
+in my unit" and always chooses a location. The tracker's script sets a ticked request's Location to the
+reporter's unit when the request arrives.
 
 Leave out every other field, Title
 above all: the circle writes it at triage, and it's what the status page
@@ -182,7 +181,7 @@ in the form, with the after-hours number and a link to the emergency guide.
 
 Reporter, in Triage, is the link to the member in People, which a member
 picks on the form. Someone who isn't in the list types the other three
-reporter fields instead; the tracker's script, once it's built, will link
+reporter fields instead; the tracker's script then links
 Reporter for them if their email address is a member's after all.
 
 The status page's and forms' links aren't kept in this repo, which is

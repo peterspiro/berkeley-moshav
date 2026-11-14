@@ -13,7 +13,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 SCRIPT_DIRS = ["archive/data_import", "archive/google_setup", "archive/cleanup"]
 APPS_SCRIPT_DIRS = ["groups_drive_sync", "calendar_notifications", "group_meetings",
-                    "circle_agendas"]
+                    "circle_agendas", "maintenance_tracker"]
 
 
 def _scripts() -> list[Path]:

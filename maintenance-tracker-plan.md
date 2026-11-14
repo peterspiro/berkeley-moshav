@@ -482,8 +482,11 @@ Move-in is soon, so the order is by what's lost if it's late.
    `maintenance/README.md`; the test base has all of it, with its views and
    forms, and takes requests. To do: the real base, set up the same way.
    Ask the builder to name who receives claims. Usable by hand from there.
-2. **Emails and backup.** The Apps Script's acknowledgments, urgent alerts,
-   status emails, weekly digest, and the daily Drive backup.
+2. **Emails and backup.** Done, in `maintenance_tracker/`: acknowledgments,
+   urgent alerts, reporter matching, "In my unit", status emails and the
+   status page's wording, updates passed on, form links, and the daily
+   backup; tried against the test base with the emails captured. To do:
+   deploying it (`maintenance_tracker/README.md`), and the weekly digest.
 3. **Claims.** Claims and Warranties, loaded from the warranty binder;
    deadline warnings; the Waiting on builder view.
 4. **Maintenance.** Assets and plans from the O&M manuals; occurrences; the

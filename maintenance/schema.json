@@ -83,6 +83,8 @@
     {"name": "Resolution", "type": "longText"},
     {"name": "Closed on", "type": "date"},
     {"name": "Member-visible status", "type": "text"},
+    {"name": "Acknowledged on", "type": "dateTime"},
+    {"name": "Status noted", "type": "text"},
     {"name": "Submitted", "type": "createdTime"},
     {"name": "Label", "type": "formula", "formula": "\"R-\" & {Number} & IF({Title}, \" \" & {Title}, IF({Location}, \" \" & {Location}))"}
    ],
@@ -108,6 +110,7 @@
     {"name": "Text", "type": "longText"},
     {"name": "Attachments", "type": "attachments"},
     {"name": "Tell the reporter", "type": "checkbox"},
+    {"name": "Told reporter on", "type": "dateTime"},
     {"name": "Logged", "type": "createdTime"}
    ],
    "views": []
