@@ -99,7 +99,7 @@ Everything a member reports or asks. One row per problem per place.
 - `In my unit` (checkbox, ticked on the form in place of choosing a
   location; the script then sets Location to the reporter's unit)
 - `Location` (link), `Room` (Kitchen, Bath, Bedroom, Living, Entry, Balcony,
-  Laundry, n/a)
+  Laundry, Other or whole unit; asked only for a unit)
 - `Type`: Repair or defect / How do I…? / Suggestion
 - `System`: Plumbing, HVAC & ventilation, Electrical & lighting, Windows &
   exterior doors, Interior doors & hardware, Appliances, Cabinets &

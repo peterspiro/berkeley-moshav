@@ -61,7 +61,7 @@
     {"name": "Photos", "type": "attachments"},
     {"name": "In my unit", "type": "checkbox"},
     {"name": "Location", "type": "link", "table": "Locations", "inverse": "Requests"},
-    {"name": "Room", "type": "select", "choices": ["Kitchen", "Bath", "Bedroom", "Living", "Entry", "Balcony", "Laundry", "n/a"]},
+    {"name": "Room", "type": "select", "choices": ["Kitchen", "Bath", "Bedroom", "Living", "Entry", "Balcony", "Laundry", "Other or whole unit"]},
     {"name": "Type", "type": "select", "choices": ["Repair or defect", "How do I…?", "Suggestion"]},
     {"name": "System", "type": "select", "choices": "@systems"},
     {"name": "Component", "type": "link", "table": "Assets", "inverse": "Requests"},
