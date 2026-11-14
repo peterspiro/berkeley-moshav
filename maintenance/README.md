@@ -93,7 +93,8 @@ primary field: select the field, and in the sidebar's **Appearance**
 section, cut its **Fields** list down to that one.
 
 - The request form's Location field shows only Name ("Unit 411"), and
-  offers every unit and common area.
+  offers every unit and common area: the units first, then the common
+  areas, each in alphabetical order (sorted by Kind, then Name).
 - The request form's Reporter field shows only Name, which
   `sync_maintenance_people.py` keeps as short as tells people apart ("Dana
   S"), and is filtered there to people whose Moved out isn't ticked. Anyone

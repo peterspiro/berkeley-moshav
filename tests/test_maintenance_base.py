@@ -72,7 +72,11 @@ def test_seed_file_has_the_36_units_and_the_common_areas():
     common = [r for r in seeds["Locations"]["rows"] if r["Kind"] == "Common"]
     assert len(common) == 31 and len({r["Name"] for r in common} | set(names)) == 67
     assert next(r for r in common if r["Name"] == "3rd floor walkway")["Floor"] == 3
-    assert "Floor" not in next(r for r in common if r["Name"] == "Roof")
+    floors = {r["Name"]: r.get("Floor") for r in common}
+    assert floors["Havdalah terrace"] == 4 and floors["Garage"] == 1
+    # The stairwells, and what isn't on a floor, have none.
+    assert [n for n, f in floors.items() if f is None] == [
+        "Roof", "Elevator", "Outdoor stairwell", "Indoor stairwell", "Building exterior"]
     tables = {t["name"]: {f["name"] for f in t["fields"]} for t in load_schema()["tables"]}
     for table, spec in seeds.items():
         assert all(set(row) <= tables[table] for row in spec["rows"])
