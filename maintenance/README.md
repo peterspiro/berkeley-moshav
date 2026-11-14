@@ -139,8 +139,9 @@ them except where it says otherwise.
 **Triage**, for the coordinator. A record review layout: the queue on the
 left, the selected request on the right.
 
-- Queue: Requests whose Status is New or empty, oldest Submitted first,
-  showing Label, Urgency, Location.
+- Queue: Requests whose Status is New or empty, sorted by Urgency (first
+  option to last, so emergencies lead) and then by Submitted, oldest
+  first, showing Label, Urgency, Location.
 - The request, in this order:
 
 | Field | Editable | Why |
@@ -228,7 +229,7 @@ whether they exist, and says nothing about them.
 
 | View | Type | Set up as |
 |---|---|---|
-| Triage | Grid | Filter: Status is New, or Status is empty. Sort: Submitted, oldest first. See "Triaging" below for its fields |
+| Triage | Grid | Filter: Status is New, or Status is empty. Sort: Urgency (first option to last, so emergencies lead), then Submitted, oldest first. See "Triaging" below for its fields |
 | Board | Kanban | Stacked by Status. Filter: Status isn't Closed, Duplicate, or Declined. Cards show Location, Owner, Urgency |
 | By owner | Grid | Grouped by Owner. Filter as Board |
 | Patterns | Grid | Grouped by System, then Component. Show Location, Room, Submitted, Status. Sort by Location |
