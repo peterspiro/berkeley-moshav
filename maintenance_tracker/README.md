@@ -5,7 +5,8 @@ Airtable base ("Building Maintenance") without anyone doing it. It runs as
 `admin@berkeleymoshav.org`. `../maintenance-tracker-plan.md` is the design;
 `../maintenance/README.md` describes the base.
 
-- **Every 10 minutes** (`processRequests`):
+- **Every 10 minutes**, or every 2 hours on Airtable's Free plan (see "The
+  Airtable plan") (`processRequests`):
   - **A new request** is acknowledged. If its reporter typed their details
     and the email address is a member's (either of their addresses in
     People), Reporter is linked to them. If "In my unit" is ticked and no
@@ -22,8 +23,9 @@ Airtable base ("Building Maintenance") without anyone doing it. It runs as
     (once Visit has a time), when the work is done ("is it fixed?"), and
     when it's closed, unless they were just asked whether it's fixed.
   - **An update marked "Tell the reporter"** is emailed to the request's
-    reporter, once.
-- **Every day**, at about 3 am (`daily`):
+    reporter, once (on the Free plan, within 6 hours).
+- **Every day**, at about 3 am, or every Sunday on the Free plan
+  (`housekeeping`):
   - **Form links** (`writeFormLinks`): each person's own link to the request
     form, which fills in their name and unit, is written to Request form
     link in People, and rewritten when their name or unit changes. Someone
@@ -34,6 +36,11 @@ Airtable base ("Building Maintenance") without anyone doing it. It runs as
     up to 100 a run. This is the evidence file if a claim is disputed. It
     goes in a folder the script makes for itself, "Building Maintenance
     backup", in `admin@`'s My Drive (see "The backup folder").
+  - **How full the base is**: having read every table for the backup, it
+    emails the circle's list when the base's records, or its photos and
+    attachments, pass 70%, 85%, and 95% of what the plan allows, once for
+    each. When either is full, Airtable accepts no more, and the request
+    form stops working for members.
 
 Emails go from `admin@`, named "Berkeley Moshav Maintenance", with replies
 going to the circle's list. A member is emailed at the address Gather has
@@ -65,6 +72,7 @@ which is public.
 |---|---|
 | `AIRTABLE_TOKEN` | A personal access token for the base, with only the scopes `data.records:read` and `data.records:write` |
 | `AIRTABLE_BASE_ID` | The base's ID: the part of its address in Airtable that starts with `app` |
+| `AIRTABLE_PLAN` | `team` once the workspace is on Airtable's Team plan. Unset, or anything else, means the Free plan (see "The Airtable plan") |
 | `CIRCLE_EMAIL` | The circle's email list: urgent requests go there, and replies to every email |
 | `REQUEST_FORM_URL` | The published request form's link. Optional: without it, no form links are written |
 | `STATUS_PAGE_URL` | The public link to the Requests table's "Status page" view, which members open to see where requests stand: in Airtable, open that view, choose **Share and sync**, and create a link to the view. Optional: emails then leave it out |
@@ -134,21 +142,43 @@ Then in the Apps Script editor:
 2. Run `processRequests` by hand, and approve what it asks permission for.
    Each request in the base that hasn't been acknowledged gets its email
    (to you, while `SEND_ALL_MAIL_TO` is set).
-3. Run `daily` by hand, to check the form links and the backup (look for
+3. Run `housekeeping` by hand, to check the form links and the backup (look for
    "Building Maintenance backup" in `admin@`'s My Drive).
-4. Run `installTriggers` to start the timers.
+4. Run `installTriggers` to start the timers, at the pace the plan allows.
 
 To move to the real base, change `AIRTABLE_TOKEN` and `AIRTABLE_BASE_ID`
 (and the form, status page, and Triage links, which are the real base's
 own), delete `backupFolderId` (see "The backup folder"), and delete `SEND_ALL_MAIL_TO` when the circle is ready for members to
 be emailed.
 
-## How much it asks of Airtable
+## The Airtable plan
 
-A run with nothing to do makes two calls to Airtable's API; one with work
-to do makes about four more, plus one or two for each request or update.
-At every 10 minutes that's some 9,000 calls a month, and the backup adds a
-dozen a day. Airtable's Free plan is reported to allow 1,000 calls a month,
-so on that plan run it less often (change `everyMinutes(10)` in
-`installTriggers` to `everyHours(1)`, and expect to go over even so) or by
-hand; the plan the real base needs has no such limit.
+Airtable's Free plan allows a workspace 1,000 calls to its API a month,
+every base and script together, and a base 1,000 records and 1 GB of
+attachments. The script keeps inside the first and warns of the others.
+What it does on each plan (`PLANS` in `tracker_rules.gs`):
+
+| | Free (`AIRTABLE_PLAN` unset) | Team (`AIRTABLE_PLAN` = `team`) |
+|---|---|---|
+| Looks for new requests and changes of status | every 2 hours | every 10 minutes |
+| Looks for updates to pass on | every 6 hours | every 10 minutes |
+| Form links, backup, and the check of how full the base is | Sundays | daily |
+| Warns the circle at 70%, 85%, 95% of | 1,000 records, 1 GB | 50,000 records, 20 GB |
+
+On the Free plan, then, a reporter's acknowledgment and the circle's alert
+about an urgent request can come up to 2 hours after the request. The
+form's own page should say what to do in an emergency.
+
+With nothing happening, the Free pace is about 540 calls a month. Each new
+request or change of status adds one or two, and the first of them in any
+6 hours two more (People and Locations are then kept for 6 hours, so a
+change made to them in Airtable can take that long to be noticed).
+`maintenance_base.py`, `sync_maintenance_people.py`, and anything done to
+the test base, if it's in the same workspace, come out of the same 1,000.
+Running a function by hand costs the same as the timer running it.
+
+A request uses more than one record: the script adds a row to Updates for
+each change of status, so allow five to seven records a request.
+
+**When the workspace moves to the Team plan**, set `AIRTABLE_PLAN` to
+`team` and run `installTriggers` again.

@@ -465,6 +465,16 @@ figures above come from third-party summaries that don't fully agree.
 The workspace should be owned by `admin@berkeleymoshav.org`, not a member's
 own account.
 
+**Decided since:** the real base starts on the Free plan, as a trial, and
+moves to Team when it nears a limit. `maintenance_tracker` runs at a
+slower pace there to stay inside the Free plan's 1,000 API calls a month,
+and warns the circle as the base nears 1,000 records or 1 GB of
+attachments (see `maintenance_tracker/README.md`, "The Airtable plan"). On
+Free, an interface can't be shared without the base, and there are no
+table or field permissions, so nothing stops an editor deleting a row:
+editors are kept few, others use the forms, and the backup is the safety
+net. On Team, everyone who edits, through an interface too, is a paid seat.
+
 ## Phases
 
 Move-in is soon, so the order is by what's lost if it's late.

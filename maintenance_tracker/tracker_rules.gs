@@ -11,6 +11,19 @@
  */
 
 const URGENT = ['Emergency', 'Urgent (days)'];
+// What each Airtable plan allows, and how often the script runs to stay
+// inside it. Free allows 1,000 API calls a month for the whole workspace,
+// so there the script looks for requests every 2 hours, for updates to
+// pass on every 6, and does its housekeeping weekly: about 700 calls a
+// month. Limits are per base.
+const PLANS = {
+  free: { checkEveryHours: 2, updatesEveryHours: 6, housekeepingWeekly: true,
+          recordLimit: 1000, attachmentLimitBytes: 1024 * 1024 * 1024 },
+  team: { checkEveryMinutes: 10, updatesEveryHours: 0, housekeepingWeekly: false,
+          recordLimit: 50000, attachmentLimitBytes: 20 * 1024 * 1024 * 1024 },
+};
+// The circle is warned as the base passes each of these shares of a limit.
+const USAGE_LEVELS = [70, 85, 95];
 // What the status page says for each Status. A status that isn't here
 // (Duplicate, Declined) isn't on the page.
 const MEMBER_STATUS = {
@@ -45,13 +58,13 @@ function acknowledgmentEmail(request, ctx) {
   return { to: who.email, subject: `Request ${requestNumber(request)} received`, body: lines.join('\n') };
 }
 
-/** A record's attachments, from every attachment field: [{ id, url, filename }]. */
+/** A record's attachments, from every attachment field: [{ id, url, filename, size }]. */
 function attachmentsIn(record) {
   const found = [];
   Object.keys(record.fields).forEach(name => {
     const value = record.fields[name];
     if (Array.isArray(value)) {
-      value.forEach(v => { if (v && v.url && v.filename) found.push({ id: v.id, url: v.url, filename: v.filename }); });
+      value.forEach(v => { if (v && v.url && v.filename) found.push({ id: v.id, url: v.url, filename: v.filename, size: v.size || 0 }); });
     }
   });
   return found;
@@ -247,6 +260,16 @@ function updateEmail(update, request, ctx) {
   return { subject: `Request ${number}: an update`, to: who.email, body: lines.join('\n') };
 }
 
+/**
+ * Whether the updates to pass on are due a look: always, on a plan with no
+ * limit on calls; otherwise every updatesEveryHours.
+ */
+function updatesDue(plan, lastCheckedIso, now) {
+  const hours = PLANS[plan].updatesEveryHours;
+  if (!hours || !lastCheckedIso) return true;
+  return now.getTime() - new Date(lastCheckedIso).getTime() >= hours * 60 * 60 * 1000 - 60 * 1000;
+}
+
 /** The email telling the circle about a new emergency or urgent request; null for a routine one. */
 function urgentAlert(request, ctx) {
   const f = request.fields;
@@ -265,4 +288,43 @@ function urgentAlert(request, ctx) {
     subject: `[${tag}] ${requestNumber(request)}${place ? ' ' + place : ''}${f['System'] ? ': ' + f['System'] : ''}`,
     body: lines.join('\n'),
   };
+}
+
+/**
+ * How full the base is: { records, recordLimit, bytes, byteLimit, level },
+ * where level is the highest of USAGE_LEVELS that the records or the
+ * attachments have reached, as a share of the plan's limit; 0 if none.
+ * `counts` is { table: its number of records }.
+ */
+function usageReport(counts, attachmentBytes, plan) {
+  const limits = PLANS[plan];
+  const records = Object.keys(counts).reduce((sum, t) => sum + counts[t], 0);
+  const share = Math.max(records / limits.recordLimit, attachmentBytes / limits.attachmentLimitBytes) * 100;
+  return {
+    records: records, recordLimit: limits.recordLimit,
+    bytes: attachmentBytes, byteLimit: limits.attachmentLimitBytes,
+    level: USAGE_LEVELS.filter(l => share >= l).pop() || 0,
+  };
+}
+
+/**
+ * The email warning the circle that the base is filling up, or null if
+ * it's at a level they've already been warned of (or none).
+ */
+function usageWarning(report, warnedLevel, plan) {
+  if (!report.level || report.level <= (warnedLevel || 0)) return null;
+  const mb = n => Math.round(n / (1024 * 1024)).toLocaleString('en-US');
+  const pct = (n, limit) => Math.round(n / limit * 100);
+  const lines = [
+    `The maintenance tracker's Airtable base has passed ${report.level}% of what its plan allows:`,
+    '',
+    `    Records: ${report.records.toLocaleString('en-US')} of ${report.recordLimit.toLocaleString('en-US')} (${pct(report.records, report.recordLimit)}%)`,
+    `    Photos and attachments: ${mb(report.bytes)} MB of ${mb(report.byteLimit)} MB (${pct(report.bytes, report.byteLimit)}%)`,
+    '',
+    'When either is full, Airtable accepts no more: the request form stops working for members.',
+  ];
+  lines.push('', plan === 'free'
+    ? "Upgrade the workspace to the Team plan before then. Afterwards, set the script's AIRTABLE_PLAN property to team and run installTriggers again (see maintenance_tracker/README.md)."
+    : 'Before then, move to a larger plan, or remove what is no longer needed.');
+  return { subject: `Maintenance tracker: the Airtable base is ${report.level}% full`, body: lines.join('\n') };
 }

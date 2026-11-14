@@ -690,7 +690,10 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
     email to the reporter about a visit, about work that's done, or that
     it's closed. An update marked "Tell the reporter" is emailed to them.
     Daily, it writes each person's own prefilled link to the request form
-    into People, and saves every table and new attachment to Drive.
+    into People, saves every table and new attachment to Drive, and warns
+    the circle when the base nears the records or storage its Airtable
+    plan allows. On Airtable's Free plan, which rations calls to its API,
+    it runs every 2 hours and weekly instead.
   - **`maintenance_tracker/tracker_rules.gs`** holds its rules and the
     emails' wording, tested under Node.
 

@@ -4,7 +4,8 @@
  * Runs as admin@berkeleymoshav.org. maintenance-tracker-plan.md is the
  * design; README.md here says how to deploy it and what to set.
  *
- * Every 10 minutes (processRequests):
+ * Every 10 minutes, or every 2 hours on Airtable's Free plan, which
+ * rations calls to its API (processRequests; see PLANS in tracker_rules.gs):
  *  - A new request: its reporter is linked, if they typed an email address
  *    that's a member's; its location is set to the reporter's unit, if they
  *    ticked "In my unit"; the reporter is emailed that it arrived; and the
@@ -15,10 +16,11 @@
  *    that's done, or that it's closed.
  *  - An update marked "Tell the reporter" is emailed to them.
  *
- * Every day (daily):
+ * Every day, or every week on the Free plan (housekeeping):
  *  - Each person's own link to the request form is written to People.
  *  - Every table, and every photo and attachment not yet copied, is saved
- *    to Drive (backup).
+ *    to Drive (backup), and the circle is warned if the base is nearing
+ *    what its plan allows.
  *
  * The rules, and the emails' wording, are in tracker_rules.gs. Each record
  * carries its own marker of what's been done to it ("Acknowledged on",
@@ -44,6 +46,10 @@ const MAX_ATTACHMENTS_PER_RUN = 100;
 const BATCH = 10;  // records per Airtable write
 
 const PROP_LAST_RUN = 'lastRun';  // ISO time the last processRequests began
+const PROP_LAST_UPDATES_CHECK = 'lastUpdatesCheck';  // ISO time updates were last looked for
+const PROP_USAGE_WARNED = 'usageWarned';  // the USAGE_LEVELS level the circle was last warned of
+const CACHE_PEOPLE = 'people', CACHE_LOCATIONS = 'locations';
+const CACHE_SECONDS = 6 * 60 * 60;  // the longest the cache keeps anything
 const PROP_BACKUP_FOLDER = 'backupFolderId';  // set by backupFolder
 const BACKUP_FOLDER_NAME = 'Building Maintenance backup';
 const FOLDER_TYPE = 'application/vnd.google-apps.folder';
@@ -70,7 +76,9 @@ function airtable(method, path, payload) {
  * Saves every table to Drive, as a JSON file each in a folder named for
  * today, and copies each photo and attachment not already there into an
  * "Attachments" folder (Airtable's own links to them expire). It all goes
- * in a folder the script makes for itself (see backupFolder).
+ * in a folder the script makes for itself (see backupFolder). Since it
+ * reads every table anyway, it then checks how full the base is
+ * (checkUsage).
  */
 function backup() {
   const root = backupFolder();
@@ -78,9 +86,11 @@ function backup() {
   const day = driveFolder(root, today);
   const attachments = driveFolder(root, 'Attachments');
   const saved = driveChildren(day), copied = driveChildren(attachments);
+  const counts = {}, sizes = {};
   let added = 0, waiting = 0;
   TABLES.forEach(table => {
     const records = listRecords(table);
+    counts[table] = records.length;
     const name = `${table}.json`;
     // A second run in a day replaces the first's file.
     if (saved[name]) Drive.Files.update({ trashed: true }, saved[name]);
@@ -88,6 +98,7 @@ function backup() {
                        Utilities.newBlob(JSON.stringify(records, null, 1), 'application/json', name));
     records.forEach(record => attachmentsIn(record).forEach(a => {
       const fileName = `${a.id} ${a.filename}`;
+      sizes[a.id] = a.size;
       if (copied[fileName]) return;
       if (added >= MAX_ATTACHMENTS_PER_RUN) { waiting++; return; }
       Drive.Files.create({ name: fileName, parents: [attachments] },
@@ -98,6 +109,7 @@ function backup() {
   });
   console.log(`Backed up ${TABLES.length} tables to ${today}; ${added} attachment(s) copied` +
               (waiting ? `, ${waiting} left for the next run.` : '.'));
+  checkUsage(counts, Object.keys(sizes).reduce((sum, id) => sum + sizes[id], 0));
 }
 
 /**
@@ -115,6 +127,38 @@ function backupFolder() {
     props.setProperty(PROP_BACKUP_FOLDER, id);
   }
   return id;
+}
+
+/**
+ * A table's records, from the cache if they're there (for up to 6 hours),
+ * to spare Airtable a call. Only for People and Locations, which change
+ * seldom; a change made in Airtable can take that long to be noticed.
+ */
+function cachedRecords(table, key) {
+  const cache = CacheService.getScriptCache();
+  const hit = cache.get(key);
+  if (hit) return JSON.parse(hit);
+  const records = listRecords(table);
+  try {
+    cache.put(key, JSON.stringify(records), CACHE_SECONDS);
+  } catch (e) {
+    console.log(`${table} is too big to cache: ${e}`);
+  }
+  return records;
+}
+
+/**
+ * Emails the circle when the base passes 70%, 85%, or 95% of the records
+ * or attachment storage its plan allows, once for each level.
+ */
+function checkUsage(counts, attachmentBytes) {
+  const props = PropertiesService.getScriptProperties();
+  const report = usageReport(counts, attachmentBytes, plan());
+  const warning = usageWarning(report, Number(props.getProperty(PROP_USAGE_WARNED)) || 0, plan());
+  if (warning) sendMail(Object.assign({ to: setting('CIRCLE_EMAIL') }, warning));
+  props.setProperty(PROP_USAGE_WARNED, String(report.level));
+  console.log(`${report.records} of ${report.recordLimit} records; ` +
+              `${Math.round(report.bytes / 1048576)} MB of attachments.`);
 }
 
 /** What the rules need from outside a record (see tracker_rules.gs). */
@@ -140,20 +184,6 @@ function createRecords(table, records) {
   }
 }
 
-/** Once a day: the form links, then the backup. Each runs even if the other fails. */
-function daily() {
-  let failure = null;
-  [writeFormLinks, backup].forEach(step => {
-    try {
-      withLock(step);
-    } catch (e) {
-      console.error(`${step.name} failed: ${e && e.stack || e}`);
-      failure = failure || e;
-    }
-  });
-  if (failure) throw failure;
-}
-
 /** The files and folders in a Drive folder that aren't in the trash: { name: ID }. */
 function driveChildren(folderId) {
   const children = {};
@@ -175,11 +205,36 @@ function driveFolder(parentId, name) {
     Drive.Files.create({ name: name, mimeType: FOLDER_TYPE, parents: [parentId] }).id;
 }
 
-/** Run once, by hand, after deploying: (re)creates the timers. */
+/**
+ * Once a day, or once a week on the Free plan: the form links, then the
+ * backup. Each runs even if the other fails.
+ */
+function housekeeping() {
+  let failure = null;
+  [writeFormLinks, backup].forEach(step => {
+    try {
+      withLock(step);
+    } catch (e) {
+      console.error(`${step.name} failed: ${e && e.stack || e}`);
+      failure = failure || e;
+    }
+  });
+  if (failure) throw failure;
+}
+
+/**
+ * Run by hand after deploying, and again after changing AIRTABLE_PLAN:
+ * (re)creates the timers, as often as the plan allows (see PLANS).
+ */
 function installTriggers() {
+  const limits = PLANS[plan()];
   ScriptApp.getProjectTriggers().forEach(t => ScriptApp.deleteTrigger(t));
-  ScriptApp.newTrigger('processRequests').timeBased().everyMinutes(10).create();
-  ScriptApp.newTrigger('daily').timeBased().everyDays(1).atHour(3).inTimezone(TIME_ZONE).create();
+  const check = ScriptApp.newTrigger('processRequests').timeBased();
+  (limits.checkEveryHours ? check.everyHours(limits.checkEveryHours)
+                          : check.everyMinutes(limits.checkEveryMinutes)).create();
+  const keeping = ScriptApp.newTrigger('housekeeping').timeBased().atHour(3).inTimezone(TIME_ZONE);
+  (limits.housekeepingWeekly ? keeping.onWeekDay(ScriptApp.WeekDay.SUNDAY) : keeping.everyDays(1)).create();
+  console.log(`Timers set for the ${plan()} plan.`);
 }
 
 /** Every record of a table, or those matching an Airtable formula. */
@@ -195,6 +250,15 @@ function listRecords(table, formula) {
     offset = page.offset;
   } while (offset);
   return records;
+}
+
+/**
+ * The Airtable plan the base's workspace is on, 'free' or 'team', from the
+ * Script Property AIRTABLE_PLAN. Anything else, or nothing, counts as
+ * free, the plan that's safe to assume.
+ */
+function plan() {
+  return setting('AIRTABLE_PLAN', true).trim().toLowerCase() === 'team' ? 'team' : 'free';
 }
 
 /** Acknowledges a new request (see the file's comment). Returns the request as it now is. */
@@ -214,10 +278,11 @@ function processNewRequest(request, people, ctx) {
 }
 
 /**
- * Every 10 minutes: new requests, changes of status, and updates to pass
- * on (see the file's comment). Looks at the requests not yet acknowledged
- * and those changed since the last run; with nothing to do, that's two
- * calls to Airtable.
+ * On the timer: new requests, changes of status, and updates to pass on
+ * (see the file's comment). Looks at the requests not yet acknowledged and
+ * those changed since the last run, and, when they're due a look
+ * (updatesDue), for updates to pass on; with nothing to do, that's one or
+ * two calls to Airtable.
  */
 function processRequests() {
   withLock(() => {
@@ -227,14 +292,16 @@ function processRequests() {
     const since = new Date(last ? new Date(last).getTime() - OVERLAP_MS : 0).toISOString();
     const requests = listRecords('Requests',
       `OR({Acknowledged on} = BLANK(), IS_AFTER(LAST_MODIFIED_TIME(), DATETIME_PARSE("${since}")))`);
-    const updates = listRecords('Updates', 'AND({Tell the reporter}, {Told reporter on} = BLANK())')
-      .filter(u => u.fields['Tell the reporter'] && !u.fields['Told reporter on']);
+    const lookForUpdates = updatesDue(plan(), props.getProperty(PROP_LAST_UPDATES_CHECK), began);
+    const updates = !lookForUpdates ? []
+      : listRecords('Updates', 'AND({Tell the reporter}, {Told reporter on} = BLANK())')
+          .filter(u => u.fields['Tell the reporter'] && !u.fields['Told reporter on']);
     const fresh = requests.filter(needsAcknowledging);
     const changed = requests.filter(r => !needsAcknowledging(r) && statusKey(r) !== r.fields['Status noted']);
 
     if (fresh.length || changed.length || updates.length) {
-      const people = listRecords('People');
-      const ctx = context(people, listRecords('Locations'));
+      const people = cachedRecords('People', CACHE_PEOPLE);
+      const ctx = context(people, cachedRecords('Locations', CACHE_LOCATIONS));
       fresh.forEach(request => processNewRequest(request, people, ctx));
       changed.forEach(request => processStatusChange(request, ctx));
       updates.forEach(update => processUpdate(update, ctx));
@@ -242,6 +309,7 @@ function processRequests() {
                   `${updates.length} update(s) passed on.`);
     }
     props.setProperty(PROP_LAST_RUN, began.toISOString());
+    if (lookForUpdates) props.setProperty(PROP_LAST_UPDATES_CHECK, began.toISOString());
   });
 }
 
@@ -337,5 +405,6 @@ function writeFormLinks() {
   listRecords('Locations').forEach(l => { locationNames[l.id] = l.fields['Name']; });
   const changes = formLinkChanges(listRecords('People'), locationNames, formUrl);
   updateRecords('People', changes);
+  if (changes.length) CacheService.getScriptCache().remove(CACHE_PEOPLE);
   console.log(`${changes.length} form link(s) written.`);
 }

@@ -16,7 +16,7 @@ const dir = path.join(__dirname, '..', 'maintenance_tracker');
 
 const tables = input.tables || {};
 const props = Object.assign({}, input.props);
-const mails = [], calls = [];
+const mails = [], calls = [], triggers = [], cache = {};
 let nextId = 1;
 
 function airtableFetch(url, options) {
@@ -102,7 +102,26 @@ const ctx = vm.createContext({
     formatDate: (d, tz) => new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(d),
     newBlob: (content, type, name) => ({ content: content, name: name }),
   },
-  ScriptApp: {},
+  CacheService: { getScriptCache: () => ({
+    get: k => (k in cache ? cache[k] : null),
+    put: (k, v) => { cache[k] = v; },
+    remove: k => { delete cache[k]; },
+  }) },
+  ScriptApp: {
+    WeekDay: { SUNDAY: 'SUNDAY' },
+    getProjectTriggers: () => [],
+    deleteTrigger: () => {},
+    // A trigger is recorded as the chain of calls that built it.
+    newTrigger: name => {
+      const chain = [name];
+      const builder = new Proxy({}, { get: (_, method) => (...args) => {
+        if (method === 'create') { triggers.push(chain.join(' ')); return null; }
+        chain.push(args.length ? `${String(method)}(${args.join(',')})` : String(method));
+        return builder;
+      } });
+      return builder;
+    },
+  },
 });
 ['tracker_rules.gs', 'maintenance_tracker.gs'].forEach(f =>
   vm.runInContext(fs.readFileSync(path.join(dir, f), 'utf8'), ctx, { filename: f }));
@@ -112,6 +131,6 @@ if (input.values) Object.keys(input.values).forEach(k => { ctx[k] = input.values
 if (input.expr) result = vm.runInContext(`JSON.stringify(${input.expr})`, ctx);
 (input.run || []).forEach(name => vm.runInContext(`${name}()`, ctx));
 process.stdout.write(JSON.stringify({
-  tables: tables, mails: mails, props: props, drive: tree('myDrive'), calls: calls,
+  tables: tables, mails: mails, props: props, triggers: triggers, drive: tree('myDrive'), calls: calls,
   result: result === undefined || result === null ? null : JSON.parse(result),
 }));

@@ -136,11 +136,17 @@ def test_new_request_from_a_member_in_their_unit():
     assert "https://airtable.example/status" in body and DANA_LINK in body
 
 
-def test_second_run_does_nothing_and_asks_airtable_twice():
+def test_second_run_does_nothing_and_asks_airtable_little():
     state = run(tables([request(Reporter=["pDana"], Location=["locRoof"])]), "processRequests")
+    # On the Free plan, updates were looked for on the first run, and aren't due again for 6 hours.
     again = run(state["tables"], "processRequests", props=state["props"])
-    assert again["mails"] == [] and again["calls"] == ["get Requests", "get Updates"]
+    assert again["mails"] == [] and again["calls"] == ["get Requests"]
     assert again["tables"] == state["tables"]
+    later = {**state["props"], "lastUpdatesCheck": "2026-01-01T00:00:00.000Z"}
+    assert run(state["tables"], "processRequests", props=later)["calls"] == ["get Requests", "get Updates"]
+    # On a plan with no ration of calls, they're looked for every time.
+    team = {**state["props"], "AIRTABLE_PLAN": "team"}
+    assert run(state["tables"], "processRequests", props=team)["calls"] == ["get Requests", "get Updates"]
 
 
 def test_a_chosen_location_wins_over_in_my_unit():
@@ -303,6 +309,85 @@ def test_update_marked_for_the_reporter_is_emailed_once():
     assert again["mails"] == []
 
 
+# --- plans -------------------------------------------------------------------
+
+def test_plan_is_free_unless_set_to_team():
+    for value, plan in [(None, "free"), ("", "free"), ("Team", "team"), (" team ", "team"), ("business", "free")]:
+        props = dict(PROPS) if value is None else {**PROPS, "AIRTABLE_PLAN": value}
+        assert run(tables(), expr="plan()", props=props)["result"] == plan
+
+
+def test_timers_fit_the_plan():
+    assert run(tables(), "installTriggers")["triggers"] == [
+        "processRequests timeBased everyHours(2)",
+        "housekeeping timeBased atHour(3) inTimezone(America/Los_Angeles) onWeekDay(SUNDAY)"]
+    assert run(tables(), "installTriggers", props={**PROPS, "AIRTABLE_PLAN": "team"})["triggers"] == [
+        "processRequests timeBased everyMinutes(10)",
+        "housekeeping timeBased atHour(3) inTimezone(America/Los_Angeles) everyDays(1)"]
+
+
+def test_free_plan_stays_inside_its_calls():
+    # With nothing happening: a look for requests every 2 hours, for updates
+    # every 6, and the weekly housekeeping (every table, and People and
+    # Locations again for the form links).
+    free = rule("PLANS.free")
+    idle = 30 * (24 / free["checkEveryHours"] + 24 / free["updatesEveryHours"])
+    housekeeping = 4.5 * (11 + 2)
+    assert idle + housekeeping < 600  # of 1,000, leaving the rest for requests, and the scripts run by hand
+    assert rule("updatesDue('free', t, new Date('2026-11-14T12:00:00Z'))", t="2026-11-14T06:00:30Z")
+    assert not rule("updatesDue('free', t, new Date('2026-11-14T12:00:00Z'))", t="2026-11-14T08:00:00Z")
+    assert rule("updatesDue('free', null, new Date())") and rule("updatesDue('team', t, new Date())", t="2099-01-01T00:00:00Z")
+
+
+def test_people_and_locations_are_cached_within_a_run():
+    out = run(tables([request(1, Reporter=["pDana"]), request(2, Reporter=["pDana"])]),
+              "processRequests", "processRequests")
+    assert out["calls"].count("get People") == 1 and out["calls"].count("get Locations") == 1
+
+
+# --- how full the base is ----------------------------------------------------
+
+MB = 1024 * 1024
+
+
+def usage(records, megabytes, warned=0, plan="free"):
+    report = rule("usageReport(c, b, p)", c={"Requests": records, "Updates": 0}, b=megabytes * MB, p=plan)
+    return report, rule("usageWarning(r, w, p)", r=report, w=warned, p=plan)
+
+
+def test_usage_levels():
+    assert usage(699, 0)[0]["level"] == 0 and usage(699, 0)[1] is None
+    assert usage(700, 0)[0]["level"] == 70
+    assert usage(10, 880)[0]["level"] == 85      # attachments count as much as records
+    assert usage(960, 100)[0]["level"] == 95
+    assert usage(960, 900, plan="team")[0]["level"] == 0
+
+
+def test_usage_warning_says_what_and_is_sent_once_a_level():
+    report, mail = usage(712, 300)
+    assert mail["subject"] == "Maintenance tracker: the Airtable base is 70% full"
+    for text in ("Records: 712 of 1,000 (71%)", "Photos and attachments: 300 MB of 1,024 MB (29%)",
+                 "the request form stops working", "AIRTABLE_PLAN property to team"):
+        assert text in mail["body"]
+    assert usage(712, 300, warned=70)[1] is None
+    assert usage(860, 300, warned=70)[1]["subject"].endswith("85% full")
+    assert "larger plan" in usage(36000, 0, plan="team")[1]["body"]
+
+
+def test_backup_warns_the_circle_as_the_base_fills():
+    photo = {"id": "att1", "url": "https://files.example/1", "filename": "a.jpg", "size": 900 * MB}
+    state = tables([request(1, Photos=[photo]), request(2, Photos=[photo])])  # one photo, linked twice
+    out = run(state, "backup")
+    [mail] = out["mails"]
+    assert mail["to"] == CIRCLE and "85% full" in mail["subject"] and "900 MB of 1,024 MB" in mail["body"]
+    assert out["props"]["usageWarned"] == "85"
+    # Not again at the same level; and the level falls back when the base empties.
+    again = run(state, "backup", props=out["props"])
+    assert again["mails"] == []
+    emptied = run(tables(), "backup", props=out["props"])
+    assert emptied["mails"] == [] and emptied["props"]["usageWarned"] == "0"
+
+
 # --- form links --------------------------------------------------------------
 
 def test_form_link_is_the_tested_shape():
@@ -331,11 +416,18 @@ def test_form_links_are_written_where_missing_or_stale():
 
 # --- backup ------------------------------------------------------------------
 
+def test_housekeeping_writes_links_and_backs_up():
+    out = run(tables(people=[{"id": "p2", "fields": {"Name": "Sam L"}}]), "housekeeping")
+    assert out["tables"]["People"][0]["fields"]["Request form link"] == FORM + "?prefill_Reporter=Sam+L"
+    assert "Building Maintenance backup/" in out["drive"]
+
+
 def test_backup_saves_every_table_and_each_attachment_once():
     photo = {"id": "att1", "url": "https://files.example/1", "filename": "leak.jpg"}
     state = tables([request(Photos=[photo])])
     # Twice in a day: the second run's files replace the first's.
     out = run(state, "backup", "backup")
+    assert out["mails"] == []  # nowhere near full
     # In a folder the script made for itself, which it remembers.
     [folder] = out["drive"]
     assert folder == "Building Maintenance backup/" and out["props"]["backupFolderId"]
