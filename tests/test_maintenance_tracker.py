@@ -216,6 +216,14 @@ def test_emergency_note_is_added_when_set():
     assert out["mails"][0]["body"].endswith("In an emergency, call 510-555-0199.")
 
 
+def test_script_may_fetch_only_from_airtable():
+    manifest = json.loads((PROJECT / "appsscript.json").read_text())
+    assert manifest["urlFetchWhitelist"] == ["https://api.airtable.com/",
+                                             "https://v5.airtableusercontent.com/"]
+    text = (PROJECT / "maintenance_tracker.gs").read_text()
+    assert "const AIRTABLE_API = 'https://api.airtable.com/v0';" in text
+
+
 # --- status changes ----------------------------------------------------------
 
 def status_run(status, noted, **fields):

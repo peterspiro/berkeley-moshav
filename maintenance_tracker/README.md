@@ -72,6 +72,22 @@ which is public.
 | `EMERGENCY_NOTE` | A line added to the end of each acknowledgment, saying what to do in an emergency. Optional |
 | `SEND_ALL_MAIL_TO` | For trying it out: while it's set, every email goes to this address instead, with who it was for in the subject. Delete it to go live |
 
+## What it's allowed to do
+
+`appsscript.json` asks for as little as the script can run with:
+
+| Permission | Why |
+|---|---|
+| Connect to an external service | To call Airtable. `urlFetchWhitelist` narrows it to Airtable's API and the host its attachments are downloaded from, so the script can't reach anywhere else |
+| Send email as you | To send the emails. It can't read mail |
+| See, edit, create, and delete only the specific Google Drive files you use with this app | For the backup: only files the script made |
+| Allow this application to run when you are not present | For the timers `installTriggers` sets |
+
+If the backup starts failing to copy attachments with an error about a
+URL that isn't allowed, Airtable has moved them to another host: add it to
+`urlFetchWhitelist`, as the address in the error up to and including the
+first single `/`.
+
 ## The backup folder
 
 The script asks for permission only for the Drive files it creates itself,
