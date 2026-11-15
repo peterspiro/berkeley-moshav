@@ -360,8 +360,9 @@ A request becomes a claim in four steps, all in Airtable (the last two on
 the Claims interface). Nothing waits for the tracker's script: the dates
 and the letter are formulas, worked out as the rows are filled in.
 
-1. **Warranties** has a row for each warranty: its Warrantor, its Term
-   (months), and when its clock starts. Clock starts says whether that's
+1. **Warranties** has a row for each warranty: its Warrantor, whose
+   warranty it is (Responsibility: Builder warranty or Manufacturer
+   warranty), its Term (months), and when its clock starts. Clock starts says whether that's
    One date for the building (Building start date), Each unit's closing
    (the Closing date of the request's unit in Locations; a common area's is
    the building's date), or Unknown. While it's Unknown, the earlier of the
@@ -369,7 +370,9 @@ and the letter are formulas, worked out as the rows are filled in.
    the answer is known, changing Clock starts moves every deadline.
 2. **At triage**, a request that's the builder's or a manufacturer's to fix
    gets its Warranty (one). Its **Claim deadline** then shows: the
-   warranty's start for that place, plus its term.
+   warranty's start for that place, plus its term. Its Warranty
+   responsibility shows the warranty's Responsibility, which the request's
+   own Responsibility should match.
 3. **A claim** is a row in Claims, linked to its Requests (several, when
    it's one defect in several places: set Scope to Systemic), its Warranty,
    and its Warrantor. Its Claim deadline is the earliest of its requests'.
