@@ -28,7 +28,9 @@ circle's folder in the Shared Drive), so no ID is kept in the repo. Make
 it once, by hand, as an empty Google Doc with that title.
 
 Lines wrapped in the source are joined before the Doc is written, so each
-paragraph and list item is one paragraph in the Doc.
+paragraph and list item is one paragraph in the Doc. The Doc is then set to
+pageless (continuous scroll, with no page breaks), which needs the Google
+Docs API enabled as well as Drive.
 
 It reads the test base, "Building Maintenance (test)", which holds the
 demo data (see maintenance_demo.py), unless given --real, which reads
@@ -113,6 +115,13 @@ def join_wrapped_lines(text: str) -> str:
     return "\n".join(out)
 
 
+def pageless_request() -> dict:
+    """The Docs API batchUpdate body that makes a Doc pageless."""
+    return {"requests": [{"updateDocumentStyle": {
+        "documentStyle": {"documentFormat": {"documentMode": "PAGELESS"}},
+        "fields": "documentFormat"}}]}
+
+
 def find_doc(drive) -> dict:
     """The one Google Doc titled DOC_TITLE that admin@ can see."""
     title = DOC_TITLE.replace("\\", "\\\\").replace("'", "\\'")
@@ -160,7 +169,8 @@ def main() -> None:
     from googleapiclient.http import MediaInMemoryUpload
     from util.google_group_utils import get_credentials
 
-    drive = build("drive", "v3", credentials=get_credentials(args.credentials))
+    credentials = get_credentials(args.credentials)
+    drive = build("drive", "v3", credentials=credentials)
     try:
         doc = find_doc(drive)
     except LookupError as e:
@@ -175,6 +185,8 @@ def main() -> None:
         return
     drive.files().update(fileId=doc["id"], supportsAllDrives=True,
                          media_body=MediaInMemoryUpload(page.encode(), mimetype=UPLOAD_MIME)).execute()
+    build("docs", "v1", credentials=credentials).documents().batchUpdate(
+        documentId=doc["id"], body=pageless_request()).execute()
     print(f"Updated {doc['webViewLink']}")
 
 

@@ -66,6 +66,13 @@ def test_wrapped_lines_are_joined_but_not_headings_lists_or_tables():
         "| a | b |\n|---|---|\n| c | d |\n\nAfter.\n")
 
 
+def test_the_doc_is_made_pageless():
+    [request] = doc.pageless_request()["requests"]
+    style = request["updateDocumentStyle"]
+    assert style["documentStyle"]["documentFormat"]["documentMode"] == "PAGELESS"
+    assert style["fields"] == "documentFormat"
+
+
 def test_the_start_here_page_uses_only_short_keys():
     keys = doc.placeholders(doc.SOURCE.read_text())
     assert keys and all(k == k.lower() and " " not in k for k in keys), keys

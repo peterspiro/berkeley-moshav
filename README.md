@@ -196,8 +196,9 @@ playwright install chromium
 - **Google APIs**: create a Desktop OAuth 2.0 client in Google Cloud Console,
   save its JSON as `client_secret.json` in the repo root (or pass `-c`), and
   enable the Drive, Admin SDK (Directory), Groups Settings, Google
-  Calendar, and Gmail APIs (Gmail sends the email telling a group about its
-  new calendar). On first run, a script prints a sign-in URL; open it signed
+  Calendar, Gmail, and Google Docs APIs (Gmail sends the email telling a
+  group about its new calendar; Docs makes the maintenance tracker's
+  start-here Doc pageless). On first run, a script prints a sign-in URL; open it signed
   in as `admin@berkeleymoshav.org`, which owns the group calendars (the
   scripts that make calendars refuse to run as anyone else). The sign-in is
   saved to `~/.google_setup_token.pkl`; delete that file to sign in as a
@@ -580,8 +581,8 @@ status line as "calendar (members can view, not edit)".
   name of the person ticked as Coordinator in People, and the others
   (`[[status-page]]`) from the base's Links table, where the
   `maintenance_tracker` Apps Script finds the same links. It joins the
-  source's wrapped lines, and replaces the Doc's whole contents, keeping
-  its address and sharing. It finds the Doc by its title, and stops if a
+  source's wrapped lines, replaces the Doc's whole contents, keeping
+  its address and sharing, and sets it to pageless (continuous scroll). It finds the Doc by its title, and stops if a
   placeholder has no value. `-n` shows what it would write. Like the other
   maintenance scripts, it reads the test base, which holds the demo data,
   unless given `--real`; until the real base is set up, the Doc links to
