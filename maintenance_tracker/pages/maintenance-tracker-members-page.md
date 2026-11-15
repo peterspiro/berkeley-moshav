@@ -1,15 +1,13 @@
-# Building maintenance
-
 Something broken, leaking, or not working? Not sure how to operate something in your unit or the building? Tell the Maintenance & Warranty Circle here.
 
 ## Numbers and links
 
-- **After-hours number:** [[after-hours number]]
-- **Water shutoff:** [[where the shutoff is, or a link to the emergency guide]]
-- **Who to tell in the building in an emergency:** [[who to tell in the building]]
-- **The request form, to report a problem or ask how something works:** [[request form link]]
-- **The status page, to see where things stand:** [[status page link]]
-- **The Maintenance & Warranty Circle:** [[how to reach the circle]]
+- **After-hours number:** [after-hours number]
+- **Water shutoff:** [where the shutoff is, or a link to the emergency guide]
+- **Who to tell in the building in an emergency:** [who to tell in the building]
+- **The request form, to report a problem or ask how something works:** [request form link]
+- **The status page, to see where things stand:** [status page link]
+- **The Maintenance & Warranty Circle:** [how to reach the circle]
 
 ## In an emergency
 

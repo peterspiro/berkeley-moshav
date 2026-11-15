@@ -36,8 +36,13 @@ move one that's renamed. `tests/test_gs_function_order.py` checks this.
 
 ## Gather wiki pages
 
-Gather's Markdown keeps line breaks (GitHub's doesn't), so in a file that
-becomes a Gather wiki page, put each paragraph and list item on one line.
+In a file that becomes a Gather wiki page:
+
+- Put each paragraph and list item on one line: Gather's Markdown keeps
+  line breaks (GitHub's doesn't).
+- Leave out the page's title: Gather's wiki editor has its own field for it.
+- Put text to fill in on the page in single brackets (`[phone number]`):
+  Gather makes double brackets a link to a new wiki page.
 
 ## Tests
 

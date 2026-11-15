@@ -75,3 +75,5 @@ def test_the_members_page_has_each_paragraph_on_one_line():
     # Gather keeps line breaks (see CLAUDE.md).
     text = (PAGES / "maintenance-tracker-members-page.md").read_text()
     assert doc.join_wrapped_lines(text) == text
+    # Its title is a field of Gather's wiki editor, and [[...]] would be a wiki link there.
+    assert not text.startswith("#") and "[[" not in text

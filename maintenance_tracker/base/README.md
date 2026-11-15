@@ -24,11 +24,14 @@ first.
 **`maintenance-tracker-start-here.md`**: the text of the two pages that
 hold the tracker's links. These copies are the sources: when one changes,
 update its page to match. The links aren't kept in the repo, since it's
-public; each `[[...]]` stands for a link, a name, or a phone number. (The
-files hold nothing but the page's text, with no comment at the top.)
+public: each placeholder stands for a link, a name, or a phone number.
+(The files hold nothing but the page's text, with no comment at the top.)
 
 - **The members' page** is a Gather wiki page titled "Building
-  maintenance", pasted in by hand; Gather has no API for it. Its links are
+  maintenance", pasted in by hand; Gather has no API for it. The title is
+  typed into the wiki editor's own field, so the source has none. Its
+  placeholders are in single brackets (`[after-hours number]`), since
+  Gather would make double brackets a link to a new wiki page. Its links are
   all in its first section, "Numbers and links", filled in on the page
   itself, and the rest of the page refers to them by name. So when the
   text changes, paste over everything but that section, and only a link

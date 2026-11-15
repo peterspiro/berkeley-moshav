@@ -79,7 +79,7 @@
    {"Name": "Status page", "Notes": "The Requests table's \"Status page\" view's public link: open the view, choose Share and sync, and create a link to the view. Emails link to it; without it, they leave it out."},
    {"Name": "Triage view", "Notes": "The Triage view's address in Airtable, which the circle's alerts and the digest link to. Optional."},
    {"Name": "Maintenance tracker interface", "Notes": "The Maintenance tracker interface's address, for the start-here page."},
-   {"Name": "Members page", "Notes": "The members' page in Gather (\"Building maintenance\"), for the start-here page."},
+   {"Name": "Members wiki page", "Notes": "The members' wiki page in Gather (\"Building maintenance\"), for the start-here page."},
    {"Name": "Tracker help", "Notes": "Who to ask about the tracker itself, or for an Airtable account: a name, or \"the Technology Circle\". For the start-here page."}
   ]
  }
