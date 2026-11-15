@@ -34,6 +34,11 @@ editor's function menu lists functions in file order, and that's how the
 functions to run by hand are found. Put a new function in its place, and
 move one that's renamed. `tests/test_gs_function_order.py` checks this.
 
+## Gather wiki pages
+
+Gather's Markdown keeps line breaks (GitHub's doesn't), so in a file that
+becomes a Gather wiki page, put each paragraph and list item on one line.
+
 ## Tests
 
 Run `python -m pytest` before committing; all tests should pass.
