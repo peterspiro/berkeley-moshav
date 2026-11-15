@@ -66,10 +66,10 @@ a meeting, add an agenda item, and update a meeting's times); a meeting's
 announcing that its agenda is ready. It also keeps the Circle Structure (see
 above and `circle_agendas/structure.gs`).
 
-The repo also holds the start of the **maintenance tracker**, an Airtable
+The repo also holds the **maintenance tracker**, an Airtable
 base for the Maintenance & Warranty Circle to track repair requests,
 warranty claims, contacts, equipment, and maintenance schedules for the
-building (see `maintenance-tracker-plan.md`). So far there's the base's
+building (see `maintenance-tracker-plan.md`). There's the base's
 structure, kept as a file in `maintenance/` and applied by
 `maintenance_base.py`; `sync_maintenance_people.py`, which copies the
 members in from Gather; and a fifth Apps Script project,
@@ -353,7 +353,7 @@ status line as "calendar (members can view, not edit)".
 | `group_meetings/` | Apps Script project that adds Zoom rooms and guests to group calendar events, and warns about overlapping meetings |
 | `circle_agendas/` | Apps Script project for the circle agenda docs (building them, and the web app their links run) and the Circle Structure sheet and doc |
 | `maintenance_tracker/` | Apps Script project that acknowledges and follows up maintenance requests in the Airtable base, and backs it up |
-| `maintenance/` | The maintenance tracker's Airtable base as files: its tables and fields, its starting rows, and the checklist of views to make by hand |
+| `maintenance/` | The maintenance tracker's Airtable base as files: its tables and fields, its starting rows, and the guide to setting a base up (the views, forms, and interfaces made by hand) and to using it |
 | `util/` | Shared Python modules used by the scripts |
 | `tests/` | Unit tests (`pytest`) |
 | `archive/` | One-off scripts and plans that are no longer in use, kept for reference |

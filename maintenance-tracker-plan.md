@@ -5,10 +5,13 @@ track the new 36-unit building: members' repair requests, warranty claims,
 subcontractor contacts, equipment, maintenance and inspection schedules, and
 how-to and emergency knowledge.
 
-Built so far (phase 1's code): the base's structure as a file, the script
-that applies it, and the 36 units, tried on the test base. See "Phases".
+This is the design, kept for its reasoning. What's built is described where
+it lives: the base in `maintenance/README.md`, the script in
+`maintenance_tracker/README.md`, and the scripts in README.md. Where the
+build departed from the design, this note says so; "Phases" says what's
+done and what's left.
 
-It will be developed in Claude Code on the web, which shapes the design more
+It's developed in Claude Code on the web, which shapes the design more
 than anything else: see "What goes where" and "Developing it in Claude Code
 on the web".
 
@@ -42,22 +45,24 @@ groups); work orders for a property manager.
 | Records (requests, claims, contacts, equipment, schedules) | Airtable | Relational, with forms, kanban and grouped views the circle can change themselves |
 | Views, the member form, interfaces | Airtable, built by hand from a checklist | Airtable's API can't create them |
 | The base's tables and fields | `maintenance/schema.json` in this repo, applied by a script | So a session can change the schema, review it as a diff, and try it on a test base |
-| All logic: emails, reminders, calendar, pattern reports, backups | A `maintenance_tracker` Apps Script project, running as `admin@berkeleymoshav.org` | Airtable automations can't be kept in git, tested, or made by the API, and are rationed by plan; Apps Script is what the repo's other timers already use, and it can send mail and write calendars and Drive as `admin@` |
+| What acts on the data: emails, reminders, calendar, pattern reports, backups | A `maintenance_tracker` Apps Script project, running as `admin@berkeleymoshav.org` | Airtable automations can't be kept in git, tested, or made by the API, and are rationed by plan; Apps Script is what the repo's other timers already use, and it can send mail and write calendars and Drive as `admin@` |
 | Documents (O&M manuals, as-builts, warranties, claim letters) | The circle's Drive folder | The community's access rules already apply there; Airtable holds links |
 | How-to and emergency guides | Google Docs in a "Building Handbook" folder everyone can view | Members already have Drive access; Airtable indexes them |
 | Members and their units | Gather, copied to Airtable | Gather stays the directory |
 | The circle, its email list, folder, and calendar | A Gather group made by `add_new_group.py`, like every other | Its Google Group is where alerts go |
 
 The rule: **Airtable holds data and the screens people use; everything that
-acts on the data is code in this repo.** No Airtable automations, and no
-formulas that carry logic a test should cover.
+acts on the data is code in this repo.** No Airtable automations. Formulas
+are the one exception that grew: warranty deadlines and the claim letter
+are formulas in the base, because on Airtable's Free plan the script runs
+too seldom to work them out in time. They're still in the repo, in
+`schema.json`, and were tried against the test base.
 
 ## The base
 
 One base, "Building Maintenance". Eleven tables. `maintenance/schema.json`
-is now the exact list of fields and options, where it differs from the
-names below. Field names here are the ones
-the schema file will use; select options are listed where they matter.
+is the exact list of fields and options; what follows says what each table
+is for and why its main fields are there.
 
 ### Locations
 
@@ -119,31 +124,37 @@ Everything a member reports or asks. One row per problem per place.
   Duplicate, Declined.
 - `Owner` (link to People), `Responsibility`: Builder warranty /
   Manufacturer warranty / HOA / Unit owner / Unknown
-- `Claim` (link), `Vendor` (link to Organizations), `Visit` (date and time)
-- `Warranty` (link, set at triage) and `Claim by` (a date the script works
-  out from it; see Warranties)
+- `Claims` (links), `Vendor` (link to Organizations), `Visit` (date and
+  time; filling it in is what schedules a request)
+- `Warranty` (link, set at triage) and `Claim deadline` (a formula: the
+  warranty's start for this place, plus its term; see Warranties)
 - `Duplicate of` (link to Requests), `Resolution`, `Closed on`
 - `Submitted` (created time; never edited)
 - `Member-visible status` (text the script writes; what the public view shows)
+- `Acknowledged on`, `Status noted`: the script's own notes of what it has
+  done to the request
 
 ### Updates
 
 The history of each request and claim: one row per thing that happened.
 `Request` or `Claim` (link), `When`, `By` (link to People), `Kind` (Note /
 Call / Email / Visit / Status change / Photo), `Text`, `Attachments`,
-`Tell the reporter` (checkbox: the script emails it to the member).
+`By name` (typed, for someone not in People), `Tell the reporter` (checkbox:
+the script emails it to the member), `Told reporter on` (the script's note
+that it has).
 
 A table rather than Airtable's comments, because comments need a seat, can't
 be entered from a form, and don't export. The script adds a "Status change"
-row whenever a request's or claim's status changes, so the timeline is
-complete without anyone remembering to write it.
+row whenever a request's status changes, so the timeline is complete
+without anyone remembering to write it. (A claim's changes of status
+aren't recorded this way yet.)
 
 ### Claims
 
 One row per claim made to a warrantor. A claim can cover many requests (a
 systemic problem) and a request can be re-claimed.
 
-- `ID` (C-0012), `Title`, `Requests` (links), `Warranty` (link),
+- `Number` and `Label` ("C-12 Leaking taps"), `Title`, `Requests` (links), `Warranty` (link),
   `Warrantor` (link to Organizations)
 - `Scope`: Unit / Common element / Systemic
 - `Status`: Drafting → Submitted → Acknowledged → Scheduled → Work done →
@@ -151,17 +162,17 @@ systemic problem) and a request can be re-claimed.
 - `Submitted on`, `Submitted how`, `Sent to` (the person it went to),
   `Their reference`, `Acknowledged on`, `Response`, `Promised by`,
   `Work done on`, `Accepted by` (link to People), `Accepted on`
-- `Claim by` (the earliest of its requests' dates, set by the script; the
-  date that must not be missed), `Folder` (Drive link to the letter and
-  evidence)
+- `Claim deadline` (the earliest of its requests'; the date that must not
+  be missed), `Draft` (the letter, written by a formula from the claim's
+  rows), `Folder` (Drive link to the sent letter and evidence)
 
 The builder has no claims process of its own, so the circle's record is the
 process, and has to show by itself that notice was given and when. Every
 claim goes in writing, by email from one address (the circle's list, or a
 `warranty@` address) to the person the builder names, with the claim's
-number in the subject and its requests and photos attached; the script
-drafts that email from the claim's rows, and the sent message is filed in
-the claim's folder. Ask the builder early, in writing, to name that person
+number in the subject and its requests and photos attached; the claim's
+`Draft` field holds that email's text, for a person to read, send, and
+file in the claim's folder. Ask the builder early, in writing, to name that person
 and agree that email to them counts as notice (see "For the attorney").
 
 ### Warranties
@@ -174,12 +185,12 @@ defects.
 `Name`, `Warrantor`, `Held by` (Association / Each owner / Unknown),
 `Covers` (System, and links to Assets), `Scope` (Unit / Common), `Clock
 starts` (One date for the building / Each unit's closing / Unknown),
-`Building start date`, `Term` (months), `Document` (Drive link), `How to
+`Building start date`, `Term (months)`, `Document` (Drive link), `How to
 claim`.
 
 It isn't known yet whether each warranty runs from one date for the
 building or from each unit's closing, and the design doesn't need to know.
-The deadline is worked out per request, by the script: the warranty's start
+The deadline is worked out per request, by a formula: the warranty's start
 for that request's location, plus its term. While `Clock starts` is
 Unknown, it uses the earliest date it could be (the building's date or the
 unit's closing, whichever is first), so a warning can come early but never
@@ -262,8 +273,8 @@ requests it settled, which shows what's worth writing next).
   Name in People and their unit's in Locations. The script writes each
   person's to `Request form link` in People, and rewrites it when their
   name or unit changes (a link made before then still opens the form, with
-  that field empty); every email the tracker sends a member includes
-  theirs, and the script can email everyone theirs once, at the start. The
+  that field empty); the acknowledgment of each request includes the
+  reporter's. (Emailing everyone theirs once, at the start, isn't built.) The
   form's own address is kept in Script Properties, not the repo. The plain
   link stays for QR codes and for anyone without their own.
 - An **acknowledgment email** with their request's number, and an email
@@ -282,64 +293,65 @@ requests it settled, which shows what's worth writing next).
 
 **The circle**
 
-- **Triage** (New requests, oldest first): set System, Component,
-  Responsibility, Owner; mark duplicates. A named coordinator does this
-  weekly, and the same day for anything urgent.
-- **Board**: kanban of open requests by Status. **Mine**: by Owner.
-- **Waiting on builder**: claims and requests by age, with promised dates.
-- **Patterns**: all requests grouped by System and Component, and by Stack.
-- **Calendar**: visits and maintenance work.
+- **Triage**: new requests, emergencies first, then oldest: write the
+  Title, set System, Component, Responsibility, Warranty, and Owner; mark
+  duplicates. A named coordinator does this weekly, and the same day for
+  anything urgent. As a view, and as an interface.
+- **Board**: kanban of open requests by Status. **By owner**.
+- **Waiting on builder**: claims by age, with promised dates.
+- **Patterns**: all requests grouped by System and Component.
 - **Contacts**: Organizations by trade, with after-hours numbers.
-- A **quick update form** (on Updates), for a volunteer on a phone, or
-  without a seat, to log a call or a visit against a request.
-- The **weekly digest** email to the circle's list: new requests, ones
-  with no owner, ones not touched in 14 days, claims past their promised
-  date, warranties expiring in 90 days, maintenance due, and patterns (below).
+- The **"Log an update" form** (on Updates), for a volunteer on a phone, or
+  without a seat, to log a call or a visit against a request; each circle
+  member has their own link to it, with their name filled in.
+- **Interfaces**, where the circle wants them: pages showing only what a
+  job needs, with no way to delete a row (see `maintenance/README.md`).
+- The **weekly digest** email to the circle's list: new requests; ones to
+  triage, with no owner, with no visit time, waiting to be confirmed, or
+  gone quiet; warranty deadlines with no claim made; claims the builder
+  is sitting on; and repeats across units.
 
 ## The `maintenance_tracker` Apps Script
 
-One project, on a 10-minute timer and a daily one, as `admin@`. It reads and
-writes Airtable with `UrlFetchApp` and a token kept in Script Properties.
-Like `group_meetings`, its decisions are pure functions in a
-`tracker_rules.gs` tested under Node; the `.gs` file that calls Airtable,
-Gmail, Calendar, and Drive stays thin.
+One project, on timers, as `admin@`. It reads and writes Airtable with
+`UrlFetchApp` and a token kept in Script Properties. Like `group_meetings`,
+its decisions are pure functions in a `tracker_rules.gs` tested under Node;
+the `.gs` file that calls Airtable, Gmail, and Drive stays thin.
+`maintenance_tracker/README.md` describes it as built. In outline:
 
-Every 10 minutes:
+Every 10 minutes (every 2 hours on Airtable's Free plan, which rations API
+calls):
 
 - **New requests**: for a reporter who typed their details, link Reporter
   if the email is a member's; set Location to the reporter's unit if "In my
-  unit" is ticked and no location was chosen (a location that was chosen
-  wins; one that can't be worked out is left for triage, and said so in the
-  alert); email the acknowledgment; for Emergency or Urgent, email the circle's list at
-  once. A "handled" field on each row, not a timestamp cursor, records what's
-  been done, so a failed run repeats nothing and misses nothing.
+  unit" is ticked and no location was chosen; email the acknowledgment; for
+  Emergency or Urgent, email the circle's list at once. Each row carries a
+  note of what's been done to it, not a timestamp cursor, so a failed run
+  misses nothing.
+- **A visit time** on an open request sets its Status to Scheduled.
 - **Status changes**: add the Updates row, set `Member-visible status` and
-  `Closed on`, email the reporter where the change calls for it.
+  `Closed on`, email the reporter about a visit, finished work, or closing.
 - **Updates marked "Tell the reporter"**: email them.
-- **Visits**: put each scheduled visit and maintenance occurrence on the
-  maintenance calendar, and move or remove it when it changes.
-- **Maintenance work**: create the next occurrence of a plan when one is done.
-- **Form links**: write each person's `Request form link` where it's
-  missing or out of date.
 
-Daily:
+Daily (weekly on the Free plan):
 
-- **Claim deadlines**: work out each warranty request's `Claim by` (see
-  Warranties) and each claim's from its requests; warn the list of
-  unclaimed warranty requests as a deadline nears (90, 30, 7 days).
+- **Form links**: write each person's own links to the forms.
 - **Backup**: write every table as JSON, and every new photo and attachment,
-  to a dated folder in the circle's Drive. Airtable's attachment links
+  to a folder of its own in `admin@`'s Drive. Airtable's attachment links
   expire and its history is limited by plan; the Drive copy is the evidence
   file, and what makes leaving Airtable possible.
-- **Checks**: email `calendaring-alerts@`-style warnings (to a
-  `maintenance-alerts@` list) if the base's tables, fields, or named views
-  no longer match what the script expects.
+- **How full the base is**: warn the circle as it nears the plan's limits.
 
-Weekly: the digest, including **patterns**. A pattern is three or more
-requests in 180 days with the same Component (or the same System and Room)
-in different units, or two or more in one Stack for Plumbing or Roof &
-envelope, that aren't already under one Systemic claim. The thresholds are
-constants in `tracker_rules.gs`.
+Weekly: the digest, including repeats. A repeat is the same Component (or
+the same System and Room) in three or more places within 180 days, or
+Plumbing or Roof & envelope in two or more places in one Stack, not
+already under a Systemic claim. The thresholds are constants in
+`tracker_rules.gs`.
+
+Designed, and not built: putting visits and maintenance work on a
+maintenance calendar; creating the next occurrence of a maintenance plan;
+and a check that the base's views are all there (`maintenance_base.py diff`
+does that when run by hand).
 
 ## Links to the rest of the setup
 
@@ -349,9 +361,8 @@ constants in `tracker_rules.gs`.
   `sync_maintenance_people.py`, run by hand when members change (Gather has
   no API, so it can't run on a timer). It reuses the directory CSV reader in
   `util/gather_utils.py`, and adds, updates, and marks as moved out; it never
-  deletes a person, since requests link to them. To check: whether Gather's
-  household records carry the unit number, or Locations needs a one-time
-  mapping.
+  deletes a person, since requests link to them. Gather's directory carries
+  each member's unit number, which links them to their Locations row.
 - **The maintenance calendar** is a separate calendar owned by `admin@`,
   not the circle's group calendar: `group_meetings` treats every event on
   a group calendar as a meeting, and would give a filter change a Zoom room
@@ -396,12 +407,12 @@ browser signed in to Airtable, no Google sign-in. So:
   read IDs and links from Script Properties and the git-ignored credentials
   file. Rows drafted from the handover (contacts, serial numbers) aren't
   committed either.
-- **What a cloud session can't do** is listed in
-  `maintenance_tracker/README.md` as a checklist: creating the workspace
-  and tokens; building each view, the forms, and the status page's share
-  link in Airtable's UI; `clasp push`; installing the timers. The script's
-  daily check names any view the checklist calls for that's missing, so
-  those parts can't silently drift. Most of the checklist can be done by
+- **What a cloud session can't do** is listed in `maintenance/README.md`
+  and `maintenance_tracker/README.md`: creating the workspace and tokens;
+  building each view, the forms, the interfaces, and the status page's
+  share link in Airtable's UI; `clasp push`; installing the timers.
+  `maintenance_base.py diff` names any view that's missing, so those can't
+  silently drift. Most of the checklist can be done by
   Claude Code on your own computer instead of by hand (see below).
 - **Tests** follow the repo's pattern: `tracker_rules.gs` under Node,
   the Python against a fake Airtable in `tests/`, all in `python -m pytest`.
@@ -424,7 +435,7 @@ other scripts use, and `clasp`. That covers most of the checklist above:
   watch. Do it that way, as a one-off, rather than as a Playwright script
   like the Gather ones: there are about a dozen views and two forms, made
   once, and a script against Airtable's UI would cost more to keep working
-  than it saves. The daily check still tells you if one goes missing.
+  than it saves. `diff` still tells you if a view goes missing.
 - **Deploying the Apps Script**: `clasp push`, running the function that
   installs the timers, and setting Script Properties.
 - **Applying the schema to the real base**, with the real token on your
@@ -446,7 +457,7 @@ A workable split: write and test the code, schema, and rules in cloud
 sessions against the test base; do setup and each deployment in a local
 session.
 
-## Plan and cost## Plan and cost
+## Plan and cost
 
 Start on Airtable's Free plan to build and try it. It won't last the
 warranty year: its limit of about 1,000 records per base covers every table
@@ -459,7 +470,7 @@ monthly API allowance, reported as 1,000 calls, is far too few for a
 The Team plan is reported at about \$20 per editor a month, billed yearly,
 with 50,000 records per base. Only people who edit the base directly need a
 seat: the coordinator and two or three triagers, so roughly \$700 to \$1,000 a
-year. Other volunteers use the quick update form and the emails. Check
+year. Other volunteers use the update form and the emails. Check
 current prices and limits on Airtable's pricing page before buying; the
 figures above come from third-party summaries that don't fully agree.
 
@@ -485,20 +496,22 @@ Move-in is soon, so the order is by what's lost if it's late.
    type the design uses, formulas and links included; it can't create views
    or forms, delete or retype anything, or add a select option directly
    (the script adds one by writing a record that uses it, and deleting the
-   record). Still to do: book the attorney (see below), and check the
-   plan's monthly API call allowance before the Apps Script's timer runs.
+   record). It also creates lookup and rollup fields. Still to do: book the
+   attorney (see below).
 1. **Intake, before move-in.** Done: the schema file (all eleven tables),
    `maintenance_base.py`, the units and common areas,
    `sync_maintenance_people.py`, and the checklist of views in
    `maintenance/README.md`; the test base has all of it, with its views and
-   forms, and takes requests. To do: the real base, set up the same way.
-   Ask the builder to name who receives claims. Usable by hand from there.
+   forms, and takes requests. To do: the real base, set up the same way
+   (`maintenance/README.md`, "Setting up a base"), and the emergency
+   instructions on the request form.
 2. **Emails and backup.** Done, in `maintenance_tracker/`: acknowledgments,
    urgent alerts, reporter matching, "In my unit", status emails and the
    status page's wording, updates passed on, form links, and the daily
-   backup; tried against the test base with the emails captured. To do:
-   deploying it against the real base (`maintenance_tracker/README.md`).
-   The weekly digest, with its repeats (phase 5's patterns), is built too.
+   backup, deployed against the test base. Also the weekly digest, with
+   its repeats (phase 5's patterns), a pace that fits Airtable's Free plan,
+   and a warning as the base fills. To do: pointing it at the real base
+   (`maintenance_tracker/README.md`).
 3. **Claims.** Done: each request's Claim deadline and each claim's draft
    letter, as formulas in the base, so they're right at once on any plan
    (the plan had the script work them out); the digest's sections for
@@ -506,11 +519,12 @@ Move-in is soon, so the order is by what's lost if it's late.
    `maintenance/README.md`, "Warranty claims". To do: the Warranties rows,
    from the warranty binder and the attorney's answers; the builder's
    contact; the attorney's review of the letter's wording.
-4. **Maintenance.** Assets and plans from the O&M manuals; occurrences; the
-   maintenance calendar and the `group_meetings` change.
-5. **Knowledge and patterns.** Guides and the handbook folder; emergency
-   cards; the patterns section of the digest.
-6. **Before the warranty ends.** The month-10 inspection as a plan; a
+4. **Maintenance.** Not started; the tables exist. Assets and plans from the
+   O&M manuals; occurrences; the maintenance calendar and the
+   `group_meetings` change.
+5. **Knowledge and patterns.** Patterns are done, in the digest. Not
+   started: Guides and the handbook folder; emergency cards.
+6. **Before the warranty ends.** Not started. The month-10 inspection as a plan; a
    report of every open and unclaimed item per warranty; an export of the
    evidence file for the attorney.
 
@@ -527,6 +541,10 @@ Move-in is soon, so the order is by what's lost if it's late.
 - **The coordinator will rotate**, and vendors' contacts will be filled in
   over time (see Organizations).
 - **The repo is public** (see "Developing it in Claude Code on the web").
+- **Members pick themselves on the request form** from a list of short
+  names ("Dana S"), which anyone with the form's link can read; and each
+  has a link of their own that fills in their name and unit.
+- **The real base starts on Airtable's Free plan** (see "Plan and cost").
 
 ## Still unknown
 
