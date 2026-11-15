@@ -23,6 +23,7 @@ from util.calendar_event_moves import (
     zoom_meeting_ids,
 )
 from util.meeting_rooms import LinkedResources, QuitRequested
+from util.zoom_utils import ROOMS_USER
 
 NOW = datetime.datetime(2026, 10, 20, tzinfo=datetime.timezone.utc)
 GROUP_CAL = "tech@group.calendar.google.com"
@@ -176,7 +177,7 @@ class TestOffer:
         _mover(svc, answers).offer("Technology Circle", GROUP_CAL)
         out = capsys.readouterr().out
         assert ("1. Technology Circle meeting   (Mon Nov 2, 7:00–8:00 PM; on "
-                "admin@berkeleymoshav.org, an invitation from someone@gmail.com)" in out)
+                f"{mr.CALENDAR_OWNER}, an invitation from someone@gmail.com)" in out)
         assert answers.prompts[0] == (
             "  1. Technology Circle meeting — [c]opy to the group's calendar, [d]elete, "
             "[b]oth, [s]kip, or [q]uit: ")
@@ -251,7 +252,7 @@ class TestOffer:
         _mover(svc, _Answers("d", "delete")).offer("Technology Circle", GROUP_CAL)
         out = capsys.readouterr().out
         assert "an invitation from someone@gmail.com" in out
-        assert "removed from admin@berkeleymoshav.org only; the organizer's event stays" in out
+        assert f"removed from {mr.CALENDAR_OWNER} only; the organizer's event stays" in out
 
     def test_not_confirming_asks_again(self):
         svc = _service({SHARED: [_event("e1", "Technology Circle meeting", SHARED)]})
@@ -541,7 +542,7 @@ class TestZoomLinks:
             meetings=zoom.list_account_meetings, linked=lambda: LinkedResources(),
             dry_run=False, input_fn=_Answers("u"), now=NOW,
             events_using=lambda mid: mover.events_using_meeting("Technology Circle", mid))
-        assert ("1. Technology Circle weekly   (812 3456 7890, circle-zoom-hosts@berkeleymoshav.org, "
+        assert (f"1. Technology Circle weekly   (812 3456 7890, {ROOMS_USER}, "
                 "no fixed time) — the location of matching event(s): "
                 "'Technology Circle meeting' on Shared Events") in capsys.readouterr().out
 

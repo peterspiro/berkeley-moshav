@@ -204,7 +204,7 @@ class TestAnnounceNewCalendars:
         m.announce_new_calendars(None, {"1": {"name": "Community Meetings", "kind": "squad"}},
                                  {"1": "a@x.org"}, ["1"], {"1": "c1"}, {"1": self.ROOM},
                                  dry_run=False)
-        assert calls[0][-2] == "all.members@berkeleymoshav.org"
+        assert calls[0][-2] == m.COMMUNITY_CALENDAR_AUDIENCE
 
     def test_admin_group_without_zoom(self, monkeypatch):
         calls = []

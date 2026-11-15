@@ -40,7 +40,7 @@
 const DOMAIN = 'berkeleymoshav.org';
 const FOLDER_SYNC_ROLE = 'fileOrganizer'; // Drive role for a folder's "Content manager"
 const SHARED_DRIVE_SYNC_ROLE = 'reader';  // Drive role for a shared drive's "Viewer"
-const ALERT_EMAIL = 'group-sync-alerts@berkeleymoshav.org';
+const ALERT_EMAIL = `group-sync-alerts@${DOMAIN}`;
 
 // Script Properties key prefix for each group's end-of-run membership snapshot.
 const SNAPSHOT_KEY_PREFIX = 'members:';

@@ -5,7 +5,10 @@ Fake Google Calendar service and Zoom client for the meeting-room tests.
 import httplib2
 from googleapiclient.errors import HttpError
 
-OWNER = "admin@berkeleymoshav.org"
+from util.meeting_rooms import CALENDAR_OWNER
+from util.zoom_utils import ROOMS_USER
+
+OWNER = CALENDAR_OWNER
 
 
 def _http_error(status):
@@ -188,7 +191,7 @@ class FakeZoom:
     def get_meeting(self, meeting_id):
         return self.meetings.get(str(meeting_id))
 
-    def create_room(self, topic, user="circle-zoom-hosts@berkeleymoshav.org"):
+    def create_room(self, topic, user=ROOMS_USER):
         mid = str(90000 + len(self.meetings))
         meeting = {"id": int(mid), "topic": topic, "join_url": f"https://zoom.us/j/{mid}?pwd=x",
                    "password": "246810", "settings": {}, "host_email": user}
@@ -222,5 +225,5 @@ def room(mid, topic, **kw):
     return {"id": mid, "topic": topic, "type": 3,
             "join_url": f"https://zoom.us/j/{mid}?pwd=p",
             "password": "135790",
-            "settings": dict(ROOM_SETTINGS), "host_email": "circle-zoom-hosts@berkeleymoshav.org",
+            "settings": dict(ROOM_SETTINGS), "host_email": ROOMS_USER,
             "created_at": "2026-09-01T00:00:00Z", **kw}

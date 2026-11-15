@@ -25,19 +25,26 @@ import time
 
 import requests
 
+from util.google_group_utils import DOMAIN
+
 API_BASE = "https://api.zoom.us/v2"
 TOKEN_URL = "https://zoom.us/oauth/token"
 
+# Addresses are put together from a name and a domain, here and in the
+# other constants like these, so that none is written out whole in the
+# repo (which is public) for a scraper to pick up.
+URBAN_MOSHAV_DOMAIN = "urbanmoshav.org"
+
 # The licensed Zoom user that new group rooms are made under, and every
 # licensed user that may own one (a Zoom user can run one meeting at a time).
-ROOMS_USER = "circle-zoom-hosts@berkeleymoshav.org"
-ROOM_USERS = (ROOMS_USER, "berkeley@urbanmoshav.org")
+ROOMS_USER = f"circle-zoom-hosts@{DOMAIN}"
+ROOM_USERS = (ROOMS_USER, f"berkeley@{URBAN_MOSHAV_DOMAIN}")
 
 # The licensed Zoom user that owns every community-wide calendar's room
 # (one per calendar, so each calendar's recordings can be told apart).
 # Group rooms are never moved to it, so community-wide meetings only clash
 # with each other.
-COMMUNITY_ROOMS_USER = "community-zoom-hosts@berkeleymoshav.org"
+COMMUNITY_ROOMS_USER = f"community-zoom-hosts@{DOMAIN}"
 COMMUNITY_ROOM_USERS = (COMMUNITY_ROOMS_USER,)
 
 ROOM_TOPIC_SUFFIX = " Meeting Room"

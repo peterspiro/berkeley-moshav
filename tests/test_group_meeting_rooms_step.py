@@ -260,12 +260,12 @@ def test_all_events_calendar_shared_with_everybody_groups():
 
 def test_all_events_shared_with_everybody_groups_given_to_a_single_group_run():
     cal = FakeCalendarService({"ae": "All Berkeley Moshav Events"})
-    everybody = {"2": dict(GROUPS["2"], list_name="all", list_domain="berkeleymoshav.org")}
+    everybody = {"2": dict(GROUPS["2"], list_name="all", list_domain=m.DOMAIN)}
     m.ensure_group_meeting_rooms(
         _Directory(), _Settings({}), cal, FakeZoom(), {"1": GROUPS["1"]}, FOLDERS, EMAILS,
         lambda: LinkedResources(), False, {}, {}, everybody_groups=everybody)
     shares = [(w[1], w[2]) for w in cal.writes if w[0] == "acl_insert" and w[1] == "ae"]
-    assert shares == [("ae", {"role": "reader", "scope": {"type": "group", "value": "all@berkeleymoshav.org"}})]
+    assert shares == [("ae", {"role": "reader", "scope": {"type": "group", "value": f"all@{m.DOMAIN}"}})]
 
 
 ADMIN = {"6": {"name": "Community Meetings Admins", "kind": "squad", "availability": "closed"}}
@@ -282,7 +282,7 @@ def test_admin_group_room_under_the_community_zoom_user():
     )
     assert set(cals) == set(urls) == {"6"}
     (meeting,) = zoom.meetings.values()
-    assert meeting["host_email"] == "community-zoom-hosts@berkeleymoshav.org"
+    assert meeting["host_email"] == m.COMMUNITY_ROOM_USERS[0]
     assert meeting["topic"] == "Community Meetings Zoom Room"
     names = [w[1]["summary"] for w in cal.writes if w[0] == "create"]
     assert names == ["Community Meetings"]
@@ -297,8 +297,8 @@ def test_footer_step_names_an_admin_groups_audience_and_host_key():
     footer = settings.updated["community-meetings-admins@x.org"]["customFooterText"]
     assert footer.endswith(
         f"\nZoom host key: {mr.COMMUNITY_HOST_KEY_DOC_URL}"
-        "\nCalendar audience: all.members@berkeleymoshav.org")
-    assert audiences == {"6": "all.members@berkeleymoshav.org"}
+        f"\nCalendar audience: {m.COMMUNITY_CALENDAR_AUDIENCE}")
+    assert audiences == {"6": m.COMMUNITY_CALENDAR_AUDIENCE}
 
 
 def test_footer_step_keeps_an_admin_groups_own_audience():

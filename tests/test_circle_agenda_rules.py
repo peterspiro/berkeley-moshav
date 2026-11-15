@@ -217,7 +217,7 @@ class TestMeetingIdFromUrl:
 
 class TestAnnounceUrl:
     ARGS = {
-        "to": "tech@berkeleymoshav.org", "circleName": "Technology Circle",
+        "to": "tech@example.org", "circleName": "Technology Circle",
         "date": "2026-12-04", "zoomUrl": "https://us02web.zoom.us/j/123",
         "agendaUrl": "https://docs.google.com/document/d/D/edit?tab=t.abc"}
 
@@ -233,7 +233,7 @@ class TestAnnounceUrl:
 
     def test_announces_the_meeting(self):
         to, subject, body = self._parts()
-        assert to == "tech@berkeleymoshav.org"
+        assert to == "tech@example.org"
         assert subject == "Agenda ready: Dec 4 Technology Circle meeting"
         assert body == (
             "Hello Technology Circle,\n\n"
@@ -353,7 +353,7 @@ class TestAboutReorder:
     def test_calendar_url_matches_the_footer(self):
         from util.google_group_footer import calendar_url
         for cal in ["c_abc123@group.calendar.google.com", "a?>", "ab", "abc", "abcd",
-                    "share@berkeleymoshav.org"]:
+                    "share@example.org"]:
             assert js(f"calendarUrl({json.dumps(cal)})") == calendar_url(cal)
 
     def test_reminder_default_and_examples_parse_as_meant(self):

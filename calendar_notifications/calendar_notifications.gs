@@ -2,7 +2,7 @@
  * Community Calendar → Group Notifications & Invitation Gatekeeper
  *
  * Runs AS the Workspace admin account, whose primary calendar is aliased by
- * share@berkeleymoshav.org. Community members invite share@ to social events
+ * share@. Community members invite share@ to social events
  * they create on their personal Gmail calendars; those invitations land on the
  * admin's primary calendar as guest copies.
  *

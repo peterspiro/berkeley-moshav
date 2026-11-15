@@ -18,6 +18,7 @@ from pathlib import Path
 import pytest
 
 from util.airtable_schema import expected_fields, load_schema
+from util.google_group_utils import DOMAIN
 
 ROOT = Path(__file__).resolve().parent.parent
 PROJECT = ROOT / "maintenance_tracker" / "apps_script"
@@ -115,8 +116,8 @@ def test_no_ids_or_links_in_the_project():
     for path in PROJECT.iterdir():
         text = path.read_text()
         assert not re.search(r"\b(app|tbl|pat)[A-Za-z0-9]{14}\b", text), path.name
-        assert "airtable.com/app" not in text and "@berkeleymoshav.org" not in text.replace(
-            "admin@berkeleymoshav.org", ""), path.name
+        assert "airtable.com/app" not in text and f"@{DOMAIN}" not in text.replace(
+            f"admin@{DOMAIN}", ""), path.name
 
 
 # --- new requests ------------------------------------------------------------

@@ -123,7 +123,7 @@ def also_invite_addresses(values: list[str]) -> list[str]:
     """The addresses given to --also-invite (add_new_group.py and
     update_groups.py), each value one or more separated by commas or
     spaces: lowercase, each once, in order, a bare name getting @DOMAIN
-    ("planning" -> "planning@berkeleymoshav.org"). "none" gives [], to
+    ("planning" -> "planning@DOMAIN"). "none" gives [], to
     remove them. Raises ValueError for one that isn't an address."""
     out: list[str] = []
     for value in values:

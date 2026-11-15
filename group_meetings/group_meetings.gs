@@ -2,7 +2,7 @@
  * Group Meetings
  *
  * Looks after every group's Google calendar (see util/meeting_rooms.py,
- * which creates them). Runs as admin@berkeleymoshav.org, which owns the
+ * which creates them). Runs as admin@, which owns the
  * calendars.
  *
  * Every 5 minutes (syncAll), for each event that changed on a group's
@@ -53,11 +53,14 @@
  */
 
 const DOMAIN = 'berkeleymoshav.org';
+// Addresses are put together from a name and a domain, so that none is
+// written out whole in the repo (which is public) for a scraper to pick up.
+const URBAN_MOSHAV_DOMAIN = 'urbanmoshav.org';
 const ALL_EVENTS_CALENDAR_ID =
   'c_301c808f640b3a04f5344b1bbf266955d51fecaabd7835936b7591f9cff09222@group.calendar.google.com';
 // The Technology Circle's address for alerts; it's also asked to move
 // meetings scheduled directly in Zoom.
-const ALERT_EMAIL = 'calendaring-alerts@berkeleymoshav.org';
+const ALERT_EMAIL = `calendaring-alerts@${DOMAIN}`;
 const TECH_CIRCLE_NAME = 'Technology Circle';
 const TIME_ZONE = 'America/Los_Angeles';
 // Linked from every group-calendar event that gets the group's Zoom room.
@@ -77,9 +80,9 @@ const MIN_GAP_MINUTES = 15;
 // community-zoom-hosts@ (COMMUNITY_ROOMS_USER) owns the community-wide
 // calendars' rooms.
 const ZOOM_USER_NUMBERS = {
-  'circle-zoom-hosts@berkeleymoshav.org': '1',
-  'berkeley@urbanmoshav.org': '2',
-  'community-zoom-hosts@berkeleymoshav.org': '3',
+  [`circle-zoom-hosts@${DOMAIN}`]: '1',
+  [`berkeley@${URBAN_MOSHAV_DOMAIN}`]: '2',
+  [`community-zoom-hosts@${DOMAIN}`]: '3',
 };
 
 // Script Properties keys.

@@ -30,11 +30,12 @@ from pathlib import Path
 
 from util.gather_utils import log
 from util.google_group_footer import calendar_url
+from util.google_group_utils import DOMAIN
 from util.mail_draft import open_draft
 
 # Who answers questions about calendars and meetings (the Technology Circle);
 # the same address the group_meetings Apps Script sends its alerts to.
-ALERT_EMAIL = "calendaring-alerts@berkeleymoshav.org"
+ALERT_EMAIL = f"calendaring-alerts@{DOMAIN}"
 
 # How to put a group's meetings on its calendar, in the BM Meetings FAQ
 # (linked from add_new_group.py's welcome message). Must be viewable by
