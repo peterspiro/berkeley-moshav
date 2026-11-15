@@ -321,7 +321,7 @@ there it's a convenience, not a protection.
 
 ## Using the base
 
-`../maintenance-circle-guide.md` says the same for the circle's members,
+`../maintenance-tracker-guide.md` says the same for the circle's members,
 without the setting up: keep the two in step.
 
 ### Triaging

@@ -815,7 +815,7 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
   Maintenance & Warranty Circle's Airtable-based tracker (repair requests,
   warranty claims, contacts, equipment, and maintenance schedules), and
   what's built so far
-- `maintenance_tracker/maintenance-circle-guide.md`: the guide to using the
+- `maintenance_tracker/maintenance-tracker-guide.md`: the guide to using the
   maintenance tracker, for the circle's members (not a design note). It
   describes the Maintenance interface's Triage and Requests pages; when a
   page is added or dropped, or a status, an email, or a digest section
