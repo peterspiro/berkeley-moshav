@@ -25,6 +25,33 @@ Scripts in `archive/` were one-offs that are no longer used, and are
 described in the past tense; describe current scripts in the present tense.
 Current scripts must not import from `archive/`; put shared code in `util/`.
 
+## Keep real data out of the repo
+
+The repo is public. Nothing in it, or in a commit message, should identify
+a real person or give a scraper something to collect:
+
+- **People.** No real member's, vendor's, or other person's name, email
+  address, phone number, or unit. Make names up (Alex Green, Dana Smith),
+  and don't copy rows from the roster sheet, Gather, or Airtable into
+  tests, examples, or docs, even to reproduce a bug: make up a case with
+  the same shape (an accent, a nickname, a hyphen). Give made-up people
+  `example.org` or `.example` addresses and `555-01xx` phone numbers.
+- **Organisational addresses.** Never write one out whole. In docs and
+  comments write the name and `@` (`admin@`, `all.members@`; `berkeley@` is
+  at urbanmoshav.org). In code, put it together from its name and `DOMAIN`
+  (or `URBAN_MOSHAV_DOMAIN`): `f"admin@{DOMAIN}"`, `` `admin@${DOMAIN}` ``.
+  In tests, use an `example.org` address, or import the constant where the
+  code checks for it. `tests/test_no_whole_addresses.py` checks this. Text
+  that's copied out for members (the admins' guide's Google Doc, a drafted
+  email) gets its whole addresses when it's copied, not in the repo.
+- **Secrets and IDs.** No credentials or tokens (see `.gitignore`), and no
+  Airtable base, table, or token IDs: those are Script Properties or read
+  at run time.
+
+Check for these before committing, and in what comes in when merging or
+pulling `main`: look through the diff for names, addresses, phone numbers,
+and IDs, fix what you find, and tell the user.
+
 ## Apps Script files
 
 In each `.gs` file outside `archive/`, keep the top-level functions in
