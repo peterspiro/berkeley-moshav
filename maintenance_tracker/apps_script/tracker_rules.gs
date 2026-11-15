@@ -408,6 +408,20 @@ function requestSummary(request, ctx) {
 }
 
 /**
+ * The Responsibility a request should be given from its warranty's (its
+ * "Warranty responsibility", a lookup), or null: only when the warranty has
+ * one, and the request's own is empty or Unknown, so that a choice someone
+ * made is never overwritten.
+ */
+function responsibilityFromWarranty(request) {
+  const f = request.fields;
+  const own = f['Responsibility'];
+  if (own && own !== 'Unknown') return null;
+  const fromWarranty = [].concat(f['Warranty responsibility'] || []).filter(Boolean)[0];
+  return fromWarranty && fromWarranty !== own ? fromWarranty : null;
+}
+
+/**
  * The email telling a reporter their request's status changed, or null if
  * this change sends none: a visit scheduled (or moved), the work done, or
  * the request closed without the work having been reported done first.

@@ -339,7 +339,9 @@ next), read what the member said, then fill in:
   It's what the status page shows.
 - **Location**, if it's empty or wrong; **System**; **Component**, once
   Assets has rows.
-- **Responsibility**, and, for a warranty item, its **Warranty**.
+- For a warranty item, its **Warranty**: the tracker's script then fills
+  in Responsibility from it, if that's empty or Unknown. Otherwise,
+  **Responsibility** (HOA, Unit owner, or Unknown).
 - **Owner**: the one person who'll see it through.
 - **Status**, last: Triaged, or Duplicate (with Duplicate of) or Declined.
   Changing it takes the request out of Triage.
@@ -371,8 +373,9 @@ and the letter are formulas, worked out as the rows are filled in.
 2. **At triage**, a request that's the builder's or a manufacturer's to fix
    gets its Warranty (one). Its **Claim deadline** then shows: the
    warranty's start for that place, plus its term. Its Warranty
-   responsibility shows the warranty's Responsibility, which the request's
-   own Responsibility should match.
+   responsibility shows the warranty's Responsibility, and the tracker's
+   script copies it to the request's own Responsibility when that's empty
+   or Unknown (never over a choice someone made).
 3. **A claim** is a row in Claims, linked to its Requests (several, when
    it's one defect in several places: set Scope to Systemic), its Warranty,
    and its Warrantor. Its Claim deadline is the earliest of its requests'.

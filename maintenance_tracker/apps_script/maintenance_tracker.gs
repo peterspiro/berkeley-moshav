@@ -11,6 +11,8 @@
  *    ticked "In my unit"; the reporter is emailed that it arrived; and the
  *    circle is emailed at once if it's an emergency or urgent.
  *  - A request that's been given a visit time is set to Scheduled.
+ *  - A request given a warranty, with no Responsibility (or Unknown), is
+ *    given its warranty's: Builder warranty or Manufacturer warranty.
  *  - A request whose status changed (or whose visit moved): the change is
  *    added to Updates, the status page's wording is set, the day it closed
  *    is recorded, and the reporter is emailed about a visit, about work
@@ -277,6 +279,8 @@ function plan() {
 /** Acknowledges a new request (see the file's comment). Returns the request as it now is. */
 function processNewRequest(request, people, ctx) {
   const fields = newRequestFields(request, people);
+  const responsibility = responsibilityFromWarranty(request);
+  if (responsibility) fields['Responsibility'] = responsibility;
   const current = { id: request.id, fields: Object.assign({}, request.fields, fields) };
   const ack = acknowledgmentEmail(current, ctx);
   if (ack) sendMail(ack);
@@ -314,6 +318,12 @@ function processRequests(event) {
     const unsigned = listed.filter(u => !(u.fields['By'] || []).length && !u.fields['By name']);
     const fresh = requests.filter(needsAcknowledging);
     const changed = requests.filter(r => !needsAcknowledging(r) && statusKey(r) !== r.fields['Status noted']);
+    // Responsibility from the warranty: written with the request's other
+    // changes when it has some, and on its own when it hasn't.
+    const responsibilities = requests.filter(r => !fresh.includes(r) && !changed.includes(r))
+      .map(r => ({ id: r.id, fields: { 'Responsibility': responsibilityFromWarranty(r) } }))
+      .filter(change => change.fields['Responsibility']);
+    updateRecords('Requests', responsibilities);
 
     if (fresh.length || changed.length || updates.length || unsigned.length) {
       const people = cachedRecords('People', CACHE_PEOPLE);
@@ -326,6 +336,7 @@ function processRequests(event) {
       updates.forEach(update => processUpdate(update, ctx));
     }
     console.log(`${fresh.length} new request(s), ${changed.length} status change(s), ` +
+                `${responsibilities.length} responsibility(ies) filled in, ` +
                 (lookForUpdates ? `${updates.length} update(s) passed on.`
                                 : 'updates to pass on not looked for this time.'));
     props.setProperty(PROP_LAST_RUN, began.toISOString());
@@ -346,6 +357,8 @@ function processStatusChange(request, ctx) {
   }
   fields['Status noted'] = statusKey(request);
   fields['Member-visible status'] = memberStatus(request, TIME_ZONE);
+  const responsibility = responsibilityFromWarranty(request);
+  if (responsibility) fields['Responsibility'] = responsibility;
   if (request.fields['Status'] === 'Closed' && !request.fields['Closed on']) {
     fields['Closed on'] = Utilities.formatDate(new Date(), TIME_ZONE, 'yyyy-MM-dd');
   }

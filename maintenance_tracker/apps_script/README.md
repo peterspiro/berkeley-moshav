@@ -20,6 +20,11 @@ Airtable base ("Building Maintenance") without anyone doing it. It runs as
     the request is open and the time is still to come. (A time left on a
     request that's since been moved back from Scheduled doesn't schedule
     it again; a new time does.)
+  - **A request given a warranty** whose Responsibility is empty or
+    Unknown is given the warranty's (Builder warranty or Manufacturer
+    warranty, from Warranties, through the request's Warranty
+    responsibility). A Responsibility someone chose is left alone. It's
+    written along with the request's other changes, if it has any.
   - **A request whose Status changed**, or whose visit was moved: the change
     is added to Updates ("Status changed from Triaged to Scheduled…"); the
     status page's wording (Member-visible status) is set, or cleared for a

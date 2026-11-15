@@ -329,6 +329,8 @@ calls):
   note of what's been done to it, not a timestamp cursor, so a failed run
   misses nothing.
 - **A visit time** on an open request sets its Status to Scheduled.
+- **A warranty** on a request with no Responsibility (or Unknown) sets it
+  to the warranty's own.
 - **Status changes**: add the Updates row, set `Member-visible status` and
   `Closed on`, email the reporter about a visit, finished work, or closing.
 - **Updates marked "Tell the reporter"**: email them.

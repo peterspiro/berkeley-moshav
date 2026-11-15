@@ -232,6 +232,37 @@ def test_script_may_fetch_only_from_airtable():
     assert "const AIRTABLE_API = 'https://api.airtable.com/v0';" in text
 
 
+# --- responsibility from the warranty ----------------------------------------
+
+def test_responsibility_is_filled_in_from_the_warranty():
+    builder = {"Warranty": ["w1"], "Warranty responsibility": ["Builder warranty"]}
+    out = run(tables([acknowledged(12, **builder, **{"Status noted": "New"}),
+                      acknowledged(13, **builder, Responsibility="Unknown", **{"Status noted": "New"}),
+                      acknowledged(14, **builder, Responsibility="HOA", **{"Status noted": "New"}),
+                      acknowledged(15, **{"Status noted": "New"})]), "processRequests")
+    got = {r["id"]: r["fields"].get("Responsibility") for r in out["tables"]["Requests"]}
+    assert got == {"req12": "Builder warranty", "req13": "Builder warranty", "req14": "HOA", "req15": None}
+    assert out["mails"] == [] and out["tables"]["Updates"] == []
+    again = run(out["tables"], "processRequests:timer", props=out["props"])
+    assert again["calls"] == ["get Requests"]
+
+
+def test_responsibility_is_written_with_a_status_change_and_a_new_request():
+    warranty = {"Warranty": ["w1"], "Warranty responsibility": ["Manufacturer warranty"]}
+    out = status_run("Triaged", "New", Title="Tap drips", **warranty)
+    assert one(out)["Responsibility"] == "Manufacturer warranty"
+    assert sum(call == "patch Requests" for call in out["calls"]) == 1
+    out = run(tables([request(Reporter=["pDana"], **warranty)]), "processRequests")
+    assert one(out)["Responsibility"] == "Manufacturer warranty"
+
+
+def test_responsibility_rule():
+    assert rule("responsibilityFromWarranty(r)", r={"fields": {"Warranty responsibility": []}}) is None
+    assert rule("responsibilityFromWarranty(r)",
+                r={"fields": {"Warranty responsibility": ["Builder warranty"],
+                              "Responsibility": "Unit owner"}}) is None
+
+
 # --- status changes ----------------------------------------------------------
 
 def status_run(status, noted, **fields):

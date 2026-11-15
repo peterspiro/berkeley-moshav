@@ -87,7 +87,8 @@ Do this at least weekly, and the same day for anything urgent.
    - **Component**: the particular fixture or piece of equipment, if it's
      in the list. Leave it empty if not.
    - **Responsibility**: the builder's warranty, a manufacturer's warranty,
-     the HOA, or the unit's owner.
+     the HOA, or the unit's owner. For a warranty item you can leave it
+     empty: the tracker fills it in from the Warranty, within two hours.
    - **Warranty**: for a warranty item, which warranty covers it. The
      tracker then shows the date a claim must be made by.
    - **Owner**: the one person who will see it through.
