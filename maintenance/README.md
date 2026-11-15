@@ -14,6 +14,11 @@ emails. This folder holds what the base is made from:
 There are two bases: the real one, and "Building Maintenance (test)" for
 trying changes, which is the one the script works on unless given `--real`.
 
+- **`members-page.md`** and **`circle-start-here.md`**: the text of the two
+  pages that hold the tracker's links: one for members, pasted into a
+  Gather wiki page, and one for the circle, made into a Google Doc in its
+  Drive folder. The links themselves are filled in there, not here.
+
 This file has three parts: changing the base's structure; setting a base
 up, with everything that has to be made by hand; and how the circle uses
 it.
@@ -65,6 +70,8 @@ the same formula into the field in each base.
    steps 4 and 5, except the forms, which the API can't see. Interfaces
    aren't checked either.
 8. Point the `maintenance_tracker` script at the base (see its README).
+9. Put the base's links into the members' page and the circle's page
+   (`members-page.md`, `circle-start-here.md`).
 
 ### Fields to change by hand
 
