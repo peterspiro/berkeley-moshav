@@ -220,8 +220,8 @@ Interfaces are made by hand; the API can't see them, so `diff` doesn't
 check them. In every one, turn off deleting records, and turn off creating
 them except where it says otherwise.
 
-Each is an interface of its own, named as here; the circle's guide calls
-them by these names.
+They're pages of one interface, "Maintenance", each named as here, so the
+circle has one thing to open; the circle's guide calls them by these names.
 
 **Triage**, for the coordinator. A record review layout: the queue on the
 left, the selected request on the right.

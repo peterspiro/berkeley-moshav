@@ -811,9 +811,9 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
   Circle's Airtable-based tracker (repair requests, warranty claims,
   contacts, equipment, and maintenance schedules), and what's built so far
 - `maintenance-circle-guide.md`: the guide to using the maintenance tracker,
-  for the circle's members (not a design note). It describes the Triage
-  and Requests interfaces as the circle's screens; when an interface is
-  added or dropped, or a status, an email, or a digest section changes,
+  for the circle's members (not a design note). It describes the
+  Maintenance interface's Triage and Requests pages; when a page is added
+  or dropped, or a status, an email, or a digest section changes,
   update it
 - `archive/gather-sandbox-plan.md` and `archive/gather-import-plan.md`: plans
   for the local Gather test instance and the member import

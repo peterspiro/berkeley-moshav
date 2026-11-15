@@ -16,7 +16,7 @@ These are the parts you'll meet:
 |---|---|---|
 | The request form | Members | Reporting a problem or asking how something works |
 | The status page | Members | Seeing where every request stands |
-| The **Triage** and **Requests** screens in Airtable | The circle | Triage, and working on requests |
+| **Maintenance**, in Airtable, with its **Triage** and **Requests** pages | The circle | Triage, and working on requests |
 | The "Log an update" form | The circle | Recording a call, a visit, or a note, from a phone |
 | Emails | Members and the circle | The tracker sends these by itself (see below) |
 | The weekly digest | The circle | A Sunday email summing up what needs attention |
@@ -74,7 +74,7 @@ member sees on the status page:
 
 Do this at least weekly, and the same day for anything urgent.
 
-1. Open the **Triage** screen. It lists the requests nobody has looked at
+1. Open **Maintenance** and go to its **Triage** page. It lists the requests nobody has looked at
    yet, emergencies first, then the oldest.
 2. Pick a request. Read what the member wrote and look at their photos.
 3. Fill in:
@@ -92,9 +92,9 @@ Do this at least weekly, and the same day for anything urgent.
      tracker then shows the date a claim must be made by.
    - **Owner**: the one person who will see it through.
 4. Last of all, change **Status** to **Triaged**. The request then leaves
-   the Triage screen, which is how you know it's dealt with.
+   the Triage page, which is how you know it's dealt with.
 
-When the Triage screen is empty, you're done.
+When the Triage page is empty, you're done.
 
 **If it's the same problem as an earlier request**, set **Duplicate of** to
 the earlier one and Status to **Duplicate**.
@@ -108,7 +108,8 @@ as the location. If Location is still empty, set it yourself.
 
 ## Working on a request (the owner)
 
-Open the **Requests** screen. It shows every request that isn't finished,
+Open **Maintenance** and go to its **Requests** page. It shows every request
+that isn't finished,
 grouped by owner.
 
 ### Scheduling a visit
@@ -129,7 +130,7 @@ what was said, what was done. Leave out guesses about whose fault it is.
 
 There are two ways to add an update:
 
-- On the **Requests** screen, under the request's **Updates**.
+- On the **Requests** page, under the request's **Updates**.
 - With the **"Log an update"** form, which is easier on a phone. Use your
   own link to it, so that your name is filled in.
 
@@ -222,8 +223,8 @@ by their System, Room, and Component.
   a duplicate, mark it Duplicate or Declined instead. The record matters
   more than tidiness.
 - **If something disappears**, it has probably just moved: a request leaves
-  the Triage screen as soon as its Status changes. Look on the Requests
-  screen. If a row really was deleted, tell whoever looks after the tracker
+  the Triage page as soon as its Status changes. Look on the Requests
+  page. If a row really was deleted, tell whoever looks after the tracker
   soon; it can be recovered for about a week.
 - **Leave these fields alone**: Acknowledged on, Status noted, Told
   reporter on, Member-visible status, and anything in the People and
