@@ -36,8 +36,9 @@ Airtable base ("Building Maintenance") without anyone doing it. It runs as
     reporter, once (on the Free plan, within 6 hours).
   - **An update that doesn't say who wrote it** is given its author, when
     it was made by someone signed in to Airtable (as on the Maintenance
-    interface): Airtable records the account in the update's Created by,
-    and the script sets By to the person in People with that email address.
+    tracker interface): Airtable records the account in the update's
+    Created by, and the script sets By to the person in People with that
+    email address.
     An update from a form's link was made by no account, and is left as it
     is. (On the Free plan, within 6 hours.)
 - **Every day**, at about 3 am, or every Sunday on the Free plan

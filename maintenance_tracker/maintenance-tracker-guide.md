@@ -16,7 +16,7 @@ These are the parts you'll meet:
 |---|---|---|
 | The request form | Members | Reporting a problem or asking how something works |
 | The status page | Members | Seeing where every request stands |
-| **Maintenance**, in Airtable, with its **Triage**, **Requests**, and **Claims** pages | The circle | Triage, working on requests, and warranty claims |
+| **Maintenance tracker**, an interface in Airtable, with its **Triage**, **Requests**, and **Claims** pages | The circle | Triage, working on requests, and warranty claims |
 | The "Log an update" form | The circle | Recording a call, a visit, or a note, from a phone |
 | Emails | Members and the circle | The tracker sends these by itself (see below) |
 | The weekly digest | The circle | A Sunday email summing up what needs attention |
@@ -74,7 +74,7 @@ member sees on the status page:
 
 Do this at least weekly, and the same day for anything urgent.
 
-1. Open **Maintenance** and go to its **Triage** page. It lists the requests nobody has looked at
+1. Open **Maintenance tracker** and go to its **Triage** page. It lists the requests nobody has looked at
    yet, emergencies first, then the oldest.
 2. Pick a request. Read what the member wrote and look at their photos.
 3. Fill in:
@@ -109,7 +109,7 @@ as the location. If Location is still empty, set it yourself.
 
 ## Working on a request (the owner)
 
-Open **Maintenance** and go to its **Requests** page. It shows every request
+Open **Maintenance tracker** and go to its **Requests** page. It shows every request
 that isn't finished,
 grouped by owner.
 
@@ -167,8 +167,8 @@ numbers are in the **Organizations** table.
 
 A warranty item becomes a **claim** when we formally tell the builder (or a
 manufacturer) about it in writing. Claims are made and followed on the
-**Claims** page of Maintenance, which lists them by status, oldest first,
-and shows each claim's requests and its updates. Log each email and call
+**Claims** page of Maintenance tracker, which lists them by status,
+oldest first, and shows each claim's requests and its updates. Log each email and call
 about a claim as an update on it, as you would on a request.
 
 1. **Create the claim**: add one, give it a short Title, and link it to

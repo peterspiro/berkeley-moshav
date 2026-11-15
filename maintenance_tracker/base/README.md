@@ -221,7 +221,7 @@ reporter by the script.
 
 Requests and Updates each have a **Created by** field, which Airtable fills
 in with the account that made the row, when it was made by someone signed
-in (not through a form's link). An update added on the Maintenance
+in (not through a form's link). An update added on the Maintenance tracker
 interface needn't say who's logging it: the script sets By from Created by.
 
 ### What a form's link shows
@@ -274,7 +274,7 @@ Interfaces are made by hand; the API can't see them, so `diff` doesn't
 check them. In every one, turn off deleting records, and turn off creating
 them except where it says otherwise.
 
-They're pages of one interface, "Maintenance", each named as here, so the
+They're pages of one interface, "Maintenance tracker", each named as here, so the
 circle has one thing to open; the circle's guide calls them by these names.
 
 **Triage**, for the coordinator. A record review layout: the queue on the

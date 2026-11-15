@@ -852,9 +852,9 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
   what's built so far
 - `maintenance_tracker/maintenance-tracker-guide.md`: the guide to using the
   maintenance tracker, for the circle's members (not a design note). It
-  describes the Maintenance interface's Triage, Requests, and Claims
-  pages; when a page is added or dropped, or a status, an email, or a
-  digest section changes, update it
+  describes the Maintenance tracker interface's Triage, Requests, and
+  Claims pages; when a page is added or dropped, or a status, an email, or
+  a digest section changes, update it
 - `maintenance_tracker/pages/maintenance-tracker-members-page.md` and
   `maintenance_tracker/pages/maintenance-tracker-start-here.md`:
   the two pages of links to the maintenance tracker, for members (a Gather

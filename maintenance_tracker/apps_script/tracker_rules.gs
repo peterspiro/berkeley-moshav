@@ -520,9 +520,9 @@ function statusUpdateText(previousKey, request, timeZone) {
  * Who wrote an update that names nobody, as a People record's ID, or null:
  * the person whose email address is that of the Airtable account that
  * created it (its "Created by"). That's known only for a row made by
- * someone signed in to Airtable, as on the Maintenance interface; one from
- * a form's public link was made by nobody in particular, and matches no
- * one. An update that has By or By name is left alone.
+ * someone signed in to Airtable, as on the Maintenance tracker interface;
+ * one from a form's public link was made by nobody in particular, and
+ * matches no one. An update that has By or By name is left alone.
  */
 function updateAuthor(update, people) {
   const f = update.fields;
