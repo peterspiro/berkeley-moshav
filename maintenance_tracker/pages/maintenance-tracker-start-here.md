@@ -3,7 +3,7 @@
 Everything the circle uses to track repairs, questions, and warranty claims
 for the building.
 
-**New to this? Read the guide first:** [[link to maintenance-circle-guide.md
+**New to this? Read the guide first:** [[link to maintenance-tracker-guide.md
 on GitHub]]
 
 ## Who's who
