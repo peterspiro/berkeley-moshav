@@ -236,7 +236,8 @@ playwright install chromium
   six-digit passcode, which Zoom rejects if passcodes must contain letters.
 
 - **Airtable API** (for `maintenance_base.py`,
-  `sync_maintenance_people.py`, and `maintenance_demo.py` only): in Airtable's
+  `sync_maintenance_people.py`, `maintenance_demo.py`, and
+  `update_start_here_doc.py` only): in Airtable's
   [Builder Hub](https://airtable.com/create/tokens), signed in as the
   workspace's owner, create a personal access token with the scopes
   `data.records:read`, `data.records:write`, `schema.bases:read`, and
@@ -533,7 +534,8 @@ status line as "calendar (members can view, not edit)".
   `apply` creates the missing tables and fields and adds missing options to
   select fields, and `seed` loads the starting rows in
   `maintenance_tracker/base/seed.json` (the building's 36 units and its
-  common areas). It never deletes or
+  common areas, and the names of the Links table's rows, whose values are
+  filled in by hand). It never deletes or
   retypes anything, and lists what must be done by hand: the views, and
   making a formula a table's primary field (so a request shows as "R-3
   Bath fan rattles" wherever it's linked), neither of which Airtable's API
@@ -556,7 +558,7 @@ status line as "calendar (members can view, not edit)".
   base unless given `--real`.
 - **`maintenance_demo.py`** fills the maintenance tracker's test base with
   demo data, for showing the tracker to the circle. It deletes every row
-  except in Locations and People, and writes a made-up, consistent set:
+  except in Locations, People, and Links, and writes a made-up, consistent set:
   requests at every stage, with the repeats the weekly digest looks for
   (one fan model in four units, leaks down one stack), their updates,
   warranty claims, warranties (each starting on `WARRANTY_START`),
@@ -572,12 +574,16 @@ status line as "calendar (members can view, not edit)".
   given `--yes`; `-n` shows what it would write.
 - **`update_start_here_doc.py`** writes
   `maintenance_tracker/pages/maintenance-tracker-start-here.md` into the
-  circle's "Maintenance tracker: start here" Google Doc. It fills each
-  placeholder (`[[status-page]]`) from `maintenance_links`, a git-ignored
-  file in the repo root of `key = value` lines, since the repo is public;
-  joins the source's wrapped lines; and replaces the Doc's whole contents,
-  keeping its address and sharing. It finds the Doc by its title, and
-  stops if a placeholder has no value. `-n` shows what it would write.
+  circle's "Maintenance tracker: start here" Google Doc. The repo is
+  public, so each link in the source is a placeholder, filled from the
+  real base: `[[base]]` with the base's link, `[[coordinator]]` with the
+  person ticked as Coordinator in People, and the others
+  (`[[status-page]]`) from the base's Links table, where the
+  `maintenance_tracker` Apps Script finds the same links. It joins the
+  source's wrapped lines, and replaces the Doc's whole contents, keeping
+  its address and sharing. It finds the Doc by its title, and stops if a
+  placeholder has no value. `-n` shows what it would write, and `--test`,
+  only with `-n`, reads the test base instead.
 - **`setup.sh`** installs and starts a local Gather development instance, for
   trying scripts out safely before running them against the real site.
 

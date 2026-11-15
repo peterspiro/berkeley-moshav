@@ -123,12 +123,18 @@ which is public.
 | `AIRTABLE_BASE_ID` | The base's ID: the part of its address in Airtable that starts with `app` |
 | `AIRTABLE_PLAN` | `team` once the workspace is on Airtable's Team plan. Unset, or anything else, means the Free plan (see "The Airtable plan") |
 | `CIRCLE_EMAIL` | The circle's email list: urgent requests go there, and replies to every email |
-| `REQUEST_FORM_URL` | The published request form's link. Optional: without it, no form links are written |
-| `UPDATE_FORM_URL` | The published "Log an update" form's link. Optional: without it, no update form links are written |
-| `STATUS_PAGE_URL` | The public link to the Requests table's "Status page" view, which members open to see where requests stand: in Airtable, open that view, choose **Share and sync**, and create a link to the view. Optional: emails then leave it out |
-| `TRIAGE_URL` | The Triage view's address in Airtable, for the circle's alerts. Optional |
 | `EMERGENCY_NOTE` | A line added to the end of each acknowledgment, saying what to do in an emergency. Optional |
 | `SEND_ALL_MAIL_TO` | For trying it out: while it's set, every email goes to this address instead, with who it was for in the subject. Delete it to go live |
+
+## Links
+
+The forms', the status page's, and the Triage view's links aren't Script
+Properties: they're in the base's Links table (see `../base/README.md`,
+"The Links table"), in the rows Request form, Update form, Status page,
+and Triage view, where the start-here page's script finds them too. Each
+is optional: without the request form's, no form links are written;
+without the status page's, emails leave it out. The script caches them
+for up to 6 hours.
 
 ## What it's allowed to do
 
@@ -197,8 +203,7 @@ Then in the Apps Script editor:
 4. Run `installTriggers` to start the timers, at the pace the plan allows.
 
 To move to the real base, change `AIRTABLE_TOKEN` and `AIRTABLE_BASE_ID`
-(and the form, status page, and Triage links, which are the real base's
-own), delete `backupFolderId` (see "The backup folder"), and delete `SEND_ALL_MAIL_TO` when the circle is ready for members to
+(the links come from that base's own Links table), delete `backupFolderId` (see "The backup folder"), and delete `SEND_ALL_MAIL_TO` when the circle is ready for members to
 be emailed.
 
 ## The Airtable plan

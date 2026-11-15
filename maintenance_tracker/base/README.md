@@ -8,7 +8,10 @@ This folder holds what the base is made from:
 - **`schema.json`**: every table, field, and select option, and the views
   each table should have. `util/airtable_schema.py` describes the format.
 - **`seed.json`**: starting rows: the building's 36 units and its common
-  areas, for the Locations table.
+  areas, for the Locations table; and a row for each of the tracker's
+  links, for the Links table, with its Name and Notes. Each link's Value
+  is filled in by hand in the base (see "The Links table"), and `seed`
+  leaves it alone.
 
 `maintenance_base.py`, in the repo root, makes a base match these files.
 There are two bases: the real one, and "Building Maintenance (test)" for
@@ -34,10 +37,12 @@ files hold nothing but the page's text, with no comment at the top.)
 - **The circle's page** is a Google Doc titled "Maintenance tracker: start
   here" in the circle's Drive folder, which only the circle can open.
   `update_start_here_doc.py`, in the repo root, writes it: each
-  placeholder is a short key (`[[status-page]]`), filled from the
-  git-ignored `maintenance_links` file, and the Doc's whole contents are
-  replaced. Don't edit the Doc by hand; change the source, or the links
-  file, and run the script again.
+  placeholder is a short key, filled from the real base (`[[base]]`, its
+  link; `[[coordinator]]`, from People; the others, such as
+  `[[status-page]]`, from the Links table, below), and the Doc's whole
+  contents are replaced. Don't edit the Doc by hand; change the source, or
+  the base, and run the script again: after a new coordinator is ticked,
+  for instance.
 
 This file has three parts: changing the base's structure; setting a base
 up, with everything that has to be made by hand; and how the circle uses
@@ -91,9 +96,23 @@ the same formula into the field in each base.
    aren't checked either.
 8. Point the `maintenance_tracker` script at the base (see
    `../apps_script/README.md`).
-9. Put the base's links into the members' page (in its "Numbers and
-   links" section) and into `maintenance_links` for the circle's page, and
-   run `python update_start_here_doc.py` (see above).
+9. Fill in each link's Value in the Links table ("The Links table"),
+   put the links into the members' page (in its "Numbers and links"
+   section), and run `python update_start_here_doc.py` (see above).
+
+### The Links table
+
+The tracker's links are kept in the base, one row each in Links, since the
+repo is public: `seed` adds each row's Name and Notes, which say what it's
+for and where to find it, and its Value is filled in by hand. Each base
+has its own, so the test base's script and page use the test base's
+forms. The `maintenance_tracker` Apps Script reads the forms', status
+page's, and Triage view's links from it (within 6 hours of a change, as it
+caches them), and `update_start_here_doc.py` reads every row, naming each
+by a key made from its Name, lowercased with hyphens for spaces ("Status
+page" is `[[status-page]]`). A row with no Value is treated as missing:
+the script leaves that link out of its emails, and the page script stops.
+Rename a row only together with the places that use its key.
 
 ### Fields to change by hand
 

@@ -70,5 +70,17 @@
    {"Name": "Elevator room", "Kind": "Common", "Floor": 1},
    {"Name": "Boiler room", "Kind": "Common", "Floor": 1}
   ]
+ },
+ "Links": {
+  "key": "Name",
+  "rows": [
+   {"Name": "Request form", "Notes": "The request form's published link (in the form builder, Share form). The script builds each person's own link from it, and puts it in acknowledgments. Without it, no form links are written."},
+   {"Name": "Update form", "Notes": "The \"Log an update\" form's published link. The script builds each circle member's own link from it. Without it, no update form links are written."},
+   {"Name": "Status page", "Notes": "The Requests table's \"Status page\" view's public link: open the view, choose Share and sync, and create a link to the view. Emails link to it; without it, they leave it out."},
+   {"Name": "Triage view", "Notes": "The Triage view's address in Airtable, which the circle's alerts and the digest link to. Optional."},
+   {"Name": "Maintenance interface", "Notes": "The Maintenance interface's address, for the start-here page."},
+   {"Name": "Members page", "Notes": "The members' page in Gather (\"Building maintenance\"), for the start-here page."},
+   {"Name": "Tracker help", "Notes": "Who to ask about the tracker itself, or for an Airtable account: a name, or \"the Technology Circle\". For the start-here page."}
+  ]
  }
 }

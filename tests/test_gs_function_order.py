@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
-GS_FILES = sorted(p for p in ROOT.glob("*/*.gs") if p.parent.name != "archive")
+GS_FILES = sorted(p for p in ROOT.rglob("*.gs") if "archive" not in p.relative_to(ROOT).parts)
 
 
 @pytest.mark.parametrize("path", GS_FILES, ids=lambda p: str(p.relative_to(ROOT)))

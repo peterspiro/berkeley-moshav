@@ -43,7 +43,7 @@ const SENDER_NAME = 'Berkeley Moshav Maintenance';
 const AIRTABLE_API = 'https://api.airtable.com/v0';
 // Every table, for the backup. The script's token can't list them.
 const TABLES = ['Locations', 'People', 'Requests', 'Updates', 'Claims', 'Warranties',
-                'Organizations', 'Assets', 'Maintenance plans', 'Maintenance work', 'Guides'];
+                'Organizations', 'Assets', 'Maintenance plans', 'Maintenance work', 'Guides', 'Links'];
 // Requests changed since the last run are looked at again, with this much
 // overlap between runs.
 const OVERLAP_MS = 5 * 60 * 1000;
@@ -56,7 +56,7 @@ const PROP_LAST_RUN = 'lastRun';  // ISO time the last processRequests began
 const PROP_LAST_UPDATES_CHECK = 'lastUpdatesCheck';  // ISO time updates were last looked for
 const PROP_LAST_DIGEST = 'lastDigest';  // ISO time the weekly digest last went out
 const PROP_USAGE_WARNED = 'usageWarned';  // the USAGE_LEVELS level the circle was last warned of
-const CACHE_PEOPLE = 'people', CACHE_LOCATIONS = 'locations';
+const CACHE_PEOPLE = 'people', CACHE_LOCATIONS = 'locations', CACHE_LINKS = 'links';
 const CACHE_SECONDS = 6 * 60 * 60;  // the longest the cache keeps anything
 const PROP_BACKUP_FOLDER = 'backupFolderId';  // set by backupFolder
 const BACKUP_FOLDER_NAME = 'Building Maintenance backup';
@@ -178,9 +178,9 @@ function context(people, locations) {
     peopleById: peopleById,
     locationNames: locationNames,
     timeZone: TIME_ZONE,
-    formUrl: setting('REQUEST_FORM_URL', true),
-    statusPageUrl: setting('STATUS_PAGE_URL', true),
-    triageUrl: setting('TRIAGE_URL', true),
+    formUrl: link('request-form'),
+    statusPageUrl: link('status-page'),
+    triageUrl: link('triage-view'),
     emergencyNote: setting('EMERGENCY_NOTE', true),
   };
 }
@@ -250,6 +250,17 @@ function installTriggers() {
   const keeping = ScriptApp.newTrigger('housekeeping').timeBased().atHour(3).inTimezone(TIME_ZONE);
   (limits.housekeepingWeekly ? keeping.onWeekDay(ScriptApp.WeekDay.SUNDAY) : keeping.everyDays(1)).create();
   console.log(`Timers set for the ${plan()} plan.`);
+}
+
+/**
+ * A link's Value in the Links table, by its key ("request-form" for the
+ * row named "Request form"; see linksByKey), or '' if it has none. `data`,
+ * if given, is every table's records; otherwise Links is read, through the
+ * cache, so a link changed in the base is used within CACHE_SECONDS.
+ */
+function link(key, data) {
+  const records = data && Array.isArray(data['Links']) ? data['Links'] : cachedRecords('Links', CACHE_LINKS);
+  return linksByKey(records)[key] || '';
 }
 
 /** Every record of a table, or those matching an Airtable formula. */
@@ -393,8 +404,8 @@ function processUpdate(update, ctx) {
  * records, if the caller has read them.
  */
 function sendDigest(data) {
-  const email = digest(tableData(data), new Date(),
-                       { timeZone: TIME_ZONE, triageUrl: setting('TRIAGE_URL', true), plan: plan() });
+  const all = tableData(data);
+  const email = digest(all, new Date(), { timeZone: TIME_ZONE, triageUrl: link('triage-view', all), plan: plan() });
   if (email) sendMail(Object.assign({ to: setting('CIRCLE_EMAIL') }, email));
   else console.log('Nothing open and nothing new: no digest.');
   PropertiesService.getScriptProperties().setProperty(PROP_LAST_DIGEST, new Date().toISOString());
@@ -459,16 +470,16 @@ function withLock(fn) {
 
 /**
  * Writes each person's own links to the forms into People, where they're
- * missing or out of date: to the request form (REQUEST_FORM_URL), and, for
- * circle members, to the "Log an update" form (UPDATE_FORM_URL). Without
+ * missing or out of date: to the request form (its link in Links), and,
+ * for circle members, to the "Log an update" form (likewise). Without
  * a form's address, its links are left alone. `data` is every table's
  * records, if the caller has read them; its People are brought up to date
  * too.
  */
 function writeFormLinks(data) {
-  const formUrl = setting('REQUEST_FORM_URL', true), updateFormUrl = setting('UPDATE_FORM_URL', true);
+  const formUrl = link('request-form', data), updateFormUrl = link('update-form', data);
   if (!formUrl && !updateFormUrl) {
-    console.log('No REQUEST_FORM_URL or UPDATE_FORM_URL: no form links written.');
+    console.log('No Request form or Update form in Links: no form links written.');
     return;
   }
   const given = data && Array.isArray(data['People']);

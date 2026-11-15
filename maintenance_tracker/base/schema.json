@@ -267,6 +267,16 @@
     {"name": "Requests answered", "type": "link", "table": "Requests", "inverse": "Answered by"}
    ],
    "views": []
+  },
+  {
+   "name": "Links",
+   "description": "The tracker's links, and who to ask about it: read by its script and the circle's start-here page.",
+   "fields": [
+    {"name": "Name", "type": "text"},
+    {"name": "Value", "type": "text"},
+    {"name": "Notes", "type": "longText"}
+   ],
+   "views": []
   }
  ]
 }

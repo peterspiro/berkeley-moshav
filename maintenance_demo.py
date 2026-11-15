@@ -4,7 +4,7 @@ Fills the maintenance tracker's test base with demo data, for showing the
 tracker to the Maintenance & Warranty Circle.
 
 It deletes every row in the test base, "Building Maintenance (test)",
-except in Locations and People, and writes a made-up but consistent set:
+except in Locations, People, and Links, and writes a made-up but consistent set:
 requests at every stage (with the repeats the weekly digest looks for),
 updates, warranty claims, warranties, organizations, assets, guides, and
 maintenance plans and work. The companies, their contacts, and their
@@ -56,7 +56,7 @@ TIME_ZONE = ZoneInfo("America/Los_Angeles")
 UTC = ZoneInfo("UTC")
 # When every demo warranty's clock starts.
 WARRANTY_START = date(2026, 12, 1)
-KEPT_TABLES = ("Locations", "People")
+KEPT_TABLES = ("Locations", "People", "Links")
 # The tables written, in an order where each row's links point to rows
 # already made (a link within a table is written in a second pass).
 WRITE_ORDER = ("Organizations", "Warranties", "Assets", "Guides", "Maintenance plans",
@@ -711,7 +711,7 @@ def main() -> None:
     if args.dry_run:
         return
     if not args.yes and input(f"This deletes every row in {TEST_BASE!r} except in "
-                              f"{' and '.join(KEPT_TABLES)}. Type its name to go on: ").strip() != TEST_BASE:
+                              f"{', '.join(KEPT_TABLES)}. Type its name to go on: ").strip() != TEST_BASE:
         sys.exit("Nothing changed.")
 
     try:

@@ -3,6 +3,9 @@ Tests for update_start_here_doc.py's filling in of the start-here page, and
 checks of the two pages' sources in maintenance_tracker/pages/.
 """
 
+import json
+import re
+
 import pytest
 
 import update_start_here_doc as doc
@@ -21,13 +24,38 @@ def test_placeholders_are_filled_and_missing_ones_named():
     assert e.value.args[0] == ["status-page"]
 
 
-def test_links_file():
-    assert doc.read_links("# links\n\ncoordinator = Dana S\nbase = https://x.example/a=b\n") == {
-        "coordinator": "Dana S", "base": "https://x.example/a=b"}
-    with pytest.raises(ValueError):
-        doc.read_links("coordinator Dana S\n")
-    with pytest.raises(ValueError):
-        doc.read_links("coordinator =\n")
+def test_values_come_from_the_base():
+    people = [{"fields": {"Name": "Dana S", "Full name": "Dana Smith", "Coordinator": True}},
+              {"fields": {"Name": "Old T", "Coordinator": True, "Moved out": True}},
+              {"fields": {"Name": "Sam L"}}]
+    links = [{"fields": {"Name": "Status page", "Value": " https://x.example/s "}},
+             {"fields": {"Name": "Update form"}}]
+    assert doc.base_values("appX", people, links) == {
+        "status-page": "https://x.example/s", "base": "https://airtable.com/appX", "coordinator": "Dana Smith"}
+    for coordinators in ([], [True, True]):
+        crowd = [{"fields": {"Name": f"P{i}", "Coordinator": c}} for i, c in enumerate(coordinators)]
+        with pytest.raises(ValueError):
+            doc.base_values("appX", crowd, links)
+
+
+def test_link_keys_match_the_apps_scripts():
+    assert doc.link_key("Request form") == "request-form"
+    assert doc.link_key("Tracker help (who to ask)") == "tracker-help-who-to-ask"
+    rules = (ROOT / "maintenance_tracker/apps_script/tracker_rules.gs").read_text()
+    assert "toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')" in rules
+
+
+def _seeded_link_keys():
+    seeds = json.loads((ROOT / "maintenance_tracker/base/seed.json").read_text())
+    return {doc.link_key(r["Name"]) for r in seeds["Links"]["rows"]}
+
+
+def test_every_placeholder_and_script_link_has_a_row_in_links():
+    keys = _seeded_link_keys() | {"base", "coordinator"}
+    assert set(doc.placeholders(doc.SOURCE.read_text())) <= keys
+    script = (ROOT / "maintenance_tracker/apps_script/maintenance_tracker.gs").read_text()
+    used = set(re.findall(r"\blink\('([^']+)'", script))
+    assert used and used <= _seeded_link_keys()
 
 
 def test_wrapped_lines_are_joined_but_not_headings_lists_or_tables():

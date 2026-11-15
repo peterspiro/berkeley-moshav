@@ -4,18 +4,23 @@ Writes maintenance_tracker/pages/maintenance-tracker-start-here.md into the
 "Maintenance tracker: start here" Google Doc, with its links filled in.
 
 The page's source is in the repo, which is public, so its links, names, and
-numbers aren't: each is a placeholder, such as [[status-page]]. Their
-values are in maintenance_links, a git-ignored file in the repo root, one
-per line:
+numbers aren't: each is a placeholder, such as [[status-page]], filled in
+from the maintenance tracker's base, "Building Maintenance":
 
-    coordinator = Dana S
-    status-page = https://airtable.com/...
+    [[base]]          the base's own link
+    [[coordinator]]   the person ticked as Coordinator in People
+    [[status-page]]   and every other key: the Value of the row in the
+                      Links table whose Name makes that key, lowercased with
+                      hyphens for spaces ("Status page")
 
-This script fills each placeholder from that file, and replaces the Doc's
-whole contents with the result, so nothing is ever edited in the Doc by
-hand: a change made there is lost the next time this runs. The Doc keeps
-its address and its sharing. It stops, changing nothing, if a placeholder
-has no value; a value no placeholder uses is listed.
+The Links table is also where the maintenance_tracker Apps Script finds the
+forms' and the status page's links, so each link is kept in one place.
+
+This script replaces the Doc's whole contents with the result, so nothing
+is ever edited in the Doc by hand: a change made there is lost the next
+time this runs. The Doc keeps its address and its sharing. It stops,
+changing nothing, if a placeholder has no value, or if People has no
+coordinator, or more than one.
 
 The Doc is found by its title, wherever admin@ can see it (it's in the
 circle's folder in the Shared Drive), so no ID is kept in the repo. Make
@@ -24,12 +29,17 @@ it once, by hand, as an empty Google Doc with that title.
 Lines wrapped in the source are joined before the Doc is written, so each
 paragraph and list item is one paragraph in the Doc.
 
-Requires Google credentials, as for the repo's other Google scripts (see
-README.md, "Setup").
+--test reads the test base instead, for trying the script out; it can only
+be used with -n, so the circle's Doc never gets the test base's links.
+
+Requires the Airtable token in airtable_credentials, and Google
+credentials, as for the repo's other Google scripts (see README.md,
+"Setup").
 
 Usage:
     python update_start_here_doc.py -n
     python update_start_here_doc.py
+    python update_start_here_doc.py -n --test
 """
 
 import argparse
@@ -39,7 +49,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 SOURCE = ROOT / "maintenance_tracker" / "pages" / "maintenance-tracker-start-here.md"
-LINKS_FILE = ROOT / "maintenance_links"
 DOC_TITLE = "Maintenance tracker: start here"
 DOC_MIME = "application/vnd.google-apps.document"
 UPLOAD_MIME = "text/markdown"
@@ -51,19 +60,28 @@ def placeholders(text: str) -> list[str]:
     return list(dict.fromkeys(m.strip() for m in PLACEHOLDER.findall(text)))
 
 
-def read_links(text: str) -> dict[str, str]:
-    """The "key = value" lines of the links file; blank lines and lines
-    starting with # are skipped."""
-    links = {}
-    for number, line in enumerate(text.splitlines(), 1):
-        line = line.strip()
-        if not line or line.startswith("#"):
-            continue
-        key, sep, value = line.partition("=")
-        if not sep or not key.strip() or not value.strip():
-            raise ValueError(f"line {number} isn't \"key = value\": {line}")
-        links[key.strip()] = value.strip()
-    return links
+def link_key(name: str) -> str:
+    """A Links row's key, from its Name, as the Apps Script's linkKey makes
+    it: "Request form" is "request-form"."""
+    return re.sub(r"[^a-z0-9]+", "-", str(name or "").lower()).strip("-")
+
+
+def base_values(base_id: str, people: list[dict], links: list[dict]) -> dict[str, str]:
+    """What the placeholders can be filled with, from the base: its link,
+    its coordinator, and each Links row that has a Value. Raises ValueError
+    unless exactly one person (not moved out) is ticked as Coordinator."""
+    coordinators = [p["fields"] for p in people
+                    if p["fields"].get("Coordinator") and not p["fields"].get("Moved out")]
+    if len(coordinators) != 1:
+        raise ValueError(f"Expected one person ticked as Coordinator in People; found {len(coordinators)}.")
+    values = {}
+    for row in links:
+        key, value = link_key(row["fields"].get("Name")), str(row["fields"].get("Value") or "").strip()
+        if key and value:
+            values[key] = value
+    values["base"] = f"https://airtable.com/{base_id}"
+    values["coordinator"] = coordinators[0].get("Full name") or coordinators[0].get("Name", "")
+    return values
 
 
 def fill(text: str, links: dict[str, str]) -> str:
@@ -105,31 +123,38 @@ def find_doc(drive) -> dict:
 
 
 def main() -> None:
+    from maintenance_base import REAL_BASE, TEST_BASE
+    from util.airtable import Airtable, AirtableError
+    from util.credentials import load_airtable_token
     from util.google_group_utils import DEFAULT_CLIENT_SECRETS_PATH
 
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0],
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("-n", "--dry-run", action="store_true",
                         help="print what would be written, and change nothing")
+    parser.add_argument("--test", action="store_true",
+                        help=f"read {TEST_BASE!r} instead of {REAL_BASE!r} (only with -n)")
     parser.add_argument("-c", "--credentials", default=str(DEFAULT_CLIENT_SECRETS_PATH),
                         help="the Google OAuth client file (default: client_secret.json)")
     args = parser.parse_args()
+    if args.test and not args.dry_run:
+        parser.error("--test can only be used with -n")
 
     source = SOURCE.read_text()
+    airtable = Airtable(load_airtable_token())
     try:
-        links = read_links(LINKS_FILE.read_text())
-    except FileNotFoundError:
-        sys.exit(f"Error: {LINKS_FILE} not found. Create it with a line for each of:\n" +
-                 "\n".join(f"    {k} = ..." for k in placeholders(source)))
-    except ValueError as e:
-        sys.exit(f"Error: {LINKS_FILE.name}, {e}")
+        base = airtable.find_base(TEST_BASE if args.test else REAL_BASE)
+        values = base_values(base, airtable.list_records(base, "People", ["Name", "Full name", "Coordinator",
+                                                                         "Moved out"]),
+                             airtable.list_records(base, "Links"))
+    except (AirtableError, ValueError) as e:
+        sys.exit(f"Error: {e}")
     try:
-        page = join_wrapped_lines(fill(source, links))
+        page = join_wrapped_lines(fill(source, values))
     except KeyError as e:
-        sys.exit(f"Error: {LINKS_FILE.name} has no value for: " + ", ".join(e.args[0]))
-    unused = sorted(set(links) - set(placeholders(source)))
-    if unused:
-        print(f"Not used by the page (in {LINKS_FILE.name}): " + ", ".join(unused))
+        sys.exit("Error: these have no value: " + ", ".join(e.args[0]) +
+                 ". Fill in each one's Value in the base's Links table, adding a row if it has none "
+                 "(Name \"Status page\" for status-page).")
 
     from googleapiclient.discovery import build
     from googleapiclient.http import MediaInMemoryUpload
