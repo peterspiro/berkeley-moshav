@@ -66,19 +66,20 @@ a meeting, add an agenda item, and update a meeting's times); a meeting's
 announcing that its agenda is ready. It also keeps the Circle Structure (see
 above and `circle_agendas/structure.gs`).
 
-The repo also holds the **maintenance tracker**, an Airtable
-base for the Maintenance & Warranty Circle to track repair requests,
-warranty claims, contacts, equipment, and maintenance schedules for the
-building (see `maintenance-tracker-plan.md`). There's the base's
-structure, kept as a file in `maintenance/` and applied by
+The repo also holds the **maintenance tracker**, an Airtable base for the
+Maintenance & Warranty Circle to track repair requests, warranty claims,
+contacts, equipment, and maintenance schedules for the building.
+Everything about it is in `maintenance_tracker/` (its `README.md` says
+where each part is), except two scripts in the root. There's the base's
+structure, kept as a file in `maintenance_tracker/base/` and applied by
 `maintenance_base.py`; `sync_maintenance_people.py`, which copies the
 members in from Gather; and a fifth Apps Script project,
-**`maintenance_tracker`**, which acknowledges each new request, emails the
-circle about urgent ones, tells reporters when their request's status
-changes, and backs the base up to Drive. The views and forms are made by
-hand (see `maintenance/README.md`), where each request's warranty
-deadline and each claim's draft letter are worked out by formulas; the
-maintenance calendar isn't built yet.
+**`maintenance_tracker/apps_script`**, which acknowledges each new
+request, emails the circle about urgent ones, tells reporters when their
+request's status changes, and backs the base up to Drive. The views and
+forms are made by hand (see `maintenance_tracker/base/README.md`), where
+each request's warranty deadline and each claim's draft letter are worked
+out by formulas; the maintenance calendar isn't built yet.
 
 The repo also keeps, in `archive/`, the one-off scripts that were used to
 migrate the community into Gather (members, households, groups, photos) and
@@ -352,8 +353,10 @@ status line as "calendar (members can view, not edit)".
 | `calendar_notifications/` | Apps Script project that announces and gatekeeps events on the shared community calendar |
 | `group_meetings/` | Apps Script project that adds Zoom rooms and guests to group calendar events, and warns about overlapping meetings |
 | `circle_agendas/` | Apps Script project for the circle agenda docs (building them, and the web app their links run) and the Circle Structure sheet and doc |
-| `maintenance_tracker/` | Apps Script project that acknowledges and follows up maintenance requests in the Airtable base, and backs it up |
-| `maintenance/` | The maintenance tracker's Airtable base as files: its tables and fields, its starting rows, and the guide to setting a base up (the views, forms, and interfaces made by hand) and to using it |
+| `maintenance_tracker/` | The maintenance tracker: its design, the circle's guide to using it, and the parts below |
+| `maintenance_tracker/base/` | The tracker's Airtable base as files: its tables and fields, its starting rows, and the guide to setting a base up (the views, forms, and interfaces made by hand) and to using it |
+| `maintenance_tracker/apps_script/` | Apps Script project that acknowledges and follows up maintenance requests in the Airtable base, and backs it up |
+| `maintenance_tracker/pages/` | The sources of the two pages that hold the tracker's links, for members and for the circle |
 | `util/` | Shared Python modules used by the scripts |
 | `tests/` | Unit tests (`pytest`) |
 | `archive/` | One-off scripts and plans that are no longer in use, kept for reference |
@@ -523,10 +526,11 @@ status line as "calendar (members can view, not edit)".
 - **`change_group_email_alias.py`** gives a group's Google Group a new, usually
   shorter, address and moves the Gather group's email list over to it.
 - **`maintenance_base.py`** keeps the maintenance tracker's Airtable base in
-  step with `maintenance/schema.json`: `diff` shows what the base lacks,
+  step with `maintenance_tracker/base/schema.json`: `diff` shows what the base lacks,
   `apply` creates the missing tables and fields and adds missing options to
   select fields, and `seed` loads the starting rows in
-  `maintenance/seed.json` (the building's 36 units and its common areas). It never deletes or
+  `maintenance_tracker/base/seed.json` (the building's 36 units and its
+  common areas). It never deletes or
   retypes anything, and lists what must be done by hand: the views, and
   making a formula a table's primary field (so a request shows as "R-3
   Bath fan rattles" wherever it's linked), neither of which Airtable's API
@@ -678,10 +682,10 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
   - **`circle_agendas/doc_helpers.gs`** holds the helpers the others
     share.
 
-- **`maintenance_tracker/`** looks after the maintenance tracker's
-  Airtable base. See `maintenance_tracker/README.md` for deployment and
-  the Script Properties it reads.
-  - **`maintenance_tracker/maintenance_tracker.gs`** runs every 10 minutes
+- **`maintenance_tracker/apps_script/`** looks after the maintenance
+  tracker's Airtable base. See `maintenance_tracker/apps_script/README.md`
+  for deployment and the Script Properties it reads.
+  - **`maintenance_tracker/apps_script/maintenance_tracker.gs`** runs every 10 minutes
     and every day, as `admin@berkeleymoshav.org`. A new request gets its
     reporter linked (if they typed an email address that's a member's) and
     its location set to the reporter's unit (if they ticked "In my unit"),
@@ -700,7 +704,7 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
     visit time, or confirmation, what's gone quiet, warranty deadlines
     with no claim made, claims the builder is sitting on, and what's
     repeating across units.
-  - **`maintenance_tracker/tracker_rules.gs`** holds its rules and the
+  - **`maintenance_tracker/apps_script/tracker_rules.gs`** holds its rules and the
     emails' wording, tested under Node.
 
 ### `util/`: shared modules
@@ -740,7 +744,7 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
   records, with notes on what the API can't do
 - **`maintenance_people.py`**: the maintenance tracker's People rows from
   the Gather directory, and what's changed since the last sync
-- **`airtable_schema.py`**: reading and checking `maintenance/schema.json`,
+- **`airtable_schema.py`**: reading and checking `maintenance_tracker/base/schema.json`,
   and working out what a base lacks compared with it (tables, fields
   including formulas, lookups, and rollups, and select options)
 - **`member_names.py`**: members' short names by email address, from the Gather
@@ -807,15 +811,17 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
   admins (not a design note: it's to be made into a Google Doc)
 - `circle-agendas-plan.md`: design of the circle agenda docs, and what
   the tests found
-- `maintenance-tracker-plan.md`: design of the Maintenance & Warranty
-  Circle's Airtable-based tracker (repair requests, warranty claims,
-  contacts, equipment, and maintenance schedules), and what's built so far
-- `maintenance-circle-guide.md`: the guide to using the maintenance tracker,
-  for the circle's members (not a design note). It describes the
-  Maintenance interface's Triage and Requests pages; when a page is added
-  or dropped, or a status, an email, or a digest section changes,
-  update it
-- `maintenance/members-page.md` and `maintenance/maintenance-tracker-start-here.md`:
+- `maintenance_tracker/maintenance-tracker-plan.md`: design of the
+  Maintenance & Warranty Circle's Airtable-based tracker (repair requests,
+  warranty claims, contacts, equipment, and maintenance schedules), and
+  what's built so far
+- `maintenance_tracker/maintenance-circle-guide.md`: the guide to using the
+  maintenance tracker, for the circle's members (not a design note). It
+  describes the Maintenance interface's Triage and Requests pages; when a
+  page is added or dropped, or a status, an email, or a digest section
+  changes, update it
+- `maintenance_tracker/pages/members-page.md` and
+  `maintenance_tracker/pages/maintenance-tracker-start-here.md`:
   the two pages of links to the maintenance tracker, for members (a Gather
   wiki page) and for the circle (a Google Doc in its Drive folder). The
   repo's copies are the sources, with the links left out
@@ -829,5 +835,5 @@ python -m pytest
 ```
 
 The tests of `group_meetings/event_rules.gs`,
-`circle_agendas/agenda_rules.gs`, and the `maintenance_tracker` project
-run them under Node, and are skipped if `node` isn't installed.
+`circle_agendas/agenda_rules.gs`, and the `maintenance_tracker/apps_script`
+project run them under Node, and are skipped if `node` isn't installed.

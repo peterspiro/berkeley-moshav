@@ -43,7 +43,7 @@ def test_schema_file_is_valid_and_has_the_plans_tables():
 
 def test_schema_file_holds_no_airtable_ids():
     # The repo is public: bases, tables, and fields are found by name.
-    text = (ROOT / "maintenance" / "schema.json").read_text()
+    text = (ROOT / "maintenance_tracker" / "base" / "schema.json").read_text()
     import re
     assert not re.search(r"\b(app|tbl|fld|viw|rec)[A-Za-z0-9]{14}\b", text)
 
@@ -61,7 +61,7 @@ def test_request_form_can_take_a_reporter_picked_or_typed():
 
 
 def test_seed_file_has_the_36_units_and_the_common_areas():
-    seeds = json.loads((ROOT / "maintenance" / "seed.json").read_text())
+    seeds = json.loads((ROOT / "maintenance_tracker" / "base" / "seed.json").read_text())
     names = [r["Name"] for r in seeds["Locations"]["rows"] if r["Kind"] == "Unit"]
     assert len(names) == len(set(names)) == 36
     # Floors 1-4, stacks 1-11, without 101-107 and 405.
