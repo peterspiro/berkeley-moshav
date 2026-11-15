@@ -32,7 +32,7 @@ It helps to see what they see.
 |---|---|
 | **Request form** | [Open the request form]([[request-form]]) |
 | **Status page** | [Open the status page]([[status-page]]) |
-| **Members' page in Gather** | [Open the members' page]([[members-page]]) |
+| **Members' wiki page in Gather** | [Open the members' wiki page]([[members-page]]) |
 
 ## The base itself
 
