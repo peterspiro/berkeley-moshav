@@ -16,7 +16,7 @@ on GitHub]]
 
 | | Link | For |
 |---|---|---|
-| **Maintenance** | [[interface link]] | Triage, and working on requests. Needs an Airtable account: ask [[name]] |
+| **Maintenance** | [[interface link]] | Triage, working on requests, and warranty claims. Needs an Airtable account: ask [[name]] |
 | **Log an update** | Your own link, sent to you by the coordinator | Recording a call, a visit, or a note. Easiest on a phone. No account needed |
 | **Weekly digest** | Arrives by email on Sundays | What needs someone this week |
 
@@ -39,7 +39,7 @@ It helps to see what they see.
 [[link to the Building Maintenance base]]
 
 Only if you need something the Maintenance pages don't show, such as the
-Claims, Warranties, or Organizations tables. Go carefully: here a stray
+Warranties or Organizations tables. Go carefully: here a stray
 keystroke can delete a row. Never delete a request, an update, or a claim;
 mark it Duplicate or Declined instead.
 

@@ -16,7 +16,7 @@ These are the parts you'll meet:
 |---|---|---|
 | The request form | Members | Reporting a problem or asking how something works |
 | The status page | Members | Seeing where every request stands |
-| **Maintenance**, in Airtable, with its **Triage** and **Requests** pages | The circle | Triage, and working on requests |
+| **Maintenance**, in Airtable, with its **Triage**, **Requests**, and **Claims** pages | The circle | Triage, working on requests, and warranty claims |
 | The "Log an update" form | The circle | Recording a call, a visit, or a note, from a phone |
 | Emails | Members and the circle | The tracker sends these by itself (see below) |
 | The weekly digest | The circle | A Sunday email summing up what needs attention |
@@ -165,9 +165,12 @@ numbers are in the **Organizations** table.
 ## Warranty claims
 
 A warranty item becomes a **claim** when we formally tell the builder (or a
-manufacturer) about it in writing. Claims are in the **Claims** table.
+manufacturer) about it in writing. Claims are made and followed on the
+**Claims** page of Maintenance, which lists them by status, oldest first,
+and shows each claim's requests and its updates. Log each email and call
+about a claim as an update on it, as you would on a request.
 
-1. **Create the claim**: add a row, give it a short Title, and link it to
+1. **Create the claim**: add one, give it a short Title, and link it to
    its **Requests**, its **Warranty**, and its **Warrantor** (who it's
    addressed to).
 2. **One problem in several places** should be one claim, not several. Link

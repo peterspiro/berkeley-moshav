@@ -356,9 +356,9 @@ to the member. The script adds an update itself for every change of status.
 
 ### Warranty claims
 
-A request becomes a claim in four steps, all in Airtable. Nothing waits
-for the tracker's script: the dates and the letter are formulas, worked
-out as the rows are filled in.
+A request becomes a claim in four steps, all in Airtable (the last two on
+the Claims interface). Nothing waits for the tracker's script: the dates
+and the letter are formulas, worked out as the rows are filled in.
 
 1. **Warranties** has a row for each warranty: its Warrantor, its Term
    (months), and when its clock starts. Clock starts says whether that's
