@@ -70,11 +70,13 @@ The repo also holds the **maintenance tracker**, an Airtable base for the
 Maintenance & Warranty Circle to track repair requests, warranty claims,
 contacts, equipment, and maintenance schedules for the building.
 Everything about it is in `maintenance_tracker/` (its `README.md` says
-where each part is), except three scripts in the root. There's the base's
+where each part is), except four scripts in the root. There's the base's
 structure, kept as a file in `maintenance_tracker/base/` and applied by
 `maintenance_base.py`; `sync_maintenance_people.py`, which copies the
 members in from Gather; `maintenance_demo.py`, which fills the test base
-with demo data for showing the tracker to the circle; and a fifth Apps Script project,
+with demo data for showing the tracker to the circle;
+`update_start_here_doc.py`, which writes the circle's "start here" Google
+Doc from its source in `maintenance_tracker/pages/`; and a fifth Apps Script project,
 **`maintenance_tracker/apps_script`**, which acknowledges each new
 request, emails the circle about urgent ones, tells reporters when their
 request's status changes, and backs the base up to Drive. The views and
@@ -568,6 +570,14 @@ status line as "calendar (members can view, not edit)".
   Apps Script's own markers, so the script sends no email about them. It
   works only on the test base, and asks you to type its name first unless
   given `--yes`; `-n` shows what it would write.
+- **`update_start_here_doc.py`** writes
+  `maintenance_tracker/pages/maintenance-tracker-start-here.md` into the
+  circle's "Maintenance tracker: start here" Google Doc. It fills each
+  placeholder (`[[status-page]]`) from `maintenance_links`, a git-ignored
+  file in the repo root of `key = value` lines, since the repo is public;
+  joins the source's wrapped lines; and replaces the Doc's whole contents,
+  keeping its address and sharing. It finds the Doc by its title, and
+  stops if a placeholder has no value. `-n` shows what it would write.
 - **`setup.sh`** installs and starts a local Gather development instance, for
   trying scripts out safely before running them against the real site.
 
@@ -840,8 +850,9 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
 - `maintenance_tracker/pages/maintenance-tracker-members-page.md` and
   `maintenance_tracker/pages/maintenance-tracker-start-here.md`:
   the two pages of links to the maintenance tracker, for members (a Gather
-  wiki page) and for the circle (a Google Doc in its Drive folder). The
-  repo's copies are the sources, with the links left out
+  wiki page) and for the circle (a Google Doc in its Drive folder, written
+  by `update_start_here_doc.py`). The repo's copies are the sources, with
+  the links left out
 - `archive/gather-sandbox-plan.md` and `archive/gather-import-plan.md`: plans
   for the local Gather test instance and the member import
 

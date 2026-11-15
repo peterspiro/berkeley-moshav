@@ -2,21 +2,28 @@
 
 Something broken, leaking, or not working? Not sure how to operate something in your unit or the building? Tell the Maintenance & Warranty Circle here.
 
+## Numbers and links
+
+- **After-hours number:** [[after-hours number]]
+- **Water shutoff:** [[where the shutoff is, or a link to the emergency guide]]
+- **Who to tell in the building in an emergency:** [[who to tell in the building]]
+- **The request form, to report a problem or ask how something works:** [[request form link]]
+- **The status page, to see where things stand:** [[status page link]]
+- **The Maintenance & Warranty Circle:** [[how to reach the circle]]
+
 ## In an emergency
 
 **Don't use the form. It isn't watched around the clock.**
 
-- **Fire, smoke, the smell of gas, or anyone in danger:** call 911, then [[who to tell in the building]].
-- **Water leaking:** turn off the water at [[where the shutoff is, or a link to the emergency guide]], then call [[after-hours number]].
-- **No heat, no power, a stuck elevator, or a door that won't lock:** call [[after-hours number]].
+- **Fire, smoke, the smell of gas, or anyone in danger:** call 911, then tell the person named above.
+- **Water leaking:** turn off the water at the shutoff above, then call the after-hours number.
+- **No heat, no power, a stuck elevator, or a door that won't lock:** call the after-hours number.
 
 Then report it on the form as well, so there's a record.
 
 ## Report a problem, or ask how something works
 
-**[[Request form link]]**
-
-Use it for repairs, defects, and questions about how to operate things in your unit or the building. It works on a phone, tablet, or computer, and you can add photos.
+Use the request form (its link is above) for repairs, defects, and questions about how to operate things in your unit or the building. It works on a phone, tablet, or computer, and you can add photos.
 
 A few things that help:
 
@@ -37,10 +44,6 @@ That first email also has **a link of your own** to the form, with your name and
 
 ## See where things stand
 
-**[[Status page link]]**
+The status page (its link is above) lists every open request in the building, with its number, where it is, and what's happening with it. It shows a short description written by the circle, not what you wrote, and never your name or photos.
 
-This lists every open request in the building, with its number, where it is, and what's happening with it. It shows a short description written by the circle, not what you wrote, and never your name or photos.
-
-## Questions
-
-[[How to reach the Maintenance & Warranty Circle]]
+For anything else, ask the circle (see above).

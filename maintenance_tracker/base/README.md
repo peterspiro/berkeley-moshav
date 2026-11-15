@@ -18,15 +18,26 @@ Locations and People: tick the circle members and the coordinator in People
 first.
 
 `../pages/` holds **`maintenance-tracker-members-page.md`** and
-**`maintenance-tracker-start-here.md`**: the text of the two pages that hold the tracker's links. The first is for
-members, pasted into a Gather wiki page titled "Building maintenance"; the
-second is for the circle, made into a Google Doc titled "Maintenance
-tracker: start here" in the circle's Drive folder, which only the circle
-can open. These copies are the sources: when one changes, update its page
-to match. Each `[[...]]` in them stands for a link, a name, or a phone
-number to fill in on the page itself; the links aren't kept in the repo,
-since it's public. (The files hold nothing but the page's text: Google
-Docs won't open a Markdown file that starts with a comment.)
+**`maintenance-tracker-start-here.md`**: the text of the two pages that
+hold the tracker's links. These copies are the sources: when one changes,
+update its page to match. The links aren't kept in the repo, since it's
+public; each `[[...]]` stands for a link, a name, or a phone number. (The
+files hold nothing but the page's text, with no comment at the top.)
+
+- **The members' page** is a Gather wiki page titled "Building
+  maintenance", pasted in by hand; Gather has no API for it. Its links are
+  all in its first section, "Numbers and links", filled in on the page
+  itself, and the rest of the page refers to them by name. So when the
+  text changes, paste over everything but that section, and only a link
+  added or removed means editing it. Gather keeps line breaks, so each
+  paragraph and list item in the source is one line.
+- **The circle's page** is a Google Doc titled "Maintenance tracker: start
+  here" in the circle's Drive folder, which only the circle can open.
+  `update_start_here_doc.py`, in the repo root, writes it: each
+  placeholder is a short key (`[[status-page]]`), filled from the
+  git-ignored `maintenance_links` file, and the Doc's whole contents are
+  replaced. Don't edit the Doc by hand; change the source, or the links
+  file, and run the script again.
 
 This file has three parts: changing the base's structure; setting a base
 up, with everything that has to be made by hand; and how the circle uses
@@ -80,8 +91,9 @@ the same formula into the field in each base.
    aren't checked either.
 8. Point the `maintenance_tracker` script at the base (see
    `../apps_script/README.md`).
-9. Put the base's links into the members' page and the circle's page
-   (`../pages/maintenance-tracker-members-page.md`, `../pages/maintenance-tracker-start-here.md`).
+9. Put the base's links into the members' page (in its "Numbers and
+   links" section) and into `maintenance_links` for the circle's page, and
+   run `python update_start_here_doc.py` (see above).
 
 ### Fields to change by hand
 

@@ -3,26 +3,26 @@
 Everything the circle uses to track repairs, questions, and warranty claims
 for the building.
 
-**New to this? Read the guide first:** [[link to maintenance-tracker-guide.md
-on GitHub]]
+**New to this? Read the guide first:**
+[the circle's guide to the tracker](https://github.com/peterspiro/berkeley-moshav/blob/main/maintenance_tracker/maintenance-tracker-guide.md)
 
 ## Who's who
 
-- **Coordinator this month:** [[name]]. They triage new requests.
+- **Coordinator this month:** [[coordinator]]. They triage new requests.
 - **Problems with the tracker itself** (something won't save, a wrong
-  email, a missing choice in a list): [[name, or the Technology Circle]].
+  email, a missing choice in a list): [[tracker-help]].
 
 ## What you'll use
 
 | | Link | For |
 |---|---|---|
-| **Maintenance** | [[interface link]] | Triage, working on requests, and warranty claims. Needs an Airtable account: ask [[name]] |
+| **Maintenance** | [Open Maintenance]([[maintenance-interface]]) | Triage, working on requests, and warranty claims. Needs an Airtable account: ask [[tracker-help]] |
 | **Log an update** | Your own link, sent to you by the coordinator | Recording a call, a visit, or a note. Easiest on a phone. No account needed |
 | **Weekly digest** | Arrives by email on Sundays | What needs someone this week |
 
 **Use your own "Log an update" link**, not someone else's: it fills in your
 name. Lost it? Ask the coordinator. This one works for anybody, but you'll
-have to pick your name each time: [[plain update form link]]
+have to pick your name each time: [the update form]([[update-form]])
 
 ## What members use
 
@@ -30,13 +30,13 @@ It helps to see what they see.
 
 | | Link |
 |---|---|
-| **Request form** | [[request form link]] |
-| **Status page** | [[status page link]] |
-| **Members' page in Gather** | [[link]] |
+| **Request form** | [Open the request form]([[request-form]]) |
+| **Status page** | [Open the status page]([[status-page]]) |
+| **Members' page in Gather** | [Open the members' page]([[members-page]]) |
 
 ## The base itself
 
-[[link to the Building Maintenance base]]
+[Open the Building Maintenance base]([[base]])
 
 Only if you need something the Maintenance pages don't show, such as the
 Warranties or Organizations tables. Go carefully: here a stray
