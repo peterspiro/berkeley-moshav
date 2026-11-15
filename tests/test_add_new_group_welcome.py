@@ -140,7 +140,7 @@ class TestCalendarAndRoom:
         zoom = FakeZoom()
         found = ang.calendar_and_room(
             cal, zoom, _Settings({}), "Community Meetings", "community-meetings-admins@x.org",
-            False, no_zoom, ("community-zoom-hosts@berkeleymoshav.org",), " Zoom Room",
+            False, no_zoom, ("community-zoom-hosts@example.org",), " Zoom Room",
             "Community Meetings Admins", dry_run=not real)
         return found, cal, zoom, capsys.readouterr().out
 

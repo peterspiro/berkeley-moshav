@@ -20,7 +20,7 @@ Rows without a Gather group ([Members] link), and the rows under them, are
 listed and skipped.
 
 Requires Gather credentials (see README.md) and Google sign-in as
-admin@berkeleymoshav.org (see update_groups.py's
+admin@ (see update_groups.py's
 docstring).
 
 Usage:

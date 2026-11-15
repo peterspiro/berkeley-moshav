@@ -106,7 +106,7 @@ Calendar):
   2. Enable the Google Drive API, Admin SDK (Directory API), Groups
      Settings API, and Google Calendar API for the project.
   3. On first run the script prints an auth URL — paste it into a browser
-     signed in as admin@berkeleymoshav.org (the account that owns the group
+     signed in as admin@ (the account that owns the group
      calendars; the script refuses to run as anyone else). The token is
      cached at ~/.google_setup_token.pkl for subsequent runs.
 Also requires the Zoom app's credentials in zoom_credentials (see README.md).

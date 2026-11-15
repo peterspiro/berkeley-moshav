@@ -22,8 +22,9 @@ from util.meeting_rooms import (
     ensure_zoom_room,
     list_owned_calendars,
 )
+from util.zoom_utils import ROOM_USERS, ROOMS_USER
 
-GROUP = "tech-circle@berkeleymoshav.org"
+GROUP = "tech-circle@example.org"
 WRITER_RULE = {"id": "r1", "role": "writer", "scope": {"type": "group", "value": GROUP}}
 NOW = datetime.datetime(2026, 10, 17, tzinfo=datetime.timezone.utc)
 
@@ -61,7 +62,7 @@ class TestCheckCalendarOwner:
 
     def test_other_account_exits(self):
         with pytest.raises(SystemExit) as exc:
-            check_calendar_owner(FakeCalendarService(primary="someone@berkeleymoshav.org"))
+            check_calendar_owner(FakeCalendarService(primary="someone@example.org"))
         assert OWNER in str(exc.value)
 
 
@@ -140,7 +141,7 @@ class TestEnsureGroupCalendar:
 
     def test_calendar_linked_to_another_group_not_offered(self):
         svc = FakeCalendarService({"c1": "Technology Circle"})
-        linked = LinkedResources(calendars={"c1": "other@berkeleymoshav.org"})
+        linked = LinkedResources(calendars={"c1": "other@example.org"})
         cid = _calendar(svc, linked=linked)  # no prompt: the only match is taken
         assert cid != "c1"
 
@@ -273,7 +274,7 @@ class TestEnsureZoomRoom:
 
     def test_room_linked_elsewhere_not_offered(self):
         zoom = FakeZoom({7: room(7, "Technology Circle Meeting Room")})
-        linked = LinkedResources(rooms={"7": "other@berkeleymoshav.org"})
+        linked = LinkedResources(rooms={"7": "other@example.org"})
         _room(zoom, linked=linked)
         assert zoom.writes[0] == ("create", "Technology Circle Meeting Room")
 
@@ -301,18 +302,18 @@ class TestEnsureZoomRoom:
 
     def test_room_moved_to_second_zoom_user_does_not_warn(self, quiet_log):
         zoom = FakeZoom({1: room(1, "Technology Circle Meeting Room",
-                                 host_email="berkeley@urbanmoshav.org")})
+                                 host_email=ROOM_USERS[1])})
         _room(zoom, "https://zoom.us/j/1?pwd=p")
         assert not any(a == "room_host" for _, a, _ in quiet_log)
 
     def test_second_zoom_users_room_can_be_used(self):
         zoom = FakeZoom({7: room(7, "Technology Circle Meeting Room",
-                                 host_email="berkeley@urbanmoshav.org")})
+                                 host_email=ROOM_USERS[1])})
         assert _room(zoom, input_fn=_inputs("u")).join_url == "https://zoom.us/j/7?pwd=p"
 
     def test_room_owned_by_someone_else_warns(self, quiet_log):
         zoom = FakeZoom({1: room(1, "Technology Circle Meeting Room",
-                                 host_email="someone@berkeleymoshav.org")})
+                                 host_email="someone@example.org")})
         _room(zoom, "https://zoom.us/j/1?pwd=p")
         assert any(a == "room_host" for _, a, _ in quiet_log)
 
@@ -329,7 +330,7 @@ class _Answers:
         return self.answers.pop(0)
 
 
-def _weekly(mid, topic, host="circle-zoom-hosts@berkeleymoshav.org"):
+def _weekly(mid, topic, host=ROOMS_USER):
     return room(mid, topic, type=8, host_email=host,
                 recurrence={"type": 2, "repeat_interval": 1, "weekly_days": "3"},
                 occurrences=[{"start_time": "2026-10-14T02:00:00Z", "status": "available"},
@@ -343,9 +344,9 @@ class TestMatchingMeetings:
         answers = _Answers("u", "i")
         _room(zoom, input_fn=answers)
         out = capsys.readouterr().out
-        assert "1. Technology Circle Meeting Room   (7, circle-zoom-hosts@berkeleymoshav.org, " \
+        assert f"1. Technology Circle Meeting Room   (7, {ROOMS_USER}, " \
                "no fixed time)" in out
-        assert "2. Technology Circle weekly   (8, circle-zoom-hosts@berkeleymoshav.org, " \
+        assert f"2. Technology Circle weekly   (8, {ROOMS_USER}, " \
                "weekly on Tue, 7:00 PM, next Tue Oct 20)" in out
         assert answers.prompts[0] == \
             "  1. Technology Circle Meeting Room — [u]se, [i]gnore, [d]elete, or [q]uit: "
@@ -428,11 +429,11 @@ class TestMatchingMeetings:
     def test_linked_elsewhere_listed_not_asked(self, capsys):
         zoom = FakeZoom({7: room(7, "Technology Circle Meeting Room"),
                          8: room(8, "Technology Circle Zoom")})
-        linked = LinkedResources(rooms={"8": "other@berkeleymoshav.org"})
+        linked = LinkedResources(rooms={"8": "other@example.org"})
         answers = _Answers("u")
         _room(zoom, input_fn=answers, linked=linked)
         assert len(answers.prompts) == 1
-        assert "linked to other@berkeleymoshav.org, not selectable" in capsys.readouterr().out
+        assert "linked to other@example.org, not selectable" in capsys.readouterr().out
 
 
 class TestDescribeSchedule:

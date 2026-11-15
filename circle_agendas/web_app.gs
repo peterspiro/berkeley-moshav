@@ -3,7 +3,7 @@
  *
  * The links in an agenda doc open this web app, which changes the doc and
  * shows a page saying what it did. It runs as the account that deployed it
- * (admin@berkeleymoshav.org), so members need no permission of their own
+ * (admin@), so members need no permission of their own
  * and see no "unverified app" screen; anyone signed in to a Google account
  * can use it. Each link's address names the action, the doc, and (but for
  * a new meeting) the meeting:

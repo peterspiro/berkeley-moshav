@@ -61,22 +61,22 @@ are; this note keeps the reasoning and the remaining work.
 ## Decisions
 
 ### Accounts
-- Calendars are owned by `admin@berkeleymoshav.org`, which also runs the Apps
+- Calendars are owned by `admin@`, which also runs the Apps
   Scripts. The Python scripts refuse to work on calendars signed in as anyone
   else, since other admins can't see calendars they don't own.
-- New rooms are made under the `circle-zoom-hosts@berkeleymoshav.org` Zoom
-  user. The account's second licensed user, `berkeley@urbanmoshav.org`, can take a
+- New rooms are made under the `circle-zoom-hosts@` Zoom
+  user. The account's second licensed user, `berkeley@` (at urbanmoshav.org), can take a
   group's room, transferred to it in Zoom, when the group's meetings keep
   clashing with others' (see "Open decisions"). Both are `ROOM_USERS` in
   `util/zoom_utils.py`.
-- A third licensed Zoom user, `community-zoom-hosts@berkeleymoshav.org`,
+- A third licensed Zoom user, `community-zoom-hosts@`,
   hosts the community-wide meetings (see "Community calendars"). It isn't
   one of `ROOM_USERS`: group rooms aren't moved to it.
 - Zoom is reached through a Server-to-Server OAuth app ("Berkeley Moshav Admin
   Scripts"). Its credentials are the project's, not a person's, so they live
   in the repo's git-ignored `zoom_credentials` file (Python) and the Apps
   Script's Script Properties.
-- Alerts go to `calendaring-alerts@berkeleymoshav.org`, plus the groups
+- Alerts go to `calendaring-alerts@`, plus the groups
   involved.
 
 ### Rooms
@@ -157,7 +157,7 @@ their own social events.
   everybody groups; that's enough, so admin groups get no other read access.
 - **Zoom room.** Each admin group gets its own no-fixed-time room (Zoom
   type 3, the standard room settings) under the
-  `community-zoom-hosts@berkeleymoshav.org` Zoom user
+  `community-zoom-hosts@` Zoom user
   (`COMMUNITY_ROOMS_USER`), so each calendar's recordings can be told apart
   by the room's name (see "Not built yet", 1). A skilled host claims host
   with that user's host key for host features such as breakout rooms.
@@ -172,7 +172,7 @@ their own social events.
   group, Drive folder, "Google calendar" and "Zoom meeting" links, plus the
   host key link and a "Calendar audience:" line naming the everybody group its events invite
   and its reminders go to. For now there's only Gather's default Full
-  Community group, `all.members@berkeleymoshav.org`
+  Community group, `all.members@`
   (`COMMUNITY_CALENDAR_AUDIENCE`, written when a footer names none), but
   the footer records it in case there are more everybody groups later.
   `group_meetings` finds the calendars, rooms and audiences the way it
@@ -246,13 +246,13 @@ their own social events.
   text (`admin_calendar_paragraphs` in `util/calendar_announcement.py`).
   The welcome email reads:
 
-  > **To:** community-meetings-admins@berkeleymoshav.org
+  > **To:** community-meetings-admins@
   > **Subject:** Your new community calendar: Community Meetings
   >
   > Hi Dana,
   >
   > I've created a Community Meetings calendar for community-wide events,
-  > and this email list, community-meetings-admins@berkeleymoshav.org, for
+  > and this email list, community-meetings-admins@, for
   > the people who schedule them. Links to the calendar, its Zoom room, its
   > Drive folder, and its admin group in Gather are in the footer at the
   > bottom of this message.
@@ -271,7 +271,7 @@ their own social events.
   > A few minutes after you save it, the event automatically gets:
   > - a link to the calendar's Zoom room, if it doesn't already have another
   >   Zoom or Meet link (or says [no zoom] in the description);
-  > - the whole community (all.members@berkeleymoshav.org) invited, each
+  > - the whole community (all.members@) invited, each
   >   member getting the invitation by email, unless the event says
   >   [no invite].
   >
@@ -315,7 +315,7 @@ their own social events.
 | Drive folder | Top level of the Shared Drive | Under "Meeting Admin", like clubs under "Clubs" |
 | Gather group, folder, and Google Group names | "<Name> Circle" / "<Name> Working Group" | "<Calendar> Admins" |
 | Calendar name | The group's | The calendar's, without "Admins" |
-| Zoom room | "<Group> Meeting Room", under `circle-zoom-hosts@` (or moved to `berkeley@urbanmoshav.org`) | "<Calendar> Zoom Room", under `community-zoom-hosts@`, never moved |
+| Zoom room | "<Group> Meeting Room", under `circle-zoom-hosts@` (or moved to `berkeley@`) | "<Calendar> Zoom Room", under `community-zoom-hosts@`, never moved |
 | Host key | Given privately to facilitators | In a doc the community can open, linked from the footer |
 | Who events invite | The group itself | The audience in its footer (`all.members@`), not the admin group |
 | BM Meetings FAQ line | Added | Not added |

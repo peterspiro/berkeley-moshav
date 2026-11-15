@@ -140,7 +140,7 @@ class TestAlsoInviteAddresses:
     def test_parsing(self):
         from util.google_group_utils import also_invite_addresses
         assert also_invite_addresses(["planning, Pat@Example.com", "x@y.org pat@example.com"]) \
-            == ["planning@berkeleymoshav.org", "pat@example.com", "x@y.org"]
+            == [f"planning@{m.DOMAIN}", "pat@example.com", "x@y.org"]
         assert also_invite_addresses(["a@x.org", "none"]) == []
 
     def test_bad_address(self):

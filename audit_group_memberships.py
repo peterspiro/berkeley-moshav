@@ -52,7 +52,7 @@ see update_groups.py's docstring for setup.
 Usage:
     python audit_group_memberships.py
     python audit_group_memberships.py -g landscape
-    python audit_group_memberships.py --ignore admin@berkeleymoshav.org
+    python audit_group_memberships.py --ignore admin@example.org
 """
 
 import argparse

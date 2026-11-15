@@ -2,7 +2,7 @@
 
 Apps Script that does what happens to the Maintenance & Warranty Circle's
 Airtable base ("Building Maintenance") without anyone doing it. It runs as
-`admin@berkeleymoshav.org`. `../maintenance-tracker-plan.md` is the design;
+`admin@`. `../maintenance-tracker-plan.md` is the design;
 `../base/README.md` describes the base.
 
 - **Every 10 minutes**, or every 2 hours on Airtable's Free plan (see "The
@@ -173,7 +173,7 @@ of the same name, so rename or delete the old one first.
 
 ## Deploying
 
-Once, signed in to `clasp` as `admin@berkeleymoshav.org`:
+Once, signed in to `clasp` as `admin@`:
 
 ```bash
 cd maintenance_tracker/apps_script

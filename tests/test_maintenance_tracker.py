@@ -18,6 +18,7 @@ from pathlib import Path
 import pytest
 
 from util.airtable_schema import expected_fields, load_schema
+from util.google_group_utils import DOMAIN
 
 ROOT = Path(__file__).resolve().parent.parent
 PROJECT = ROOT / "maintenance_tracker" / "apps_script"
@@ -117,8 +118,8 @@ def test_no_ids_or_links_in_the_project():
     for path in PROJECT.iterdir():
         text = path.read_text()
         assert not re.search(r"\b(app|tbl|pat)[A-Za-z0-9]{14}\b", text), path.name
-        assert "airtable.com/app" not in text and "@berkeleymoshav.org" not in text.replace(
-            "admin@berkeleymoshav.org", ""), path.name
+        assert "airtable.com/app" not in text and f"@{DOMAIN}" not in text.replace(
+            f"admin@{DOMAIN}", ""), path.name
 
 
 # --- new requests ------------------------------------------------------------
@@ -698,8 +699,8 @@ def test_housekeeping_reads_each_table_once():
 # --- form links --------------------------------------------------------------
 
 def test_form_link_is_the_tested_shape():
-    assert rule("formLink(u, 'Peter S', 'Unit 411')", u=FORM) == \
-        FORM + "?prefill_Reporter=Peter+S&prefill_Location=Unit+411"
+    assert rule("formLink(u, 'Pat S', 'Unit 411')", u=FORM) == \
+        FORM + "?prefill_Reporter=Pat+S&prefill_Location=Unit+411"
     assert rule("formLink(u, \"Zoë O'Neil\", null)", u=FORM + "?x=1") == \
         FORM + "?x=1&prefill_Reporter=Zo%C3%AB+O'Neil"
 

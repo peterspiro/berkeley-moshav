@@ -32,7 +32,8 @@
  */
 
 // Who can change the structure: they can edit the sheet's Parent column.
-const STRUCTURE_EDITORS = 'coordinating-circle@berkeleymoshav.org';
+// The group's name, without its @DOMAIN (circles.gs).
+const STRUCTURE_EDITORS = 'coordinating-circle';
 // The community's Shared Drive (DEFAULT_DRIVE_ID in util/gdrive_config.py),
 // and the folder at its top that holds the sheet and the doc: outside any
 // group's folder, so its files can be deleted or moved only by the Shared
@@ -767,7 +768,7 @@ function setupCircleStructure() {
 
   // Editors of a file in a shared drive (unlike its managers) can't delete
   // or move it.
-  Drive.Permissions.create({role: 'writer', type: 'group', emailAddress: STRUCTURE_EDITORS},
+  Drive.Permissions.create({role: 'writer', type: 'group', emailAddress: STRUCTURE_EDITORS + '@' + DOMAIN},
     sheetId, {sendNotificationEmail: false, supportsAllDrives: true});
   try {
     DriveApp.getFileById(docId).setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
@@ -788,7 +789,7 @@ function setupCircleStructure() {
   }
   logLink('The folder, at the top of the Shared Drive:',
     'https://drive.google.com/drive/folders/' + folderId);
-  logLink('The sheet, which ' + STRUCTURE_EDITORS + ' can edit (send them the link):',
+  logLink('The sheet, which ' + STRUCTURE_EDITORS + '@' + DOMAIN + ' can edit (send them the link):',
     'https://docs.google.com/spreadsheets/d/' + sheetId + '/edit');
   logLink('The doc, which anyone with the link can view:', structureDocUrl());
 }

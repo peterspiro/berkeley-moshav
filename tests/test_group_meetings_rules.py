@@ -693,11 +693,14 @@ def test_merge_keeps_every_group_name():
 
 
 def test_zoom_user_numbers_cover_room_users():
+    from util.google_group_utils import DOMAIN
     from util.zoom_utils import ROOM_USERS
     script = (RULES.parent / "group_meetings.gs").read_text()
     numbers = script.split("const ZOOM_USER_NUMBERS = {", 1)[1].split("};", 1)[0]
     for user in ROOM_USERS:
-        assert f"'{user}':" in numbers
+        local, domain = user.split("@")
+        const = "DOMAIN" if domain == DOMAIN else "URBAN_MOSHAV_DOMAIN"
+        assert f"[`{local}@${{{const}}}`]:" in numbers
 
 
 MIN = 60 * 1000

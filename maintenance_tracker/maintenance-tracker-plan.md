@@ -45,7 +45,7 @@ groups); work orders for a property manager.
 | Records (requests, claims, contacts, equipment, schedules) | Airtable | Relational, with forms, kanban and grouped views the circle can change themselves |
 | Views, the member form, interfaces | Airtable, built by hand from a checklist | Airtable's API can't create them |
 | The base's tables and fields | `base/schema.json` in this repo, applied by a script | So a session can change the schema, review it as a diff, and try it on a test base |
-| What acts on the data: emails, reminders, calendar, pattern reports, backups | A `maintenance_tracker` Apps Script project, running as `admin@berkeleymoshav.org` | Airtable automations can't be kept in git, tested, or made by the API, and are rationed by plan; Apps Script is what the repo's other timers already use, and it can send mail and write calendars and Drive as `admin@` |
+| What acts on the data: emails, reminders, calendar, pattern reports, backups | A `maintenance_tracker` Apps Script project, running as `admin@` | Airtable automations can't be kept in git, tested, or made by the API, and are rationed by plan; Apps Script is what the repo's other timers already use, and it can send mail and write calendars and Drive as `admin@` |
 | Documents (O&M manuals, as-builts, warranties, claim letters) | The circle's Drive folder | The community's access rules already apply there; Airtable holds links |
 | How-to and emergency guides | Google Docs in a "Building Handbook" folder everyone can view | Members already have Drive access; Airtable indexes them |
 | Members and their units | Gather, copied to Airtable | Gather stays the directory |
@@ -476,7 +476,7 @@ year. Other volunteers use the update form and the emails. Check
 current prices and limits on Airtable's pricing page before buying; the
 figures above come from third-party summaries that don't fully agree.
 
-The workspace should be owned by `admin@berkeleymoshav.org`, not a member's
+The workspace should be owned by `admin@`, not a member's
 own account.
 
 **Decided since:** the real base starts on the Free plan, as a trial, and

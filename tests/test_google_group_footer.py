@@ -143,7 +143,7 @@ class TestParseFooterLink:
 class TestCalendarAndZoomLinks:
     @pytest.mark.parametrize("cal_id", [
         CAL_ID,
-        "someone@berkeleymoshav.org",
+        "someone@example.org",
         "en.usa#holiday@group.v.calendar.google.com",
         "a?>",  # base64 of this contains "+" and "/"
     ])
@@ -207,18 +207,18 @@ class TestCalendarAudience:
     """A community-wide calendar's admin group's footer names the calendar's
     audience."""
 
-    def block(self, audience="all.members@berkeleymoshav.org"):
+    def block(self, audience="all.members@example.org"):
         return build_footer_block(
             "7", "F", "https://g", "Community Meetings", calendar_id="c@group.calendar.google.com",
             zoom_url="https://zoom.us/j/81234567890?pwd=x", zoom_passcode="123456",
             audience=audience)
 
     def test_written_last(self):
-        assert self.block().endswith("\nCalendar audience: all.members@berkeleymoshav.org")
+        assert self.block().endswith("\nCalendar audience: all.members@example.org")
 
     def test_read_back(self):
         assert parse_footer_audience("Notes\n\n" + self.block()) == \
-            "all.members@berkeleymoshav.org"
+            "all.members@example.org"
 
     def test_absent_for_other_groups(self):
         assert parse_footer_audience(self.block(audience=None)) is None
@@ -233,8 +233,8 @@ class TestCalendarAudience:
         old = self.block()
         updates = footer_updates({"customFooterText": old, "includeCustomFooter": "true"},
                                  "7", "F", "https://g", "Community Meetings",
-                                 audience="everyone@berkeleymoshav.org")
-        assert parse_footer_audience(updates["customFooterText"]) == "everyone@berkeleymoshav.org"
+                                 audience="everyone@example.org")
+        assert parse_footer_audience(updates["customFooterText"]) == "everyone@example.org"
         assert describe_footer_updates(old, updates) == "calendar audience"
 
     def test_host_key_link(self):
@@ -250,7 +250,7 @@ class TestCalendarAudience:
 
     def test_kept_when_zoom_replaced(self):
         new = replace_footer_zoom(self.block(), "https://zoom.us/j/81234567890?pwd=y", "654321")
-        assert parse_footer_audience(new) == "all.members@berkeleymoshav.org"
+        assert parse_footer_audience(new) == "all.members@example.org"
 
 
 class TestNoZoom:

@@ -47,7 +47,7 @@ from util.google_group_footer import (
     parse_footer_calendar_id,
     parse_footer_zoom_url,
 )
-from util.google_group_utils import TOKEN_PATH, list_all_groups
+from util.google_group_utils import DOMAIN, TOKEN_PATH, list_all_groups
 from util.zoom_utils import (
     MEETING_TYPE_NO_FIXED_TIME,
     ROOM_TOPIC_SUFFIX,
@@ -63,7 +63,7 @@ from util.zoom_utils import (
 
 # The Google account that owns every group calendar and the all-events
 # calendar, and runs the Apps Scripts.
-CALENDAR_OWNER = "admin@berkeleymoshav.org"
+CALENDAR_OWNER = f"admin@{DOMAIN}"
 CALENDAR_TIME_ZONE = "America/Los_Angeles"
 
 ALL_EVENTS_CALENDAR_NAME = "All Berkeley Moshav Events"
@@ -79,7 +79,7 @@ ALL_EVENTS_CALENDAR_ID = (
 # on its admin group's footer's "Calendar audience" line when the footer
 # has none. The footer, not this, is what the Apps Script reads, so a
 # calendar for another everybody group is set there.
-COMMUNITY_CALENDAR_AUDIENCE = "all.members@berkeleymoshav.org"
+COMMUNITY_CALENDAR_AUDIENCE = f"all.members@{DOMAIN}"
 
 # The doc holding the host key of the community-wide calendars' rooms (the
 # community-zoom-hosts@ Zoom user's), "Community Events Zoom Host Key" in

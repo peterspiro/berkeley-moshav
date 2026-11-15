@@ -20,7 +20,7 @@ invite and its reminders go to (the group_meetings Apps Script reads it,
 and knows the group for an admin group by it):
 
     Zoom host key: https://docs.google.com/document/d/<id>/edit
-    Calendar audience: all.members@berkeleymoshav.org
+    Calendar audience: everyone@example.org
     Also invite: other-list@example.org, someone@example.com
 
 The "Also invite" line, if any, names more addresses (any domain) that

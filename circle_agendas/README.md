@@ -34,7 +34,7 @@ constants.
 
 ## Setting up the project
 
-Use `admin@berkeleymoshav.org`. With
+Use `admin@`. With
 [clasp](https://github.com/google/clasp):
 
 ```bash
@@ -60,7 +60,7 @@ error, allow the rest, and run it again.
 
 A doc's links run the web app, so it must be deployed, and its address
 recorded, before any doc is built. Once, in the editor (as
-`admin@berkeleymoshav.org`):
+`admin@`):
 
 1. **Deploy → New deployment**, type **Web app**. `appsscript.json` already
    sets it to run as you and to let anyone with a Google account use it;
@@ -343,7 +343,7 @@ the sheet's editors, which in a shared drive can't. It has three parts:
   row says "View the Circle Structure. Coordinating Circle: change a
   group’s Parent here to move it within the structure.", "View the Circle
   Structure" linking the doc. The Coordinating Circle
-  (`coordinating-circle@berkeleymoshav.org`, `STRUCTURE_EDITORS`) can edit
+  (`coordinating-circle@`, `STRUCTURE_EDITORS`) can edit
   only its **Parent** column: everything else is protected, editable only by
   `admin@`, which the script runs as. (So can anyone with edit access to the
   whole Shared Drive, its members with a Contributor role or above, as only

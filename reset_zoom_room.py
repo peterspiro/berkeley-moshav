@@ -20,7 +20,7 @@ Requires Google API access (see update_groups.py)
 and the Zoom app's credentials in zoom_credentials (see README.md).
 
 Usage:
-    python reset_zoom_room.py -g tech-circle@berkeleymoshav.org
+    python reset_zoom_room.py -g tech-circle@example.org
     python reset_zoom_room.py -g technology -n
 """
 
