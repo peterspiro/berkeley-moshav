@@ -5,10 +5,11 @@ Writes maintenance_tracker/pages/maintenance-tracker-start-here.md into the
 
 The page's source is in the repo, which is public, so its links, names, and
 numbers aren't: each is a placeholder, such as [[status-page]], filled in
-from the maintenance tracker's base, "Building Maintenance":
+from the maintenance tracker's base:
 
     [[base]]          the base's own link
-    [[coordinator]]   the person ticked as Coordinator in People
+    [[coordinator]]   the Name ("Dana S") of the person ticked as
+                      Coordinator in People
     [[status-page]]   and every other key: the Value of the row in the
                       Links table whose Name makes that key, lowercased with
                       hyphens for spaces ("Status page")
@@ -29,8 +30,10 @@ it once, by hand, as an empty Google Doc with that title.
 Lines wrapped in the source are joined before the Doc is written, so each
 paragraph and list item is one paragraph in the Doc.
 
---test reads the test base instead, for trying the script out; it can only
-be used with -n, so the circle's Doc never gets the test base's links.
+It reads the test base, "Building Maintenance (test)", which holds the
+demo data (see maintenance_demo.py), unless given --real, which reads
+"Building Maintenance". Until the real base is set up, the Doc links to the
+test base.
 
 Requires the Airtable token in airtable_credentials, and Google
 credentials, as for the repo's other Google scripts (see README.md,
@@ -39,7 +42,7 @@ credentials, as for the repo's other Google scripts (see README.md,
 Usage:
     python update_start_here_doc.py -n
     python update_start_here_doc.py
-    python update_start_here_doc.py -n --test
+    python update_start_here_doc.py --real
 """
 
 import argparse
@@ -80,7 +83,7 @@ def base_values(base_id: str, people: list[dict], links: list[dict]) -> dict[str
         if key and value:
             values[key] = value
     values["base"] = f"https://airtable.com/{base_id}"
-    values["coordinator"] = coordinators[0].get("Full name") or coordinators[0].get("Name", "")
+    values["coordinator"] = coordinators[0].get("Name", "")
     return values
 
 
@@ -132,20 +135,17 @@ def main() -> None:
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("-n", "--dry-run", action="store_true",
                         help="print what would be written, and change nothing")
-    parser.add_argument("--test", action="store_true",
-                        help=f"read {TEST_BASE!r} instead of {REAL_BASE!r} (only with -n)")
+    parser.add_argument("--real", action="store_true",
+                        help=f"read {REAL_BASE!r} instead of {TEST_BASE!r}")
     parser.add_argument("-c", "--credentials", default=str(DEFAULT_CLIENT_SECRETS_PATH),
                         help="the Google OAuth client file (default: client_secret.json)")
     args = parser.parse_args()
-    if args.test and not args.dry_run:
-        parser.error("--test can only be used with -n")
 
     source = SOURCE.read_text()
     airtable = Airtable(load_airtable_token())
     try:
-        base = airtable.find_base(TEST_BASE if args.test else REAL_BASE)
-        values = base_values(base, airtable.list_records(base, "People", ["Name", "Full name", "Coordinator",
-                                                                         "Moved out"]),
+        base = airtable.find_base(REAL_BASE if args.real else TEST_BASE)
+        values = base_values(base, airtable.list_records(base, "People", ["Name", "Coordinator", "Moved out"]),
                              airtable.list_records(base, "Links"))
     except (AirtableError, ValueError) as e:
         sys.exit(f"Error: {e}")

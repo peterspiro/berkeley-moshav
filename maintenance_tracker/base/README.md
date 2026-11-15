@@ -37,8 +37,9 @@ files hold nothing but the page's text, with no comment at the top.)
 - **The circle's page** is a Google Doc titled "Maintenance tracker: start
   here" in the circle's Drive folder, which only the circle can open.
   `update_start_here_doc.py`, in the repo root, writes it: each
-  placeholder is a short key, filled from the real base (`[[base]]`, its
-  link; `[[coordinator]]`, from People; the others, such as
+  placeholder is a short key, filled from the test base, or with
+  `--real` the real one (`[[base]]`, its link; `[[coordinator]]`, from
+  People; the others, such as
   `[[status-page]]`, from the Links table, below), and the Doc's whole
   contents are replaced. Don't edit the Doc by hand; change the source, or
   the base, and run the script again: after a new coordinator is ticked,
