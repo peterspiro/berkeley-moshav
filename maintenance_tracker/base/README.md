@@ -17,7 +17,7 @@ trying changes, which is the one the script works on unless given `--real`.
 Locations and People: tick the circle members and the coordinator in People
 first.
 
-`../pages/` holds **`members-page.md`** and
+`../pages/` holds **`maintenance-tracker-members-page.md`** and
 **`maintenance-tracker-start-here.md`**: the text of the two pages that hold the tracker's links. The first is for
 members, pasted into a Gather wiki page titled "Building maintenance"; the
 second is for the circle, made into a Google Doc titled "Maintenance
@@ -81,7 +81,7 @@ the same formula into the field in each base.
 8. Point the `maintenance_tracker` script at the base (see
    `../apps_script/README.md`).
 9. Put the base's links into the members' page and the circle's page
-   (`../pages/members-page.md`, `../pages/maintenance-tracker-start-here.md`).
+   (`../pages/maintenance-tracker-members-page.md`, `../pages/maintenance-tracker-start-here.md`).
 
 ### Fields to change by hand
 

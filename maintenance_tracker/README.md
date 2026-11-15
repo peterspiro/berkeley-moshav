@@ -12,7 +12,7 @@ in this folder, except three scripts in the repo root.
 | `maintenance-tracker-guide.md` | The guide to using the tracker, for the circle's members |
 | `base/` | The base as files (`schema.json`, `seed.json`), and in its `README.md` how to change the base, set one up, and use it |
 | `apps_script/` | The Apps Script project that acknowledges and follows up requests, emails the circle, and backs the base up; its `README.md` says how to deploy it |
-| `pages/` | The sources of the two pages that hold the tracker's links: `members-page.md` (a Gather wiki page) and `maintenance-tracker-start-here.md` (a Google Doc in the circle's Drive folder) |
+| `pages/` | The sources of the two pages that hold the tracker's links: `maintenance-tracker-members-page.md` (a Gather wiki page) and `maintenance-tracker-start-here.md` (a Google Doc in the circle's Drive folder) |
 | `../maintenance_base.py` | Makes a base match `base/schema.json` and `base/seed.json` |
 | `../sync_maintenance_people.py` | Copies the members in from Gather to the base's People table |
 | `../maintenance_demo.py` | Replaces the test base's rows, except Locations and People, with demo data for showing the tracker to the circle |
