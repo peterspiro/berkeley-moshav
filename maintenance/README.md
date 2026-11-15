@@ -14,10 +14,16 @@ emails. This folder holds what the base is made from:
 There are two bases: the real one, and "Building Maintenance (test)" for
 trying changes, which is the one the script works on unless given `--real`.
 
-- **`members-page.md`** and **`circle-start-here.md`**: the text of the two
-  pages that hold the tracker's links: one for members, pasted into a
-  Gather wiki page, and one for the circle, made into a Google Doc in its
-  Drive folder. The links themselves are filled in there, not here.
+- **`members-page.md`** and **`maintenance-tracker-start-here.md`**: the
+  text of the two pages that hold the tracker's links. The first is for
+  members, pasted into a Gather wiki page titled "Building maintenance";
+  the second is for the circle, made into a Google Doc titled "Maintenance
+  tracker: start here" in the circle's Drive folder, which only the circle
+  can open. These copies are the sources: when one changes, update its
+  page to match. Each `[[...]]` in them stands for a link, a name, or a
+  phone number to fill in on the page itself; the links aren't kept here,
+  since the repo is public. (The files hold nothing but the page's text:
+  Google Docs won't open a Markdown file that starts with a comment.)
 
 This file has three parts: changing the base's structure; setting a base
 up, with everything that has to be made by hand; and how the circle uses
@@ -71,7 +77,7 @@ the same formula into the field in each base.
    aren't checked either.
 8. Point the `maintenance_tracker` script at the base (see its README).
 9. Put the base's links into the members' page and the circle's page
-   (`members-page.md`, `circle-start-here.md`).
+   (`members-page.md`, `maintenance-tracker-start-here.md`).
 
 ### Fields to change by hand
 

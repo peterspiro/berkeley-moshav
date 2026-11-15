@@ -1,13 +1,3 @@
-<!--
-The members' page about the maintenance tracker, to paste into a Gather
-wiki page titled "Building maintenance". This copy is the source: when it
-changes, update the page to match.
-
-Replace each [[...]] with the real link, phone number, or instruction
-before pasting. The links aren't kept in this repo, which is public.
-Delete this comment.
--->
-
 # Building maintenance
 
 Something broken, leaking, or not working? Not sure how to operate

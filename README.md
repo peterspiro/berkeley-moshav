@@ -815,7 +815,7 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
   Maintenance interface's Triage and Requests pages; when a page is added
   or dropped, or a status, an email, or a digest section changes,
   update it
-- `maintenance/members-page.md` and `maintenance/circle-start-here.md`:
+- `maintenance/members-page.md` and `maintenance/maintenance-tracker-start-here.md`:
   the two pages of links to the maintenance tracker, for members (a Gather
   wiki page) and for the circle (a Google Doc in its Drive folder). The
   repo's copies are the sources, with the links left out

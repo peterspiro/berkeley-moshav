@@ -1,13 +1,3 @@
-<!--
-The circle's page of links to the maintenance tracker, to make into a Google
-Doc titled "Maintenance tracker: start here" in the Maintenance & Warranty
-Circle's Drive folder (which only the circle can open). This copy is the
-source: when it changes, update the doc to match.
-
-Replace each [[...]] with the real link or name. The links aren't kept in
-this repo, which is public. Delete this comment.
--->
-
 # Maintenance tracker: start here
 
 Everything the circle uses to track repairs, questions, and warranty claims
