@@ -16,7 +16,7 @@ These are the parts you'll meet:
 |---|---|---|
 | The request form | Members | Reporting a problem or asking how something works |
 | The status page | Members | Seeing where every request stands |
-| The **Maintenance** screens in Airtable | The circle | Triage, and working on requests |
+| The **Triage** and **Requests** screens in Airtable | The circle | Triage, and working on requests |
 | The "Log an update" form | The circle | Recording a call, a visit, or a note, from a phone |
 | Emails | Members and the circle | The tracker sends these by itself (see below) |
 | The weekly digest | The circle | A Sunday email summing up what needs attention |
