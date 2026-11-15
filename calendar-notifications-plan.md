@@ -3,7 +3,7 @@
 ## Goal
 
 A Google Apps Script, **owned by the Workspace admin account**, that watches the
-admin's primary calendar — the one aliased by `share@berkeleymoshav.org` — and,
+admin's primary calendar — the one aliased by `share@` — and,
 whenever a community member invites `share@` to an event they created on their
 personal Gmail calendar:
 
@@ -21,7 +21,7 @@ configuration out of each group's footer rather than a hardcoded map.
 ## How the pieces fit
 
 - Community members create social events on their **personal (non-Workspace)
-  Gmail** calendars and invite `share@berkeleymoshav.org`.
+  Gmail** calendars and invite `share@`.
 - `share@` is an **alias of the admin account**, so the invitation lands on the
   admin account's **primary calendar** as a guest copy. On that copy, the
   `organizer` field is the community member's personal Gmail address.
@@ -127,7 +127,7 @@ community member who created the event rather than to the admin account.
 > View on the shared calendar: https://calendar.google.com/…
 >
 > —
-> You're receiving this because members@berkeleymoshav.org can see the Berkeley Moshav shared calendar.
+> You're receiving this because members@ can see the Berkeley Moshav shared calendar.
 
 Optional fields degrade gracefully: location/description lines drop out when
 absent; all-day events show "All day" instead of a time range.
@@ -161,7 +161,7 @@ keep/remove gate, and the per-group email.
  * Community Calendar → Group Notifications & Invitation Gatekeeper
  *
  * Runs AS the Workspace admin account, whose primary calendar is aliased by
- * share@berkeleymoshav.org. Community members invite share@ to social events
+ * share@. Community members invite share@ to social events
  * they create on their personal Gmail calendars; those invitations land on the
  * admin's primary calendar as guest copies.
  *

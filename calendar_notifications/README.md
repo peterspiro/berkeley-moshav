@@ -1,7 +1,7 @@
 # Calendar Notifications
 
 Apps Script that watches the admin account's primary calendar (aliased by
-`share@berkeleymoshav.org`), emails a community Google Group when one of its
+`share@`), emails a community Google Group when one of its
 members adds an event, and removes invitations from anyone who isn't allowed to
 add events. See `../calendar-notifications-plan.md` for the full design.
 
@@ -86,7 +86,7 @@ Two Workspace settings (not code) must be in place, or nothing is delivered:
 ## Smoke test
 
 1. From a Gmail account that **is** a member of the reader group, create an event
-   and invite `share@berkeleymoshav.org` → expect a notification to the group
+   and invite `share@` → expect a notification to the group
    within a minute or two.
 2. From an address that is **not** a member, do the same → the invitation should
    be removed from the calendar and produce no email.

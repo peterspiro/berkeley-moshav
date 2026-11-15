@@ -120,7 +120,7 @@ don't reach docs already built, and will take their own scripts (see
 
 ## How it works
 
-One central Apps Script web app, running as `admin@berkeleymoshav.org` and
+One central Apps Script web app, running as `admin@` and
 open to anyone with a Google account, rather than a script in each doc:
 members need not approve an "unverified app" screen for each doc, members
 with personal Gmail accounts can use it, and there's one copy of the code

@@ -15,7 +15,7 @@ Their main job is keeping these things linked together and consistent:
   `berkeleymoshav.org` Workspace, which serve as each Gather group's email list
 - The **Circle Structure**, the tree of the circles and working groups: a
   Google Sheet where the Coordinating Circle
-  (`coordinating-circle@berkeleymoshav.org`) changes a group's parent and
+  (`coordinating-circle@`) changes a group's parent and
   nothing else, and a Google Doc, which anyone with the link can view, that
   shows the tree with links to each group's agenda doc, members, documents,
   and email list. The `circle_agendas` Apps Script fills in both from the
@@ -24,10 +24,10 @@ Their main job is keeping these things linked together and consistent:
   "Circle Structure" folder at the top of the Shared Drive. (It replaced the
   [Circle Structure](https://berkeley-moshav.gather.coop/wiki/circle-structure)
   wiki page in Gather.)
-- Each group's **Google calendar**, owned by `admin@berkeleymoshav.org` and
+- Each group's **Google calendar**, owned by `admin@` and
   shared with the group's Google Group so its members can add meetings, and
   its permanent **Zoom meeting room**, owned by the
-  `circle-zoom-hosts@berkeleymoshav.org` Zoom user. A room's link never
+  `circle-zoom-hosts@` Zoom user. A room's link never
   changes, and meetings in it can run with no host present. There's also one "All Berkeley
   Moshav Events" calendar for every meeting, which everyone can view.
 - **Community calendars**, for community-wide events (such as community
@@ -35,10 +35,16 @@ Their main job is keeping these things linked together and consistent:
   "<Calendar> Admins"): its calendar, its email list, its folder in the
   Shared Drive's "Meeting Admin" folder, and its own Zoom room
   ("<Calendar> Zoom Room"), owned by the
-  `community-zoom-hosts@berkeleymoshav.org` Zoom user. Their events invite
-  the whole community (`all.members@berkeleymoshav.org`).
+  `community-zoom-hosts@` Zoom user. Their events invite
+  the whole community (`all.members@`).
   `community-calendar-admins-guide.md` is the guide for their admins, to
   make into a Google Doc (see "Setup").
+
+Addresses are written short in this repo, as their name and an `@`
+(`admin@` is the `admin` account at berkeleymoshav.org; `berkeley@` alone is
+at urbanmoshav.org), and the code puts each together from its name and its
+domain: the repo is public, and this keeps whole addresses from being
+scraped from it.
 
 Three Google Apps Script projects run inside Google Workspace alongside the
 Python scripts:
@@ -125,7 +131,7 @@ types, knows a community calendar from a group's:
 
 ```
 Zoom host key: https://docs.google.com/document/d/.../edit
-Calendar audience: all.members@berkeleymoshav.org
+Calendar audience: all.members@
 ```
 
 The host key doc can be opened by the Shared Drive's members (the
@@ -195,7 +201,7 @@ playwright install chromium
   enable the Drive, Admin SDK (Directory), Groups Settings, Google
   Calendar, and Gmail APIs (Gmail sends the email telling a group about its
   new calendar). On first run, a script prints a sign-in URL; open it signed
-  in as `admin@berkeleymoshav.org`, which owns the group calendars (the
+  in as `admin@`, which owns the group calendars (the
   scripts that make calendars refuse to run as anyone else). The sign-in is
   saved to `~/.google_setup_token.pkl`; delete that file to sign in as a
   different account. A script that needs a scope the saved sign-in lacks asks
@@ -257,15 +263,15 @@ screenshots go to `debug/` (git-ignored).
 ### Changing the host key
 
 All the group rooms share one host key: the
-`circle-zoom-hosts@berkeleymoshav.org` Zoom user's. It's given privately to each group's facilitators, so they can
+`circle-zoom-hosts@` Zoom user's. It's given privately to each group's facilitators, so they can
 claim host in their group's room. Change it only when it has leaked or a
 facilitator who knows it shouldn't any more, since every facilitator in every
 group then needs the new one. It's changed by hand, not by a script: sign in
-to the Zoom web portal as `circle-zoom-hosts@berkeleymoshav.org`, open
+to the Zoom web portal as `circle-zoom-hosts@`, open
 **Profile**, and edit **Host Key** (6 to 10 digits; Zoom rejects easy ones like 123456).
 
 The community calendars' rooms have their own host key, the
-`community-zoom-hosts@berkeleymoshav.org` Zoom user's, changed the same way.
+`community-zoom-hosts@` Zoom user's, changed the same way.
 It's kept in the "Community Events Zoom Host Key" doc in the Shared Drive's
 Meeting Admin folder, linked from every admin group's footer; after changing
 the key, update the doc.
@@ -284,15 +290,16 @@ Before making the first community calendar's admin group:
 3. Check that the "Community Events Zoom Host Key" doc's General access is
    "Restricted", not "Anyone with the link": the Shared Drive's members (the
    community, admins included) can open it, and no one else should.
-4. Make sure `all.members@berkeleymoshav.org` (the audience) lets
-   `admin@berkeleymoshav.org` post, or the reminders it sends there bounce.
+4. Make sure `all.members@` (the audience) lets
+   `admin@` post, or the reminders it sends there bounce.
 5. Push the `group_meetings` and `circle_agendas` Apps Scripts (`clasp push`
    in each folder).
 6. The admins' guide, `community-calendar-admins-guide.md`, is also a
    [Google Doc](https://docs.google.com/document/d/1CO85_1BlMX_ONiSGp9g6B2svbi-ZGEa89YtMj8H6tkE/edit)
    linked from the emails to admins
    (`ADMIN_GUIDE_URL` in `util/calendar_announcement.py`). The repo's copy is
-   the source: when it changes, update the doc to match.
+   the source: when it changes, update the doc to match. The doc gives each
+   address whole, where the repo's copy gives only its name and `@`.
 
 Then, for each calendar:
 
@@ -331,7 +338,7 @@ with. If a circle wants only a few designated members to do that, change the
 calendar's sharing by hand; the scripts leave it alone afterwards (they only
 share a calendar with its group when it isn't shared with the group at all).
 
-1. Sign in to Google Calendar as `admin@berkeleymoshav.org` and open the
+1. Sign in to Google Calendar as `admin@` and open the
    group calendar's **Settings and sharing**.
 2. Under **Share with specific people or groups**, change the group's email
    list to **See all event details**.
@@ -460,7 +467,7 @@ status line as "calendar (members can view, not edit)".
   so and suggests `-m`/`--move-events`),
   then asks of each one in turn whether to use it as the room, ignore it, or
   delete it. Only a no-fixed-time meeting of `circle-zoom-hosts@` or
-  `berkeley@urbanmoshav.org` (the second Zoom user) can be used, since Zoom
+  `berkeley@` (the second Zoom user, at urbanmoshav.org) can be used, since Zoom
   can't change a meeting's type; choosing a second one to use
   asks to confirm the switch, and what to do with the first. Nothing changes
   until the end, when it shows what it will do and, if it will delete any
@@ -562,16 +569,16 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
 - **`groups_drive_sync/groups_drive_sync.gs`** runs hourly. For every Google
   Group whose footer links a Drive item, it makes the group's members match
   the item's Content managers (folder) or Viewers (shared drive), and emails
-  any membership changes to group-sync-alerts@berkeleymoshav.org. Its
+  any membership changes to group-sync-alerts@. Its
   directory also holds `gdrive_item_map.json`, a cache of Drive IDs to
   Gather's linked-item IDs that the Python scripts use.
 - **`calendar_notifications/calendar_notifications.gs`** watches the shared
-  community calendar (`share@berkeleymoshav.org`): it emails a community
+  community calendar (`share@`): it emails a community
   group when one of its members adds an event, and removes invitations from
   anyone who isn't allowed to add events. See
   `calendar_notifications/README.md` for deployment.
 - **`group_meetings/group_meetings.gs`** runs every 5 minutes, as
-  `admin@berkeleymoshav.org`, over every group calendar linked from a footer.
+  `admin@`, over every group calendar linked from a footer.
   Each event the group calendar organizes gets the group's Zoom room (link,
   meeting ID, passcode, and the number and name of the Zoom user that owns
   the room) with a link to the "BM Meetings FAQ", in place of
@@ -596,7 +603,7 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
   checks the next 8 weeks for meetings in rooms of the same Zoom user that
   overlap or are less than 15 minutes apart, including ones scheduled
   directly in Zoom, and emails the groups involved (and, for a meeting
-  scheduled directly in Zoom, calendaring-alerts@berkeleymoshav.org, for the
+  scheduled directly in Zoom, calendaring-alerts@, for the
   Technology Circle), listing their options: moving one meeting to another
   time (with a link to the all-events calendar for finding a free time),
   holding one on a personal or work Zoom account, and, where a group's room
@@ -613,7 +620,7 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
   preview by hand from the Apps Script editor), is the web app behind the links in an agenda
   doc, and keeps the Circle Structure. See `circle_agendas/README.md`.
   - **`circle_agendas/web_app.gs`** is the web app, deployed to run as
-    `admin@berkeleymoshav.org` for anyone with a Google account: a link in
+    `admin@` for anyone with a Google account: a link in
     an agenda doc names an action, the doc, and a meeting, and the web app
     shows a page saying what it did. It acts only on built circle agenda
     docs (and the latest preview).
@@ -686,7 +693,7 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
   tracker's Airtable base. See `maintenance_tracker/apps_script/README.md`
   for deployment and the Script Properties it reads.
   - **`maintenance_tracker/apps_script/maintenance_tracker.gs`** runs every 10 minutes
-    and every day, as `admin@berkeleymoshav.org`. A new request gets its
+    and every day, as `admin@`. A new request gets its
     reporter linked (if they typed an email address that's a member's) and
     its location set to the reporter's unit (if they ticked "In my unit"),
     an email to the reporter saying it arrived, and, if it's an emergency

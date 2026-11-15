@@ -6,8 +6,8 @@ Apps Script that looks after every group's Google calendar (the calendars
 - **Every 5 minutes**, for each changed event on a group calendar:
   - an event the group calendar organizes gets the group's Zoom room (link in
     the location; link, meeting ID, passcode, and which Zoom user owns the
-    room (its number, `1` for `circle-zoom-hosts@berkeleymoshav.org`, `2` for
-    `berkeley@urbanmoshav.org`, or `3` for `community-zoom-hosts@berkeleymoshav.org`
+    room (its number, `1` for `circle-zoom-hosts@`, `2` for
+    `berkeley@` (at urbanmoshav.org), or `3` for `community-zoom-hosts@`
     (the community calendars' rooms), and its name in Zoom, so anyone looking at
     the all-events calendar can tell which meetings can't overlap) in the
     description, with a
@@ -30,7 +30,7 @@ Apps Script that looks after every group's Google calendar (the calendars
     events within the hour.
   - an event that's only a copy of someone's invitation (made on their own
     calendar, with the group calendar invited) can't be changed that way, so
-    its organizer and `calendaring-alerts@berkeleymoshav.org` get one email
+    its organizer and `calendaring-alerts@` get one email
     asking them to create it on the group calendar instead.
 - **Every 5 minutes**, each group's meetings get their **reminder email**,
   sent to the group's Google Group (replies go to the group), with the
@@ -55,7 +55,7 @@ Apps Script that looks after every group's Google calendar (the calendars
   its reminder was due (its invitation has just gone out). A meeting moved
   to another time gets its reminders again.
 - **Every 5 minutes**, for each changed event on the other calendars
-  `admin@berkeleymoshav.org` owns (its primary, which is the shared community
+  `admin@` owns (its primary, which is the shared community
   calendar, and any others, but not the all-events calendar; the list is
   re-read hourly): an event the calendar organizes gets the all-events
   calendar as a guest, sending no email. It gets no Zoom room and isn't
@@ -82,7 +82,7 @@ has a reminder tag. A group already invited stays invited.
 
 **Community calendars.** A community calendar's admin group (made by
 `add_new_group.py -t a`) has a footer that also names the calendar's
-audience (`Calendar audience: all.members@berkeleymoshav.org`). Its calendar
+audience (`Calendar audience: all.members@`). Its calendar
 is handled like a group's, except that:
 - its events invite the audience, not the admin group, and get no FAQ line;
 - their reminders go to the audience ("Hi everyone"), with replies going to
@@ -90,7 +90,7 @@ is handled like a group's, except that:
 - in clash emails, its meetings are named by their calendar, the admin
   group is greeted ("Community Meetings admins"), and there's no option to
   move a room to the second Zoom user. Its room is under
-  `community-zoom-hosts@berkeleymoshav.org` (Zoom user 3), so it clashes
+  `community-zoom-hosts@` (Zoom user 3), so it clashes
   only with other community calendars' meetings, or ones scheduled directly
   in Zoom under that user;
 - an invitation copy's email speaks of the calendar, not a group.
@@ -106,7 +106,7 @@ A community calendar made without a Zoom room (its footer says
 and the all-events calendar as guests, and their reminders.
 
 The calendar's name is the admin group's name without "Admins". The
-audience must let `admin@berkeleymoshav.org` post, or reminders bounce.
+audience must let `admin@` post, or reminders bounce.
 
 Which calendar and room are a group's comes from the group's email footer,
 read hourly, so new groups need no redeploy. When a group's room link changes
@@ -121,12 +121,12 @@ hour.
 
 ## Deploy with clasp
 
-**Everything runs as `admin@berkeleymoshav.org`**, which owns the group
+**Everything runs as `admin@`**, which owns the group
 calendars. Sign in as that account for every step.
 
 ```bash
 npm install -g @google/clasp
-clasp login                     # as admin@berkeleymoshav.org
+clasp login                     # as admin@
 cd group_meetings
 clasp create --type standalone --title "Group Meetings"
 git checkout -- appsscript.json # clasp create overwrites it with a bare default
