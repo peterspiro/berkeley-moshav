@@ -656,6 +656,12 @@ class GatherUser:
     # The address Gather shares Google Drive items with ("Google Email" in
     # the directory), which may differ from `email`; "" if not set.
     google_email: str = ""
+    # The household's unit ("Unit Num" and "Unit Suffix"), the member's
+    # phone (mobile, or else home), and the date they left ("" if they
+    # haven't), as the directory gives them.
+    unit: str = ""
+    phone: str = ""
+    departure_date: str = ""
 
 
 @dataclass
@@ -703,6 +709,9 @@ def fetch_all_gather_users(page: Page, base_url: str) -> list[GatherUser]:
             child=is_child,
             email=email,
             google_email=google_email,
+            unit=((row.get("Unit Num") or "").strip() + (row.get("Unit Suffix") or "").strip()),
+            phone=((row.get("Mobile Phone") or "").strip() or (row.get("Home Phone") or "").strip()),
+            departure_date=(row.get("Departure Date") or "").strip(),
         ))
     return users
 

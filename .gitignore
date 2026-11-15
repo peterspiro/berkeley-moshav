@@ -5,3 +5,4 @@ client_secret*.json
 zoom_credentials
 .google_setup_token.pkl
 debug/
+airtable_credentials
