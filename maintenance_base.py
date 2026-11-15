@@ -2,23 +2,24 @@
 """
 Keeps the maintenance tracker's Airtable base in step with its schema file.
 
-The base's tables and fields are described in maintenance/schema.json (see
-util/airtable_schema.py for the format, and maintenance-tracker-plan.md for
-the design). This script compares a base with that file and adds what's
-missing:
+The base's tables and fields are described in
+maintenance_tracker/base/schema.json (see util/airtable_schema.py for the
+format, and maintenance_tracker/maintenance-tracker-plan.md for the design).
+This script compares a base with that file and adds what's missing:
 
     diff    Show what the base lacks, and change nothing.
     apply   Create the missing tables and fields, and add missing options
             to select fields.
-    seed    Load the starting rows in maintenance/seed.json (the building's
-            units and common areas), adding rows that are missing and updating the others.
+    seed    Load the starting rows in maintenance_tracker/base/seed.json
+            (the building's units and common areas), adding rows that are
+            missing and updating the others.
 
 It never deletes or retypes anything; Airtable's API can't. What it can't
 do is listed under "By hand": the views, and making a formula a table's
 primary field, which have to be done in Airtable (see
-maintenance/README.md), and anything in the base that disagrees with the
-file. The forms are made by hand too, but the API doesn't show them, so
-they aren't checked.
+maintenance_tracker/base/README.md), and anything in the base that
+disagrees with the file. The forms are made by hand too, but the API
+doesn't show them, so they aren't checked.
 
 It works on the test base, "Building Maintenance (test)", unless told
 otherwise: --real picks "Building Maintenance", and asks you to type the
@@ -49,7 +50,7 @@ from util.credentials import load_airtable_token
 
 TEST_BASE = "Building Maintenance (test)"
 REAL_BASE = "Building Maintenance"
-SEED_FILE = Path(__file__).parent / "maintenance" / "seed.json"
+SEED_FILE = Path(__file__).parent / "maintenance_tracker" / "base" / "seed.json"
 
 
 def show(p, out=print) -> None:

@@ -6,8 +6,8 @@ subcontractor contacts, equipment, maintenance and inspection schedules, and
 how-to and emergency knowledge.
 
 This is the design, kept for its reasoning. What's built is described where
-it lives: the base in `maintenance/README.md`, the script in
-`maintenance_tracker/README.md`, and the scripts in README.md. Where the
+it lives: the base in `base/README.md`, the script in
+`apps_script/README.md`, and the scripts in the repo's README.md. Where the
 build departed from the design, this note says so; "Phases" says what's
 done and what's left.
 
@@ -44,7 +44,7 @@ groups); work orders for a property manager.
 |---|---|---|
 | Records (requests, claims, contacts, equipment, schedules) | Airtable | Relational, with forms, kanban and grouped views the circle can change themselves |
 | Views, the member form, interfaces | Airtable, built by hand from a checklist | Airtable's API can't create them |
-| The base's tables and fields | `maintenance/schema.json` in this repo, applied by a script | So a session can change the schema, review it as a diff, and try it on a test base |
+| The base's tables and fields | `base/schema.json` in this repo, applied by a script | So a session can change the schema, review it as a diff, and try it on a test base |
 | What acts on the data: emails, reminders, calendar, pattern reports, backups | A `maintenance_tracker` Apps Script project, running as `admin@berkeleymoshav.org` | Airtable automations can't be kept in git, tested, or made by the API, and are rationed by plan; Apps Script is what the repo's other timers already use, and it can send mail and write calendars and Drive as `admin@` |
 | Documents (O&M manuals, as-builts, warranties, claim letters) | The circle's Drive folder | The community's access rules already apply there; Airtable holds links |
 | How-to and emergency guides | Google Docs in a "Building Handbook" folder everyone can view | Members already have Drive access; Airtable indexes them |
@@ -60,7 +60,7 @@ too seldom to work them out in time. They're still in the repo, in
 
 ## The base
 
-One base, "Building Maintenance". Eleven tables. `maintenance/schema.json`
+One base, "Building Maintenance". Eleven tables. `base/schema.json`
 is the exact list of fields and options; what follows says what each table
 is for and why its main fields are there.
 
@@ -305,7 +305,7 @@ requests it settled, which shows what's worth writing next).
   without a seat, to log a call or a visit against a request; each circle
   member has their own link to it, with their name filled in.
 - **Interfaces**, where the circle wants them: pages showing only what a
-  job needs, with no way to delete a row (see `maintenance/README.md`).
+  job needs, with no way to delete a row (see `base/README.md`).
 - The **weekly digest** email to the circle's list: new requests; ones to
   triage, with no owner, with no visit time, waiting to be confirmed, or
   gone quiet; warranty deadlines with no claim made; claims the builder
@@ -317,7 +317,7 @@ One project, on timers, as `admin@`. It reads and writes Airtable with
 `UrlFetchApp` and a token kept in Script Properties. Like `group_meetings`,
 its decisions are pure functions in a `tracker_rules.gs` tested under Node;
 the `.gs` file that calls Airtable, Gmail, and Drive stays thin.
-`maintenance_tracker/README.md` describes it as built. In outline:
+`apps_script/README.md` describes it as built. In outline:
 
 Every 10 minutes (every 2 hours on Airtable's Free plan, which rations API
 calls):
@@ -379,7 +379,7 @@ does that when run by hand).
 A cloud session has the repo and a network connection, and nothing else: no
 browser signed in to Airtable, no Google sign-in. So:
 
-- **The schema is a file.** `maintenance/schema.json` lists tables, fields,
+- **The schema is a file.** `base/schema.json` lists tables, fields,
   types, and select options. `maintenance_base.py` compares it with a base
   through Airtable's metadata API and prints the difference (`diff`), makes
   the base match by adding tables, fields, and options (`apply`; it never
@@ -407,8 +407,8 @@ browser signed in to Airtable, no Google sign-in. So:
   read IDs and links from Script Properties and the git-ignored credentials
   file. Rows drafted from the handover (contacts, serial numbers) aren't
   committed either.
-- **What a cloud session can't do** is listed in `maintenance/README.md`
-  and `maintenance_tracker/README.md`: creating the workspace and tokens;
+- **What a cloud session can't do** is listed in `base/README.md`
+  and `apps_script/README.md`: creating the workspace and tokens;
   building each view, the forms, the interfaces, and the status page's
   share link in Airtable's UI; `clasp push`; installing the timers.
   `maintenance_base.py diff` names any view that's missing, so those can't
@@ -481,7 +481,7 @@ own account.
 moves to Team when it nears a limit. `maintenance_tracker` runs at a
 slower pace there to stay inside the Free plan's 1,000 API calls a month,
 and warns the circle as the base nears 1,000 records or 1 GB of
-attachments (see `maintenance_tracker/README.md`, "The Airtable plan"). On
+attachments (see `apps_script/README.md`, "The Airtable plan"). On
 Free, an interface can't be shared without the base, and there are no
 table or field permissions, so nothing stops an editor deleting a row:
 editors are kept few, others use the forms, and the backup is the safety
@@ -501,22 +501,22 @@ Move-in is soon, so the order is by what's lost if it's late.
 1. **Intake, before move-in.** Done: the schema file (all eleven tables),
    `maintenance_base.py`, the units and common areas,
    `sync_maintenance_people.py`, and the checklist of views in
-   `maintenance/README.md`; the test base has all of it, with its views and
+   `base/README.md`; the test base has all of it, with its views and
    forms, and takes requests. To do: the real base, set up the same way
-   (`maintenance/README.md`, "Setting up a base"), and the emergency
+   (`base/README.md`, "Setting up a base"), and the emergency
    instructions on the request form.
-2. **Emails and backup.** Done, in `maintenance_tracker/`: acknowledgments,
+2. **Emails and backup.** Done, in `apps_script/`: acknowledgments,
    urgent alerts, reporter matching, "In my unit", status emails and the
    status page's wording, updates passed on, form links, and the daily
    backup, deployed against the test base. Also the weekly digest, with
    its repeats (phase 5's patterns), a pace that fits Airtable's Free plan,
    and a warning as the base fills. To do: pointing it at the real base
-   (`maintenance_tracker/README.md`).
+   (`apps_script/README.md`).
 3. **Claims.** Done: each request's Claim deadline and each claim's draft
    letter, as formulas in the base, so they're right at once on any plan
    (the plan had the script work them out); the digest's sections for
    deadlines with no claim made and claims the builder is sitting on. See
-   `maintenance/README.md`, "Warranty claims". To do: the Warranties rows,
+   `base/README.md`, "Warranty claims". To do: the Warranties rows,
    from the warranty binder and the attorney's answers; the builder's
    contact; the attorney's review of the letter's wording.
 4. **Maintenance.** Not started; the tables exist. Assets and plans from the

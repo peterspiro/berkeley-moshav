@@ -20,7 +20,7 @@ import pytest
 from util.airtable_schema import expected_fields, load_schema
 
 ROOT = Path(__file__).resolve().parent.parent
-PROJECT = ROOT / "maintenance_tracker"
+PROJECT = ROOT / "maintenance_tracker" / "apps_script"
 HARNESS = Path(__file__).resolve().parent / "maintenance_tracker_harness.js"
 
 pytestmark = pytest.mark.skipif(shutil.which("node") is None, reason="needs Node")

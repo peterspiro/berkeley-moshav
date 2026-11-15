@@ -1,8 +1,8 @@
 /**
  * The maintenance tracker: what happens to the Maintenance & Warranty
  * Circle's Airtable base ("Building Maintenance") without anyone doing it.
- * Runs as admin@berkeleymoshav.org. maintenance-tracker-plan.md is the
- * design; README.md here says how to deploy it and what to set.
+ * Runs as admin@berkeleymoshav.org. ../maintenance-tracker-plan.md is
+ * the design; README.md here says how to deploy it and what to set.
  *
  * Every 10 minutes, or every 2 hours on Airtable's Free plan, which
  * rations calls to its API (processRequests; see PLANS in tracker_rules.gs):

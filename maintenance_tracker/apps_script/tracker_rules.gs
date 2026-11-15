@@ -577,7 +577,7 @@ function usageWarning(report, warnedLevel, plan) {
     'When either is full, Airtable accepts no more: the request form stops working for members.',
   ];
   lines.push('', plan === 'free'
-    ? "Upgrade the workspace to the Team plan before then. Afterwards, set the script's AIRTABLE_PLAN property to team and run installTriggers again (see maintenance_tracker/README.md)."
+    ? "Upgrade the workspace to the Team plan before then. Afterwards, set the script's AIRTABLE_PLAN property to team and run installTriggers again (see maintenance_tracker/apps_script/README.md)."
     : 'Before then, move to a larger plan, or remove what is no longer needed.');
   return { subject: `Maintenance tracker: the Airtable base is ${report.level}% full`, body: lines.join('\n') };
 }

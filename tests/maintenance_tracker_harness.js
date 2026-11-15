@@ -12,7 +12,7 @@
  */
 const vm = require('vm'), fs = require('fs'), path = require('path');
 const input = JSON.parse(fs.readFileSync(0, 'utf8'));
-const dir = path.join(__dirname, '..', 'maintenance_tracker');
+const dir = path.join(__dirname, '..', 'maintenance_tracker', 'apps_script');
 
 const tables = input.tables || {};
 const props = Object.assign({}, input.props);

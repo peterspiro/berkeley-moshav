@@ -1,6 +1,7 @@
 """
-The maintenance tracker's base as a file: reading `maintenance/schema.json`,
-checking it, and working out what a base lacks compared with it.
+The maintenance tracker's base as a file: reading
+`maintenance_tracker/base/schema.json`, checking it, and working out what a
+base lacks compared with it.
 
 The schema file names tables, fields, and views; it holds no Airtable IDs.
 Each field has a `type`, one of FIELD_TYPES' keys. A `select` or
@@ -34,7 +35,7 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
-SCHEMA_FILE = Path(__file__).parent.parent / "maintenance" / "schema.json"
+SCHEMA_FILE = Path(__file__).parent.parent / "maintenance_tracker" / "base" / "schema.json"
 TIME_ZONE = "America/Los_Angeles"
 
 _DATE = {"dateFormat": {"name": "local"}}

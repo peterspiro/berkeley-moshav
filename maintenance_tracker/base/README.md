@@ -2,8 +2,8 @@
 
 The Maintenance & Warranty Circle's tracker is an Airtable base, "Building
 Maintenance". `../maintenance-tracker-plan.md` is its design, and
-`../maintenance_tracker/README.md` describes the script that sends its
-emails. This folder holds what the base is made from:
+`../apps_script/README.md` describes the script that sends its emails.
+This folder holds what the base is made from:
 
 - **`schema.json`**: every table, field, and select option, and the views
   each table should have. `util/airtable_schema.py` describes the format.
@@ -14,16 +14,16 @@ emails. This folder holds what the base is made from:
 There are two bases: the real one, and "Building Maintenance (test)" for
 trying changes, which is the one the script works on unless given `--real`.
 
-- **`members-page.md`** and **`maintenance-tracker-start-here.md`**: the
-  text of the two pages that hold the tracker's links. The first is for
-  members, pasted into a Gather wiki page titled "Building maintenance";
-  the second is for the circle, made into a Google Doc titled "Maintenance
-  tracker: start here" in the circle's Drive folder, which only the circle
-  can open. These copies are the sources: when one changes, update its
-  page to match. Each `[[...]]` in them stands for a link, a name, or a
-  phone number to fill in on the page itself; the links aren't kept here,
-  since the repo is public. (The files hold nothing but the page's text:
-  Google Docs won't open a Markdown file that starts with a comment.)
+`../pages/` holds **`members-page.md`** and
+**`maintenance-tracker-start-here.md`**: the text of the two pages that hold the tracker's links. The first is for
+members, pasted into a Gather wiki page titled "Building maintenance"; the
+second is for the circle, made into a Google Doc titled "Maintenance
+tracker: start here" in the circle's Drive folder, which only the circle
+can open. These copies are the sources: when one changes, update its page
+to match. Each `[[...]]` in them stands for a link, a name, or a phone
+number to fill in on the page itself; the links aren't kept in the repo,
+since it's public. (The files hold nothing but the page's text: Google
+Docs won't open a Markdown file that starts with a comment.)
 
 This file has three parts: changing the base's structure; setting a base
 up, with everything that has to be made by hand; and how the circle uses
@@ -75,9 +75,10 @@ the same formula into the field in each base.
 7. Run `python maintenance_base.py diff`: it lists what's still to do of
    steps 4 and 5, except the forms, which the API can't see. Interfaces
    aren't checked either.
-8. Point the `maintenance_tracker` script at the base (see its README).
+8. Point the `maintenance_tracker` script at the base (see
+   `../apps_script/README.md`).
 9. Put the base's links into the members' page and the circle's page
-   (`members-page.md`, `maintenance-tracker-start-here.md`).
+   (`../pages/members-page.md`, `../pages/maintenance-tracker-start-here.md`).
 
 ### Fields to change by hand
 
@@ -395,7 +396,7 @@ each base.
 On Sundays the script emails the circle's list what came in, what's
 waiting for triage, an owner, a visit time, or confirmation, what's gone
 quiet, the warranty deadlines and claims above, and what's repeating across
-units (see `../maintenance_tracker/README.md`).
+units (see `../apps_script/README.md`).
 
 The status page's and forms' links, the base's ID, and the circle's
 address aren't kept in this repo, which is public.
