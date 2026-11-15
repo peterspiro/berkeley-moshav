@@ -70,10 +70,11 @@ The repo also holds the **maintenance tracker**, an Airtable base for the
 Maintenance & Warranty Circle to track repair requests, warranty claims,
 contacts, equipment, and maintenance schedules for the building.
 Everything about it is in `maintenance_tracker/` (its `README.md` says
-where each part is), except two scripts in the root. There's the base's
+where each part is), except three scripts in the root. There's the base's
 structure, kept as a file in `maintenance_tracker/base/` and applied by
 `maintenance_base.py`; `sync_maintenance_people.py`, which copies the
-members in from Gather; and a fifth Apps Script project,
+members in from Gather; `maintenance_demo.py`, which fills the test base
+with demo data for showing the tracker to the circle; and a fifth Apps Script project,
 **`maintenance_tracker/apps_script`**, which acknowledges each new
 request, emails the circle about urgent ones, tells reporters when their
 request's status changes, and backs the base up to Drive. The views and
@@ -232,8 +233,8 @@ playwright install chromium
   require them so rooms made by hand match. The scripts give every room a
   six-digit passcode, which Zoom rejects if passcodes must contain letters.
 
-- **Airtable API** (for `maintenance_base.py` and
-  `sync_maintenance_people.py` only): in Airtable's
+- **Airtable API** (for `maintenance_base.py`,
+  `sync_maintenance_people.py`, and `maintenance_demo.py` only): in Airtable's
   [Builder Hub](https://airtable.com/create/tokens), signed in as the
   workspace's owner, create a personal access token with the scopes
   `data.records:read`, `data.records:write`, `schema.bases:read`, and
@@ -551,6 +552,22 @@ status line as "calendar (members can view, not edit)".
   nobody, and leaves alone the fields the circle sets in Airtable and rows
   added there by hand. Like `maintenance_base.py`, it works on the test
   base unless given `--real`.
+- **`maintenance_demo.py`** fills the maintenance tracker's test base with
+  demo data, for showing the tracker to the circle. It deletes every row
+  except in Locations and People, and writes a made-up, consistent set:
+  requests at every stage, with the repeats the weekly digest looks for
+  (one fan model in four units, leaks down one stack), their updates,
+  warranty claims, warranties (each starting on `WARRANTY_START`),
+  fictional organizations, assets, guides, and maintenance plans and work.
+  The circle members are whoever is ticked as one in People (tick them
+  first), the coordinator first: they own the requests, in turn, and write
+  the updates. Reporters are people living in the units the requests are
+  in, so no member's name is in the script. Dates are relative to the day
+  it runs, but every request's Submitted is that day, since Airtable can't
+  backdate it. Each request and update carries the `maintenance_tracker`
+  Apps Script's own markers, so the script sends no email about them. It
+  works only on the test base, and asks you to type its name first unless
+  given `--yes`; `-n` shows what it would write.
 - **`setup.sh`** installs and starts a local Gather development instance, for
   trying scripts out safely before running them against the real site.
 

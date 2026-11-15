@@ -13,6 +13,9 @@ This folder holds what the base is made from:
 `maintenance_base.py`, in the repo root, makes a base match these files.
 There are two bases: the real one, and "Building Maintenance (test)" for
 trying changes, which is the one the script works on unless given `--real`.
+`maintenance_demo.py` fills the test base with demo data, keeping its
+Locations and People: tick the circle members and the coordinator in People
+first.
 
 `../pages/` holds **`members-page.md`** and
 **`maintenance-tracker-start-here.md`**: the text of the two pages that hold the tracker's links. The first is for
