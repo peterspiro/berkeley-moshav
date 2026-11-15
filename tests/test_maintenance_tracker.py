@@ -347,6 +347,27 @@ def test_update_marked_for_the_reporter_is_emailed_once():
     assert again["mails"] == []
 
 
+def test_update_made_in_airtable_is_given_its_author():
+    def made_by(n, email, **fields):
+        return {"id": f"upd{n}", "fields": {"Request": ["req12"], "Text": "Note",
+                                            "Created by": {"id": "usr1", "email": email, "name": "X"}, **fields}}
+    updates = [
+        made_by(1, "Dana.S@gmail.example"),                       # either of a member's addresses
+        made_by(2, "noreply@airtable.example"),                   # a form's public link: nobody
+        made_by(3, "dana@example.org", **{"By name": "Maintenance tracker"}),   # the script's own
+        made_by(4, "dana@example.org", By=["pGone"]),             # already says who
+        made_by(5, "old@example.org"),                            # moved out
+        {"id": "upd6", "fields": {"Request": ["req12"], "Text": "Note"}},
+    ]
+    out = run(tables([acknowledged(Status="Triaged", **{"Status noted": "Triaged"})], updates), "processRequests")
+    by = {u["id"]: u["fields"].get("By") for u in out["tables"]["Updates"]}
+    assert by == {"upd1": ["pDana"], "upd2": None, "upd3": None, "upd4": ["pGone"], "upd5": None, "upd6": None}
+    assert out["mails"] == [] and out["calls"].count("patch Updates") == 1
+    # Those that match nobody are looked at again, and nothing is written.
+    again = run(out["tables"], "processRequests", props=out["props"])
+    assert "patch Updates" not in again["calls"]
+
+
 # --- plans -------------------------------------------------------------------
 
 def test_plan_is_free_unless_set_to_team():

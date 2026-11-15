@@ -130,7 +130,9 @@ what was said, what was done. Leave out guesses about whose fault it is.
 
 There are two ways to add an update:
 
-- On the **Requests** page, under the request's **Updates**.
+- On the **Requests** page, under the request's **Updates**. You needn't say
+  who you are: the tracker knows from your Airtable sign-in, and fills it
+  in.
 - With the **"Log an update"** form, which is easier on a phone. Use your
   own link to it, so that your name is filled in.
 

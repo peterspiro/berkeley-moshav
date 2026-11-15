@@ -52,6 +52,7 @@ FIELD_TYPES = {
     "attachments": ("multipleAttachments", None),
     "autoNumber": ("autoNumber", None),
     "createdTime": ("createdTime", None),
+    "createdBy": ("createdBy", None),
     "select": ("singleSelect", None),
     "multiSelect": ("multipleSelects", None),
     "link": ("multipleRecordLinks", None),

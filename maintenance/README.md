@@ -177,6 +177,11 @@ and title to anyone with the link. Its questions:
 An update with "Tell the reporter" ticked is emailed to the request's
 reporter by the script.
 
+Requests and Updates each have a **Created by** field, which Airtable fills
+in with the account that made the row, when it was made by someone signed
+in (not through a form's link). An update added on the Maintenance
+interface needn't say who's logging it: the script sets By from Created by.
+
 ### What a form's link shows
 
 A published form lets anyone with its link pick from the rows of each

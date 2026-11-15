@@ -481,6 +481,25 @@ function statusUpdateText(previousKey, request, timeZone) {
                         : `Status changed from ${before} to ${now}${visit}.`;
 }
 
+/**
+ * Who wrote an update that names nobody, as a People record's ID, or null:
+ * the person whose email address is that of the Airtable account that
+ * created it (its "Created by"). That's known only for a row made by
+ * someone signed in to Airtable, as on the Maintenance interface; one from
+ * a form's public link was made by nobody in particular, and matches no
+ * one. An update that has By or By name is left alone.
+ */
+function updateAuthor(update, people) {
+  const f = update.fields;
+  if ((f['By'] || []).length || f['By name']) return null;
+  const email = String((f['Created by'] || {}).email || '').trim().toLowerCase();
+  if (!email) return null;
+  const person = people.filter(p => !p.fields['Moved out'] &&
+    [p.fields['Email'], p.fields['Other email']]
+      .some(a => String(a || '').trim().toLowerCase() === email))[0];
+  return person ? person.id : null;
+}
+
 /** The email passing an update on to the request's reporter; null if they gave no address. */
 function updateEmail(update, request, ctx) {
   const who = reporterOf(request, ctx.peopleById);

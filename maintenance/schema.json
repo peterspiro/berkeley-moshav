@@ -86,6 +86,7 @@
     {"name": "Acknowledged on", "type": "dateTime"},
     {"name": "Status noted", "type": "text"},
     {"name": "Submitted", "type": "createdTime"},
+    {"name": "Created by", "type": "createdBy"},
     {"name": "Warranty term", "type": "lookup", "link": "Warranty", "field": "Term (months)"},
     {"name": "Warranty clock", "type": "rollup", "link": "Warranty", "field": "Clock starts", "formula": "ARRAYJOIN(values)"},
     {"name": "Warranty start", "type": "rollup", "link": "Warranty", "field": "Building start date", "formula": "MIN(values)"},
@@ -118,7 +119,8 @@
     {"name": "Attachments", "type": "attachments"},
     {"name": "Tell the reporter", "type": "checkbox"},
     {"name": "Told reporter on", "type": "dateTime"},
-    {"name": "Logged", "type": "createdTime"}
+    {"name": "Logged", "type": "createdTime"},
+    {"name": "Created by", "type": "createdBy"}
    ],
    "views": []
   },

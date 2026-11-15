@@ -16,6 +16,8 @@
  *    is recorded, and the reporter is emailed about a visit, about work
  *    that's done, or that it's closed.
  *  - An update marked "Tell the reporter" is emailed to them.
+ *  - An update that doesn't say who wrote it, made by someone signed in to
+ *    Airtable, is given its author (By), from the account that made it.
  *
  * Every day, or every week on the Free plan (housekeeping):
  *  - Each person's own link to the request form is written to People,
@@ -305,14 +307,19 @@ function processRequests(event) {
     const requests = listRecords('Requests',
       `OR({Acknowledged on} = BLANK(), IS_AFTER(LAST_MODIFIED_TIME(), DATETIME_PARSE("${since}")))`);
     const lookForUpdates = !event || updatesDue(plan(), props.getProperty(PROP_LAST_UPDATES_CHECK), began);
-    const updates = !lookForUpdates ? []
-      : listRecords('Updates', 'AND({Tell the reporter}, {Told reporter on} = BLANK())')
-          .filter(u => u.fields['Tell the reporter'] && !u.fields['Told reporter on']);
+    // Updates to pass on, and updates that don't say who wrote them.
+    const listed = !lookForUpdates ? [] : listRecords('Updates',
+      'OR(AND({Tell the reporter}, {Told reporter on} = BLANK()), AND(NOT({By}), NOT({By name})))');
+    const updates = listed.filter(u => u.fields['Tell the reporter'] && !u.fields['Told reporter on']);
+    const unsigned = listed.filter(u => !(u.fields['By'] || []).length && !u.fields['By name']);
     const fresh = requests.filter(needsAcknowledging);
     const changed = requests.filter(r => !needsAcknowledging(r) && statusKey(r) !== r.fields['Status noted']);
 
-    if (fresh.length || changed.length || updates.length) {
+    if (fresh.length || changed.length || updates.length || unsigned.length) {
       const people = cachedRecords('People', CACHE_PEOPLE);
+      const authors = unsigned.map(u => ({ id: u.id, fields: { 'By': [updateAuthor(u, people)] } }))
+        .filter(change => change.fields['By'][0]);
+      updateRecords('Updates', authors);
       const ctx = context(people, cachedRecords('Locations', CACHE_LOCATIONS));
       fresh.forEach(request => processNewRequest(request, people, ctx));
       changed.forEach(request => processStatusChange(request, ctx));
