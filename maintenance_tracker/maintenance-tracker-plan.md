@@ -275,7 +275,7 @@ requests it settled, which shows what's worth writing next).
   name or unit changes (a link made before then still opens the form, with
   that field empty); the acknowledgment of each request includes the
   reporter's. (Emailing everyone theirs once, at the start, isn't built.) The
-  form's own address is kept in Script Properties, not the repo. The plain
+  form's own address is kept in the base's Links table, not the repo. The plain
   link stays for QR codes and for anyone without their own.
 - An **acknowledgment email** with their request's number, and an email
   whenever an update is marked "Tell the reporter", a visit is scheduled, or
@@ -329,6 +329,8 @@ calls):
   note of what's been done to it, not a timestamp cursor, so a failed run
   misses nothing.
 - **A visit time** on an open request sets its Status to Scheduled.
+- **A warranty** on a request with no Responsibility (or Unknown) sets it
+  to the warranty's own.
 - **Status changes**: add the Updates row, set `Member-visible status` and
   `Closed on`, email the reporter about a visit, finished work, or closing.
 - **Updates marked "Tell the reporter"**: email them.
@@ -404,8 +406,8 @@ browser signed in to Airtable, no Google sign-in. So:
 - **Nothing that opens the base is in the repo**, which is public: no
   tokens, base IDs, form or status page links, calendar IDs, or phone
   numbers. The schema file names tables and fields, not IDs. The scripts
-  read IDs and links from Script Properties and the git-ignored credentials
-  file. Rows drafted from the handover (contacts, serial numbers) aren't
+  read IDs from Script Properties and the git-ignored credentials file,
+  and links from the base's Links table. Rows drafted from the handover (contacts, serial numbers) aren't
   committed either.
 - **What a cloud session can't do** is listed in `base/README.md`
   and `apps_script/README.md`: creating the workspace and tokens;

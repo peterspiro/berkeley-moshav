@@ -326,6 +326,27 @@ function formLinkChanges(people, locationNames, formUrl, updateFormUrl) {
   return changes;
 }
 
+/** A Links row's key, from its Name (see linksByKey). */
+function linkKey(name) {
+  return String(name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
+/**
+ * The Links table's values by key: each row's Name, lowercased, with each
+ * run of other characters made a hyphen ("Request form" is "request-form"),
+ * so that the script and the start-here page's [[placeholders]] name them
+ * alike. Rows with no Value are left out.
+ */
+function linksByKey(records) {
+  const links = {};
+  records.forEach(r => {
+    const key = linkKey(r.fields['Name']);
+    const value = String(r.fields['Value'] || '').trim();
+    if (key && value) links[key] = value;
+  });
+  return links;
+}
+
 /** What the status page says about a request; null if it shouldn't be there. */
 function memberStatus(request, timeZone) {
   const f = request.fields;
@@ -408,6 +429,20 @@ function requestSummary(request, ctx) {
 }
 
 /**
+ * The Responsibility a request should be given from its warranty's (its
+ * "Warranty responsibility", a lookup), or null: only when the warranty has
+ * one, and the request's own is empty or Unknown, so that a choice someone
+ * made is never overwritten.
+ */
+function responsibilityFromWarranty(request) {
+  const f = request.fields;
+  const own = f['Responsibility'];
+  if (own && own !== 'Unknown') return null;
+  const fromWarranty = [].concat(f['Warranty responsibility'] || []).filter(Boolean)[0];
+  return fromWarranty && fromWarranty !== own ? fromWarranty : null;
+}
+
+/**
  * The email telling a reporter their request's status changed, or null if
  * this change sends none: a visit scheduled (or moved), the work done, or
  * the request closed without the work having been reported done first.
@@ -485,9 +520,9 @@ function statusUpdateText(previousKey, request, timeZone) {
  * Who wrote an update that names nobody, as a People record's ID, or null:
  * the person whose email address is that of the Airtable account that
  * created it (its "Created by"). That's known only for a row made by
- * someone signed in to Airtable, as on the Maintenance interface; one from
- * a form's public link was made by nobody in particular, and matches no
- * one. An update that has By or By name is left alone.
+ * someone signed in to Airtable, as on the Maintenance tracker interface;
+ * one from a form's public link was made by nobody in particular, and
+ * matches no one. An update that has By or By name is left alone.
  */
 function updateAuthor(update, people) {
   const f = update.fields;

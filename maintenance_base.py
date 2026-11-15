@@ -11,8 +11,10 @@ This script compares a base with that file and adds what's missing:
     apply   Create the missing tables and fields, and add missing options
             to select fields.
     seed    Load the starting rows in maintenance_tracker/base/seed.json
-            (the building's units and common areas), adding rows that are
-            missing and updating the others.
+            (the building's units and common areas, and the Links table's
+            names and notes), adding rows that are missing and updating
+            the others. A link's Value isn't in the file, and is left as
+            it is.
 
 It never deletes or retypes anything; Airtable's API can't. What it can't
 do is listed under "By hand": the views, and making a formula a table's
