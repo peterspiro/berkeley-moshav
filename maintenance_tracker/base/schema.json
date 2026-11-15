@@ -88,6 +88,7 @@
     {"name": "Submitted", "type": "createdTime"},
     {"name": "Created by", "type": "createdBy"},
     {"name": "Warranty term", "type": "lookup", "link": "Warranty", "field": "Term (months)"},
+    {"name": "Warranty responsibility", "type": "lookup", "link": "Warranty", "field": "Responsibility"},
     {"name": "Warranty clock", "type": "rollup", "link": "Warranty", "field": "Clock starts", "formula": "ARRAYJOIN(values)"},
     {"name": "Warranty start", "type": "rollup", "link": "Warranty", "field": "Building start date", "formula": "MIN(values)"},
     {"name": "Unit closing", "type": "rollup", "link": "Location", "field": "Closing date", "formula": "MIN(values)"},
@@ -164,6 +165,7 @@
    "fields": [
     {"name": "Name", "type": "text"},
     {"name": "Warrantor", "type": "link", "table": "Organizations", "inverse": "Warranties"},
+    {"name": "Responsibility", "type": "select", "choices": ["Builder warranty", "Manufacturer warranty"]},
     {"name": "Held by", "type": "select", "choices": ["Association", "Each owner", "Unknown"]},
     {"name": "Systems", "type": "multiSelect", "choices": "@systems"},
     {"name": "Assets", "type": "link", "table": "Assets", "inverse": "Warranties"},
@@ -263,6 +265,16 @@
     {"name": "Assets", "type": "link", "table": "Assets", "inverse": "Guides"},
     {"name": "Reviewed on", "type": "date"},
     {"name": "Requests answered", "type": "link", "table": "Requests", "inverse": "Answered by"}
+   ],
+   "views": []
+  },
+  {
+   "name": "Links",
+   "description": "The tracker's links, and who to ask about it: read by its script and the circle's start-here page.",
+   "fields": [
+    {"name": "Name", "type": "text"},
+    {"name": "Value", "type": "text"},
+    {"name": "Notes", "type": "longText"}
    ],
    "views": []
   }

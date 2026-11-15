@@ -38,7 +38,7 @@ def test_schema_file_is_valid_and_has_the_plans_tables():
     schema = load_schema()
     assert [t["name"] for t in schema["tables"]] == [
         "Locations", "People", "Requests", "Updates", "Claims", "Warranties",
-        "Organizations", "Assets", "Maintenance plans", "Maintenance work", "Guides"]
+        "Organizations", "Assets", "Maintenance plans", "Maintenance work", "Guides", "Links"]
 
 
 def test_schema_file_holds_no_airtable_ids():

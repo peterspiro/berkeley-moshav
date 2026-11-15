@@ -70,10 +70,13 @@ The repo also holds the **maintenance tracker**, an Airtable base for the
 Maintenance & Warranty Circle to track repair requests, warranty claims,
 contacts, equipment, and maintenance schedules for the building.
 Everything about it is in `maintenance_tracker/` (its `README.md` says
-where each part is), except two scripts in the root. There's the base's
+where each part is), except four scripts in the root. There's the base's
 structure, kept as a file in `maintenance_tracker/base/` and applied by
 `maintenance_base.py`; `sync_maintenance_people.py`, which copies the
-members in from Gather; and a fifth Apps Script project,
+members in from Gather; `maintenance_demo.py`, which fills the test base
+with demo data for showing the tracker to the circle;
+`update_start_here_doc.py`, which writes the circle's "start here" Google
+Doc from its source in `maintenance_tracker/pages/`; and a fifth Apps Script project,
 **`maintenance_tracker/apps_script`**, which acknowledges each new
 request, emails the circle about urgent ones, tells reporters when their
 request's status changes, and backs the base up to Drive. The views and
@@ -193,8 +196,9 @@ playwright install chromium
 - **Google APIs**: create a Desktop OAuth 2.0 client in Google Cloud Console,
   save its JSON as `client_secret.json` in the repo root (or pass `-c`), and
   enable the Drive, Admin SDK (Directory), Groups Settings, Google
-  Calendar, and Gmail APIs (Gmail sends the email telling a group about its
-  new calendar). On first run, a script prints a sign-in URL; open it signed
+  Calendar, Gmail, and Google Docs APIs (Gmail sends the email telling a
+  group about its new calendar; Docs makes the maintenance tracker's
+  start-here Doc pageless). On first run, a script prints a sign-in URL; open it signed
   in as `admin@berkeleymoshav.org`, which owns the group calendars (the
   scripts that make calendars refuse to run as anyone else). The sign-in is
   saved to `~/.google_setup_token.pkl`; delete that file to sign in as a
@@ -232,8 +236,9 @@ playwright install chromium
   require them so rooms made by hand match. The scripts give every room a
   six-digit passcode, which Zoom rejects if passcodes must contain letters.
 
-- **Airtable API** (for `maintenance_base.py` and
-  `sync_maintenance_people.py` only): in Airtable's
+- **Airtable API** (for `maintenance_base.py`,
+  `sync_maintenance_people.py`, `maintenance_demo.py`, and
+  `update_start_here_doc.py` only): in Airtable's
   [Builder Hub](https://airtable.com/create/tokens), signed in as the
   workspace's owner, create a personal access token with the scopes
   `data.records:read`, `data.records:write`, `schema.bases:read`, and
@@ -530,7 +535,8 @@ status line as "calendar (members can view, not edit)".
   `apply` creates the missing tables and fields and adds missing options to
   select fields, and `seed` loads the starting rows in
   `maintenance_tracker/base/seed.json` (the building's 36 units and its
-  common areas). It never deletes or
+  common areas, and the names of the Links table's rows, whose values are
+  filled in by hand). It never deletes or
   retypes anything, and lists what must be done by hand: the views, and
   making a formula a table's primary field (so a request shows as "R-3
   Bath fan rattles" wherever it's linked), neither of which Airtable's API
@@ -551,6 +557,36 @@ status line as "calendar (members can view, not edit)".
   nobody, and leaves alone the fields the circle sets in Airtable and rows
   added there by hand. Like `maintenance_base.py`, it works on the test
   base unless given `--real`.
+- **`maintenance_demo.py`** fills the maintenance tracker's test base with
+  demo data, for showing the tracker to the circle. It deletes every row
+  except in Locations, People, and Links, and writes a made-up, consistent set:
+  requests at every stage, with the repeats the weekly digest looks for
+  (one fan model in four units, leaks down one stack), their updates,
+  warranty claims, warranties (each starting on `WARRANTY_START`),
+  fictional organizations, assets, guides, and maintenance plans and work.
+  The circle members are whoever is ticked as one in People (tick them
+  first), the coordinator first: they own the requests, in turn, and write
+  the updates. Reporters are people living in the units the requests are
+  in, so no member's name is in the script. Dates are relative to the day
+  it runs, but every request's Submitted is that day, since Airtable can't
+  backdate it. Each request and update carries the `maintenance_tracker`
+  Apps Script's own markers, so the script sends no email about them. It
+  works only on the test base, and asks you to type its name first unless
+  given `--yes`; `-n` shows what it would write.
+- **`update_start_here_doc.py`** writes
+  `maintenance_tracker/pages/maintenance-tracker-start-here.md` into the
+  circle's "Maintenance tracker: start here" Google Doc. The repo is
+  public, so each link in the source is a placeholder, filled from the
+  base: `[[base]]` with the base's link, `[[coordinator]]` with the first
+  name of the person ticked as Coordinator in People, and the others
+  (`[[status-page]]`) from the base's Links table, where the
+  `maintenance_tracker` Apps Script finds the same links. It joins the
+  source's wrapped lines, replaces the Doc's whole contents, keeping
+  its address and sharing, and sets it to pageless (continuous scroll). It finds the Doc by its title, and stops if a
+  placeholder has no value. `-n` shows what it would write. Like the other
+  maintenance scripts, it reads the test base, which holds the demo data,
+  unless given `--real`; until the real base is set up, the Doc links to
+  the test base.
 - **`setup.sh`** installs and starts a local Gather development instance, for
   trying scripts out safely before running them against the real site.
 
@@ -817,14 +853,15 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
   what's built so far
 - `maintenance_tracker/maintenance-tracker-guide.md`: the guide to using the
   maintenance tracker, for the circle's members (not a design note). It
-  describes the Maintenance interface's Triage and Requests pages; when a
-  page is added or dropped, or a status, an email, or a digest section
-  changes, update it
-- `maintenance_tracker/pages/members-page.md` and
+  describes the Maintenance tracker interface's Triage, Requests, and
+  Claims pages; when a page is added or dropped, or a status, an email, or
+  a digest section changes, update it
+- `maintenance_tracker/pages/maintenance-tracker-members-page.md` and
   `maintenance_tracker/pages/maintenance-tracker-start-here.md`:
   the two pages of links to the maintenance tracker, for members (a Gather
-  wiki page) and for the circle (a Google Doc in its Drive folder). The
-  repo's copies are the sources, with the links left out
+  wiki page) and for the circle (a Google Doc in its Drive folder, written
+  by `update_start_here_doc.py`). The repo's copies are the sources, with
+  the links left out
 - `archive/gather-sandbox-plan.md` and `archive/gather-import-plan.md`: plans
   for the local Gather test instance and the member import
 

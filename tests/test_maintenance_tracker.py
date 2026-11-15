@@ -27,16 +27,18 @@ pytestmark = pytest.mark.skipif(shutil.which("node") is None, reason="needs Node
 
 CIRCLE = "maintenance@example.org"
 FORM = "https://airtable.example/form"
-PROPS = {"AIRTABLE_TOKEN": "pat", "AIRTABLE_BASE_ID": "appTest", "CIRCLE_EMAIL": CIRCLE,
-         "REQUEST_FORM_URL": FORM, "STATUS_PAGE_URL": "https://airtable.example/status",
-         "TRIAGE_URL": "https://airtable.example/triage"}
+PROPS = {"AIRTABLE_TOKEN": "pat", "AIRTABLE_BASE_ID": "appTest", "CIRCLE_EMAIL": CIRCLE}
+LINKS = {"Request form": FORM, "Status page": "https://airtable.example/status",
+         "Triage view": "https://airtable.example/triage"}
 DANA_LINK = FORM + "?prefill_Reporter=Dana+S&prefill_Location=Unit+411"
 
 
-def tables(requests=(), updates=(), people=None):
+def tables(requests=(), updates=(), people=None, links=None):
     base = {name: [] for name in ["Locations", "People", "Requests", "Updates", "Claims", "Warranties",
                                   "Organizations", "Assets", "Maintenance plans", "Maintenance work",
-                                  "Guides"]}
+                                  "Guides", "Links"]}
+    base["Links"] = [{"id": f"lnk{i}", "fields": {"Name": name, "Value": value}}
+                     for i, (name, value) in enumerate((LINKS if links is None else links).items())]
     base["Locations"] = [{"id": "loc411", "fields": {"Name": "Unit 411", "Kind": "Unit"}},
                          {"id": "locRoof", "fields": {"Name": "Roof", "Kind": "Common"}}]
     base["People"] = people if people is not None else [
@@ -232,6 +234,37 @@ def test_script_may_fetch_only_from_airtable():
     assert "const AIRTABLE_API = 'https://api.airtable.com/v0';" in text
 
 
+# --- responsibility from the warranty ----------------------------------------
+
+def test_responsibility_is_filled_in_from_the_warranty():
+    builder = {"Warranty": ["w1"], "Warranty responsibility": ["Builder warranty"]}
+    out = run(tables([acknowledged(12, **builder, **{"Status noted": "New"}),
+                      acknowledged(13, **builder, Responsibility="Unknown", **{"Status noted": "New"}),
+                      acknowledged(14, **builder, Responsibility="HOA", **{"Status noted": "New"}),
+                      acknowledged(15, **{"Status noted": "New"})]), "processRequests")
+    got = {r["id"]: r["fields"].get("Responsibility") for r in out["tables"]["Requests"]}
+    assert got == {"req12": "Builder warranty", "req13": "Builder warranty", "req14": "HOA", "req15": None}
+    assert out["mails"] == [] and out["tables"]["Updates"] == []
+    again = run(out["tables"], "processRequests:timer", props=out["props"])
+    assert again["calls"] == ["get Requests"]
+
+
+def test_responsibility_is_written_with_a_status_change_and_a_new_request():
+    warranty = {"Warranty": ["w1"], "Warranty responsibility": ["Manufacturer warranty"]}
+    out = status_run("Triaged", "New", Title="Tap drips", **warranty)
+    assert one(out)["Responsibility"] == "Manufacturer warranty"
+    assert sum(call == "patch Requests" for call in out["calls"]) == 1
+    out = run(tables([request(Reporter=["pDana"], **warranty)]), "processRequests")
+    assert one(out)["Responsibility"] == "Manufacturer warranty"
+
+
+def test_responsibility_rule():
+    assert rule("responsibilityFromWarranty(r)", r={"fields": {"Warranty responsibility": []}}) is None
+    assert rule("responsibilityFromWarranty(r)",
+                r={"fields": {"Warranty responsibility": ["Builder warranty"],
+                              "Responsibility": "Unit owner"}}) is None
+
+
 # --- status changes ----------------------------------------------------------
 
 def status_run(status, noted, **fields):
@@ -391,7 +424,7 @@ def test_free_plan_stays_inside_its_calls():
     # Locations again for the form links).
     free = rule("PLANS.free")
     idle = 30 * (24 / free["checkEveryHours"] + 24 / free["updatesEveryHours"])
-    housekeeping = 4.5 * (11 + 2)
+    housekeeping = 4.5 * (12 + 2)
     assert idle + housekeeping < 600  # of 1,000, leaving the rest for requests, and the scripts run by hand
     assert rule("updatesDue('free', t, new Date('2026-11-14T12:00:00Z'))", t="2026-11-14T06:00:30Z")
     assert not rule("updatesDue('free', t, new Date('2026-11-14T12:00:00Z'))", t="2026-11-14T08:00:00Z")
@@ -402,6 +435,15 @@ def test_people_and_locations_are_cached_within_a_run():
     out = run(tables([request(1, Reporter=["pDana"]), request(2, Reporter=["pDana"])]),
               "processRequests", "processRequests")
     assert out["calls"].count("get People") == 1 and out["calls"].count("get Locations") == 1
+    assert out["calls"].count("get Links") == 1
+
+
+def test_links_are_found_by_a_key_made_from_their_name():
+    records = [{"fields": {"Name": "Request form", "Value": " https://x.example/f "}},
+               {"fields": {"Name": "Triage view"}},
+               {"fields": {"Name": "Tracker help (who to ask)", "Value": "Dana S"}}]
+    assert rule("linksByKey(r)", r=records) == {"request-form": "https://x.example/f",
+                                                 "tracker-help-who-to-ask": "Dana S"}
 
 
 # --- how full the base is ----------------------------------------------------
@@ -521,7 +563,7 @@ def test_digest_sections():
     assert "Repeats" not in body
     assert ("Open requests: 9 (2 New, 1 Triaged, 1 Waiting on builder, 1 Waiting on vendor, "
             "3 Scheduled, 1 Done, to confirm)") in body
-    assert "The base holds 17 of the 1,000 records its plan allows, and 0 MB of 1,024 MB of attachments." in body
+    assert "The base holds 20 of the 1,000 records its plan allows, and 0 MB of 1,024 MB of attachments." in body
     assert body.endswith("Triage: https://airtable.example/triage")
 
 
@@ -675,8 +717,8 @@ def test_form_links_are_written_where_missing_or_stale():
                      "p4": FORM + "?prefill_Reporter=Dana+Stone"}
     assert out["calls"].count("patch People") == 1
     assert "patch People" not in run(out["tables"], "writeFormLinks")["calls"]
-    props = {k: v for k, v in PROPS.items() if k != "REQUEST_FORM_URL"}
-    assert run(tables(people=people), "writeFormLinks", props=props)["calls"] == []
+    links = {k: v for k, v in LINKS.items() if k != "Request form"}
+    assert run(tables(people=people, links=links), "writeFormLinks")["calls"] == ["get Links"]
 
 
 def test_circle_members_get_a_link_to_the_update_form():
@@ -688,15 +730,15 @@ def test_circle_members_get_a_link_to_the_update_form():
                                 "Update form link": "https://stale"}},
     ]
     # Only the update form's address is set: the request form's links are left alone.
-    props = {**{k: v for k, v in PROPS.items() if k != "REQUEST_FORM_URL"}, "UPDATE_FORM_URL": update_form}
-    out = run(tables(people=people), "writeFormLinks", props=props)
+    links = {**{k: v for k, v in LINKS.items() if k != "Request form"}, "Update form": update_form}
+    out = run(tables(people=people, links=links), "writeFormLinks")
     fields = {p["id"]: p["fields"] for p in out["tables"]["People"]}
     assert fields["p1"]["Update form link"] == update_form + "?prefill_By=Dana+S"
     assert fields["p1"]["Request form link"] == "keep"
     assert "Update form link" not in fields["p2"] and "Update form link" not in fields["p3"]
     # Both set: one write to a person covers both links.
-    out = run(tables(people=[{"id": "p1", "fields": {"Name": "Dana S", "Circle member": True}}]),
-              "writeFormLinks", props={**PROPS, "UPDATE_FORM_URL": update_form})
+    out = run(tables(people=[{"id": "p1", "fields": {"Name": "Dana S", "Circle member": True}}],
+                     links={**LINKS, "Update form": update_form}), "writeFormLinks")
     assert set(out["tables"]["People"][0]["fields"]) >= {"Request form link", "Update form link"}
     assert out["calls"].count("patch People") == 1
 

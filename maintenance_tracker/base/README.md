@@ -8,22 +8,45 @@ This folder holds what the base is made from:
 - **`schema.json`**: every table, field, and select option, and the views
   each table should have. `util/airtable_schema.py` describes the format.
 - **`seed.json`**: starting rows: the building's 36 units and its common
-  areas, for the Locations table.
+  areas, for the Locations table; and a row for each of the tracker's
+  links, for the Links table, with its Name and Notes. Each link's Value
+  is filled in by hand in the base (see "The Links table"), and `seed`
+  leaves it alone.
 
 `maintenance_base.py`, in the repo root, makes a base match these files.
 There are two bases: the real one, and "Building Maintenance (test)" for
 trying changes, which is the one the script works on unless given `--real`.
+`maintenance_demo.py` fills the test base with demo data, keeping its
+Locations and People: tick the circle members and the coordinator in People
+first.
 
-`../pages/` holds **`members-page.md`** and
-**`maintenance-tracker-start-here.md`**: the text of the two pages that hold the tracker's links. The first is for
-members, pasted into a Gather wiki page titled "Building maintenance"; the
-second is for the circle, made into a Google Doc titled "Maintenance
-tracker: start here" in the circle's Drive folder, which only the circle
-can open. These copies are the sources: when one changes, update its page
-to match. Each `[[...]]` in them stands for a link, a name, or a phone
-number to fill in on the page itself; the links aren't kept in the repo,
-since it's public. (The files hold nothing but the page's text: Google
-Docs won't open a Markdown file that starts with a comment.)
+`../pages/` holds **`maintenance-tracker-members-page.md`** and
+**`maintenance-tracker-start-here.md`**: the text of the two pages that
+hold the tracker's links. These copies are the sources: when one changes,
+update its page to match. The links aren't kept in the repo, since it's
+public: each placeholder stands for a link, a name, or a phone number.
+(The files hold nothing but the page's text, with no comment at the top.)
+
+- **The members' page** is a Gather wiki page titled "Building
+  maintenance", pasted in by hand; Gather has no API for it. The title is
+  typed into the wiki editor's own field, so the source has none. Its
+  placeholders are in single brackets (`[after-hours number]`), since
+  Gather would make double brackets a link to a new wiki page. Its links are
+  all in its first section, "Numbers and links", filled in on the page
+  itself, and the rest of the page refers to them by name. So when the
+  text changes, paste over everything but that section, and only a link
+  added or removed means editing it. Gather keeps line breaks, so each
+  paragraph and list item in the source is one line.
+- **The circle's page** is a Google Doc titled "Maintenance tracker: start
+  here" in the circle's Drive folder, which only the circle can open.
+  `update_start_here_doc.py`, in the repo root, writes it: each
+  placeholder is a short key, filled from the test base, or with
+  `--real` the real one (`[[base]]`, its link; `[[coordinator]]`, from
+  People; the others, such as
+  `[[status-page]]`, from the Links table, below), and the Doc's whole
+  contents are replaced. Don't edit the Doc by hand; change the source, or
+  the base, and run the script again: after a new coordinator is ticked,
+  for instance.
 
 This file has three parts: changing the base's structure; setting a base
 up, with everything that has to be made by hand; and how the circle uses
@@ -77,8 +100,23 @@ the same formula into the field in each base.
    aren't checked either.
 8. Point the `maintenance_tracker` script at the base (see
    `../apps_script/README.md`).
-9. Put the base's links into the members' page and the circle's page
-   (`../pages/members-page.md`, `../pages/maintenance-tracker-start-here.md`).
+9. Fill in each link's Value in the Links table ("The Links table"),
+   put the links into the members' page (in its "Numbers and links"
+   section), and run `python update_start_here_doc.py` (see above).
+
+### The Links table
+
+The tracker's links are kept in the base, one row each in Links, since the
+repo is public: `seed` adds each row's Name and Notes, which say what it's
+for and where to find it, and its Value is filled in by hand. Each base
+has its own, so the test base's script and page use the test base's
+forms. The `maintenance_tracker` Apps Script reads the forms', status
+page's, and Triage view's links from it (within 6 hours of a change, as it
+caches them), and `update_start_here_doc.py` reads every row, naming each
+by a key made from its Name, lowercased with hyphens for spaces ("Status
+page" is `[[status-page]]`). A row with no Value is treated as missing:
+the script leaves that link out of its emails, and the page script stops.
+Rename a row only together with the places that use its key.
 
 ### Fields to change by hand
 
@@ -186,7 +224,7 @@ reporter by the script.
 
 Requests and Updates each have a **Created by** field, which Airtable fills
 in with the account that made the row, when it was made by someone signed
-in (not through a form's link). An update added on the Maintenance
+in (not through a form's link). An update added on the Maintenance tracker
 interface needn't say who's logging it: the script sets By from Created by.
 
 ### What a form's link shows
@@ -239,7 +277,7 @@ Interfaces are made by hand; the API can't see them, so `diff` doesn't
 check them. In every one, turn off deleting records, and turn off creating
 them except where it says otherwise.
 
-They're pages of one interface, "Maintenance", each named as here, so the
+They're pages of one interface, "Maintenance tracker", each named as here, so the
 circle has one thing to open; the circle's guide calls them by these names.
 
 **Triage**, for the coordinator. A record review layout: the queue on the
@@ -336,7 +374,9 @@ next), read what the member said, then fill in:
   It's what the status page shows.
 - **Location**, if it's empty or wrong; **System**; **Component**, once
   Assets has rows.
-- **Responsibility**, and, for a warranty item, its **Warranty**.
+- For a warranty item, its **Warranty**: the tracker's script then fills
+  in Responsibility from it, if that's empty or Unknown. Otherwise,
+  **Responsibility** (HOA, Unit owner, or Unknown).
 - **Owner**: the one person who'll see it through.
 - **Status**, last: Triaged, or Duplicate (with Duplicate of) or Declined.
   Changing it takes the request out of Triage.
@@ -353,12 +393,13 @@ to the member. The script adds an update itself for every change of status.
 
 ### Warranty claims
 
-A request becomes a claim in four steps, all in Airtable. Nothing waits
-for the tracker's script: the dates and the letter are formulas, worked
-out as the rows are filled in.
+A request becomes a claim in four steps, all in Airtable (the last two on
+the Claims interface). Nothing waits for the tracker's script: the dates
+and the letter are formulas, worked out as the rows are filled in.
 
-1. **Warranties** has a row for each warranty: its Warrantor, its Term
-   (months), and when its clock starts. Clock starts says whether that's
+1. **Warranties** has a row for each warranty: its Warrantor, whose
+   warranty it is (Responsibility: Builder warranty or Manufacturer
+   warranty), its Term (months), and when its clock starts. Clock starts says whether that's
    One date for the building (Building start date), Each unit's closing
    (the Closing date of the request's unit in Locations; a common area's is
    the building's date), or Unknown. While it's Unknown, the earlier of the
@@ -366,7 +407,10 @@ out as the rows are filled in.
    the answer is known, changing Clock starts moves every deadline.
 2. **At triage**, a request that's the builder's or a manufacturer's to fix
    gets its Warranty (one). Its **Claim deadline** then shows: the
-   warranty's start for that place, plus its term.
+   warranty's start for that place, plus its term. Its Warranty
+   responsibility shows the warranty's Responsibility, and the tracker's
+   script copies it to the request's own Responsibility when that's empty
+   or Unknown (never over a choice someone made).
 3. **A claim** is a row in Claims, linked to its Requests (several, when
    it's one defect in several places: set Scope to Systemic), its Warranty,
    and its Warrantor. Its Claim deadline is the earliest of its requests'.
