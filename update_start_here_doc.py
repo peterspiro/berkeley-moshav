@@ -8,8 +8,8 @@ numbers aren't: each is a placeholder, such as [[status-page]], filled in
 from the maintenance tracker's base:
 
     [[base]]          the base's own link
-    [[coordinator]]   the Name ("Dana S") of the person ticked as
-                      Coordinator in People
+    [[coordinator]]   the first name ("Dana", from the Name "Dana S") of
+                      the person ticked as Coordinator in People
     [[status-page]]   and every other key: the Value of the row in the
                       Links table whose Name makes that key, lowercased with
                       hyphens for spaces ("Status page")
@@ -83,7 +83,7 @@ def base_values(base_id: str, people: list[dict], links: list[dict]) -> dict[str
         if key and value:
             values[key] = value
     values["base"] = f"https://airtable.com/{base_id}"
-    values["coordinator"] = coordinators[0].get("Name", "")
+    values["coordinator"] = (coordinators[0].get("Name") or "").split(" ")[0]
     return values
 
 

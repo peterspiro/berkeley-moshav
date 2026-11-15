@@ -31,7 +31,7 @@ def test_values_come_from_the_base():
     links = [{"fields": {"Name": "Status page", "Value": " https://x.example/s "}},
              {"fields": {"Name": "Update form"}}]
     assert doc.base_values("appX", people, links) == {
-        "status-page": "https://x.example/s", "base": "https://airtable.com/appX", "coordinator": "Dana S"}
+        "status-page": "https://x.example/s", "base": "https://airtable.com/appX", "coordinator": "Dana"}
     for coordinators in ([], [True, True]):
         crowd = [{"fields": {"Name": f"P{i}", "Coordinator": c}} for i, c in enumerate(coordinators)]
         with pytest.raises(ValueError):

@@ -576,8 +576,8 @@ status line as "calendar (members can view, not edit)".
   `maintenance_tracker/pages/maintenance-tracker-start-here.md` into the
   circle's "Maintenance tracker: start here" Google Doc. The repo is
   public, so each link in the source is a placeholder, filled from the
-  base: `[[base]]` with the base's link, `[[coordinator]]` with the Name
-  of the person ticked as Coordinator in People, and the others
+  base: `[[base]]` with the base's link, `[[coordinator]]` with the first
+  name of the person ticked as Coordinator in People, and the others
   (`[[status-page]]`) from the base's Links table, where the
   `maintenance_tracker` Apps Script finds the same links. It joins the
   source's wrapped lines, and replaces the Doc's whole contents, keeping
