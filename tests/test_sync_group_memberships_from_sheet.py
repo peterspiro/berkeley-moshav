@@ -115,12 +115,12 @@ def _sheet(*rows: str) -> str:
 
 class TestParseMemberships:
     def test_basic_bm_member(self):
-        csv = _sheet("notes,Peter,Spiro,peter@example.com,Member,BM; Technology")
+        csv = _sheet("notes,Paul,Stone,paul@example.com,Member,BM; Technology")
         result = parse_memberships(csv)
         assert len(result) == 1
-        assert result[0]["first_name"] == "Peter"
-        assert result[0]["last_name"] == "Spiro"
-        assert result[0]["email"] == "peter@example.com"
+        assert result[0]["first_name"] == "Paul"
+        assert result[0]["last_name"] == "Stone"
+        assert result[0]["email"] == "paul@example.com"
         assert result[0]["groups"] == ["Technology"]
 
     def test_bm_only_no_groups(self):
@@ -135,7 +135,7 @@ class TestParseMemberships:
         assert result[0]["groups"] == ["Technology", "Finance"]
 
     def test_consultant_with_bm_included(self):
-        csv = _sheet("notes,Katie,McCamant,k@example.com,Consultant,BM; Technology")
+        csv = _sheet("notes,Katie,Marsh,k@example.com,Consultant,BM; Technology")
         result = parse_memberships(csv)
         assert len(result) == 1
 
@@ -189,7 +189,7 @@ def _user(uid, first, last, email=""):
 class TestResolveUser:
     def setup_method(self):
         self.users = [
-            _user("1", "Peter", "Spiro", "peter@example.com"),
+            _user("1", "Paul", "Stone", "paul@example.com"),
             _user("2", "Alice", "Brown", "alice@example.com"),
             _user("3", "Bob", "Lee", ""),
         ]
@@ -201,7 +201,7 @@ class TestResolveUser:
         return resolve_user(entry, self.email_index, self.users, warnings)
 
     def test_match_by_email(self):
-        entry = {"first_name": "Peter", "last_name": "Spiro", "email": "peter@example.com"}
+        entry = {"first_name": "Paul", "last_name": "Stone", "email": "paul@example.com"}
         u = self._resolve(entry)
         assert u is not None
         assert u.user_id == "1"
@@ -242,7 +242,7 @@ class TestResolveUser:
         assert any("Ambiguous" in w for w in warnings)
 
     def test_case_insensitive_last_name(self):
-        entry = {"first_name": "Peter", "last_name": "spiro", "email": ""}
+        entry = {"first_name": "Paul", "last_name": "stone", "email": ""}
         u = self._resolve(entry)
         assert u is not None
         assert u.user_id == "1"

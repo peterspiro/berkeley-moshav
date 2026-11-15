@@ -427,7 +427,7 @@ class TestParseMemberLine:
         assert parse_member_line("- Sharon-Feedback link") == [("Sharon", None)]
 
     def test_role_with_last_name(self):
-        assert parse_member_line("- Henry Hirschel-lead") == [("Henry", "Hirschel")]
+        assert parse_member_line("- Henry Harper-lead") == [("Henry", "Harper")]
 
     def test_lead_role_after_name_and_space(self):
         assert parse_member_line("- Anita -Lead") == [("Anita", None)]
@@ -710,20 +710,20 @@ class TestMatchMember:
         assert result[0].user_id == "5"
 
     def test_accented_last_name_matches_unaccented(self):
-        # Spreadsheet has "Codruta Girlea"; directory has "Codruța Gîrlea"
-        users = [make_user("42", "Codruța", "Gîrlea")]
-        result = match_member("Codruta", "Girlea", users)
+        # Spreadsheet has "Renee Dube"; directory has "Renée Dubé"
+        users = [make_user("42", "Renée", "Dubé")]
+        result = match_member("Renee", "Dube", users)
         assert len(result) == 1
         assert result[0].user_id == "42"
 
     def test_accented_first_name_matches_unaccented(self):
-        users = [make_user("43", "Codruța", "Girlea")]
-        result = match_member("Codruta", "Girlea", users)
+        users = [make_user("43", "Renée", "Dube")]
+        result = match_member("Renee", "Dube", users)
         assert len(result) == 1
 
     def test_both_accented_match(self):
-        users = [make_user("44", "Codruța", "Gîrlea")]
-        result = match_member("Codruța", "Gîrlea", users)
+        users = [make_user("44", "Renée", "Dubé")]
+        result = match_member("Renée", "Dubé", users)
         assert len(result) == 1
 
     def test_kathryn_matches_kathryn(self):

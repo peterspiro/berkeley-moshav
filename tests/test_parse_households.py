@@ -72,7 +72,7 @@ class TestHelpers(unittest.TestCase):
     def test_strip_pronunciation(self):
         self.assertEqual(strip_pronunciation("Aria (ar-EE-uh)"), "Aria")
         self.assertEqual(strip_pronunciation("Robin"), "Robin")
-        self.assertEqual(strip_pronunciation("Estee Solomon Gray"), "Estee Solomon Gray")
+        self.assertEqual(strip_pronunciation("Mary Ann Gray"), "Mary Ann Gray")
 
     def test_parse_others_child_by_age(self):
         entries = parse_others("Kael (12), Wren (10)")

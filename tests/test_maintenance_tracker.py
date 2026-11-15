@@ -656,8 +656,8 @@ def test_housekeeping_reads_each_table_once():
 # --- form links --------------------------------------------------------------
 
 def test_form_link_is_the_tested_shape():
-    assert rule("formLink(u, 'Peter S', 'Unit 411')", u=FORM) == \
-        FORM + "?prefill_Reporter=Peter+S&prefill_Location=Unit+411"
+    assert rule("formLink(u, 'Pat S', 'Unit 411')", u=FORM) == \
+        FORM + "?prefill_Reporter=Pat+S&prefill_Location=Unit+411"
     assert rule("formLink(u, \"Zoë O'Neil\", null)", u=FORM + "?x=1") == \
         FORM + "?x=1&prefill_Reporter=Zo%C3%AB+O'Neil"
 
