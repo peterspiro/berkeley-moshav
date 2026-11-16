@@ -10,6 +10,10 @@ from the maintenance tracker's base:
     [[base]]          the base's own link
     [[coordinator]]   the first name ("Dana", from the Name "Dana S") of
                       the person ticked as Coordinator in People
+    [[update-links]]  a list of the circle's members (Circle member ticked
+                      in People), each name a link to that person's own
+                      "Log an update" form: their Update form link, which
+                      the maintenance_tracker Apps Script writes
     [[status-page]]   and every other key: the Value of the row in the
                       Links table whose Name makes that key, lowercased with
                       hyphens for spaces ("Status page")
@@ -20,8 +24,9 @@ forms' and the status page's links, so each link is kept in one place.
 This script replaces the Doc's whole contents with the result, so nothing
 is ever edited in the Doc by hand: a change made there is lost the next
 time this runs. The Doc keeps its address and its sharing. It stops,
-changing nothing, if a placeholder has no value, or if People has no
-coordinator, or more than one.
+changing nothing, if a placeholder has no value, if People has no
+coordinator, or more than one, or if no circle member has an Update form
+link yet. Run it again when the circle's members change.
 
 The Doc is found by its title, wherever admin@ can see it (it's in the
 circle's folder in the Shared Drive), so no ID is kept in the repo. Make
@@ -73,8 +78,10 @@ def link_key(name: str) -> str:
 
 def base_values(base_id: str, people: list[dict], links: list[dict]) -> dict[str, str]:
     """What the placeholders can be filled with, from the base: its link,
-    its coordinator, and each Links row that has a Value. Raises ValueError
-    unless exactly one person (not moved out) is ticked as Coordinator."""
+    its coordinator, the circle's members' own links to the update form,
+    and each Links row that has a Value. Raises ValueError unless exactly
+    one person (not moved out) is ticked as Coordinator, or if no circle
+    member has an Update form link."""
     coordinators = [p["fields"] for p in people
                     if p["fields"].get("Coordinator") and not p["fields"].get("Moved out")]
     if len(coordinators) != 1:
@@ -86,7 +93,25 @@ def base_values(base_id: str, people: list[dict], links: list[dict]) -> dict[str
             values[key] = value
     values["base"] = f"https://airtable.com/{base_id}"
     values["coordinator"] = (coordinators[0].get("Name") or "").split(" ")[0]
+    values["update-links"], _ = update_links(people)
+    if not values["update-links"]:
+        raise ValueError("No one ticked as Circle member in People has an Update form link. The "
+                         "maintenance_tracker Apps Script writes them (run writeFormLinks).")
     return values
+
+
+def update_links(people: list[dict]) -> tuple[str, list[str]]:
+    """The circle's members' own links to the "Log an update" form, as a
+    Markdown list in order of name ("- [Dana S](https://…)"), and the names
+    of the circle's members who have no link yet. Leaves out anyone who's
+    moved out."""
+    circle = sorted((p["fields"] for p in people
+                     if p["fields"].get("Circle member") and not p["fields"].get("Moved out")),
+                    key=lambda f: str(f.get("Name") or "").casefold())
+    items = [f"- [{f.get('Name')}]({f['Update form link'].strip()})"
+             for f in circle if str(f.get("Update form link") or "").strip()]
+    missing = [str(f.get("Name") or "") for f in circle if not str(f.get("Update form link") or "").strip()]
+    return "\n".join(items), missing
 
 
 def fill(text: str, links: dict[str, str]) -> str:
@@ -154,8 +179,9 @@ def main() -> None:
     airtable = Airtable(load_airtable_token())
     try:
         base = airtable.find_base(REAL_BASE if args.real else TEST_BASE)
-        values = base_values(base, airtable.list_records(base, "People", ["Name", "Coordinator", "Moved out"]),
-                             airtable.list_records(base, "Links"))
+        people = airtable.list_records(
+            base, "People", ["Name", "Coordinator", "Circle member", "Moved out", "Update form link"])
+        values = base_values(base, people, airtable.list_records(base, "Links"))
     except (AirtableError, ValueError) as e:
         sys.exit(f"Error: {e}")
     try:
@@ -164,6 +190,11 @@ def main() -> None:
         sys.exit("Error: these have no value: " + ", ".join(e.args[0]) +
                  ". Fill in each one's Value in the base's Links table, adding a row if it has none "
                  "(Name \"Status page\" for status-page).")
+
+    without_link = update_links(people)[1]
+    if without_link:
+        print("Left out, having no Update form link yet (the Apps Script's writeFormLinks writes them): "
+              + ", ".join(without_link), file=sys.stderr)
 
     from googleapiclient.discovery import build
     from googleapiclient.http import MediaInMemoryUpload

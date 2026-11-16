@@ -42,11 +42,12 @@ public: each placeholder stands for a link, a name, or a phone number.
   `update_start_here_doc.py`, in the repo root, writes it: each
   placeholder is a short key, filled from the test base, or with
   `--real` the real one (`[[base]]`, its link; `[[coordinator]]`, from
-  People; the others, such as
+  People; `[[update-links]]`, each circle member's Update form link;
+  the others, such as
   `[[status-page]]`, from the Links table, below), and the Doc's whole
   contents are replaced. Don't edit the Doc by hand; change the source, or
   the base, and run the script again: after a new coordinator is ticked,
-  for instance.
+  or someone joins or leaves the circle, for instance.
 
 This file has three parts: changing the base's structure; setting a base
 up, with everything that has to be made by hand; and how the circle uses

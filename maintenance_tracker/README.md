@@ -15,7 +15,7 @@ in this folder, except four scripts in the repo root.
 | `pages/` | The sources of the two pages that hold the tracker's links: `maintenance-tracker-members-page.md` (a Gather wiki page) and `maintenance-tracker-start-here.md` (a Google Doc in the circle's Drive folder, written by `../update_start_here_doc.py`) |
 | `../maintenance_base.py` | Makes a base match `base/schema.json` and `base/seed.json` |
 | `../sync_maintenance_people.py` | Copies the members in from Gather to the base's People table |
-| `../update_start_here_doc.py` | Writes the circle's "start here" Google Doc from `pages/maintenance-tracker-start-here.md`, with its links filled in from the base (its Links table, and its coordinator) |
+| `../update_start_here_doc.py` | Writes the circle's "start here" Google Doc from `pages/maintenance-tracker-start-here.md`, with its links filled in from the base (its Links table, its coordinator, and each circle member's own link to the update form) |
 | `../maintenance_demo.py` | Replaces the test base's rows, except Locations and People, with demo data for showing the tracker to the circle |
 
 The shared Python code is in `../util/` (`airtable.py`, `airtable_schema.py`,

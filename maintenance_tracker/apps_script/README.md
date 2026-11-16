@@ -48,8 +48,9 @@ Airtable base ("Building Maintenance") without anyone doing it. It runs as
     link in People, and rewritten when their name or unit changes. Someone
     who's moved out has none. Each person whose Circle member box is ticked
     also gets an Update form link, to the "Log an update" form with "Who's
-    logging this?" filled in; the circle ticks those boxes, and gives each
-    volunteer their link.
+    logging this?" filled in; the circle ticks those boxes, and
+    `update_start_here_doc.py` lists the links in the circle's "start here"
+    Doc.
   - **Backup** (`backup`): every table is saved as a JSON file in a folder
     named for the day, and each photo and attachment not yet copied is
     saved to an "Attachments" folder (Airtable's own links to them expire),

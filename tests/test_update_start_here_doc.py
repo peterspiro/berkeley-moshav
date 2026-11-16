@@ -30,12 +30,33 @@ def test_values_come_from_the_base():
               {"fields": {"Name": "Sam L"}}]
     links = [{"fields": {"Name": "Status page", "Value": " https://x.example/s "}},
              {"fields": {"Name": "Update form"}}]
+    people[0]["fields"].update({"Circle member": True, "Update form link": "https://x.example/u?prefill_By=Dana+S"})
     assert doc.base_values("appX", people, links) == {
-        "status-page": "https://x.example/s", "base": "https://airtable.com/appX", "coordinator": "Dana"}
+        "status-page": "https://x.example/s", "base": "https://airtable.com/appX", "coordinator": "Dana",
+        "update-links": "- [Dana S](https://x.example/u?prefill_By=Dana+S)"}
     for coordinators in ([], [True, True]):
-        crowd = [{"fields": {"Name": f"P{i}", "Coordinator": c}} for i, c in enumerate(coordinators)]
+        crowd = [{"fields": {"Name": f"P{i}", "Coordinator": c, "Circle member": True,
+                             "Update form link": "https://x.example/u"}} for i, c in enumerate(coordinators)]
         with pytest.raises(ValueError):
             doc.base_values("appX", crowd, links)
+
+
+def test_update_links_list_the_circle_by_name():
+    def person(name, **fields):
+        return {"fields": dict({"Name": name, "Circle member": True,
+                                "Update form link": f"https://x.example/u?prefill_By={name[0]}"}, **fields)}
+    people = [person("sam L"), person("Dana S"), person("Old T", **{"Moved out": True}),
+              person("Pat S", **{"Circle member": False}), person("New N", **{"Update form link": ""})]
+    assert doc.update_links(people) == (
+        "- [Dana S](https://x.example/u?prefill_By=D)\n- [sam L](https://x.example/u?prefill_By=s)", ["New N"])
+    # The list stays a list in the Doc: each item its own line, after the page's wrapped lines are joined.
+    page = doc.join_wrapped_lines(doc.fill("Open\nyours:\n\n[[update-links]]\n\nUse your own.",
+                                           {"update-links": doc.update_links(people)[0]}))
+    assert page.split("\n")[2:4] == ["- [Dana S](https://x.example/u?prefill_By=D)",
+                                     "- [sam L](https://x.example/u?prefill_By=s)"]
+    coordinator = [{"fields": {"Name": "Dana S", "Coordinator": True}}]
+    with pytest.raises(ValueError, match="Update form link"):
+        doc.base_values("appX", coordinator, [])
 
 
 def test_link_keys_match_the_apps_scripts():
@@ -51,7 +72,7 @@ def _seeded_link_keys():
 
 
 def test_every_placeholder_and_script_link_has_a_row_in_links():
-    keys = _seeded_link_keys() | {"base", "coordinator"}
+    keys = _seeded_link_keys() | {"base", "coordinator", "update-links"}
     assert set(doc.placeholders(doc.SOURCE.read_text())) <= keys
     script = (ROOT / "maintenance_tracker/apps_script/maintenance_tracker.gs").read_text()
     used = set(re.findall(r"\blink\('([^']+)'", script))

@@ -17,12 +17,20 @@ for the building.
 | | Link | For |
 |---|---|---|
 | **Maintenance tracker** | [Open Maintenance tracker]([[maintenance-tracker-interface]]) | Triage, working on requests, and warranty claims, on its Triage, Requests, and Claims pages; contractors' numbers on Contacts; each warranty's terms on Warranties; what's repeating on Patterns. Needs an Airtable account: ask [[tracker-help]] |
-| **Log an update** | Your own link, sent to you by the coordinator | Recording a call, a visit, or a note. Easiest on a phone. No account needed |
+| **Log an update** | Your own link, under "Log an update" below | Recording a call, a visit, or a note. Easiest on a phone. No account needed |
 | **Weekly digest** | Arrives by email on Sundays | What needs someone this week |
 
-**Use your own "Log an update" link**, not someone else's: it fills in your
-name. Lost it? Ask the coordinator. This one works for anybody, but you'll
-have to pick your name each time: [the update form]([[update-form]])
+## Log an update
+
+Each of us has our own link to the "Log an update" form, which fills in our
+name. Open yours:
+
+[[update-links]]
+
+Use your own, not someone else's. To have it handy on your phone, open it
+once and add it to your home screen or your bookmarks. Not in the list? Ask
+[[tracker-help]]. Until you are, this one works for anybody, but you'll
+have to pick your name: [the update form]([[update-form]])
 
 ## What members use
 
