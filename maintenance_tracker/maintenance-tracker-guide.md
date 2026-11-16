@@ -23,7 +23,8 @@ These are the parts you'll meet:
 | The weekly digest | The circle | A Sunday email summing up what needs attention |
 
 The coordinator can give you the links to each. Every circle member also has
-their own link to the "Log an update" form, which fills in their name.
+their own link to the "Log an update" form, which fills in their name; the
+circle's "start here" doc lists them.
 
 ## What the tracker does by itself
 
@@ -136,7 +137,8 @@ There are two ways to add an update:
   who you are: the tracker knows from your Airtable sign-in, and fills it
   in.
 - With the **"Log an update"** form, which is easier on a phone. Use your
-  own link to it, so that your name is filled in.
+  own link to it, from the circle's "start here" doc, so that your name is
+  filled in.
 
 **"Tell the reporter"**: tick this box on an update and the tracker emails
 your words to the member, exactly as you wrote them. Use it to keep them

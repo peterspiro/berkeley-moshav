@@ -585,7 +585,9 @@ status line as "calendar (members can view, not edit)".
   circle's "Maintenance tracker: start here" Google Doc. The repo is
   public, so each link in the source is a placeholder, filled from the
   base: `[[base]]` with the base's link, `[[coordinator]]` with the first
-  name of the person ticked as Coordinator in People, and the others
+  name of the person ticked as Coordinator in People, `[[update-links]]`
+  with a list of the circle's members, each name a link to that person's
+  own "Log an update" form (their Update form link in People), and the others
   (`[[status-page]]`) from the base's Links table, where the
   `maintenance_tracker` Apps Script finds the same links. It joins the
   source's wrapped lines, replaces the Doc's whole contents, keeping
@@ -593,7 +595,9 @@ status line as "calendar (members can view, not edit)".
   placeholder has no value. `-n` shows what it would write. Like the other
   maintenance scripts, it reads the test base, which holds the demo data,
   unless given `--real`; until the real base is set up, the Doc links to
-  the test base.
+  the test base, and says so: text the source wraps in `{{trial: …}}` (a
+  notice under the title, and a few words elsewhere) is kept for the test
+  base and left out with `--real`.
 - **`setup.sh`** installs and starts a local Gather development instance, for
   trying scripts out safely before running them against the real site.
 

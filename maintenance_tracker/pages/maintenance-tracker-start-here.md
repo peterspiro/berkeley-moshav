@@ -1,4 +1,10 @@
-# Maintenance tracker: start here
+# Maintenance tracker: start here{{trial: (trial)}}
+
+{{trial:**This is a trial version.** The tracker isn't in use yet. Every link on
+this page opens a test copy filled with made-up requests, so you can click
+around and try things without harm. Don't record real problems here yet:
+anything entered in the test copy will be thrown away. We'll tell you when
+the real one is ready, and this page will then point to it.}}
 
 Everything the circle uses to track repairs, questions, and warranty claims
 for the building.
@@ -16,13 +22,30 @@ for the building.
 
 | | Link | For |
 |---|---|---|
-| **Maintenance tracker** | [Open Maintenance tracker]([[maintenance-tracker-interface]]) | Triage, working on requests, and warranty claims, on its Triage, Requests, and Claims pages; contractors' numbers on Contacts; each warranty's terms on Warranties; what's repeating on Patterns. Needs an Airtable account: ask [[tracker-help]] |
-| **Log an update** | Your own link, sent to you by the coordinator | Recording a call, a visit, or a note. Easiest on a phone. No account needed |
+| **Maintenance tracker** | [Open Maintenance tracker]([[maintenance-tracker-interface]]) | Triage, working on requests, and warranty claims: its pages are listed below. Needs an Airtable account: ask [[tracker-help]] |
+| **Log an update** | Your own link, under "Log an update" below | Recording a call, a visit, or a note. Easiest on a phone. No account needed |
 | **Weekly digest** | Arrives by email on Sundays | What needs someone this week |
 
-**Use your own "Log an update" link**, not someone else's: it fills in your
-name. Lost it? Ask the coordinator. This one works for anybody, but you'll
-have to pick your name each time: [the update form]([[update-form]])
+Maintenance tracker's pages:
+
+- **Triage:** new requests, for the coordinator to sort
+- **Requests:** working on requests
+- **Claims:** warranty claims
+- **Contacts:** contractors' numbers
+- **Warranties:** each warranty's terms
+- **Patterns:** what's repeating
+
+## Log an update
+
+Each of us has our own link to the "Log an update" form, which fills in our
+name.{{trial: For now, these open the test copy's form.}} Open yours:
+
+[[update-links]]
+
+Use your own, not someone else's. To have it handy on your phone, open it
+once and add it to your home screen or your bookmarks. Not in the list? Ask
+[[tracker-help]]. Until you are, this one works for anybody, but you'll
+have to pick your name: [the update form]([[update-form]])
 
 ## What members use
 
@@ -36,7 +59,7 @@ It helps to see what they see.
 
 ## The base itself
 
-[Open the Building Maintenance base]([[base]])
+[Open the Building Maintenance{{trial: (test)}} base]([[base]])
 
 Only if you need something Maintenance tracker's pages don't show, or to
 change what they only show, such as a warranty. Go carefully: here a stray
