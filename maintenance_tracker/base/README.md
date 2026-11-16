@@ -322,8 +322,11 @@ with a filter for Status.
   Status to Scheduled and tells the reporter.
 - Read-only: everything the member entered, as in Triage, and Submitted.
 - Its Updates, as a list within the page, newest first, where creating is
-  turned on: Kind, Text, By (or By name), When, Attachments, Tell the
-  reporter.
+  turned on. Its form has Kind and Text (both required), When,
+  Attachments, and Tell the reporter. Leave off Request (Airtable links
+  an update made here to the request whose page it's on: make one to
+  check), and By and By name (the script sets By from the account that
+  made the row, but only when both are empty).
   Told reporter on is shown read-only. This does on a computer what the
   "Log an update" form does on a phone.
 
@@ -344,8 +347,11 @@ Warrantor can be made required once Warranties and Organizations are
 complete.) Editable: every field but Label, Number, and the ones worked out
 (Claim deadline, Request count, Request lines, Warrantor contact, Draft,
 which are shown). Shown with each claim: its
-Requests (to link and unlink), and its Updates, with creating turned on as
-above.
+Requests (to link and unlink), and its Updates, with creating turned on.
+That form is the Requests page's, with Claim left off in place of
+Request, and without Tell the reporter: a claim has no one reporter, and
+for an update with no Request the script sends nothing but still fills in
+Told reporter on.
 
 **Contacts**. A list of Organizations grouped by Trades, with creating
 turned on and every field editable: the circle collects these over time.
