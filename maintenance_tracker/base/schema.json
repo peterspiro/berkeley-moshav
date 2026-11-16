@@ -241,7 +241,7 @@
    "description": "Each occurrence of a maintenance plan.",
    "fields": [
     {"name": "Number", "type": "autoNumber"},
-    {"name": "Plan", "type": "link", "table": "Maintenance plans", "inverse": "Work"},
+    {"name": "Plan", "type": "link", "table": "Maintenance plans", "inverse": "Work", "single": true},
     {"name": "Due", "type": "date"},
     {"name": "Status", "type": "select", "choices": ["Due", "Scheduled", "Done", "Skipped"]},
     {"name": "Scheduled for", "type": "dateTime"},
@@ -249,7 +249,8 @@
     {"name": "Done by", "type": "text"},
     {"name": "Notes", "type": "longText"},
     {"name": "Photos", "type": "attachments"},
-    {"name": "Found", "type": "link", "table": "Requests", "inverse": "Found during"}
+    {"name": "Found", "type": "link", "table": "Requests", "inverse": "Found during"},
+    {"name": "Plan name", "type": "formula", "formula": "ARRAYJOIN({Plan}, \", \")"}
    ],
    "views": []
   },

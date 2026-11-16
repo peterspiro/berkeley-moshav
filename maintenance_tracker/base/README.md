@@ -391,9 +391,11 @@ start date, so a change to one moves them all.
 who does. A record review layout over Maintenance work, grouped by Status
 (Due, Scheduled, Done, Skipped, as the field's options are ordered) and
 sorted by Due, soonest first, so that what's to do next leads and what's
-been done is kept below it as the record. The list shows Plan, Due, and
-Scheduled for: Plan is the row's name here, since its own primary field
-is only its number.
+been done is kept below it as the record. The list's title is Plan name,
+and it shows Due and Scheduled for. Plan name is a formula that repeats
+the plan's Task as text: a list's title can be a text, number, date, or
+formula field, not a link, and the table's own primary field is only its
+number.
 
 Creating is turned off: the tracker's script makes each plan's next
 occurrence, a day or so after the last is marked Done or Skipped (see
@@ -406,7 +408,7 @@ The occurrence, in this order:
 
 | Field | Editable | Why |
 |---|---|---|
-| Plan | no | Shown with the plan's Task, Asset, Kind, Every (months), Done by, Vendor, Owner, Required by, and Procedure: what the task is, who does it, and how |
+| Plan | no | Opens the plan's details (see the linked fields, below): Task, Asset, Kind, Every (months), Done by, Vendor, Owner, Required by, and Procedure, which say what the task is, who does it, and how |
 | Due | yes | To move work that has to wait. The next occurrence is counted from this date |
 | Scheduled for | yes | The time booked with the vendor or the volunteers |
 | Status | yes | Scheduled once it has a time; Done or Skipped when it's over. Unlike a request, it isn't set by filling in the time |
@@ -415,9 +417,10 @@ The occurrence, in this order:
 | Photos | yes | With Done on and Notes, the proof that the work was done, where a warranty requires it |
 | Found | yes | The requests raised by what was seen. Report each through the request form, then link it here |
 
-Leave out Number. Found is a linked field like the others (see below): on
-to link and unlink, off to add through a form, since a request made here
-would skip the form's questions and the script's acknowledgment.
+Leave out Number, and Plan name, which the title shows. Found is a linked
+field like the others (see below): on to link and unlink, off to add
+through a form, since a request made here would skip the form's questions
+and the script's acknowledgment.
 
 A plan is added or changed in the base, by whoever looks after the
 tracker, as a warranty is: its Every (months) and First due set every
@@ -436,6 +439,32 @@ organization, or request from another row's page. (An organization is added
 on the Contacts page, and a warranty in the base, where its term and clock
 are set with care: every deadline under it depends on them.) Updates, on the Requests and Claims pages, is the reverse:
 adding through a form on, linking and unlinking off.
+
+A linked field has three more settings:
+
+- **Show as**: **Field**, for every link that's picked, so that it sits
+  among the row's other fields. **View** only for Updates on the Requests
+  and Claims pages, which is a list of rows people add to.
+- **Allow linking to multiple records**: on for Found, and for a claim's
+  Requests. Off for the rest, each of which holds one record in the base
+  (see "Links that hold one record").
+- **Click into record details**: on where the linked row is something to
+  read, off where it isn't:
+
+| Linked field | Click into details | Why |
+|---|---|---|
+| Plan | on | The task, who does it, and how |
+| Found, a claim's Requests, Duplicate of | on | The request |
+| Warranty | on | Its terms, and how to claim |
+| Component | on | The asset: its model, where it is, its manual |
+| Vendor, Warrantor | on | Who to call |
+| Location | off | Nothing more to read |
+| Reporter, Owner, Our contact | off | A person's row holds their contact details and their own form links. What's needed of a reporter is on the request |
+
+  The details a link opens are set up with it: make every field there
+  read-only, and leave off the links that table has to others, so that
+  opening a plan or a warranty from another row's page isn't a way to
+  change it.
 
 On Airtable's Free plan an interface can't be shared without the base, so
 there it's a convenience, not a protection.
