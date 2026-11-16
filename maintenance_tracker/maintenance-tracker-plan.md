@@ -304,8 +304,10 @@ requests it settled, which shows what's worth writing next).
 - The **"Log an update" form** (on Updates), for a volunteer on a phone, or
   without a seat, to log a call or a visit against a request; each circle
   member has their own link to it, with their name filled in.
-- **Interfaces**, where the circle wants them: pages showing only what a
-  job needs, with no way to delete a row (see `base/README.md`).
+- The **Maintenance tracker** interface: pages showing only what a job
+  needs, with no way to delete a row (see `base/README.md`,
+  "Interfaces"). Six pages: Triage, Requests, and Claims, to work on;
+  Contacts, to keep; Warranties and Patterns, to read.
 - The **weekly digest** email to the circle's list: new requests; ones to
   triage, with no owner, with no visit time, waiting to be confirmed, or
   gone quiet; warranty deadlines with no claim made; claims the builder
@@ -504,8 +506,11 @@ Move-in is soon, so the order is by what's lost if it's late.
    `maintenance_base.py`, the units and common areas,
    `sync_maintenance_people.py`, and the checklist of views in
    `base/README.md`; the test base has all of it, with its views and
-   forms, and takes requests. To do: the real base, set up the same way
-   (`base/README.md`, "Setting up a base"), and the emergency
+   forms, and takes requests. Also the Maintenance tracker interface, with
+   its six pages, built by hand in the test base as `base/README.md`
+   describes them. To do: the real base, set up the same way
+   (`base/README.md`, "Setting up a base"), its interface built again
+   by hand (Airtable's API can't create one), and the emergency
    instructions on the request form.
 2. **Emails and backup.** Done, in `apps_script/`: acknowledgments,
    urgent alerts, reporter matching, "In my unit", status emails and the
