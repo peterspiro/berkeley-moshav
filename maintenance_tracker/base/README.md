@@ -334,7 +334,14 @@ and Scope. Take out the others Airtable puts on the form (Status through
 Response): they're filled in on the claim's page once the letter has gone
 out and the builder answers, and a date entered while drafting would
 start the digest's count of days unacknowledged once Status is Submitted.
-A claim made without a Status counts as Drafting. Editable: every field but Label, Number, and the ones worked out
+A claim made without a Status counts as Drafting. On the form, Title and
+Requests are required: the title is the letter's subject, and a claim
+with no requests has no deadline and an empty letter. Warranty,
+Warrantor, and Scope aren't: the form can't add a warranty or an
+organization, so requiring one would stop a claim being started while its
+row is missing, and the Draft shows what's been left out. (Warranty and
+Warrantor can be made required once Warranties and Organizations are
+complete.) Editable: every field but Label, Number, and the ones worked out
 (Claim deadline, Request count, Request lines, Warrantor contact, Draft,
 which are shown). Shown with each claim: its
 Requests (to link and unlink), and its Updates, with creating turned on as
