@@ -327,8 +327,13 @@ with a filter for Status.
   an update made here to the request whose page it's on: make one to
   check), and By and By name (the script sets By from the account that
   made the row, but only when both are empty).
-  Told reporter on is shown read-only. This does on a computer what the
-  "Log an update" form does on a phone.
+  An update that's been made is read-only, every field of it: updates
+  are the record (and, for a warranty item, evidence), and one marked
+  Tell the reporter has been emailed as written. A mistake is put right
+  with another update, or, when the row itself has to change (it's on
+  the wrong request, say), in the base, which keeps each row's revision
+  history. This does on a computer what the "Log an update" form does on
+  a phone.
 
 **Claims**, for whoever deals with the builder. A record review layout over
 Claims, grouped by Status, oldest Submitted on first. Creating is turned
@@ -351,7 +356,7 @@ Requests (to link and unlink), and its Updates, with creating turned on.
 That form is the Requests page's, with Claim left off in place of
 Request, and without Tell the reporter: a claim has no one reporter, and
 for an update with no Request the script sends nothing but still fills in
-Told reporter on.
+Told reporter on. Here too, an update that's been made is read-only.
 
 **Contacts**. A list of Organizations grouped by Trades, with creating
 turned on and every field editable: the circle collects these over time.

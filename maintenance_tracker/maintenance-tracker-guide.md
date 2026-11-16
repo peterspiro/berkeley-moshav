@@ -231,6 +231,11 @@ by their System, Room, and Component.
 - **Don't delete a request, an update, or a claim.** If one is a mistake or
   a duplicate, mark it Duplicate or Declined instead. The record matters
   more than tidiness.
+- **An update can't be changed once it's saved**, on the Requests page or
+  the Claims page. If one is wrong, add another that corrects it ("The
+  visit was Tuesday, not Monday"), so the record shows both. If one is on
+  the wrong request, or says something that shouldn't have been written
+  down, ask whoever looks after the tracker.
 - **If something disappears**, it has probably just moved: a request leaves
   the Triage page as soon as its Status changes. Look on the Requests
   page. If a row really was deleted, tell whoever looks after the tracker
