@@ -173,7 +173,10 @@ about a claim as an update on it, as you would on a request.
 
 1. **Create the claim**: add one, give it a short Title, and link it to
    its **Requests**, its **Warranty**, and its **Warrantor** (who it's
-   addressed to).
+   addressed to). You choose the Warranty and the Warrantor yourself, and
+   the tracker doesn't check them against each other or against the
+   requests. Usually the Warrantor is whoever gave the warranty, but not
+   always: a manufacturer's warranty may be claimed through the builder.
 2. **One problem in several places** should be one claim, not several. Link
    all the requests to it and set **Scope** to **Systemic**. This asks the
    builder to fix it throughout the building, not unit by unit.
@@ -237,9 +240,10 @@ by their System, Room, and Component.
   Locations tables. The tracker fills them in, and they're overwritten.
 - **Titles are public.** So are the status and location of each request.
   Descriptions, photos, names, and updates are not.
-- **Don't add people, locations, or warranties** while working on a
-  request. If someone or something is missing from a list, ask whoever
-  looks after the tracker.
+- **Don't add people, locations, warranties, or warrantors** while working
+  on a request or a claim: choose them from the lists. If someone or
+  something is missing from a list (a claim's **Warrantor**, say), ask
+  whoever looks after the tracker.
 - **Advice from our attorney doesn't go in the tracker.**
 
 ## Who to ask

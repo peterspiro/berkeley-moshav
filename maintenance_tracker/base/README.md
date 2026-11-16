@@ -348,10 +348,12 @@ Assets, Warranties, Maintenance plans, Maintenance work, and Guides get
 theirs when those tables come into use.
 
 For a linked field on an interface (Location, Component, Warranty,
-Duplicate of, Owner, and the like), "editable" means turning on **Link /
-unlink records** in its user actions, and leaving **Add records through a
-form** off, so that nobody adds a location, person, or warranty from a
-request's page. Updates, on the Requests and Claims pages, is the reverse:
+Warrantor, Duplicate of, Owner, and the like), "editable" means turning on
+**Link / unlink records** in its user actions, and leaving **Add records
+through a form** off, so that nobody adds a location, person, warranty, or
+organization from a request's or a claim's page. (An organization is added
+on the Contacts page, and a warranty in the base, where its term and clock
+are set with care: every deadline under it depends on them.) Updates, on the Requests and Claims pages, is the reverse:
 adding through a form on, linking and unlinking off.
 
 On Airtable's Free plan an interface can't be shared without the base, so
@@ -420,6 +422,19 @@ and the letter are formulas, worked out as the rows are filled in.
    it uses each request's Title as written at triage; then copy it into an
    email from the circle's address to the person the builder named, and
    attach the requests' photos.
+
+   A claim's Warranty and Warrantor are chosen by hand, and nothing ties
+   them to each other or to its requests. Its Warranty only names the
+   warranty in the letter: the Claim deadline comes from each request's
+   own Warranty. Its Warrantor is who the letter is addressed to, and
+   needn't be the warranty's Warrantor in Warranties. So a claim can name
+   one warranty while its requests carry another, or be addressed to an
+   organization that isn't the warranty's warrantor. That is sometimes
+   right (a manufacturer's warranty claimed through the builder, say),
+   which is why neither is worked out from the other: a warranty can have
+   several warrantors, and a systemic claim's requests can be under
+   different warranties, so someone has to choose. It also means nothing
+   catches a wrong choice, so check both when reading the Draft.
 4. **Once sent**, set the claim's Status to Submitted, with Submitted on,
    Submitted how, and Sent to, and file the sent email in its Folder. As
    the builder answers: Acknowledged on, Response, Promised by, Work done
