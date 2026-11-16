@@ -329,7 +329,12 @@ with a filter for Status.
 
 **Claims**, for whoever deals with the builder. A record review layout over
 Claims, grouped by Status, oldest Submitted on first. Creating is turned
-on. Editable: every field but Label, Number, and the ones worked out
+on, and its form has five fields: Title, Requests, Warranty, Warrantor,
+and Scope. Take out the others Airtable puts on the form (Status through
+Response): they're filled in on the claim's page once the letter has gone
+out and the builder answers, and a date entered while drafting would
+start the digest's count of days unacknowledged once Status is Submitted.
+A claim made without a Status counts as Drafting. Editable: every field but Label, Number, and the ones worked out
 (Claim deadline, Request count, Request lines, Warrantor contact, Draft,
 which are shown). Shown with each claim: its
 Requests (to link and unlink), and its Updates, with creating turned on as
