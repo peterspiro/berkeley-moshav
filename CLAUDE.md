@@ -74,3 +74,11 @@ In a file that becomes a Gather wiki page:
 ## Tests
 
 Run `python -m pytest` before committing; all tests should pass.
+
+## Branches
+
+Give each branch a short, descriptive name that says what the change is,
+such as `claude/fix-drive-folder-sharing` or `claude/readme-circle-structure`,
+instead of an auto-generated one. Create it from `main`, and commit and push
+there. This permission covers branches named this way only: never push to
+`main`.
