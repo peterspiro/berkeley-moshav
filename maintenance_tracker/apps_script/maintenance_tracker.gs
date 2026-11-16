@@ -428,7 +428,7 @@ function sendDigest(data) {
   const all = tableData(data);
   const email = digest(all, new Date(), { timeZone: TIME_ZONE, triageUrl: link('triage-view', all), plan: plan() });
   if (email) sendMail(Object.assign({ to: setting('CIRCLE_EMAIL') }, email));
-  else console.log('Nothing open and nothing new: no digest.');
+  else console.log('Nothing open, new, or due: no digest.');
   PropertiesService.getScriptProperties().setProperty(PROP_LAST_DIGEST, new Date().toISOString());
 }
 

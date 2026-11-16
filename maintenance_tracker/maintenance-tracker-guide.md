@@ -226,6 +226,9 @@ Each section appears only when it has something in it:
 | Claims the builder hasn't acknowledged | Chase the builder |
 | Claims past the date the builder promised | Chase the builder |
 | Repeats | The same thing is going wrong in several places: consider one systemic claim |
+| Maintenance overdue | Do it or book it; then set its Status to Done, or to Skipped with a note saying why |
+| Maintenance scheduled, and the time has passed | Mark it Done, or give it a new time |
+| Maintenance coming up in the next 30 days | Book the vendor or find the volunteers |
 
 "Repeats" only works if triage is done carefully, since it counts requests
 by their System, Room, and Component.

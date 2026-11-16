@@ -76,7 +76,8 @@ Airtable base ("Building Maintenance") without anyone doing it. It runs as
 
 - **Every Sunday**, with the housekeeping (`sendDigest`): the **weekly
   digest** is emailed to the circle's list. Each section is left out when
-  it's empty, and nothing is sent when no request is open or new:
+  it's empty, and nothing is sent when no request is open or new and no
+  maintenance work is listed:
   - **New this week**: requests that arrived in the last 7 days.
   - **To triage**: requests still New, and how long they've waited.
   - **No owner**: open, triaged requests with nobody assigned.
@@ -97,6 +98,14 @@ Airtable base ("Building Maintenance") without anyone doing it. It runs as
     in one stack of units. A sign of a defect to claim once, for the
     building; requests already under a claim whose Scope is Systemic
     are left out.
+  - **Maintenance overdue**: work in Maintenance work, not Done or
+    Skipped, whose Due date has passed and that has no time scheduled.
+    **Maintenance scheduled, and the time has passed**: still Scheduled 2
+    days after its Scheduled for. **Maintenance coming up in the next 30
+    days**: due, or scheduled for a time, within 30 days; work scheduled
+    for later than it was due is here, as it's in hand. Each line has the
+    plan's Task, its Vendor and Owner, and the date. The subject says how
+    many are overdue.
   - Then how many requests are open, by status, and how full the base is.
 
   Run `sendDigest` by hand to send it now. The thresholds are constants at
@@ -114,8 +123,7 @@ its Acknowledged on.
 Claim deadlines and the claim letter aren't the script's work: they're
 formulas in the base (see `../base/README.md`, "Warranty claims").
 
-Not built yet: the maintenance calendar, anything in the digest about
-maintenance that's due, and the check that the base's views are all there
+Not built yet: the maintenance calendar, and the check that the base's views are all there
 (run `python maintenance_base.py diff` for that).
 
 ## Files

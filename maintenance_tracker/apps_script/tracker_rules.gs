@@ -43,6 +43,7 @@ const CLAIM_MADE = ['Submitted', 'Acknowledged', 'Scheduled', 'Work done', 'Acce
 const CLAIM_PENDING = ['Submitted', 'Acknowledged', 'Scheduled'];
 // The circle is warned as the base passes each of these shares of a limit.
 const USAGE_LEVELS = [70, 85, 95];
+const MAINTENANCE_AHEAD_DAYS = 30; // maintenance work due within this long is listed as coming up
 // A Maintenance work row in one of these statuses is finished with, and its
 // plan's next occurrence can be made (see maintenanceWorkDue).
 const WORK_FINISHED = ['Done', 'Skipped'];
@@ -111,10 +112,26 @@ function attachmentsIn(record) {
   return found;
 }
 
+/** A date without a time ("2026-11-15"), as text: "Nov 15, 2026". */
+function dateText(isoDate) {
+  return new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' })
+    .format(new Date(dayNumber(String(isoDate)) * DAY_MS));
+}
+
+/** A date without a time, as a count of days, for taking one from another. */
+function dayNumber(isoDate) {
+  return Date.UTC(+isoDate.slice(0, 4), +isoDate.slice(5, 7) - 1, +isoDate.slice(8, 10)) / DAY_MS;
+}
+
+/** How many days from today, in the time zone, a date without a time is: negative if it's past. */
+function daysFromToday(isoDate, now, timeZone) {
+  return dayNumber(String(isoDate)) - dayNumber(new Intl.DateTimeFormat('en-CA', { timeZone: timeZone }).format(now));
+}
+
 /**
  * The weekly digest for the circle: what came in, what needs someone, and
  * what's repeating across the building, as { subject, body }; null if
- * there's nothing open and nothing new. `data` is every table's records,
+ * no request is open or new and no maintenance work is listed. `data` is every table's records,
  * { table: [records] }; `ctx` needs timeZone, triageUrl, and plan.
  *
  * Its sections, each left out when empty:
@@ -131,6 +148,8 @@ function attachmentsIn(record) {
  *  - Claims the builder hasn't acknowledged in UNACKNOWLEDGED_DAYS, and
  *    claims past the date the builder promised.
  *  - Repeats (see digestRepeats).
+ *  - Maintenance work that's overdue, whose scheduled time has passed,
+ *    and that's coming up (see digestMaintenance).
  * Then how many requests are open, by status, and how full the base is.
  */
 function digest(data, now, ctx) {
@@ -159,7 +178,9 @@ function digest(data, now, ctx) {
 
   const open = requests.filter(r => OPEN_STATUSES.indexOf(status(r)) >= 0).sort(byAge);
   const fresh = requests.filter(r => days(submitted(r)) < 7).sort(byAge);
-  if (!open.length && !fresh.length) return null;
+  const maintenance = digestMaintenance(data, now, ctx.timeZone);
+  if (!open.length && !fresh.length && !maintenance.overdue.length && !maintenance.passed.length &&
+      !maintenance.coming.length) return null;
 
   const visit = r => (r.fields['Visit'] ? new Date(r.fields['Visit']).getTime() : null);
   const triage = open.filter(r => status(r) === 'New');
@@ -172,11 +193,7 @@ function digest(data, now, ctx) {
     idle(r) >= QUIET_DAYS);
 
   // Dates without times (deadlines, promises), as days from today in the time zone.
-  const dayNumber = iso => Date.UTC(+iso.slice(0, 4), +iso.slice(5, 7) - 1, +iso.slice(8, 10)) / DAY_MS;
-  const today = dayNumber(new Intl.DateTimeFormat('en-CA', { timeZone: ctx.timeZone }).format(now));
-  const daysUntil = iso => dayNumber(String(iso)) - today;
-  const dateText = iso => new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' })
-    .format(new Date(dayNumber(String(iso)) * DAY_MS));
+  const daysUntil = iso => daysFromToday(iso, now, ctx.timeZone);
   const claims = data['Claims'] || [];
   const claimStatus = {};
   claims.forEach(c => { claimStatus[c.id] = c.fields['Status'] || 'Drafting'; });
@@ -210,6 +227,9 @@ function digest(data, now, ctx) {
     ['Claims past the date the builder promised',
      overdue.map(c => claimLine(c, `promised by ${dateText(c.fields['Promised by'])}`))],
     ['Repeats: the same thing in several places', digestRepeats(data, now)],
+    ['Maintenance overdue', maintenance.overdue],
+    ['Maintenance scheduled, and the time has passed: mark it done, or give it a new time', maintenance.passed],
+    [`Maintenance coming up in the next ${MAINTENANCE_AHEAD_DAYS} days`, maintenance.coming],
   ].filter(section => section[1].length);
 
   const lines = [];
@@ -224,7 +244,9 @@ function digest(data, now, ctx) {
              `, and ${Math.round(usage.bytes / 1048576).toLocaleString('en-US')} MB of ${Math.round(usage.byteLimit / 1048576).toLocaleString('en-US')} MB of attachments.`);
   if (ctx.triageUrl) lines.push('', `Triage: ${ctx.triageUrl}`);
   const head = [fresh.length ? `${fresh.length} new` : '', triage.length ? `${triage.length} to triage` : '',
-                `${open.length} open`].filter(Boolean).join(', ');
+                `${open.length} open`,
+                maintenance.overdue.length ? `${maintenance.overdue.length} maintenance overdue` : '']
+    .filter(Boolean).join(', ');
   return { subject: `Maintenance digest: ${head}`, body: lines.join('\n') };
 }
 
@@ -233,6 +255,51 @@ function digestDue(now, lastSentIso, timeZone) {
   const local = d => new Intl.DateTimeFormat('en-CA', { timeZone: timeZone }).format(d);
   const weekday = new Intl.DateTimeFormat('en-US', { timeZone: timeZone, weekday: 'long' }).format(now);
   return weekday === 'Sunday' && !(lastSentIso && local(new Date(lastSentIso)) === local(now));
+}
+
+/**
+ * The digest's lines about maintenance work that isn't Done or Skipped,
+ * as { overdue, passed, coming }, each soonest first:
+ *  - overdue: its Due date has passed, and it has no time scheduled;
+ *  - passed: it's Scheduled, for a time VISIT_PASSED_DAYS or more ago;
+ *  - coming: it's due, or scheduled for a time, within
+ *    MAINTENANCE_AHEAD_DAYS. One scheduled later than it was due is here,
+ *    not in overdue: it's in hand.
+ * Each line names the plan's Task, who does it (the plan's Vendor, if it
+ * has one, and its Owner), and the date. Work with neither a Due date
+ * nor a time isn't listed.
+ */
+function digestMaintenance(data, now, timeZone) {
+  const plans = {}, people = {}, vendors = {};
+  (data['Maintenance plans'] || []).forEach(p => { plans[p.id] = p.fields; });
+  (data['People'] || []).forEach(p => { people[p.id] = p.fields['Name']; });
+  (data['Organizations'] || []).forEach(o => { vendors[o.id] = o.fields['Company']; });
+  const lists = { overdue: [], passed: [], coming: [] };
+  const add = (list, when, w, note) => {
+    const plan = plans[(w.fields['Plan'] || [])[0]] || {};
+    const who = [vendors[(plan['Vendor'] || [])[0]], people[(plan['Owner'] || [])[0]]].filter(Boolean).join(', ');
+    lists[list].push([when, `  ${plan['Task'] || `Maintenance work ${w.fields['Number'] || ''}`.trim()}` +
+                            `${who ? ' (' + who + ')' : ''} - ${note}`]);
+  };
+  const days = n => (n === 1 ? '1 day' : `${n} days`);
+  (data['Maintenance work'] || []).forEach(w => {
+    const f = w.fields;
+    if (WORK_FINISHED.indexOf(f['Status']) >= 0) return;
+    const time = f['Status'] === 'Scheduled' && f['Scheduled for'] ? new Date(f['Scheduled for']).getTime() : null;
+    if (time !== null) {
+      const ahead = (time - now.getTime()) / DAY_MS;
+      const note = `scheduled for ${formatVisit(f['Scheduled for'], timeZone)}`;
+      if (ahead <= -VISIT_PASSED_DAYS) add('passed', time, w, note);
+      else if (ahead <= MAINTENANCE_AHEAD_DAYS) add('coming', time, w, note);
+    } else if (f['Due']) {
+      const left = daysFromToday(f['Due'], now, timeZone);
+      const when = dayNumber(String(f['Due'])) * DAY_MS;
+      if (left < 0) add('overdue', when, w, `was due ${dateText(f['Due'])} (${days(-left)} ago)`);
+      else if (left <= MAINTENANCE_AHEAD_DAYS) add('coming', when, w, `due ${dateText(f['Due'])}`);
+    }
+  });
+  Object.keys(lists).forEach(k => { lists[k] = lists[k].sort((a, b) => a[0] - b[0]).map(entry => entry[1]); });
+  return lists;
 }
 
 /**
