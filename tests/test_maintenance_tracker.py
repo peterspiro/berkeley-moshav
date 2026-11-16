@@ -776,6 +776,57 @@ def test_housekeeping_creates_the_occurrences_and_backs_them_up():
     assert len(again["tables"]["Maintenance work"]) == 3 and "post Maintenance work" not in again["calls"]
 
 
+def maintenance_digest(occurrences, requests=()):
+    data = tables(requests)
+    data["Organizations"] = [{"id": "orgLift", "fields": {"Company": "Uplift Elevator Co."}}]
+    data["Maintenance plans"] = [
+        plan("lift", Task="Elevator visit", Vendor=["orgLift"], Owner=["pDana"]),
+        plan("drains", Task="Clear drains", Owner=["pDana"]),
+        plan("alarm", Task="Alarm test")]
+    data["Maintenance work"] = list(occurrences)
+    return rule("digest(d, new Date(n), c)", d=data, n=NOW, c={"timeZone": "America/Los_Angeles", "plan": "free"})
+
+
+def test_digest_lists_maintenance_overdue_passed_and_coming_up():
+    mail = maintenance_digest([
+        work("w1", "drains", "Due", Due="2026-11-01"),
+        work("w2", "alarm", Due="2026-11-14"),                              # no Status: still to do
+        work("w3", "lift", "Scheduled", Due="2026-11-10", Scheduled_for=days_ago(3)),
+        work("w4", "lift", "Scheduled", Due="2026-11-01", Scheduled_for=days_ago(-2)),   # late, but in hand
+        work("w5", "alarm", "Due", Due="2026-12-15"),
+        work("w6", "drains", "Due", Due="2026-11-15"),                      # today
+        work("w7", "drains", "Scheduled", Due="2026-12-01"),                # no time: goes by its Due
+        work("w8", "alarm", "Due", Due="2026-12-16"),                       # more than 30 days off
+        work("w9", "lift", "Scheduled", Due="2026-11-20", Scheduled_for=days_ago(-40)),
+        work("w10", "drains", "Done", Due="2026-05-01"),
+        work("w11", "drains", "Skipped", Due="2026-08-01"),
+        work("w12", "alarm", "Due"),                                        # no date at all
+    ], [old(1, "Triaged", 10, Title="In hand", Owner=["pDana"])])
+    body = mail["body"]
+    assert section(body, "Maintenance overdue (2)") == [
+        "Clear drains (Dana S) - was due Nov 1, 2026 (14 days ago)",
+        "Alarm test - was due Nov 14, 2026 (1 day ago)"]
+    assert section(body, "Maintenance scheduled, and the time has passed") == [
+        "Elevator visit (Uplift Elevator Co., Dana S) - scheduled for Thu, Nov 12, 12:00 PM"]
+    assert section(body, "Maintenance coming up in the next 30 days (4)") == [
+        "Clear drains (Dana S) - due Nov 15, 2026",
+        "Elevator visit (Uplift Elevator Co., Dana S) - scheduled for Tue, Nov 17, 12:00 PM",
+        "Clear drains (Dana S) - due Dec 1, 2026",
+        "Alarm test - due Dec 15, 2026"]
+    assert mail["subject"] == "Maintenance digest: 1 open, 2 maintenance overdue"
+
+
+def test_digest_goes_out_for_maintenance_alone():
+    mail = maintenance_digest([work("w1", "alarm", "Due", Due="2026-11-20")])
+    assert mail["subject"] == "Maintenance digest: 0 open"
+    assert mail["body"].startswith("Maintenance coming up in the next 30 days (1)\n  Alarm test - due Nov 20, 2026\n")
+    assert maintenance_digest([work("w1", "alarm", "Done", Due="2026-11-01"),
+                               work("w2", "alarm", "Due", Due="2027-06-01")]) is None
+    # Work whose plan is gone is still listed, by its number.
+    lost = {"id": "w3", "fields": {"Number": 7, "Status": "Due", "Due": "2026-11-01"}}
+    assert "  Maintenance work 7 - was due Nov 1, 2026 (14 days ago)" in maintenance_digest([lost])["body"]
+
+
 # --- form links --------------------------------------------------------------
 
 def test_form_link_is_the_tested_shape():

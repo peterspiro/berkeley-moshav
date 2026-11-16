@@ -349,7 +349,8 @@ Daily (weekly on the Free plan):
 - **Maintenance work**: give each maintenance plan its next occurrence,
   when it has none waiting to be done.
 
-Weekly: the digest, including repeats. A repeat is the same Component (or
+Weekly: the digest, including maintenance work that's overdue or coming
+up, and repeats. A repeat is the same Component (or
 the same System and Room) in three or more places within 180 days, or
 Plumbing or Roof & envelope in two or more places in one Stack, not
 already under a Systemic claim. The thresholds are constants in
@@ -528,7 +529,8 @@ Move-in is soon, so the order is by what's lost if it's late.
    `base/README.md`, "Warranty claims". To do: the Warranties rows,
    from the warranty binder and the attorney's answers; the builder's
    contact; the attorney's review of the letter's wording.
-4. **Maintenance.** Done: the script creates each plan's occurrences. To
+4. **Maintenance.** Done: the script creates each plan's occurrences, and
+   the digest lists what's overdue and what's coming up. To
    do: Assets and plans from the O&M manuals; views and an interface for
    the maintenance tables; the maintenance calendar and the
    `group_meetings` change.

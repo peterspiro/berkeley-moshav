@@ -751,8 +751,9 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
     it runs every 2 hours and weekly instead. On Sundays it emails the
     circle a digest: what came in, what's waiting for triage, an owner, a
     visit time, or confirmation, what's gone quiet, warranty deadlines
-    with no claim made, claims the builder is sitting on, and what's
-    repeating across units.
+    with no claim made, claims the builder is sitting on, what's
+    repeating across units, and maintenance work that's overdue or coming
+    up.
   - **`maintenance_tracker/apps_script/tracker_rules.gs`** holds its rules and the
     emails' wording, tested under Node.
 
