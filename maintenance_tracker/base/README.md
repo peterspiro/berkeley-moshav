@@ -365,10 +365,20 @@ turned on and every field editable: the circle collects these over time.
 and by Location, and a list grouped by System and Component, for the
 monthly look for repeats.
 
+**Warranties**, read-only, once Warranties has rows. A list of Warranties
+grouped by Responsibility, showing Name, Warrantor, Systems, Scope, Held
+by, Term (months), Clock starts, Building start date, Document, How to
+claim, and Notes: what someone triaging a request or drafting a claim
+needs to choose the warranty and to follow its terms. Creating is turned
+off and no field is editable. Warranties are added and changed in the
+base, by whoever looks after the tracker: every Claim deadline under a
+warranty is worked out from its Term (months), Clock starts, and Building
+start date, so a change to one moves them all.
+
 No interface is needed for People (the sync keeps it), Locations (the seed
 file does), or what members use (the request form and the status page).
-Assets, Warranties, Maintenance plans, Maintenance work, and Guides get
-theirs when those tables come into use.
+Assets, Maintenance plans, Maintenance work, and Guides get theirs when
+those tables come into use.
 
 For a linked field on an interface (Location, Component, Warranty,
 Warrantor, Duplicate of, Owner, and the like), "editable" means turning on
