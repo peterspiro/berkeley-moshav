@@ -445,9 +445,10 @@ A linked field has three more settings:
 - **Show as**: **Field**, for every link that's picked, so that it sits
   among the row's other fields. **View** only for Updates on the Requests
   and Claims pages, which is a list of rows people add to.
-- **Allow linking to multiple records**: on for Found, and for a claim's
-  Requests. Off for the rest, each of which holds one record in the base
-  (see "Links that hold one record").
+- **Allow linking to multiple records**: as the field is in the base. On
+  for Found, a claim's Requests, and an organization's Our contact; off
+  for the rest, each of which holds one record there (see "Links that
+  hold one record").
 - **Click into record details**: on where the linked row is something to
   read, off where it isn't:
 
@@ -459,7 +460,7 @@ A linked field has three more settings:
 | Component | on | The asset: its model, where it is, its manual |
 | Vendor, Warrantor | on | Who to call |
 | Location | off | Nothing more to read |
-| Reporter, Owner, Our contact | off | A person's row holds their contact details and their own form links. What's needed of a reporter is on the request |
+| Reporter, Owner, Accepted by, Our contact | off | A person's row holds their contact details and their own form links. What's needed of a reporter is on the request |
 
   The details a link opens are set up with it: make every field there
   read-only, and leave off the links that table has to others, so that
