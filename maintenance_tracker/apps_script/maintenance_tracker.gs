@@ -24,6 +24,8 @@
  * Every day, or every week on the Free plan (housekeeping):
  *  - Each person's own link to the request form is written to People,
  *    and each circle member's to the "Log an update" form.
+ *  - Each maintenance plan with no occurrence waiting to be done is given
+ *    its next, in Maintenance work (createMaintenanceWork).
  *  - Every table, and every photo and attachment not yet copied, is saved
  *    to Drive (backup), and the circle is warned if the base is nearing
  *    what its plan allows.
@@ -185,11 +187,29 @@ function context(people, locations) {
   };
 }
 
-/** Creates records, [{ fields }], in a table. */
+/**
+ * Creates each maintenance plan's next occurrence in Maintenance work,
+ * where it has none waiting to be done (see maintenanceWorkDue in
+ * tracker_rules.gs): the first from the plan's First due, and the next
+ * once the last is Done or Skipped. `data` is every table's records, if
+ * the caller has read them; the new rows are added to it, for the steps
+ * that follow.
+ */
+function createMaintenanceWork(data) {
+  data = tableData(data);
+  const made = createRecords('Maintenance work', maintenanceWorkDue(data));
+  made.forEach(record => data['Maintenance work'].push(record));
+  console.log(`${made.length} maintenance occurrence(s) created.`);
+}
+
+/** Creates records, [{ fields }], in a table, and returns them as created. */
 function createRecords(table, records) {
+  const made = [];
   for (let i = 0; i < records.length; i += BATCH) {
-    airtable('post', encodeURIComponent(table), { records: records.slice(i, i + BATCH), typecast: true });
+    const reply = airtable('post', encodeURIComponent(table), { records: records.slice(i, i + BATCH), typecast: true });
+    (reply.records || []).forEach(record => made.push(record));
   }
+  return made;
 }
 
 /** The files and folders in a Drive folder that aren't in the trash: { name: ID }. */
@@ -214,15 +234,16 @@ function driveFolder(parentId, name) {
 }
 
 /**
- * Once a day, or once a week on the Free plan: the form links, the backup,
- * and, on a Sunday, the digest. Every table is read once, for all three.
+ * Once a day, or once a week on the Free plan: the form links, the
+ * maintenance plans' next occurrences, the backup, and, on a Sunday, the
+ * digest. Every table is read once, for all of them.
  * Each step runs even if another fails.
  */
 function housekeeping() {
   withLock(() => {
     const props = PropertiesService.getScriptProperties();
     const data = tableData();
-    const steps = [writeFormLinks, backup];
+    const steps = [writeFormLinks, createMaintenanceWork, backup];
     if (digestDue(new Date(), props.getProperty(PROP_LAST_DIGEST), TIME_ZONE)) steps.push(sendDigest);
     let failure = null;
     steps.forEach(step => {

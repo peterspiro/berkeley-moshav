@@ -43,6 +43,9 @@ const CLAIM_MADE = ['Submitted', 'Acknowledged', 'Scheduled', 'Work done', 'Acce
 const CLAIM_PENDING = ['Submitted', 'Acknowledged', 'Scheduled'];
 // The circle is warned as the base passes each of these shares of a limit.
 const USAGE_LEVELS = [70, 85, 95];
+// A Maintenance work row in one of these statuses is finished with, and its
+// plan's next occurrence can be made (see maintenanceWorkDue).
+const WORK_FINISHED = ['Done', 'Skipped'];
 // What the status page says for each Status. A status that isn't here
 // (Duplicate, Declined) isn't on the page.
 const MEMBER_STATUS = {
@@ -75,6 +78,17 @@ function acknowledgmentEmail(request, ctx) {
   if (link) lines.push('', `Your own link to the form, with your name and unit filled in: ${link}`);
   if (ctx.emergencyNote) lines.push('', ctx.emergencyNote);
   return { to: who.email, subject: `Request ${requestNumber(request)} received`, body: lines.join('\n') };
+}
+
+/**
+ * A date ("2026-01-31") that many months on, as a date: the same day of
+ * the month, or the month's last day if it has no such day ("2026-02-28").
+ */
+function addMonths(isoDate, months) {
+  const month = +isoDate.slice(0, 4) * 12 + (+isoDate.slice(5, 7) - 1) + months;
+  const lastDay = new Date(Date.UTC(Math.floor(month / 12), month % 12 + 1, 0)).getUTCDate();
+  const two = n => String(n).padStart(2, '0');
+  return `${Math.floor(month / 12)}-${two(month % 12 + 1)}-${two(Math.min(+isoDate.slice(8, 10), lastDay))}`;
 }
 
 /** The size of every attachment in the base, in bytes, counting one linked from two records once. */
@@ -345,6 +359,42 @@ function linksByKey(records) {
     if (key && value) links[key] = value;
   });
   return links;
+}
+
+/**
+ * The Maintenance work rows to create, [{ fields }]: each maintenance
+ * plan's next occurrence, when it has none waiting to be done.
+ *  - A plan with no occurrence yet gets its first, due on its First due
+ *    (none, while that's empty).
+ *  - A plan whose occurrences are all Done or Skipped gets its next, due
+ *    Every (months) after the latest of them was due (or was done, if it
+ *    had no Due), whenever it was in fact done: the plan keeps to its
+ *    dates. A plan with no Every (months) happens once, and gets no more.
+ *  - A plan with an occurrence still Due or Scheduled (or with no Status)
+ *    gets nothing: one made or moved by hand is left to stand.
+ * Nothing is recorded on the plan: what's due is worked out from its
+ * occurrences each time, so a run that fails is made up for by the next.
+ * `data` is every table's records, { table: [records] }.
+ */
+function maintenanceWorkDue(data) {
+  const workOf = {};
+  (data['Maintenance work'] || []).forEach(w => (w.fields['Plan'] || []).forEach(id => {
+    (workOf[id] = workOf[id] || []).push(w.fields);
+  }));
+  const due = [];
+  (data['Maintenance plans'] || []).forEach(plan => {
+    const work = workOf[plan.id] || [];
+    let next = '';
+    if (!work.length) {
+      next = plan.fields['First due'] || '';
+    } else if (work.every(w => WORK_FINISHED.indexOf(w['Status']) >= 0)) {
+      const every = Math.round(Number(plan.fields['Every (months)']) || 0);
+      const latest = work.map(w => w['Due'] || w['Done on'] || '').sort().pop();
+      if (every >= 1 && latest) next = addMonths(latest, every);
+    }
+    if (next) due.push({ fields: { 'Plan': [plan.id], 'Due': next, 'Status': 'Due' } });
+  });
+  return due;
 }
 
 /** What the status page says about a request; null if it shouldn't be there. */
