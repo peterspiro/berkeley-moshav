@@ -74,3 +74,18 @@ In a file that becomes a Gather wiki page:
 ## Tests
 
 Run `python -m pytest` before committing; all tests should pass.
+
+## Branches
+
+Don't use the branch name a session is assigned. Before a session's first
+commit, create a new branch from the latest `main` with a short name that
+says what the work is, such as `claude/fix-drive-folder-sharing` or
+`claude/readme-circle-structure`. Make the session's commits on that
+branch and push them to it.
+
+Before each later commit, check whether the branch's pull request has been
+merged. If it has, create another new branch from the latest `main`, named
+for the work you're about to commit, and use it from then on. Carry over
+any commits that weren't merged.
+
+Never push to `main` or to a branch you didn't create.
