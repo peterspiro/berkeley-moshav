@@ -17,6 +17,7 @@ These are the parts you'll meet:
 | The request form | Members | Reporting a problem or asking how something works |
 | The status page | Members | Seeing where every request stands |
 | **Maintenance tracker**, an interface in Airtable, with its **Triage**, **Requests**, and **Claims** pages | The circle | Triage, working on requests, and warranty claims |
+| Its **Contacts**, **Warranties**, and **Patterns** pages | The circle | Contractors and how to reach them; each warranty's terms and how to claim under it; charts of what's going wrong where |
 | The "Log an update" form | The circle | Recording a call, a visit, or a note, from a phone |
 | Emails | Members and the circle | The tracker sends these by itself (see below) |
 | The weekly digest | The circle | A Sunday email summing up what needs attention |
@@ -161,7 +162,8 @@ nothing is happening.
 Each contractor and the builder should hear from **one** of us, not from
 whoever happens to be handling a request. Before you contact one, check
 who our contact for them is, and go through that person. Their names and
-numbers are in the **Organizations** table.
+numbers are on the **Contacts** page, where you can also add a contractor
+or correct one's details.
 
 ## Warranty claims
 
@@ -173,7 +175,10 @@ about a claim as an update on it, as you would on a request.
 
 1. **Create the claim**: add one, give it a short Title, and link it to
    its **Requests**, its **Warranty**, and its **Warrantor** (who it's
-   addressed to).
+   addressed to). You choose the Warranty and the Warrantor yourself, and
+   the tracker doesn't check them against each other or against the
+   requests. Usually the Warrantor is whoever gave the warranty, but not
+   always: a manufacturer's warranty may be claimed through the builder.
 2. **One problem in several places** should be one claim, not several. Link
    all the requests to it and set **Scope** to **Systemic**. This asks the
    builder to fix it throughout the building, not unit by unit.
@@ -228,6 +233,11 @@ by their System, Room, and Component.
 - **Don't delete a request, an update, or a claim.** If one is a mistake or
   a duplicate, mark it Duplicate or Declined instead. The record matters
   more than tidiness.
+- **An update can't be changed once it's saved**, on the Requests page or
+  the Claims page. If one is wrong, add another that corrects it ("The
+  visit was Tuesday, not Monday"), so the record shows both. If one is on
+  the wrong request, or says something that shouldn't have been written
+  down, ask whoever looks after the tracker.
 - **If something disappears**, it has probably just moved: a request leaves
   the Triage page as soon as its Status changes. Look on the Requests
   page. If a row really was deleted, tell whoever looks after the tracker
@@ -237,9 +247,11 @@ by their System, Room, and Component.
   Locations tables. The tracker fills them in, and they're overwritten.
 - **Titles are public.** So are the status and location of each request.
   Descriptions, photos, names, and updates are not.
-- **Don't add people, locations, or warranties** while working on a
-  request. If someone or something is missing from a list, ask whoever
-  looks after the tracker.
+- **Don't add people, locations, warranties, or warrantors** while working
+  on a request or a claim: choose them from the lists. A missing
+  **Warrantor** is added on the **Contacts** page. For anyone or anything
+  else that's missing from a list, ask whoever looks after the tracker;
+  the **Warranties** page shows the warranties but can't change them.
 - **Advice from our attorney doesn't go in the tracker.**
 
 ## Who to ask

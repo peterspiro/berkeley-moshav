@@ -322,36 +322,80 @@ with a filter for Status.
   Status to Scheduled and tells the reporter.
 - Read-only: everything the member entered, as in Triage, and Submitted.
 - Its Updates, as a list within the page, newest first, where creating is
-  turned on: Kind, Text, By (or By name), When, Attachments, Tell the
-  reporter.
-  Told reporter on is shown read-only. This does on a computer what the
-  "Log an update" form does on a phone.
+  turned on. Its form has Kind and Text (both required), When,
+  Attachments, and Tell the reporter. Leave off Request (Airtable links
+  an update made here to the request whose page it's on: make one to
+  check), and By and By name (the script sets By from the account that
+  made the row, but only when both are empty).
+  An update that's been made is read-only, every field of it: updates
+  are the record (and, for a warranty item, evidence), and one marked
+  Tell the reporter has been emailed as written. A mistake is put right
+  with another update, or, when the row itself has to change (it's on
+  the wrong request, say), in the base, which keeps each row's revision
+  history. This does on a computer what the "Log an update" form does on
+  a phone.
 
 **Claims**, for whoever deals with the builder. A record review layout over
 Claims, grouped by Status, oldest Submitted on first. Creating is turned
-on. Editable: every field but Label, Number, and the ones worked out
+on, and its form has five fields: Title, Requests, Warranty, Warrantor,
+and Scope. Take out the others Airtable puts on the form (Status through
+Response): they're filled in on the claim's page once the letter has gone
+out and the builder answers, and a date entered while drafting would
+start the digest's count of days unacknowledged once Status is Submitted.
+A claim made without a Status counts as Drafting. On the form, Title and
+Requests are required: the title is the letter's subject, and a claim
+with no requests has no deadline and an empty letter. Warranty,
+Warrantor, and Scope aren't: the form can't add a warranty or an
+organization, so requiring one would stop a claim being started while its
+row is missing, and the Draft shows what's been left out. (Warranty and
+Warrantor can be made required once Warranties and Organizations are
+complete.) Editable: every field but Label, Number, and the ones worked out
 (Claim deadline, Request count, Request lines, Warrantor contact, Draft,
 which are shown). Shown with each claim: its
-Requests (to link and unlink), and its Updates, with creating turned on as
-above.
+Requests (to link and unlink), and its Updates, with creating turned on.
+That form is the Requests page's, with Claim left off in place of
+Request, and without Tell the reporter: a claim has no one reporter, and
+for an update with no Request the script sends nothing but still fills in
+Told reporter on. Here too, an update that's been made is read-only.
 
 **Contacts**. A list of Organizations grouped by Trades, with creating
 turned on and every field editable: the circle collects these over time.
+The list shows Company, Role, Contact name, Phone, After-hours phone, and
+Our contact (as the By trade view does): who to call, and who of us calls
+them. A row's details add Trades, Email, Licence, Under contract until,
+and Notes. The links other tables make (Claims, Warranties, and so on)
+are left off, or shown read-only.
 
-**Patterns**, read-only. Charts counting requests by System, by Component,
-and by Location, and a list grouped by System and Component, for the
-monthly look for repeats.
+**Patterns**, read-only, for the monthly look for repeats. A dashboard
+layout over Requests: three bar charts counting requests by System, by
+Component, and by Location, and under them a list grouped by System, then
+Component, showing Location, Room, Submitted, and Status, sorted by
+Location (as the Patterns view is). Filter out requests whose Status is
+Duplicate or Declined, so that a problem reported twice is counted once,
+and keep closed ones: a repeat is a repeat after it's fixed.
+
+**Warranties**, read-only, once Warranties has rows. A list of Warranties
+grouped by Responsibility, showing Name, Warrantor, Systems, Scope, Held
+by, Term (months), Clock starts, Building start date, Document, How to
+claim, and Notes: what someone triaging a request or drafting a claim
+needs to choose the warranty and to follow its terms. Creating is turned
+off and no field is editable. Warranties are added and changed in the
+base, by whoever looks after the tracker: every Claim deadline under a
+warranty is worked out from its Term (months), Clock starts, and Building
+start date, so a change to one moves them all.
 
 No interface is needed for People (the sync keeps it), Locations (the seed
 file does), or what members use (the request form and the status page).
-Assets, Warranties, Maintenance plans, Maintenance work, and Guides get
-theirs when those tables come into use.
+Assets, Maintenance plans, Maintenance work, and Guides get theirs when
+those tables come into use.
 
 For a linked field on an interface (Location, Component, Warranty,
-Duplicate of, Owner, and the like), "editable" means turning on **Link /
-unlink records** in its user actions, and leaving **Add records through a
-form** off, so that nobody adds a location, person, or warranty from a
-request's page. Updates, on the Requests and Claims pages, is the reverse:
+Warrantor, Duplicate of, Owner, and the like), "editable" means turning on
+**Link / unlink records** in its user actions, and leaving **Add records
+through a form** off, so that nobody adds a location, person, warranty, or
+organization from a request's or a claim's page. (An organization is added
+on the Contacts page, and a warranty in the base, where its term and clock
+are set with care: every deadline under it depends on them.) Updates, on the Requests and Claims pages, is the reverse:
 adding through a form on, linking and unlinking off.
 
 On Airtable's Free plan an interface can't be shared without the base, so
@@ -420,6 +464,19 @@ and the letter are formulas, worked out as the rows are filled in.
    it uses each request's Title as written at triage; then copy it into an
    email from the circle's address to the person the builder named, and
    attach the requests' photos.
+
+   A claim's Warranty and Warrantor are chosen by hand, and nothing ties
+   them to each other or to its requests. Its Warranty only names the
+   warranty in the letter: the Claim deadline comes from each request's
+   own Warranty. Its Warrantor is who the letter is addressed to, and
+   needn't be the warranty's Warrantor in Warranties. So a claim can name
+   one warranty while its requests carry another, or be addressed to an
+   organization that isn't the warranty's warrantor. That is sometimes
+   right (a manufacturer's warranty claimed through the builder, say),
+   which is why neither is worked out from the other: a warranty can have
+   several warrantors, and a systemic claim's requests can be under
+   different warranties, so someone has to choose. It also means nothing
+   catches a wrong choice, so check both when reading the Draft.
 4. **Once sent**, set the claim's Status to Submitted, with Submitted on,
    Submitted how, and Sent to, and file the sent email in its Folder. As
    the builder answers: Acknowledged on, Response, Promised by, Work done
