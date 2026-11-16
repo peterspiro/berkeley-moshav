@@ -47,7 +47,9 @@ public: each placeholder stands for a link, a name, or a phone number.
   `[[status-page]]`, from the Links table, below), and the Doc's whole
   contents are replaced. Don't edit the Doc by hand; change the source, or
   the base, and run the script again: after a new coordinator is ticked,
-  or someone joins or leaves the circle, for instance.
+  or someone joins or leaves the circle, for instance. Written from the
+  test base, the Doc says it's a trial whose links open a test copy: the
+  source's `{{trial: …}}` text, which `--real` leaves out.
 
 This file has three parts: changing the base's structure; setting a base
 up, with everything that has to be made by hand; and how the circle uses

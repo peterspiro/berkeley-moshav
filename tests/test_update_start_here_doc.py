@@ -59,6 +59,25 @@ def test_update_links_list_the_circle_by_name():
         doc.base_values("appX", coordinator, [])
 
 
+def test_trial_text_is_kept_for_the_test_base_only():
+    text = "# Start here{{trial: (trial)}}\n\n{{trial:**A trial.** Made-up\nrequests.}}\n\nOpen the Base{{trial: (test)}} base."
+    assert doc.trial_text(text, real=False) == (
+        "# Start here (trial)\n\n**A trial.** Made-up\nrequests.\n\nOpen the Base (test) base.")
+    assert doc.trial_text(text, real=True) == "# Start here\n\nOpen the Base base."
+
+
+def test_the_start_here_page_says_its_a_trial_unless_real():
+    source = doc.SOURCE.read_text()
+    trial, real = doc.trial_text(source, real=False), doc.trial_text(source, real=True)
+    assert trial.startswith("# Maintenance tracker: start here (trial)\n\n**This is a trial version.**")
+    assert "Building Maintenance (test) base" in trial
+    assert real.startswith("# Maintenance tracker: start here\n\nEverything the circle uses")
+    for page in (trial, real):
+        assert "{{" not in page and "}}" not in page
+    for word in ("trial", "test copy", "(test)"):
+        assert word not in real, word
+
+
 def test_link_keys_match_the_apps_scripts():
     assert doc.link_key("Request form") == "request-form"
     assert doc.link_key("Tracker help (who to ask)") == "tracker-help-who-to-ask"

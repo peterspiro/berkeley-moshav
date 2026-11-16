@@ -595,7 +595,9 @@ status line as "calendar (members can view, not edit)".
   placeholder has no value. `-n` shows what it would write. Like the other
   maintenance scripts, it reads the test base, which holds the demo data,
   unless given `--real`; until the real base is set up, the Doc links to
-  the test base.
+  the test base, and says so: text the source wraps in `{{trial: …}}` (a
+  notice under the title, and a few words elsewhere) is kept for the test
+  base and left out with `--real`.
 - **`setup.sh`** installs and starts a local Gather development instance, for
   trying scripts out safely before running them against the real site.
 

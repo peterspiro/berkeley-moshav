@@ -40,7 +40,9 @@ Docs API enabled as well as Drive.
 It reads the test base, "Building Maintenance (test)", which holds the
 demo data (see maintenance_demo.py), unless given --real, which reads
 "Building Maintenance". Until the real base is set up, the Doc links to the
-test base.
+test base, and says so: text the source wraps in {{trial: …}} (a notice
+under the title that the links open a test copy, and a few words elsewhere)
+is kept when the test base is read, and left out with --real.
 
 Requires the Airtable token in airtable_credentials, and Google
 credentials, as for the repo's other Google scripts (see README.md,
@@ -63,6 +65,7 @@ DOC_TITLE = "Maintenance tracker: start here"
 DOC_MIME = "application/vnd.google-apps.document"
 UPLOAD_MIME = "text/markdown"
 PLACEHOLDER = re.compile(r"\[\[([^\[\]]+)\]\]")
+TRIAL = re.compile(r"\{\{trial:(.*?)\}\}", re.DOTALL)
 
 
 def placeholders(text: str) -> list[str]:
@@ -98,6 +101,13 @@ def base_values(base_id: str, people: list[dict], links: list[dict]) -> dict[str
         raise ValueError("No one ticked as Circle member in People has an Update form link. The "
                          "maintenance_tracker Apps Script writes them (run writeFormLinks).")
     return values
+
+
+def trial_text(text: str, real: bool) -> str:
+    """The page with each {{trial:…}} replaced by the text inside it, or,
+    for the real base, by nothing; a paragraph left empty goes too."""
+    text = TRIAL.sub("" if real else lambda m: m.group(1), text)
+    return re.sub(r"\n{3,}", "\n\n", text)
 
 
 def update_links(people: list[dict]) -> tuple[str, list[str]]:
@@ -185,7 +195,7 @@ def main() -> None:
     except (AirtableError, ValueError) as e:
         sys.exit(f"Error: {e}")
     try:
-        page = join_wrapped_lines(fill(source, values))
+        page = join_wrapped_lines(fill(trial_text(source, args.real), values))
     except KeyError as e:
         sys.exit("Error: these have no value: " + ", ".join(e.args[0]) +
                  ". Fill in each one's Value in the base's Links table, adding a row if it has none "

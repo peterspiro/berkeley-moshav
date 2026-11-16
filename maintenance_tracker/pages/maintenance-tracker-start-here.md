@@ -1,4 +1,10 @@
-# Maintenance tracker: start here
+# Maintenance tracker: start here{{trial: (trial)}}
+
+{{trial:**This is a trial version.** The tracker isn't in use yet. Every link on
+this page opens a test copy filled with made-up requests, so you can click
+around and try things without harm. Don't record real problems here yet:
+anything entered in the test copy will be thrown away. We'll tell you when
+the real one is ready, and this page will then point to it.}}
 
 Everything the circle uses to track repairs, questions, and warranty claims
 for the building.
@@ -32,7 +38,7 @@ Maintenance tracker's pages:
 ## Log an update
 
 Each of us has our own link to the "Log an update" form, which fills in our
-name. Open yours:
+name.{{trial: For now, these open the test copy's form.}} Open yours:
 
 [[update-links]]
 
@@ -53,7 +59,7 @@ It helps to see what they see.
 
 ## The base itself
 
-[Open the Building Maintenance base]([[base]])
+[Open the Building Maintenance{{trial: (test)}} base]([[base]])
 
 Only if you need something Maintenance tracker's pages don't show, or to
 change what they only show, such as a warranty. Go carefully: here a stray
