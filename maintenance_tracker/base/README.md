@@ -360,10 +360,19 @@ Told reporter on. Here too, an update that's been made is read-only.
 
 **Contacts**. A list of Organizations grouped by Trades, with creating
 turned on and every field editable: the circle collects these over time.
+The list shows Company, Role, Contact name, Phone, After-hours phone, and
+Our contact (as the By trade view does): who to call, and who of us calls
+them. A row's details add Trades, Email, Licence, Under contract until,
+and Notes. The links other tables make (Claims, Warranties, and so on)
+are left off, or shown read-only.
 
-**Patterns**, read-only. Charts counting requests by System, by Component,
-and by Location, and a list grouped by System and Component, for the
-monthly look for repeats.
+**Patterns**, read-only, for the monthly look for repeats. A dashboard
+layout over Requests: three bar charts counting requests by System, by
+Component, and by Location, and under them a list grouped by System, then
+Component, showing Location, Room, Submitted, and Status, sorted by
+Location (as the Patterns view is). Filter out requests whose Status is
+Duplicate or Declined, so that a problem reported twice is counted once,
+and keep closed ones: a repeat is a repeat after it's fixed.
 
 **Warranties**, read-only, once Warranties has rows. A list of Warranties
 grouped by Responsibility, showing Name, Warrantor, Systems, Scope, Held

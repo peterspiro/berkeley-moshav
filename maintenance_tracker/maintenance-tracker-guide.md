@@ -17,6 +17,7 @@ These are the parts you'll meet:
 | The request form | Members | Reporting a problem or asking how something works |
 | The status page | Members | Seeing where every request stands |
 | **Maintenance tracker**, an interface in Airtable, with its **Triage**, **Requests**, and **Claims** pages | The circle | Triage, working on requests, and warranty claims |
+| Its **Contacts**, **Warranties**, and **Patterns** pages | The circle | Contractors and how to reach them; each warranty's terms and how to claim under it; charts of what's going wrong where |
 | The "Log an update" form | The circle | Recording a call, a visit, or a note, from a phone |
 | Emails | Members and the circle | The tracker sends these by itself (see below) |
 | The weekly digest | The circle | A Sunday email summing up what needs attention |
@@ -161,7 +162,8 @@ nothing is happening.
 Each contractor and the builder should hear from **one** of us, not from
 whoever happens to be handling a request. Before you contact one, check
 who our contact for them is, and go through that person. Their names and
-numbers are in the **Organizations** table.
+numbers are on the **Contacts** page, where you can also add a contractor
+or correct one's details.
 
 ## Warranty claims
 
@@ -246,9 +248,10 @@ by their System, Room, and Component.
 - **Titles are public.** So are the status and location of each request.
   Descriptions, photos, names, and updates are not.
 - **Don't add people, locations, warranties, or warrantors** while working
-  on a request or a claim: choose them from the lists. If someone or
-  something is missing from a list (a claim's **Warrantor**, say), ask
-  whoever looks after the tracker.
+  on a request or a claim: choose them from the lists. A missing
+  **Warrantor** is added on the **Contacts** page. For anyone or anything
+  else that's missing from a list, ask whoever looks after the tracker;
+  the **Warranties** page shows the warranties but can't change them.
 - **Advice from our attorney doesn't go in the tracker.**
 
 ## Who to ask

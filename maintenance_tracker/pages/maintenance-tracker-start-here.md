@@ -16,7 +16,7 @@ for the building.
 
 | | Link | For |
 |---|---|---|
-| **Maintenance tracker** | [Open Maintenance tracker]([[maintenance-tracker-interface]]) | Triage, working on requests, and warranty claims. Needs an Airtable account: ask [[tracker-help]] |
+| **Maintenance tracker** | [Open Maintenance tracker]([[maintenance-tracker-interface]]) | Triage, working on requests, and warranty claims, on its Triage, Requests, and Claims pages; contractors' numbers on Contacts; each warranty's terms on Warranties; what's repeating on Patterns. Needs an Airtable account: ask [[tracker-help]] |
 | **Log an update** | Your own link, sent to you by the coordinator | Recording a call, a visit, or a note. Easiest on a phone. No account needed |
 | **Weekly digest** | Arrives by email on Sundays | What needs someone this week |
 
@@ -38,8 +38,8 @@ It helps to see what they see.
 
 [Open the Building Maintenance base]([[base]])
 
-Only if you need something Maintenance tracker's pages don't show, such
-as the Warranties or Organizations tables. Go carefully: here a stray
+Only if you need something Maintenance tracker's pages don't show, or to
+change what they only show, such as a warranty. Go carefully: here a stray
 keystroke can delete a row. Never delete a request, an update, or a claim;
 mark it Duplicate or Declined instead.
 
@@ -49,7 +49,7 @@ mark it Duplicate or Declined instead.
   members are told to phone, not to wait for us to see the form.
 - **A request's Title is public**, on the status page. Keep names and
   personal details out of it.
-- **Each contractor hears from one of us.** Check who our contact is, in
-  the Organizations table, before calling one.
+- **Each contractor hears from one of us.** Check who our contact is, on
+  the Contacts page, before calling one.
 - **Warranty items have a deadline** for making a claim. The weekly digest
   lists the ones coming up.
