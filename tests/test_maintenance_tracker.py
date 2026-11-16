@@ -696,6 +696,86 @@ def test_housekeeping_reads_each_table_once():
     assert "prefill_Reporter=Sam+L" in day["People.json"]
 
 
+# --- maintenance work --------------------------------------------------------
+
+def plan(key, **fields):
+    return {"id": key, "fields": {k.replace("_", " "): v for k, v in fields.items()}}
+
+
+def work(key, plan_id, status=None, **fields):
+    made = {"Plan": [plan_id], **{k.replace("_", " "): v for k, v in fields.items()}}
+    if status:
+        made["Status"] = status
+    return {"id": key, "fields": made}
+
+
+def work_due(plans, occurrences=()):
+    data = {"Maintenance plans": plans, "Maintenance work": list(occurrences)}
+    return [w["fields"] for w in rule("maintenanceWorkDue(data)", data=data)]
+
+
+def test_a_plan_with_no_occurrence_gets_its_first():
+    monthly = {"Every (months)": 1}
+    assert work_due([plan("alarm", First_due="2027-01-20", **monthly)]) == [
+        {"Plan": ["alarm"], "Due": "2027-01-20", "Status": "Due"}]
+    assert work_due([plan("alarm", **monthly)]) == []  # no First due yet
+
+
+def test_the_next_occurrence_follows_the_last_ones_due_date():
+    drains = plan("drains", First_due="2026-04-15", **{"Every (months)": 6})
+    done = [work("w1", "drains", "Done", Due="2026-04-15", Done_on="2026-04-12"),
+            work("w2", "drains", "Done", Due="2026-10-15", Done_on="2026-11-20")]  # late: the plan keeps its dates
+    assert work_due([drains], done) == [{"Plan": ["drains"], "Due": "2027-04-15", "Status": "Due"}]
+    assert work_due([drains], done[:1] + [work("w2", "drains", "Skipped", Due="2026-10-15")]) == [
+        {"Plan": ["drains"], "Due": "2027-04-15", "Status": "Due"}]
+    # With no Due, the day it was done is counted from.
+    assert work_due([drains], [work("w1", "drains", "Done", Done_on="2026-05-02")])[0]["Due"] == "2026-11-02"
+    assert work_due([drains], [work("w1", "drains", "Done")]) == []
+
+
+def test_a_plan_with_an_occurrence_waiting_gets_no_other():
+    fans = plan("fans", First_due="2026-07-15", **{"Every (months)": 6})
+    skipped = work("w1", "fans", "Skipped", Due="2026-07-15")
+    for waiting in [work("w2", "fans", "Due", Due="2027-01-15"),
+                    work("w2", "fans", "Scheduled", Due="2026-11-20"),  # moved by hand
+                    work("w2", "fans", Due="2027-01-15")]:  # no Status
+        assert work_due([fans], [skipped, waiting]) == []
+
+
+def test_a_plan_with_no_interval_happens_once():
+    walk = plan("walk", First_due="2027-11-01")
+    assert [w["Due"] for w in work_due([walk])] == ["2027-11-01"]
+    assert work_due([walk], [work("w1", "walk", "Done", Due="2027-11-01")]) == []
+    assert work_due([plan("walk", First_due="2027-11-01", **{"Every (months)": 0})],
+                    [work("w1", "walk", "Done", Due="2027-11-01")]) == []
+
+
+def test_months_are_added_to_a_date():
+    assert rule("addMonths('2026-11-10', 1)") == "2026-12-10"
+    assert rule("addMonths('2026-12-10', 1)") == "2027-01-10"
+    assert rule("addMonths('2026-08-31', 6)") == "2027-02-28"  # no February 31st
+    assert rule("addMonths('2027-08-31', 6)") == "2028-02-29"
+    assert rule("addMonths('2026-03-01', 36)") == "2029-03-01"
+
+
+def test_housekeeping_creates_the_occurrences_and_backs_them_up():
+    state = tables()
+    state["Maintenance plans"] = [plan("alarm", Task="Alarm test", First_due="2026-12-01", **{"Every (months)": 1}),
+                                  plan("drains", Task="Clear drains", **{"Every (months)": 6})]
+    state["Maintenance work"] = [work("w1", "drains", "Done", Due="2026-10-15")]
+    out = run(state, "housekeeping")
+    made = [w["fields"] for w in out["tables"]["Maintenance work"][1:]]
+    assert made == [{"Plan": ["alarm"], "Due": "2026-12-01", "Status": "Due"},
+                    {"Plan": ["drains"], "Due": "2027-04-15", "Status": "Due"}]
+    assert out["calls"].count("post Maintenance work") == 1
+    [folder] = out["drive"].values()
+    [day] = [v for k, v in folder.items() if k != "Attachments/"]
+    assert len(json.loads(day["Maintenance work.json"])) == 3
+    # Nothing more is made while those wait to be done.
+    again = run(out["tables"], "createMaintenanceWork")
+    assert len(again["tables"]["Maintenance work"]) == 3 and "post Maintenance work" not in again["calls"]
+
+
 # --- form links --------------------------------------------------------------
 
 def test_form_link_is_the_tested_shape():

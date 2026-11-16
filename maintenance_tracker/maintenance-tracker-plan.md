@@ -241,8 +241,9 @@ Code / Manufacturer / Good practice), `Procedure` (link to a Guide),
 / Scheduled / Done / Skipped), `Scheduled for`, `Done on`, `Done by`,
 `Notes`, `Photos`, `Found` (links to Requests raised by what was seen).
 
-The script creates the next occurrence when one is done, and the first from
-`First due`. The independent inspection in month 10 or 11 is a plan like
+The script creates the next occurrence when one is done or skipped, due
+`Every` months after the last was due, and the first from `First due`; a
+plan with no `Every` happens once (`apps_script/README.md` has the rule). The independent inspection in month 10 or 11 is a plan like
 any other, as is each warranty's "claim by" review.
 
 ### Guides
@@ -345,6 +346,8 @@ Daily (weekly on the Free plan):
   expire and its history is limited by plan; the Drive copy is the evidence
   file, and what makes leaving Airtable possible.
 - **How full the base is**: warn the circle as it nears the plan's limits.
+- **Maintenance work**: give each maintenance plan its next occurrence,
+  when it has none waiting to be done.
 
 Weekly: the digest, including repeats. A repeat is the same Component (or
 the same System and Room) in three or more places within 180 days, or
@@ -353,8 +356,7 @@ already under a Systemic claim. The thresholds are constants in
 `tracker_rules.gs`.
 
 Designed, and not built: putting visits and maintenance work on a
-maintenance calendar; creating the next occurrence of a maintenance plan;
-and a check that the base's views are all there (`maintenance_base.py diff`
+maintenance calendar; and a check that the base's views are all there (`maintenance_base.py diff`
 does that when run by hand).
 
 ## Links to the rest of the setup
@@ -526,8 +528,9 @@ Move-in is soon, so the order is by what's lost if it's late.
    `base/README.md`, "Warranty claims". To do: the Warranties rows,
    from the warranty binder and the attorney's answers; the builder's
    contact; the attorney's review of the letter's wording.
-4. **Maintenance.** Not started; the tables exist. Assets and plans from the
-   O&M manuals; occurrences; the maintenance calendar and the
+4. **Maintenance.** Done: the script creates each plan's occurrences. To
+   do: Assets and plans from the O&M manuals; views and an interface for
+   the maintenance tables; the maintenance calendar and the
    `group_meetings` change.
 5. **Knowledge and patterns.** Patterns are done, in the digest. Not
    started: Guides and the handbook folder; emergency cards.

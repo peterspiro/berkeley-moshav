@@ -51,6 +51,17 @@ Airtable base ("Building Maintenance") without anyone doing it. It runs as
     logging this?" filled in; the circle ticks those boxes, and
     `update_start_here_doc.py` lists the links in the circle's "start here"
     Doc.
+  - **Maintenance work** (`createMaintenanceWork`): each row in
+    Maintenance plans is given its next occurrence in Maintenance work,
+    with Status Due, when it has none waiting to be done. A plan with no
+    occurrence yet gets its first, due on its First due. A plan whose
+    occurrences are all Done or Skipped gets its next, due Every (months)
+    after the last one was due, however early or late that one was done,
+    so the plan keeps to its dates. A plan with no Every (months) happens
+    once. While an occurrence is still Due or Scheduled the plan gets no
+    other, so one that's added or moved by hand stands. Season isn't
+    used. So marking an occurrence Done or Skipped is all anyone has to
+    do; the next appears within a day (a week, on the Free plan).
   - **Backup** (`backup`): every table is saved as a JSON file in a folder
     named for the day, and each photo and attachment not yet copied is
     saved to an "Attachments" folder (Airtable's own links to them expire),
@@ -103,7 +114,8 @@ its Acknowledged on.
 Claim deadlines and the claim letter aren't the script's work: they're
 formulas in the base (see `../base/README.md`, "Warranty claims").
 
-Not built yet: the maintenance calendar, and the check that the base's views are all there
+Not built yet: the maintenance calendar, anything in the digest about
+maintenance that's due, and the check that the base's views are all there
 (run `python maintenance_base.py diff` for that).
 
 ## Files
@@ -229,7 +241,8 @@ form's own page should say what to do in an emergency.
 
 With nothing happening, the Free pace is about 530 calls a month (the
 housekeeping reads each table once, for the form links, the backup, and
-the digest together). Each new
+the digest together, and writes only when a maintenance plan's next
+occurrence is due). Each new
 request or change of status adds one or two, and the first of them in any
 6 hours two more (People and Locations are then kept for 6 hours, so a
 change made to them in Airtable can take that long to be noticed).
