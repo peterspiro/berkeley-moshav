@@ -387,16 +387,52 @@ base, by whoever looks after the tracker: every Claim deadline under a
 warranty is worked out from its Term (months), Clock starts, and Building
 start date, so a change to one moves them all.
 
+**Maintenance**, for whoever does a maintenance task or books the vendor
+who does. A record review layout over Maintenance work, grouped by Status
+(Due, Scheduled, Done, Skipped, as the field's options are ordered) and
+sorted by Due, soonest first, so that what's to do next leads and what's
+been done is kept below it as the record. The list shows Plan, Due, and
+Scheduled for: Plan is the row's name here, since its own primary field
+is only its number.
+
+Creating is turned off: the tracker's script makes each plan's next
+occurrence, a day or so after the last is marked Done or Skipped (see
+`../apps_script/README.md`), and while one is still Due or Scheduled the
+plan gets no other. So work that has to wait is moved, by changing its
+Due, not skipped; Skipped is for an occurrence that won't happen at all,
+and the next is then counted from the date the skipped one was due.
+
+The occurrence, in this order:
+
+| Field | Editable | Why |
+|---|---|---|
+| Plan | no | Shown with the plan's Task, Asset, Kind, Every (months), Done by, Vendor, Owner, Required by, and Procedure: what the task is, who does it, and how |
+| Due | yes | To move work that has to wait. The next occurrence is counted from this date |
+| Scheduled for | yes | The time booked with the vendor or the volunteers |
+| Status | yes | Scheduled once it has a time; Done or Skipped when it's over. Unlike a request, it isn't set by filling in the time |
+| Done on, Done by | yes | Done by is typed: the vendor, or the volunteers' names |
+| Notes | yes | What was found, or why it was skipped |
+| Photos | yes | With Done on and Notes, the proof that the work was done, where a warranty requires it |
+| Found | yes | The requests raised by what was seen. Report each through the request form, then link it here |
+
+Leave out Number. Found is a linked field like the others (see below): on
+to link and unlink, off to add through a form, since a request made here
+would skip the form's questions and the script's acknowledgment.
+
+A plan is added or changed in the base, by whoever looks after the
+tracker, as a warranty is: its Every (months) and First due set every
+date after them. So are Assets.
+
 No interface is needed for People (the sync keeps it), Locations (the seed
 file does), or what members use (the request form and the status page).
-Assets, Maintenance plans, Maintenance work, and Guides get theirs when
-those tables come into use.
+Assets, Maintenance plans, and Guides get theirs when those tables come
+into use.
 
 For a linked field on an interface (Location, Component, Warranty,
-Warrantor, Duplicate of, Owner, and the like), "editable" means turning on
+Warrantor, Duplicate of, Owner, Found, and the like), "editable" means turning on
 **Link / unlink records** in its user actions, and leaving **Add records
-through a form** off, so that nobody adds a location, person, warranty, or
-organization from a request's or a claim's page. (An organization is added
+through a form** off, so that nobody adds a location, person, warranty,
+organization, or request from another row's page. (An organization is added
 on the Contacts page, and a warranty in the base, where its term and clock
 are set with care: every deadline under it depends on them.) Updates, on the Requests and Claims pages, is the reverse:
 adding through a form on, linking and unlinking off.
@@ -499,8 +535,9 @@ each base.
 
 On Sundays the script emails the circle's list what came in, what's
 waiting for triage, an owner, a visit time, or confirmation, what's gone
-quiet, the warranty deadlines and claims above, and what's repeating across
-units (see `../apps_script/README.md`).
+quiet, the warranty deadlines and claims above, what's repeating across
+units, and the maintenance work that's overdue or coming up (see
+`../apps_script/README.md`).
 
 The status page's and forms' links, the base's ID, and the circle's
 address aren't kept in this repo, which is public.

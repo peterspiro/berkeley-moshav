@@ -22,7 +22,7 @@ for the building.
 
 | | Link | For |
 |---|---|---|
-| **Maintenance tracker** | [Open Maintenance tracker]([[maintenance-tracker-interface]]) | Triage, working on requests, and warranty claims: its pages are listed below. Needs an Airtable account: ask [[tracker-help]] |
+| **Maintenance tracker** | [Open Maintenance tracker]([[maintenance-tracker-interface]]) | Triage, working on requests, warranty claims, and regular maintenance: its pages are listed below. Needs an Airtable account: ask [[tracker-help]] |
 | **Log an update** | Your own link, under "Log an update" below | Recording a call, a visit, or a note. Easiest on a phone. No account needed |
 | **Weekly digest** | Arrives by email on Sundays | What needs someone this week |
 
@@ -31,6 +31,7 @@ Maintenance tracker's pages:
 - **Triage:** new requests, for the coordinator to sort
 - **Requests:** working on requests
 - **Claims:** warranty claims
+- **Maintenance:** regular maintenance: what's due, and what's been done
 - **Contacts:** contractors' numbers
 - **Warranties:** each warranty's terms
 - **Patterns:** what's repeating
