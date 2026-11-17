@@ -486,7 +486,8 @@ function sendDigest(data) {
  * Sends { to, subject, body }, from the account the script runs as, with
  * replies going to the circle. While SEND_ALL_MAIL_TO is set, every email
  * goes to that address instead, saying who it was for: for trying the
- * script out without emailing members.
+ * script out without emailing members. The log says who each email went
+ * to, so a run by hand shows what it did.
  */
 function sendMail(email) {
   const override = setting('SEND_ALL_MAIL_TO', true);
@@ -497,6 +498,7 @@ function sendMail(email) {
     name: SENDER_NAME,
     replyTo: setting('CIRCLE_EMAIL'),
   });
+  console.log(`Emailed ${override || email.to}${override ? ` (for ${email.to})` : ''}: "${email.subject}"`);
 }
 
 /**
