@@ -17,6 +17,7 @@ These are the parts you'll meet:
 | The request form | Members | Reporting a problem or asking how something works |
 | The status page | Members | Seeing where every request stands |
 | **Maintenance tracker**, an interface in Airtable, with its **Triage**, **Requests**, and **Claims** pages | The circle | Triage, working on requests, and warranty claims |
+| Its **Maintenance work** page | The circle | The regular maintenance, inspections, and tests: what's due, and what's been done |
 | Its **Contacts**, **Warranties**, and **Patterns** pages | The circle | Contractors and how to reach them; each warranty's terms and how to claim under it; charts of what's going wrong where |
 | The "Log an update" form | The circle | Recording a call, a visit, or a note, from a phone |
 | Emails | Members and the circle | The tracker sends these by itself (see below) |
@@ -38,6 +39,8 @@ You don't have to do any of these:
 - **When work is marked done**, it emails the member to ask whether it's
   fixed.
 - **Every change of status** is added to the request's history.
+- **When a piece of regular maintenance is marked done**, it adds the next
+  time that task is due, within a day or so (for now, within a week).
 - **Every Sunday**, it emails the circle the weekly digest.
 - **It keeps a backup** of everything, including photos.
 
@@ -166,6 +169,38 @@ whoever happens to be handling a request. Before you contact one, check
 who our contact for them is, and go through that person. Their names and
 numbers are on the **Contacts** page, where you can also add a contractor
 or correct one's details.
+
+## Regular maintenance
+
+Some work comes round again: the elevator's service visits, clearing the
+roof drains, testing the fire alarm. Each of these is a plan, and each
+time it comes due is a row on the **Maintenance work** page, with the date
+it's due. The tracker adds the rows; nobody has to remember them. The
+weekly digest lists what's overdue and what's due in the next 30 days.
+
+The page shows what's **Due** first, then what's **Scheduled**, with the
+work already done below. Open a row to see the task, who does it (our
+volunteers or a vendor, and which of us looks after it), and the guide
+that says how, if there is one. Then:
+
+1. **Book it.** When there's a time, fill in **Scheduled for** and set
+   **Status** to **Scheduled**. (Here you set the status yourself.)
+2. **When it's done**, set **Status** to **Done**, and fill in **Done on**
+   and **Done by** (the vendor, or the names of whoever did it). Write in
+   **Notes** what was found, and add **Photos**. Some warranties are only
+   good while the maintenance is kept up, and this row is our proof that
+   it was.
+3. **If you saw something wrong**, report it through the request form like
+   any other problem, then pick that request under **Found**.
+
+If the work has to wait, change its **Due** date: don't skip it.
+**Skipped** is for a time that won't happen at all, and needs a note
+saying why. Either way the tracker then adds the next time the task is
+due, counted from the date this one was due, not from the day it was
+done.
+
+To add a task, or change how often one comes round, ask whoever looks
+after the tracker (see "Who to ask").
 
 ## Warranty claims
 

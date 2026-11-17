@@ -307,8 +307,8 @@ requests it settled, which shows what's worth writing next).
   member has their own link to it, with their name filled in.
 - The **Maintenance tracker** interface: pages showing only what a job
   needs, with no way to delete a row (see `base/README.md`,
-  "Interfaces"). Six pages: Triage, Requests, and Claims, to work on;
-  Contacts, to keep; Warranties and Patterns, to read.
+  "Interfaces"). Seven pages: Triage, Requests, Claims, and Maintenance work,
+  to work on; Contacts, to keep; Warranties and Patterns, to read.
 - The **weekly digest** email to the circle's list: new requests; ones to
   triage, with no owner, with no visit time, waiting to be confirmed, or
   gone quiet; warranty deadlines with no claim made; claims the builder
@@ -510,7 +510,7 @@ Move-in is soon, so the order is by what's lost if it's late.
    `sync_maintenance_people.py`, and the checklist of views in
    `base/README.md`; the test base has all of it, with its views and
    forms, and takes requests. Also the Maintenance tracker interface, with
-   its six pages, built by hand in the test base as `base/README.md`
+   its first six pages, built by hand in the test base as `base/README.md`
    describes them. To do: the real base, set up the same way
    (`base/README.md`, "Setting up a base"), its interface built again
    by hand (Airtable's API can't create one), and the emergency
@@ -530,9 +530,9 @@ Move-in is soon, so the order is by what's lost if it's late.
    from the warranty binder and the attorney's answers; the builder's
    contact; the attorney's review of the letter's wording.
 4. **Maintenance.** Done: the script creates each plan's occurrences, and
-   the digest lists what's overdue and what's coming up. To
-   do: Assets and plans from the O&M manuals; views and an interface for
-   the maintenance tables; the maintenance calendar and the
+   the digest lists what's overdue and what's coming up; the interface's
+   Maintenance work page is described in `base/README.md`. To do: building
+   that page in the test base; Assets and plans from the O&M manuals; the maintenance calendar and the
    `group_meetings` change.
 5. **Knowledge and patterns.** Patterns are done, in the digest. Not
    started: Guides and the handbook folder; emergency cards.
