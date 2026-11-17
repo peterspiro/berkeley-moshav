@@ -62,7 +62,8 @@ Python scripts:
   warnings about meetings that would clash over a Zoom
   user, and about meetings set up as invitations from someone's own calendar.
   It also invites the all-events calendar to the events created on the admin
-  account's other calendars, including the shared community calendar.
+  account's other calendars, including the shared community calendar, but
+  not those of a calendar whose description says `[not on all-events]`.
 
 A fourth, **`circle_agendas`**, will run the circle agenda docs (see
 `circle-agendas-plan.md`): it builds each circle's agenda doc from a blank

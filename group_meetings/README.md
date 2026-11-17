@@ -61,6 +61,13 @@ Apps Script that looks after every group's Google calendar (the calendars
   calendar as a guest, sending no email. It gets no Zoom room and isn't
   checked for overlaps, and invitation copies there (such as the
   invitations people send the community calendar) are left alone.
+  A calendar whose description (in its settings in Google Calendar) says
+  **`[not on all-events]`** is left alone altogether: for one that holds
+  something other than events for everyone, such as the maintenance
+  tracker's calendar of maintenance work. It's noticed within the hour.
+  Events that were given the all-events calendar before the calendar was
+  marked keep it; remove that guest by hand. Taking the marker out brings
+  the calendar back, and its upcoming events are then all handled.
 - **Every hour**, and after any change, it looks for meetings in the next 8
   weeks in Zoom rooms belonging to the same Zoom user (a Zoom user can run
   only one meeting at a time) that overlap, or that are less than 15 minutes

@@ -37,6 +37,9 @@ const NO_ZOOM_MARKER = '[no zoom]';
 // An event that shouldn't invite the group (or a community-wide calendar's
 // audience), nor, unless it has a reminder tag, remind them.
 const NO_INVITE_MARKER = '[no invite]';
+// In the description of one of the account's other calendars: its events
+// aren't for the all-events calendar, and the script leaves it alone.
+const NOT_ON_ALL_EVENTS_MARKER = '[not on all-events]';
 const ZOOM_BLOCK_END = '(Added automatically from the group\'s Zoom room.)';
 // The block, whether written with plain-text or HTML line breaks.
 const ZOOM_BLOCK_RE =
@@ -386,12 +389,15 @@ function mergeMeetings(x, y) {
  * skipIds (the group calendars and the all-events calendar): its primary
  * calendar and its other calendars. Another person's primary calendar
  * shared with it as an owner is left out, since its ID is that person's
- * address.
+ * address. So is a calendar whose description says "[not on all-events]",
+ * in any case: one that holds something other than events for everyone,
+ * such as the maintenance calendar.
  */
 function otherOwnedCalendars(items, account, skipIds) {
   const skip = new Set(skipIds.map(lower));
   return items
     .filter(c => c.accessRole === 'owner' && !skip.has(lower(c.id)) &&
+                 !plainText(lower(c.description)).includes(NOT_ON_ALL_EVENTS_MARKER) &&
                  (c.primary || lower(c.id) === lower(account) ||
                   lower(c.id).endsWith('@group.calendar.google.com')))
     .map(c => ({ id: c.id, name: c.summaryOverride || c.summary || c.id }));
