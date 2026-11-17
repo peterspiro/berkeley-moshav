@@ -95,6 +95,7 @@ const ctx = vm.createContext({
   PropertiesService: { getScriptProperties: () => ({
     getProperty: k => (k in props ? props[k] : null),
     setProperty: (k, v) => { props[k] = v; },
+    deleteProperty: k => { delete props[k]; },
   }) },
   LockService: { getScriptLock: () => ({ tryLock: () => true, releaseLock: () => {} }) },
   Drive: { Files: Files },

@@ -77,6 +77,11 @@ def run(state, *functions, props=None, expr=None, values=None):
     return json.loads(result.stdout)
 
 
+def note(out, name):
+    """One of the script's notes about the base, as it keeps them: by base."""
+    return out["props"].get(f"{name}:{PROPS['AIRTABLE_BASE_ID']}")
+
+
 def rule(expr, **values):
     return run(tables(), expr=expr, values=values)["result"]
 
@@ -145,7 +150,7 @@ def test_second_run_does_nothing_and_asks_airtable_little():
     again = run(state["tables"], "processRequests:timer", props=state["props"])
     assert again["mails"] == [] and again["calls"] == ["get Requests"]
     assert again["tables"] == state["tables"]
-    later = {**state["props"], "lastUpdatesCheck": "2026-01-01T00:00:00.000Z"}
+    later = {**state["props"], "lastUpdatesCheck:appTest": "2026-01-01T00:00:00.000Z"}
     assert run(state["tables"], "processRequests:timer", props=later)["calls"] == ["get Requests", "get Updates"]
     # On a plan with no ration of calls, they're looked for every time.
     team = {**state["props"], "AIRTABLE_PLAN": "team"}
@@ -482,12 +487,12 @@ def test_backup_warns_the_circle_as_the_base_fills():
     out = run(state, "backup")
     [mail] = out["mails"]
     assert mail["to"] == CIRCLE and "85% full" in mail["subject"] and "900 MB of 1,024 MB" in mail["body"]
-    assert out["props"]["usageWarned"] == "85"
+    assert note(out, "usageWarned") == "85"
     # Not again at the same level; and the level falls back when the base empties.
     again = run(state, "backup", props=out["props"])
     assert again["mails"] == []
     emptied = run(tables(), "backup", props=out["props"])
-    assert emptied["mails"] == [] and emptied["props"]["usageWarned"] == "0"
+    assert emptied["mails"] == [] and note(emptied, "usageWarned") == "0"
 
 
 # --- the weekly digest -------------------------------------------------------
@@ -682,7 +687,7 @@ def test_send_digest_emails_the_circle():
     out = run(tables([request(1, Submitted=days_ago(1), Location=["loc411"])]), "sendDigest")
     [mail] = out["mails"]
     assert mail["to"] == CIRCLE and mail["subject"].startswith("Maintenance digest: ")
-    assert out["props"]["lastDigest"]
+    assert note(out, "lastDigest")
     assert run(tables(), "sendDigest")["mails"] == []
 
 
@@ -694,6 +699,50 @@ def test_housekeeping_reads_each_table_once():
     [folder] = out["drive"].values()
     [day] = [v for k, v in folder.items() if k != "Attachments/"]
     assert "prefill_Reporter=Sam+L" in day["People.json"]
+
+
+# --- the script's notes, by base ----------------------------------------------
+
+def test_another_base_starts_afresh_and_the_first_is_found_again():
+    photo = {"id": "att1", "url": "https://files.example/1", "filename": "a.jpg", "size": 900 * MB}
+    state = tables([request(1, Photos=[photo])])
+    first = run(state, "backup")
+    assert len(first["mails"]) == 1 and list(first["drive"]) == ["Building Maintenance backup/"]
+    # Pointed at another base, it goes by none of that: it warns for that
+    # base too, and makes that base a backup folder of its own.
+    real = {**first["props"], "AIRTABLE_BASE_ID": "appReal"}
+    other = run(state, "backup", props=real)
+    assert len(other["mails"]) == 1
+    assert other["props"]["backupFolderId:appReal"] and list(other["drive"]) == ["Building Maintenance backup/"]
+    assert other["props"]["usageWarned:appReal"] == "85"
+    # Pointed back, it finds the first base's notes as it left them.
+    back = run(state, "backup", props={**other["props"], "AIRTABLE_BASE_ID": "appTest"})
+    assert back["mails"] == [] and back["props"]["backupFolderId:appTest"] == first["props"]["backupFolderId:appTest"]
+
+
+def test_notes_from_before_they_were_kept_by_base_belong_to_the_base_of_the_time():
+    # As a deployed script's properties were: plain names, and no word of which base.
+    old_props = {**PROPS, "lastDigest": NOW, "usageWarned": "85", "backupFolderId": "folder0"}
+    assert rule_with(old_props, "[baseNote('lastDigest'), baseNote('usageWarned')]") == [NOW, "85"]
+    out = run(tables(), props=old_props, expr="(setBaseNote('usageWarned', '95'), baseNote('usageWarned'))")
+    assert out["result"] == "95" and "usageWarned" not in out["props"]      # its old copy is dropped
+    assert out["props"]["firstBase"] == "appTest" and out["props"]["lastDigest"] == NOW
+    # Another base gets none of them, once the script has run on the first.
+    # (Pointed elsewhere before it ever has, it can't tell whose they were.)
+    elsewhere = {**out["props"], "AIRTABLE_BASE_ID": "appReal"}
+    assert rule_with(elsewhere, "[baseNote('lastDigest'), baseNote('usageWarned'), baseNote('backupFolderId')]") == [
+        None, None, None]
+
+
+def rule_with(props, expr):
+    return run(tables(), props=props, expr=expr)["result"]
+
+
+def test_the_cache_is_kept_by_base():
+    switch = "PropertiesService.getScriptProperties().setProperty('AIRTABLE_BASE_ID', 'appReal')"
+    read = "cachedRecords('People', CACHE_PEOPLE)"
+    out = run(tables(), expr=f"({read}, {read}, {switch}, {read}, {read}, 1)")
+    assert out["calls"] == ["get People", "get People"]
 
 
 # --- the warranty report -----------------------------------------------------
@@ -799,12 +848,12 @@ def test_housekeeping_sends_the_warranty_report_when_its_due():
     state = warranty_data()
     out = run(state, "housekeeping", expr=SUNDAY, values={"n": NOW})
     assert [m["subject"].split(":")[0] for m in out["mails"]] == ["Maintenance digest", "Warranty report"]
-    assert out["props"]["lastWarrantyReport"].startswith("2026-11-15")
+    assert note(out, "lastWarrantyReport").startswith("2026-11-15")
     assert sorted(c for c in out["calls"] if c.startswith("get ")) == sorted(f"get {t}" for t in state)
     # A week later it has gone out too recently; four weeks later it goes again.
     for n, sent in [("2026-11-22T20:00:00.000Z", False), ("2026-12-13T20:00:00.000Z", True)]:
         later = run(warranty_data(), "housekeeping", expr=SUNDAY, values={"n": n},
-                    props={**PROPS, "lastWarrantyReport": out["props"]["lastWarrantyReport"]})
+                    props=out["props"])
         assert any(m["subject"].startswith("Warranty report") for m in later["mails"]) is sent
     # With no deadline coming, only the digest.
     quiet = run(tables([old(1, "Triaged")]), "housekeeping", expr=SUNDAY, values={"n": NOW})
@@ -1006,7 +1055,7 @@ def test_backup_saves_every_table_and_each_attachment_once():
     assert out["mails"] == []  # nowhere near full
     # In a folder the script made for itself, which it remembers.
     [folder] = out["drive"]
-    assert folder == "Building Maintenance backup/" and out["props"]["backupFolderId"]
+    assert folder == "Building Maintenance backup/" and note(out, "backupFolderId")
     backup = out["drive"][folder]
     [day] = [k for k in backup if re.fullmatch(r"\d{4}-\d\d-\d\d/", k)]
     assert sorted(backup[day]) == sorted(f"{t}.json" for t in state)

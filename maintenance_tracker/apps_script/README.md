@@ -217,9 +217,11 @@ with nobody, or with the particular people who need it. Don't move it into
 the community's Shared Drive, which every member can view. It can be
 renamed, or moved within My Drive.
 
-To start a fresh backup, as when changing from the test base to the real
-one, delete the `backupFolderId` property; the next run makes a new folder
-of the same name, so rename or delete the old one first.
+Each base has a backup folder of its own. Pointed at another base, as
+when changing from the test base to the real one, the script makes a new
+folder of the same name on its next backup, so rename the old one first
+("Building Maintenance backup (test)", say) to tell them apart. To start
+a base's backup afresh, delete its `backupFolderId:app…` property.
 
 ## Deploying
 
@@ -253,9 +255,32 @@ Then in the Apps Script editor:
    "Building Maintenance backup" in `admin@`'s My Drive).
 4. Run `installTriggers` to start the timers, at the pace the plan allows.
 
-To move to the real base, change `AIRTABLE_TOKEN` and `AIRTABLE_BASE_ID`
-(the links come from that base's own Links table), delete `backupFolderId` (see "The backup folder"), and delete `SEND_ALL_MAIL_TO` when the circle is ready for members to
-be emailed.
+To move to the real base, rename the test base's backup folder (see "The
+backup folder"), change `AIRTABLE_TOKEN` and `AIRTABLE_BASE_ID`, and
+delete `SEND_ALL_MAIL_TO` when the circle is ready for members to be
+emailed. Nothing else has to be cleared: the script starts afresh on a
+base it hasn't worked on (see "The script's notes"), and the links come
+from that base's own Links table.
+
+## The script's notes
+
+Besides the properties above, the script keeps notes of its own as Script
+Properties: when it last looked for requests and for updates
+(`lastRun`, `lastUpdatesCheck`), when the digest and the warranty report
+last went (`lastDigest`, `lastWarrantyReport`), how full a base it last
+warned of (`usageWarned`), and its backup folder (`backupFolderId`). Each
+is kept by base, named for the note and the base's ID
+(`lastRun:app…`), and what it caches of People, Locations, and Links is
+kept by base too. So pointed at another base, the script goes by nothing
+it did to the last one, and pointed back, it carries on where it left
+off. Leave them alone, except to start something afresh by deleting one.
+
+Notes written before they were kept by base have plain names
+(`lastRun`). They're taken to be about the base the script is working on
+the first time it runs after that change (recorded in `firstBase`), and
+each is replaced by its named-for-the-base copy as it's next written. So
+after deploying that change, let the script run once, or run
+`processRequests` by hand, before changing `AIRTABLE_BASE_ID`.
 
 ## The Airtable plan
 
