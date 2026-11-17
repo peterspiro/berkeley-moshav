@@ -556,6 +556,13 @@ past) with no claim made, claims the builder hasn't acknowledged in 14
 days, and claims past their promised date. A draft doesn't count as a claim
 made.
 
+Every four weeks while a request with no claim made has a deadline
+within 120 days, the script also emails the circle the warranty report
+(`sendWarrantyReport`, which can be run by hand at any time; see
+`../apps_script/README.md`): every request under each warranty, open or
+closed, that no claim has been made for, and the open repairs that have
+no warranty chosen at all.
+
 The letter's wording is the Draft field's formula in `schema.json`; it
 should be reviewed by the circle's attorney before the first claim goes
 out. To change it, change the file and paste the formula into the field in

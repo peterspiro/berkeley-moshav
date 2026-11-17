@@ -753,7 +753,10 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
     visit time, or confirmation, what's gone quiet, warranty deadlines
     with no claim made, claims the builder is sitting on, what's
     repeating across units, and maintenance work that's overdue or coming
-    up.
+    up. Every four weeks while a warranty deadline is within 120
+    days (or when run by hand), `sendWarrantyReport` emails the circle
+    every request under each warranty and whether a claim has been made
+    for it.
   - **`maintenance_tracker/apps_script/tracker_rules.gs`** holds its rules and the
     emails' wording, tested under Node.
 

@@ -42,6 +42,8 @@ You don't have to do any of these:
 - **When a piece of regular maintenance is marked done**, it adds the next
   time that task is due, within a day or so (for now, within a week).
 - **Every Sunday**, it emails the circle the weekly digest.
+- **As a warranty's deadlines come near**, it emails the circle the
+  warranty report, every four weeks.
 - **It keeps a backup** of everything, including photos.
 
 These emails are not instant. For now they can take **up to two hours** to
@@ -242,6 +244,13 @@ fix it.
 
 A claim that's still being drafted doesn't count as made. Only sending it
 does.
+
+**In a warranty's last four months**, the tracker emails the circle's
+list the **warranty report**, every four weeks. It lists every request
+under each warranty that no claim has been made for, and the open repairs
+that nobody has chosen a warranty for. Go through it together: each one
+needs a claim, or a decision that it doesn't. Whoever looks after the
+tracker (see "Who to ask") can send it at any other time.
 
 ## The weekly digest
 
