@@ -17,7 +17,7 @@ These are the parts you'll meet:
 | The request form | Members | Reporting a problem or asking how something works |
 | The status page | Members | Seeing where every request stands |
 | **Maintenance tracker**, an interface in Airtable, with its **Triage**, **Requests**, and **Claims** pages | The circle | Triage, working on requests, and warranty claims |
-| Its **Maintenance** page | The circle | The regular maintenance, inspections, and tests: what's due, and what's been done |
+| Its **Maintenance work** page | The circle | The regular maintenance, inspections, and tests: what's due, and what's been done |
 | Its **Contacts**, **Warranties**, and **Patterns** pages | The circle | Contractors and how to reach them; each warranty's terms and how to claim under it; charts of what's going wrong where |
 | The "Log an update" form | The circle | Recording a call, a visit, or a note, from a phone |
 | Emails | Members and the circle | The tracker sends these by itself (see below) |
@@ -174,7 +174,7 @@ or correct one's details.
 
 Some work comes round again: the elevator's service visits, clearing the
 roof drains, testing the fire alarm. Each of these is a plan, and each
-time it comes due is a row on the **Maintenance** page, with the date
+time it comes due is a row on the **Maintenance work** page, with the date
 it's due. The tracker adds the rows; nobody has to remember them. The
 weekly digest lists what's overdue and what's due in the next 30 days.
 

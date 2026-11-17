@@ -307,7 +307,7 @@ requests it settled, which shows what's worth writing next).
   member has their own link to it, with their name filled in.
 - The **Maintenance tracker** interface: pages showing only what a job
   needs, with no way to delete a row (see `base/README.md`,
-  "Interfaces"). Seven pages: Triage, Requests, Claims, and Maintenance,
+  "Interfaces"). Seven pages: Triage, Requests, Claims, and Maintenance work,
   to work on; Contacts, to keep; Warranties and Patterns, to read.
 - The **weekly digest** email to the circle's list: new requests; ones to
   triage, with no owner, with no visit time, waiting to be confirmed, or
@@ -531,7 +531,7 @@ Move-in is soon, so the order is by what's lost if it's late.
    contact; the attorney's review of the letter's wording.
 4. **Maintenance.** Done: the script creates each plan's occurrences, and
    the digest lists what's overdue and what's coming up; the interface's
-   Maintenance page is described in `base/README.md`. To do: building
+   Maintenance work page is described in `base/README.md`. To do: building
    that page in the test base; Assets and plans from the O&M manuals; the maintenance calendar and the
    `group_meetings` change.
 5. **Knowledge and patterns.** Patterns are done, in the digest. Not

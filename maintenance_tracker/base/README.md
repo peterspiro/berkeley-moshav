@@ -387,7 +387,7 @@ base, by whoever looks after the tracker: every Claim deadline under a
 warranty is worked out from its Term (months), Clock starts, and Building
 start date, so a change to one moves them all.
 
-**Maintenance**, for whoever does a maintenance task or books the vendor
+**Maintenance work**, for whoever does a maintenance task or books the vendor
 who does. A record review layout over Maintenance work, grouped by Status
 (Due, Scheduled, Done, Skipped, as the field's options are ordered) and
 sorted by Due, soonest first, so that what's to do next leads and what's

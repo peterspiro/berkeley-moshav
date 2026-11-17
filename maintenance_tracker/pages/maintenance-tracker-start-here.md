@@ -31,7 +31,7 @@ Maintenance tracker's pages:
 - **Triage:** new requests, for the coordinator to sort
 - **Requests:** working on requests
 - **Claims:** warranty claims
-- **Maintenance:** regular maintenance: what's due, and what's been done
+- **Maintenance work:** regular maintenance: what's due, and what's been done
 - **Contacts:** contractors' numbers
 - **Warranties:** each warranty's terms
 - **Patterns:** what's repeating
