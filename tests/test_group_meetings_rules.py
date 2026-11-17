@@ -456,6 +456,18 @@ class TestOtherOwnedCalendars:
                  {"id": ALL_EVENTS, "summary": "All", "accessRole": "owner"}]
         assert self.other(items, [CAL.upper(), ALL_EVENTS]) == []
 
+    def test_skips_a_calendar_marked_not_on_all_events(self):
+        def cal(n, description=None):
+            item = {"id": f"c_{n}@group.calendar.google.com", "summary": n, "accessRole": "owner"}
+            if description is not None:
+                item["description"] = description
+            return item
+
+        items = [cal("maintenance", "Maintenance work, written by the tracker.\n[Not on All-Events]"),
+                 cal("html", "<b>[not on all-events]</b>"),
+                 cal("misc", "Odds and ends"), cal("bare"), cal("events", "Everything on all-events")]
+        assert [c["name"] for c in self.other(items)] == ["misc", "bare", "events"]
+
     def test_skips_calendars_it_does_not_own(self):
         items = [{"id": "c_r@group.calendar.google.com", "summary": "R", "accessRole": "writer"},
                  {"id": "dana@x.org", "summary": "Dana", "accessRole": "owner"}]

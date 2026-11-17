@@ -374,9 +374,9 @@ does that when run by hand).
   not the circle's group calendar: `group_meetings` treats every event on
   a group calendar as a meeting, and would give a filter change a Zoom room
   and a reminder. But `group_meetings` also invites the all-events calendar
-  to events on `admin@`'s *other* calendars, so it needs a small change to
-  leave this one alone (a skip list, or a marker in the calendar's
-  description). Work that affects everyone (a water shutoff, a fire alarm
+  to events on `admin@`'s *other* calendars, so this one's description
+  says `[not on all-events]`, which makes `group_meetings` leave it alone
+  (see `group_meetings/README.md`). Work that affects everyone (a water shutoff, a fire alarm
   test) is announced by hand on the community calendar.
 - **Emails** go from `admin@` with replies to the circle's list, as the
   calendar emails do.
@@ -532,8 +532,8 @@ Move-in is soon, so the order is by what's lost if it's late.
 4. **Maintenance.** Done: the script creates each plan's occurrences, and
    the digest lists what's overdue and what's coming up; the interface's
    Maintenance work page is described in `base/README.md`. To do: building
-   that page in the test base; Assets and plans from the O&M manuals; the maintenance calendar and the
-   `group_meetings` change.
+   that page in the test base; Assets and plans from the O&M manuals; the maintenance calendar (`group_meetings`
+   already leaves alone a calendar marked `[not on all-events]`).
 5. **Knowledge and patterns.** Patterns are done, in the digest. Not
    started: Guides and the handbook folder; emergency cards.
 6. **Before the warranty ends.** Done: the warranty report, of where every

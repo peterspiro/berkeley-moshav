@@ -22,7 +22,8 @@
  * It does the same for the account's other calendars (its primary, the
  * shared community calendar, and any others it owns), except that an event
  * one of them organizes gets only the all-events calendar as a guest, and
- * invitation copies on them are left alone.
+ * invitation copies on them are left alone. A calendar whose description
+ * says "[not on all-events]" is left alone altogether.
  * On the same run, each group's meetings starting soon get their reminder
  * emails (see sendDueReminders): to the group's Google Group, by default
  * 24 hours before; a group can change that, or turn reminders off, in its
@@ -561,8 +562,9 @@ function refreshGroups() {
 
 /**
  * The calendars the account owns besides the group calendars and the
- * all-events calendar (see otherOwnedCalendars in event_rules.gs). A
- * calendar the account no longer has loses its sync token, so it's
+ * all-events calendar, and not marked "[not on all-events]" (see
+ * otherOwnedCalendars in event_rules.gs). A calendar the account no
+ * longer has, or that's been marked, loses its sync token, so it's
  * rechecked in full if it comes back.
  */
 function refreshOtherCalendars(groups) {
