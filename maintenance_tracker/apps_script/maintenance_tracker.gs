@@ -59,6 +59,8 @@ const OVERLAP_MS = 5 * 60 * 1000;
 const MAX_ATTACHMENTS_PER_RUN = 100;
 const BATCH = 10;  // records per Airtable write
 
+// The script's notes about the base it's working on, each kept by base
+// (see baseNote), so that pointing the script at another base starts afresh.
 const PROP_LAST_RUN = 'lastRun';  // ISO time the last processRequests began
 const PROP_LAST_UPDATES_CHECK = 'lastUpdatesCheck';  // ISO time updates were last looked for
 const PROP_LAST_DIGEST = 'lastDigest';  // ISO time the weekly digest last went out
@@ -67,6 +69,9 @@ const PROP_USAGE_WARNED = 'usageWarned';  // the USAGE_LEVELS level the circle w
 const CACHE_PEOPLE = 'people', CACHE_LOCATIONS = 'locations', CACHE_LINKS = 'links';
 const CACHE_SECONDS = 6 * 60 * 60;  // the longest the cache keeps anything
 const PROP_BACKUP_FOLDER = 'backupFolderId';  // set by backupFolder
+// The base whose notes were kept, before notes were kept by base, under
+// their plain names: the one the script was working on when that changed.
+const PROP_FIRST_BASE = 'firstBase';
 const BACKUP_FOLDER_NAME = 'Building Maintenance backup';
 const FOLDER_TYPE = 'application/vnd.google-apps.folder';
 
@@ -136,13 +141,31 @@ function backup(data) {
  * Drive, so it can't use a folder a person made.
  */
 function backupFolder() {
-  const props = PropertiesService.getScriptProperties();
-  let id = props.getProperty(PROP_BACKUP_FOLDER);
+  let id = baseNote(PROP_BACKUP_FOLDER);
   if (!id) {
     id = Drive.Files.create({ name: BACKUP_FOLDER_NAME, mimeType: FOLDER_TYPE }).id;
-    props.setProperty(PROP_BACKUP_FOLDER, id);
+    setBaseNote(PROP_BACKUP_FOLDER, id);
   }
   return id;
+}
+
+/**
+ * One of the script's notes about the base it's working on (when it last
+ * ran, its backup folder, and so on), or null. Each is a Script Property
+ * named for the note and the base ("lastRun:app..."), so that the script,
+ * pointed at another base, doesn't go by what it did to the last one, and
+ * finds its notes again if it's pointed back. A note from before they were
+ * kept by base, under its plain name, is read for the base the script was
+ * working on then (see PROP_FIRST_BASE), until it's next set. (Which base
+ * that was is taken from the first run after the change, so the script
+ * has to run once before it's pointed elsewhere.)
+ */
+function baseNote(name) {
+  const props = PropertiesService.getScriptProperties();
+  const base = setting('AIRTABLE_BASE_ID');
+  const kept = props.getProperty(`${name}:${base}`);
+  if (kept !== null) return kept;
+  return firstBase() === base ? props.getProperty(name) : null;
 }
 
 /**
@@ -152,6 +175,7 @@ function backupFolder() {
  */
 function cachedRecords(table, key) {
   const cache = CacheService.getScriptCache();
+  key = cacheKey(key);
   const hit = cache.get(key);
   if (hit) return JSON.parse(hit);
   const records = listRecords(table);
@@ -163,16 +187,20 @@ function cachedRecords(table, key) {
   return records;
 }
 
+/** A cache key for the base the script is working on: another base's rows are never read from the cache. */
+function cacheKey(key) {
+  return `${key}:${setting('AIRTABLE_BASE_ID')}`;
+}
+
 /**
  * Emails the circle when the base passes 70%, 85%, or 95% of the records
  * or attachment storage its plan allows, once for each level.
  */
 function checkUsage(counts, attachmentBytes) {
-  const props = PropertiesService.getScriptProperties();
   const report = usageReport(counts, attachmentBytes, plan());
-  const warning = usageWarning(report, Number(props.getProperty(PROP_USAGE_WARNED)) || 0, plan());
+  const warning = usageWarning(report, Number(baseNote(PROP_USAGE_WARNED)) || 0, plan());
   if (warning) sendMail(Object.assign({ to: setting('CIRCLE_EMAIL') }, warning));
-  props.setProperty(PROP_USAGE_WARNED, String(report.level));
+  setBaseNote(PROP_USAGE_WARNED, String(report.level));
   console.log(`${report.records} of ${report.recordLimit} records; ` +
               `${Math.round(report.bytes / 1048576)} MB of attachments.`);
 }
@@ -240,6 +268,21 @@ function driveFolder(parentId, name) {
 }
 
 /**
+ * The base whose notes are the ones under plain names, from before notes
+ * were kept by base (see baseNote): the base the script is working on the
+ * first time this is asked, remembered from then on.
+ */
+function firstBase() {
+  const props = PropertiesService.getScriptProperties();
+  let first = props.getProperty(PROP_FIRST_BASE);
+  if (!first) {
+    first = setting('AIRTABLE_BASE_ID');
+    props.setProperty(PROP_FIRST_BASE, first);
+  }
+  return first;
+}
+
+/**
  * Once a day, or once a week on the Free plan: the form links, the
  * maintenance plans' next occurrences, the backup, and, on a Sunday, the
  * digest and, when a warranty deadline is near, the warranty report. Every table is read once, for all of them.
@@ -247,11 +290,10 @@ function driveFolder(parentId, name) {
  */
 function housekeeping() {
   withLock(() => {
-    const props = PropertiesService.getScriptProperties();
     const data = tableData();
     const steps = [writeFormLinks, createMaintenanceWork, backup];
-    if (digestDue(new Date(), props.getProperty(PROP_LAST_DIGEST), TIME_ZONE)) steps.push(sendDigest);
-    if (warrantyReportDue(data, new Date(), props.getProperty(PROP_LAST_WARRANTY_REPORT), TIME_ZONE)) {
+    if (digestDue(new Date(), baseNote(PROP_LAST_DIGEST), TIME_ZONE)) steps.push(sendDigest);
+    if (warrantyReportDue(data, new Date(), baseNote(PROP_LAST_WARRANTY_REPORT), TIME_ZONE)) {
       steps.push(sendWarrantyReport);
     }
     let failure = null;
@@ -345,13 +387,12 @@ function processNewRequest(request, people, ctx) {
  */
 function processRequests(event) {
   withLock(() => {
-    const props = PropertiesService.getScriptProperties();
     const began = new Date();
-    const last = props.getProperty(PROP_LAST_RUN);
+    const last = baseNote(PROP_LAST_RUN);
     const since = new Date(last ? new Date(last).getTime() - OVERLAP_MS : 0).toISOString();
     const requests = listRecords('Requests',
       `OR({Acknowledged on} = BLANK(), IS_AFTER(LAST_MODIFIED_TIME(), DATETIME_PARSE("${since}")))`);
-    const lookForUpdates = !event || updatesDue(plan(), props.getProperty(PROP_LAST_UPDATES_CHECK), began);
+    const lookForUpdates = !event || updatesDue(plan(), baseNote(PROP_LAST_UPDATES_CHECK), began);
     // Updates to pass on, and updates that don't say who wrote them.
     const listed = !lookForUpdates ? [] : listRecords('Updates',
       'OR(AND({Tell the reporter}, {Told reporter on} = BLANK()), AND(NOT({By}), NOT({By name})))');
@@ -380,8 +421,8 @@ function processRequests(event) {
                 `${responsibilities.length} responsibility(ies) filled in, ` +
                 (lookForUpdates ? `${updates.length} update(s) passed on.`
                                 : 'updates to pass on not looked for this time.'));
-    props.setProperty(PROP_LAST_RUN, began.toISOString());
-    if (lookForUpdates) props.setProperty(PROP_LAST_UPDATES_CHECK, began.toISOString());
+    setBaseNote(PROP_LAST_RUN, began.toISOString());
+    if (lookForUpdates) setBaseNote(PROP_LAST_UPDATES_CHECK, began.toISOString());
   });
 }
 
@@ -438,7 +479,7 @@ function sendDigest(data) {
   const email = digest(all, new Date(), { timeZone: TIME_ZONE, triageUrl: link('triage-view', all), plan: plan() });
   if (email) sendMail(Object.assign({ to: setting('CIRCLE_EMAIL') }, email));
   else console.log('Nothing open, new, or due: no digest.');
-  PropertiesService.getScriptProperties().setProperty(PROP_LAST_DIGEST, new Date().toISOString());
+  setBaseNote(PROP_LAST_DIGEST, new Date().toISOString());
 }
 
 /**
@@ -473,7 +514,20 @@ function sendWarrantyReport(data) {
     ['Requests', 'Claims', 'Warranties', 'Organizations', 'Locations'].forEach(table => { all[table] = listRecords(table); });
   }
   sendMail(Object.assign({ to: setting('CIRCLE_EMAIL') }, warrantyReport(all, new Date(), { timeZone: TIME_ZONE })));
-  PropertiesService.getScriptProperties().setProperty(PROP_LAST_WARRANTY_REPORT, new Date().toISOString());
+  setBaseNote(PROP_LAST_WARRANTY_REPORT, new Date().toISOString());
+}
+
+/**
+ * Sets one of the script's notes about the base it's working on (see
+ * baseNote), and drops the note's copy from before notes were kept by
+ * base, if it was this base's.
+ */
+function setBaseNote(name, value) {
+  const props = PropertiesService.getScriptProperties();
+  const base = setting('AIRTABLE_BASE_ID');
+  const first = firstBase();
+  props.setProperty(`${name}:${base}`, value);
+  if (first === base) props.deleteProperty(name);
 }
 
 /** A Script Property's value. Throws if it isn't set, unless `optional` (then ''). */
@@ -542,6 +596,6 @@ function writeFormLinks(data) {
       if (change.fields[k] === null) delete fields[k]; else fields[k] = change.fields[k];
     });
   });
-  if (changes.length) CacheService.getScriptCache().remove(CACHE_PEOPLE);
+  if (changes.length) CacheService.getScriptCache().remove(cacheKey(CACHE_PEOPLE));
   console.log(`Form links written for ${changes.length} person(s).`);
 }

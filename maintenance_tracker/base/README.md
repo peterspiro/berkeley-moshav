@@ -102,7 +102,8 @@ the same formula into the field in each base.
    steps 4 and 5, except the forms, which the API can't see. Interfaces
    aren't checked either.
 8. Point the `maintenance_tracker` script at the base (see
-   `../apps_script/README.md`).
+   `../apps_script/README.md`, "Deploying"). It starts afresh on a base
+   it hasn't worked on, so nothing of the test base's carries over.
 9. Fill in each link's Value in the Links table ("The Links table"),
    put the links into the members' page (in its "Numbers and links"
    section), and run `python update_start_here_doc.py` (see above).
