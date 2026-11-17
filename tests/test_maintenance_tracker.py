@@ -696,6 +696,79 @@ def test_housekeeping_reads_each_table_once():
     assert "prefill_Reporter=Sam+L" in day["People.json"]
 
 
+# --- the warranty report -----------------------------------------------------
+
+def warranty_data():
+    def under(number, warranty, in_days=None, status="Triaged", **fields):
+        if in_days is not None:
+            fields["Claim deadline"] = days_ago(-in_days)[:10] + "T00:00:00.000Z"
+        return old(number, status, Title=f"T{number}", Warranty=[warranty] if warranty else None, **fields)
+
+    data = tables([
+        under(1, "one", 40), under(2, "one", -3), under(3, "one", 40, Claims=["claim2"]),  # only drafted
+        under(4, "one", 40, Claims=["claim1"]),                    # claimed
+        under(5, "one", 40, status="Closed"), under(6, "one", 40, status="Closed", Claims=["claim1"]),
+        under(7, "one", 40, status="Declined"), under(8, "one", 10, Claims=["claim3"]),    # withdrawn
+        under(9, "two", 400),
+        under(10, "roof"),                                         # its warranty has no term yet
+        under(11, None), under(12, None, Responsibility="Unknown"),
+        under(13, None, Responsibility="HOA"), under(14, None, Type="Suggestion"),
+        under(15, None, status="Closed")])
+    data["Claims"] = [claim(1, "Acknowledged"), claim(2, "Drafting"), claim(3, "Withdrawn")]
+    data["Organizations"] = [{"id": "orgB", "fields": {"Company": "Eastbay Builders"}}]
+    data["Warranties"] = [
+        {"id": "two", "fields": {"Name": "Two-year systems", "Warrantor": ["orgB"]}},
+        {"id": "roof", "fields": {"Name": "Roof membrane"}},
+        {"id": "one", "fields": {"Name": "One-year workmanship", "Warrantor": ["orgB"]}},
+        {"id": "spare", "fields": {"Name": "Appliances"}}]
+    return data
+
+
+def test_warranty_report():
+    mail = rule("warrantyReport(d, new Date(n), { timeZone: 'America/Los_Angeles' })", d=warranty_data(), n=NOW)
+    assert mail["subject"] == "Warranty report: 6 open with no claim made, 1 past the deadline, 2 with no warranty chosen"
+    assert mail["body"].split("\n") == [
+        "One-year workmanship (Eastbay Builders)",
+        "Open, and no claim made (4)",
+        "  R-2 Unit 411: T2 - claim by Nov 12, 2026 (PASSED 3 days ago)",
+        "  R-8 Unit 411: T8 - claim by Nov 25, 2026 (10 days left)",
+        "  R-1 Unit 411: T1 - claim by Dec 25, 2026 (40 days left)",
+        "  R-3 Unit 411: T3 - claim by Dec 25, 2026 (40 days left); C-2 is being drafted",
+        "Open, with a claim made (1)",
+        "  R-4 Unit 411: T4 - C-1 Acknowledged",
+        "Closed with no claim made (1): R-5",
+        "",
+        "Two-year systems (Eastbay Builders)",
+        "Open, and no claim made (1)",
+        "  R-9 Unit 411: T9 - claim by Dec 20, 2027 (400 days left)",
+        "",
+        "Roof membrane",
+        "Open, and no claim made (1)",
+        "  R-10 Unit 411: T10 - NO DEADLINE: the warranty has no term or no start date",
+        "",
+        "Open repairs and defects with no warranty chosen (2)",
+        "  R-11 Unit 411: T11 - Triaged, Responsibility not set",
+        "  R-12 Unit 411: T12 - Triaged, Responsibility Unknown",
+        "",
+        "Nothing to report under: Appliances.",
+        "",
+        "A claim that is being drafted, or was denied or withdrawn, does not count as made.",
+    ]
+
+
+def test_warranty_report_with_nothing_in_it():
+    mail = rule("warrantyReport(d, new Date(n), { timeZone: 'America/Los_Angeles' })", d=tables(), n=NOW)
+    assert mail["subject"] == "Warranty report: 0 open with no claim made"
+    assert mail["body"].startswith("No request is under a warranty, and no open repair is without one.\n")
+
+
+def test_send_warranty_report_emails_the_circle_and_reads_five_tables():
+    out = run(warranty_data(), "sendWarrantyReport")
+    [mail] = out["mails"]
+    assert mail["to"] == CIRCLE and mail["subject"].startswith("Warranty report: 6 open")
+    assert sorted(out["calls"]) == ["get Claims", "get Locations", "get Organizations", "get Requests", "get Warranties"]
+
+
 # --- maintenance work --------------------------------------------------------
 
 def plan(key, **fields):

@@ -748,3 +748,97 @@ function visitSchedules(request, previousKey, now) {
   return !!f['Visit'] && f['Visit'] !== noted && new Date(f['Visit']) > now &&
     SCHEDULABLE.indexOf(f['Status'] || 'New') >= 0;
 }
+
+/**
+ * The warranty report for the circle, as { subject, body }: where every
+ * request under each warranty stands, for going through before a warranty
+ * ends. Sent when someone runs sendWarrantyReport. `data` needs Requests,
+ * Claims, Warranties, Organizations, and Locations; `ctx` needs timeZone.
+ *
+ * Requests that are Duplicate or Declined are left out. For each warranty,
+ * soonest deadline first:
+ *  - Open, and no claim made: each with its own Claim deadline (a unit's
+ *    can differ from the building's), soonest first, and the claim being
+ *    drafted for it, if one is. A claim that's Drafting, Denied, or
+ *    Withdrawn isn't a claim made (see CLAIM_MADE).
+ *  - Open, with a claim made: each with its claims and their statuses.
+ *  - Closed with no claim made, as a list of numbers: fixed without the
+ *    warrantor having been given notice.
+ * Then open repairs and defects with no warranty chosen, unless their
+ * Responsibility is the HOA's or the unit owner's: these have no deadline
+ * shown anywhere, so one that's really a warranty item can be missed.
+ */
+function warrantyReport(data, now, ctx) {
+  const places = {}, companies = {}, claims = {};
+  (data['Locations'] || []).forEach(l => { places[l.id] = l.fields['Name']; });
+  (data['Organizations'] || []).forEach(o => { companies[o.id] = o.fields['Company']; });
+  (data['Claims'] || []).forEach(c => { claims[c.id] = c.fields; });
+  const status = r => r.fields['Status'] || 'New';
+  const isOpen = r => OPEN_STATUSES.indexOf(status(r)) >= 0;
+  const claimsOf = r => (r.fields['Claims'] || []).map(id => claims[id]).filter(Boolean);
+  const claimed = r => claimsOf(r).some(c => CLAIM_MADE.indexOf(c['Status']) >= 0);
+  const claimText = c => `C-${c['Number']} ${c['Status'] || 'Drafting'}`;
+  const deadline = r => (r.fields['Claim deadline'] ? daysFromToday(r.fields['Claim deadline'], now, ctx.timeZone) : Infinity);
+  const days = n => (n === 1 ? '1 day' : `${n} days`);
+  const deadlineText = r => {
+    const left = deadline(r);
+    if (left === Infinity) return 'NO DEADLINE: the warranty has no term or no start date';
+    return `claim by ${dateText(r.fields['Claim deadline'])} ` +
+      (left < 0 ? `(PASSED ${days(-left)} ago)` : left === 0 ? '(TODAY)' : `(${days(left)} left)`);
+  };
+  const line = (r, note) => {
+    const place = (r.fields['Location'] || []).map(id => places[id]).filter(Boolean).join(', ');
+    const what = r.fields['Title'] || String(r.fields['Description'] || '').trim().replace(/\s+/g, ' ').slice(0, 60);
+    return `  ${requestNumber(r)}${place ? ' ' + place : ''}${what ? ': ' + what : ''} - ${note}`;
+  };
+  const byDeadline = (a, b) => deadline(a) - deadline(b) || a.fields['Number'] - b.fields['Number'];
+
+  const requests = (data['Requests'] || []).filter(r => ['Duplicate', 'Declined'].indexOf(status(r)) < 0);
+  const under = {};
+  requests.forEach(r => (r.fields['Warranty'] || []).forEach(id => { (under[id] = under[id] || []).push(r); }));
+  let unclaimedCount = 0, passedCount = 0;
+  const blocks = [], quiet = [];
+  (data['Warranties'] || []).forEach(w => {
+    const mine = under[w.id] || [];
+    const unclaimed = mine.filter(r => isOpen(r) && !claimed(r)).sort(byDeadline);
+    const inHand = mine.filter(r => isOpen(r) && claimed(r)).sort(byDeadline);
+    const closed = mine.filter(r => !isOpen(r) && !claimed(r)).sort((a, b) => a.fields['Number'] - b.fields['Number']);
+    const name = w.fields['Name'] || 'A warranty with no name';
+    if (!unclaimed.length && !inHand.length && !closed.length) { quiet.push(name); return; }
+    unclaimedCount += unclaimed.length;
+    passedCount += unclaimed.filter(r => deadline(r) < 0).length;
+    const warrantors = (w.fields['Warrantor'] || []).map(id => companies[id]).filter(Boolean).join(', ');
+    const lines = [`${name}${warrantors ? ' (' + warrantors + ')' : ''}`];
+    if (unclaimed.length) {
+      lines.push(`Open, and no claim made (${unclaimed.length})`);
+      unclaimed.forEach(r => {
+        const drafts = claimsOf(r).filter(c => (c['Status'] || 'Drafting') === 'Drafting').map(c => `C-${c['Number']}`);
+        lines.push(line(r, deadlineText(r) + (drafts.length ? `; ${drafts.join(', ')} is being drafted` : '')));
+      });
+    }
+    if (inHand.length) {
+      lines.push(`Open, with a claim made (${inHand.length})`);
+      inHand.forEach(r => lines.push(line(r, claimsOf(r).map(claimText).join(', '))));
+    }
+    if (closed.length) lines.push(`Closed with no claim made (${closed.length}): ${closed.map(requestNumber).join(', ')}`);
+    blocks.push([Math.min.apply(null, unclaimed.concat(inHand).map(deadline).concat([Infinity])), lines]);
+  });
+  const unsorted = requests.filter(r => isOpen(r) && !(r.fields['Warranty'] || []).length &&
+      (r.fields['Type'] || 'Repair or defect') === 'Repair or defect' &&
+      ['HOA', 'Unit owner'].indexOf(r.fields['Responsibility']) < 0)
+    .sort((a, b) => a.fields['Number'] - b.fields['Number']);
+
+  const body = [];
+  blocks.sort((a, b) => a[0] - b[0]).forEach(block => { block[1].forEach(l => body.push(l)); body.push(''); });
+  if (unsorted.length) {
+    body.push(`Open repairs and defects with no warranty chosen (${unsorted.length})`);
+    unsorted.forEach(r => body.push(line(r, `${status(r)}, Responsibility ${r.fields['Responsibility'] || 'not set'}`)));
+    body.push('');
+  }
+  if (quiet.length) body.push(`Nothing to report under: ${quiet.join('; ')}.`, '');
+  if (!blocks.length && !unsorted.length) body.unshift('No request is under a warranty, and no open repair is without one.', '');
+  body.push('A claim that is being drafted, or was denied or withdrawn, does not count as made.');
+  const head = [`${unclaimedCount} open with no claim made`, passedCount ? `${passedCount} past the deadline` : '',
+                unsorted.length ? `${unsorted.length} with no warranty chosen` : ''].filter(Boolean).join(', ');
+  return { subject: `Warranty report: ${head}`, body: body.join('\n') };
+}

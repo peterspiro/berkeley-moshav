@@ -31,6 +31,9 @@
  *    what its plan allows.
  *  - On Sundays, the circle is emailed the weekly digest (sendDigest).
  *
+ * By hand, before a warranty ends (sendWarrantyReport): the circle is
+ * emailed where every request under each warranty stands.
+ *
  * The rules, and the emails' wording, are in tracker_rules.gs. Each record
  * carries its own marker of what's been done to it ("Acknowledged on",
  * "Status noted", "Told reporter on"), written after the work is done, so a
@@ -447,6 +450,21 @@ function sendMail(email) {
     name: SENDER_NAME,
     replyTo: setting('CIRCLE_EMAIL'),
   });
+}
+
+/**
+ * Run by hand, when a warranty's end is coming: emails the circle where
+ * every request under each warranty stands (see warrantyReport in
+ * tracker_rules.gs), so that nothing is left unclaimed when it ends.
+ * Reads the five tables it needs. `data` is every table's records, if a
+ * caller has read them.
+ */
+function sendWarrantyReport(data) {
+  const all = data && Array.isArray(data['Requests']) ? data : {};
+  if (all !== data) {
+    ['Requests', 'Claims', 'Warranties', 'Organizations', 'Locations'].forEach(table => { all[table] = listRecords(table); });
+  }
+  sendMail(Object.assign({ to: setting('CIRCLE_EMAIL') }, warrantyReport(all, new Date(), { timeZone: TIME_ZONE })));
 }
 
 /** A Script Property's value. Throws if it isn't set, unless `optional` (then ''). */

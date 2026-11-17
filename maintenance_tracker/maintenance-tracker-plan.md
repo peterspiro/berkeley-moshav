@@ -536,8 +536,9 @@ Move-in is soon, so the order is by what's lost if it's late.
    `group_meetings` change.
 5. **Knowledge and patterns.** Patterns are done, in the digest. Not
    started: Guides and the handbook folder; emergency cards.
-6. **Before the warranty ends.** Not started. The month-10 inspection as a plan; a
-   report of every open and unclaimed item per warranty; an export of the
+6. **Before the warranty ends.** Done: the warranty report, of where every
+   request under each warranty stands, run by hand (`sendWarrantyReport`).
+   Not started: the month-10 inspection as a plan; an export of the
    evidence file for the attorney.
 
 ## Decided

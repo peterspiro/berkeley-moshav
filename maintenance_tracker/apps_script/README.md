@@ -111,6 +111,27 @@ Airtable base ("Building Maintenance") without anyone doing it. It runs as
   Run `sendDigest` by hand to send it now. The thresholds are constants at
   the top of `tracker_rules.gs`.
 
+- **By hand, before a warranty ends** (`sendWarrantyReport`): the
+  **warranty report** is emailed to the circle's list, so that nothing is
+  left unclaimed when a warranty runs out. Run it in the Apps Script
+  editor; nothing runs it on a timer. It reads five tables, so it costs
+  five calls to Airtable. Requests that are Duplicate or Declined are left
+  out. For each warranty, the one with the soonest deadline first:
+  - **Open, and no claim made**: each request with its own Claim deadline
+    (a unit's can differ from the building's) and how long is left,
+    soonest first, and the claim being drafted for it, if there is one. A
+    request whose warranty has no term or start date is marked as having
+    no deadline.
+  - **Open, with a claim made**: each request with its claims and their
+    statuses.
+  - **Closed with no claim made**, as a list of numbers: fixed without
+    the warrantor having been given notice.
+
+  Then **open repairs and defects with no warranty chosen**, unless their
+  Responsibility is HOA or Unit owner: these have no deadline anywhere,
+  so one that's really a warranty item could be missed. As in the digest,
+  a claim that's Drafting, Denied, or Withdrawn doesn't count as made.
+
 Emails go from `admin@`, named "Berkeley Moshav Maintenance", with replies
 going to the circle's list. A member is emailed at the address Gather has
 for them; someone who typed their details, at the address they typed.

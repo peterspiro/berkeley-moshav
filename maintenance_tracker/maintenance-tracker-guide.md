@@ -243,6 +243,13 @@ fix it.
 A claim that's still being drafted doesn't count as made. Only sending it
 does.
 
+**Before a warranty ends**, ask whoever looks after the tracker (see "Who
+to ask") for the **warranty report**. It's an email to the circle's list
+of every request under each warranty that no claim has been made for, and
+of the open repairs that nobody has chosen a warranty for. Go through it
+together, a couple of months ahead: each one needs a claim, or a decision
+that it doesn't.
+
 ## The weekly digest
 
 Every Sunday the circle's list gets an email listing what needs someone.
