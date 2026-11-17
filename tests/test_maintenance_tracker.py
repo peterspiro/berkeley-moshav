@@ -769,6 +769,48 @@ def test_send_warranty_report_emails_the_circle_and_reads_five_tables():
     assert sorted(out["calls"]) == ["get Claims", "get Locations", "get Organizations", "get Requests", "get Warranties"]
 
 
+def report_due(requests, claims=(), now=NOW, last=None):
+    data = {"Requests": requests, "Claims": list(claims)}
+    return rule("warrantyReportDue(d, new Date(n), l, 'America/Los_Angeles')", d=data, n=now, l=last)
+
+
+def test_warranty_report_goes_out_by_itself_while_a_deadline_is_coming():
+    def due(in_days, status="Triaged", **fields):
+        return old(1, status, **{"Claim deadline": days_ago(-in_days)[:10] + "T00:00:00.000Z"}, **fields)
+
+    assert report_due([due(120)]) and report_due([due(0)]) and report_due([due(30, "Closed")])
+    assert not report_due([due(121)]) and not report_due([due(-1)])    # too far off; passed
+    assert not report_due([old(1, "Triaged")])                           # no warranty, so no deadline
+    assert not report_due([due(30, "Declined")]) and not report_due([due(30, "Duplicate")])
+    assert not report_due([due(30, Claims=["claim1"])], [claim(1, "Submitted")])
+    assert report_due([due(30, Claims=["claim1"])], [claim(1, "Drafting")])
+    assert not report_due([due(30)], now="2026-11-16T20:00:00.000Z")     # a Monday
+    # Every four weeks, counted in days, whatever the time of day it last went.
+    assert not report_due([due(30)], last=days_ago(21))
+    assert report_due([due(30)], last="2026-10-18T23:00:00.000Z")        # 28 days before, later in the day
+    assert not report_due([due(30)], last=NOW)
+
+
+SUNDAY = "(Date = class extends Date { constructor(...a) { super(...(a.length ? a : [n])); } " \
+         "static now() { return new Date(n).getTime(); } }, 1)"
+
+
+def test_housekeeping_sends_the_warranty_report_when_its_due():
+    state = warranty_data()
+    out = run(state, "housekeeping", expr=SUNDAY, values={"n": NOW})
+    assert [m["subject"].split(":")[0] for m in out["mails"]] == ["Maintenance digest", "Warranty report"]
+    assert out["props"]["lastWarrantyReport"].startswith("2026-11-15")
+    assert sorted(c for c in out["calls"] if c.startswith("get ")) == sorted(f"get {t}" for t in state)
+    # A week later it has gone out too recently; four weeks later it goes again.
+    for n, sent in [("2026-11-22T20:00:00.000Z", False), ("2026-12-13T20:00:00.000Z", True)]:
+        later = run(warranty_data(), "housekeeping", expr=SUNDAY, values={"n": n},
+                    props={**PROPS, "lastWarrantyReport": out["props"]["lastWarrantyReport"]})
+        assert any(m["subject"].startswith("Warranty report") for m in later["mails"]) is sent
+    # With no deadline coming, only the digest.
+    quiet = run(tables([old(1, "Triaged")]), "housekeeping", expr=SUNDAY, values={"n": NOW})
+    assert [m["subject"].split(":")[0] for m in quiet["mails"]] == ["Maintenance digest"]
+
+
 # --- maintenance work --------------------------------------------------------
 
 def plan(key, **fields):

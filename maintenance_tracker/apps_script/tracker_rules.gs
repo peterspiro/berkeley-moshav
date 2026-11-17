@@ -43,6 +43,10 @@ const CLAIM_MADE = ['Submitted', 'Acknowledged', 'Scheduled', 'Work done', 'Acce
 const CLAIM_PENDING = ['Submitted', 'Acknowledged', 'Scheduled'];
 // The circle is warned as the base passes each of these shares of a limit.
 const USAGE_LEVELS = [70, 85, 95];
+// The warranty report goes out by itself while a request with no claim made
+// has a deadline within WARRANTY_REPORT_DAYS, every WARRANTY_REPORT_EVERY_DAYS.
+const WARRANTY_REPORT_DAYS = 120;
+const WARRANTY_REPORT_EVERY_DAYS = 28;
 const MAINTENANCE_AHEAD_DAYS = 30; // maintenance work due within this long is listed as coming up
 // A Maintenance work row in one of these statuses is finished with, and its
 // plan's next occurrence can be made (see maintenanceWorkDue).
@@ -752,7 +756,8 @@ function visitSchedules(request, previousKey, now) {
 /**
  * The warranty report for the circle, as { subject, body }: where every
  * request under each warranty stands, for going through before a warranty
- * ends. Sent when someone runs sendWarrantyReport. `data` needs Requests,
+ * ends. Sent when someone runs sendWarrantyReport, and by itself when
+ * warrantyReportDue. `data` needs Requests,
  * Claims, Warranties, Organizations, and Locations; `ctx` needs timeZone.
  *
  * Requests that are Duplicate or Declined are left out. For each warranty,
@@ -841,4 +846,31 @@ function warrantyReport(data, now, ctx) {
   const head = [`${unclaimedCount} open with no claim made`, passedCount ? `${passedCount} past the deadline` : '',
                 unsorted.length ? `${unsorted.length} with no warranty chosen` : ''].filter(Boolean).join(', ');
   return { subject: `Warranty report: ${head}`, body: body.join('\n') };
+}
+
+/**
+ * Whether the warranty report should go out by itself: it's Sunday in the
+ * time zone; it hasn't gone out, by itself or by hand, in the last
+ * WARRANTY_REPORT_EVERY_DAYS; and some request under a warranty, open or
+ * closed (but not Duplicate or Declined), has had no claim made and has a
+ * Claim deadline that's today or within WARRANTY_REPORT_DAYS. So it goes
+ * out every four weeks through a warranty's last months, and stops once
+ * everything under it is claimed or its deadlines have passed (the weekly
+ * digest goes on listing what's open and past its deadline). A warranty
+ * has no one end: each request's deadline is its own. `data` needs
+ * Requests and Claims.
+ */
+function warrantyReportDue(data, now, lastSentIso, timeZone) {
+  const local = d => new Intl.DateTimeFormat('en-CA', { timeZone: timeZone }).format(d);
+  if (new Intl.DateTimeFormat('en-US', { timeZone: timeZone, weekday: 'long' }).format(now) !== 'Sunday') return false;
+  if (lastSentIso && -daysFromToday(local(new Date(lastSentIso)), now, timeZone) < WARRANTY_REPORT_EVERY_DAYS) return false;
+  const made = {};
+  (data['Claims'] || []).forEach(c => { made[c.id] = CLAIM_MADE.indexOf(c.fields['Status']) >= 0; });
+  return (data['Requests'] || []).some(r => {
+    const f = r.fields;
+    if (['Duplicate', 'Declined'].indexOf(f['Status']) >= 0 || !f['Claim deadline']) return false;
+    if ((f['Claims'] || []).some(id => made[id])) return false;
+    const left = daysFromToday(f['Claim deadline'], now, timeZone);
+    return left >= 0 && left <= WARRANTY_REPORT_DAYS;
+  });
 }

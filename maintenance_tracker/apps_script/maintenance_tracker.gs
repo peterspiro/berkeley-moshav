@@ -30,9 +30,11 @@
  *    to Drive (backup), and the circle is warned if the base is nearing
  *    what its plan allows.
  *  - On Sundays, the circle is emailed the weekly digest (sendDigest).
+ *  - On a Sunday, every four weeks while a request with no claim made
+ *    has a warranty deadline within 120 days, the circle is emailed where
+ *    every request under each warranty stands (sendWarrantyReport, which
+ *    can also be run by hand).
  *
- * By hand, before a warranty ends (sendWarrantyReport): the circle is
- * emailed where every request under each warranty stands.
  *
  * The rules, and the emails' wording, are in tracker_rules.gs. Each record
  * carries its own marker of what's been done to it ("Acknowledged on",
@@ -60,6 +62,7 @@ const BATCH = 10;  // records per Airtable write
 const PROP_LAST_RUN = 'lastRun';  // ISO time the last processRequests began
 const PROP_LAST_UPDATES_CHECK = 'lastUpdatesCheck';  // ISO time updates were last looked for
 const PROP_LAST_DIGEST = 'lastDigest';  // ISO time the weekly digest last went out
+const PROP_LAST_WARRANTY_REPORT = 'lastWarrantyReport';  // ISO time the warranty report last went out
 const PROP_USAGE_WARNED = 'usageWarned';  // the USAGE_LEVELS level the circle was last warned of
 const CACHE_PEOPLE = 'people', CACHE_LOCATIONS = 'locations', CACHE_LINKS = 'links';
 const CACHE_SECONDS = 6 * 60 * 60;  // the longest the cache keeps anything
@@ -239,7 +242,7 @@ function driveFolder(parentId, name) {
 /**
  * Once a day, or once a week on the Free plan: the form links, the
  * maintenance plans' next occurrences, the backup, and, on a Sunday, the
- * digest. Every table is read once, for all of them.
+ * digest and, when a warranty deadline is near, the warranty report. Every table is read once, for all of them.
  * Each step runs even if another fails.
  */
 function housekeeping() {
@@ -248,6 +251,9 @@ function housekeeping() {
     const data = tableData();
     const steps = [writeFormLinks, createMaintenanceWork, backup];
     if (digestDue(new Date(), props.getProperty(PROP_LAST_DIGEST), TIME_ZONE)) steps.push(sendDigest);
+    if (warrantyReportDue(data, new Date(), props.getProperty(PROP_LAST_WARRANTY_REPORT), TIME_ZONE)) {
+      steps.push(sendWarrantyReport);
+    }
     let failure = null;
     steps.forEach(step => {
       try {
@@ -453,10 +459,12 @@ function sendMail(email) {
 }
 
 /**
- * Run by hand, when a warranty's end is coming: emails the circle where
- * every request under each warranty stands (see warrantyReport in
- * tracker_rules.gs), so that nothing is left unclaimed when it ends.
- * Reads the five tables it needs. `data` is every table's records, if a
+ * Emails the circle where every request under each warranty stands (see
+ * warrantyReport in tracker_rules.gs), so that nothing is left unclaimed
+ * when a warranty ends. The housekeeping runs it on a Sunday, every four
+ * weeks, while a request with no claim made has a deadline coming (see
+ * warrantyReportDue); run by hand, it goes now, and the next by itself
+ * is four weeks on. By hand it reads the five tables it needs. `data` is every table's records, if a
  * caller has read them.
  */
 function sendWarrantyReport(data) {
@@ -465,6 +473,7 @@ function sendWarrantyReport(data) {
     ['Requests', 'Claims', 'Warranties', 'Organizations', 'Locations'].forEach(table => { all[table] = listRecords(table); });
   }
   sendMail(Object.assign({ to: setting('CIRCLE_EMAIL') }, warrantyReport(all, new Date(), { timeZone: TIME_ZONE })));
+  PropertiesService.getScriptProperties().setProperty(PROP_LAST_WARRANTY_REPORT, new Date().toISOString());
 }
 
 /** A Script Property's value. Throws if it isn't set, unless `optional` (then ''). */
