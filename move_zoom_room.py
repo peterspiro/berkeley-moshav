@@ -247,11 +247,13 @@ def move_room(zoom, settings_service, group: dict, room: dict, target: str,
     else:
         print("Its link and passcode are unchanged.")
 
-    where = (f" (it's in the Community Events Zoom Host Key doc, {COMMUNITY_HOST_KEY_DOC_URL})"
-             if target == COMMUNITY_ROOMS_USER else "")
+    # The link goes alone on its own line, so terminals that open it don't
+    # take in any punctuation around it.
+    where = (f", which is in the Community Events Zoom Host Key doc:\n{COMMUNITY_HOST_KEY_DOC_URL}"
+             if target == COMMUNITY_ROOMS_USER else ".")
     print(f"\nWARNING: facilitators claim host with the host key of the Zoom user the room "
           f"is under, now {target}'s, not {current}'s. Give {group['name']}'s facilitators "
-          f"{target}'s host key{where}.")
+          f"{target}'s host key{where}")
     print("\nWithin the hour, group_meetings names the room's new Zoom user in the group's "
           "calendar events, and checks for clashes again.")
 

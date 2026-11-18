@@ -659,10 +659,11 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
   is handled like a group's, except that its events invite the audience,
   not the admin group, and get no FAQ line; their reminders go to the
   audience, with replies to the admin group; and its clash emails go to
-  the admin groups, naming the calendars, without the option of moving a
-  room to another Zoom user (all community rooms are under
+  the admin groups, naming the calendars. A community calendar's room isn't
+  moved to another Zoom user (all community rooms are under
   `community-zoom-hosts@`, Zoom user 3, so they clash only with each other
-  and with the few groups' rooms moved there).
+  and with the few groups' rooms moved there), but when one clashes with a
+  group's meeting, moving the group's room is offered.
   An event that's only a copy of someone's invitation gets its organizer an
   email asking them to create it on the group calendar instead. Each group
   gets a reminder email before each of its meetings: 24 hours before, unless
@@ -675,7 +676,8 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
   Technology Circle), listing their options: moving one meeting to another
   time (with a link to the all-events calendar for finding a free time),
   holding one on a personal or work Zoom account, and, where a group's room
-  could help, having it moved to the second Zoom user. On every other
+  could help, having it moved to another of our Zoom users
+  (`move_zoom_room.py`). On every other
   calendar `admin@` owns (its primary, which is the shared community calendar,
   and any others; re-read hourly), each event the calendar organizes gets the
   all-events calendar as a guest, with no email; invitation copies there are

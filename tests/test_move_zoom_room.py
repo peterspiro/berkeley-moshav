@@ -170,7 +170,10 @@ class TestRun:
         zoom = _MovingZoom({"7": room(7, "Tea Club Meeting Room")})
         mz.run(zoom, _Settings(), _group(), dict(zoom.meetings["7"]), _meetings(), 3, False,
                _answers())
-        assert "Community Events Zoom Host Key doc" in capsys.readouterr().out
+        out = capsys.readouterr().out
+        assert "host key, which is in the Community Events Zoom Host Key doc:\n" in out
+        # The link is alone on its line, so nothing next to it is taken as part of it.
+        assert f"\n{mz.COMMUNITY_HOST_KEY_DOC_URL}\n" in out
 
     def test_changed_link_written_to_footer(self):
         zoom = _MovingZoom({"7": room(7, "Tea Club Meeting Room")},

@@ -77,7 +77,8 @@ Apps Script that looks after every group's Google calendar (the calendars
   time (with a link to the all-events calendar for finding a free time),
   holding one on a personal or work Zoom account instead, and, unless both
   meetings are one group's or neither is a group's, asking the Technology
-  Circle to move a group's Zoom room to the second Zoom user. The email has an HTML version, so it isn't broken into
+  Circle to move a group's Zoom room to another of our Zoom users (with
+  `move_zoom_room.py`). The email has an HTML version, so it isn't broken into
   short lines. `calendaring-alerts@`
   (the Technology Circle) is copied, or, when one of the meetings was
   scheduled directly in Zoom, asked to agree too (or, when the other is the
@@ -95,8 +96,9 @@ is handled like a group's, except that:
 - their reminders go to the audience ("Hi everyone"), with replies going to
   the admin group;
 - in clash emails, its meetings are named by their calendar, the admin
-  group is greeted ("Community Meetings admins"), and there's no option to
-  move a room to the second Zoom user. Its room is under
+  group is greeted ("Community Meetings admins"), and its room isn't
+  offered for moving to another Zoom user (a group's room that clashes with
+  it is). Its room is under
   `community-zoom-hosts@` (Zoom user 3), so it clashes
   only with meetings in that user's other rooms (other community calendars'
   and the few groups' moved there), or ones scheduled directly in Zoom
