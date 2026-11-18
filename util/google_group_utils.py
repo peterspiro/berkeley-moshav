@@ -183,6 +183,25 @@ def list_all_groups(dir_service) -> list[dict]:
     return groups
 
 
+def find_group(groups: list[dict], query: str) -> dict:
+    """The one group whose address is query (with or without the domain),
+    or else whose name or address starts with query (case-insensitive).
+    Raises ValueError if none or several match."""
+    q = query.casefold()
+    exact = [g for g in groups
+             if g["email"].casefold() == q or g["email"].casefold().split("@")[0] == q]
+    if len(exact) == 1:
+        return exact[0]
+    matches = [g for g in groups
+               if g.get("name", "").casefold().startswith(q) or g["email"].casefold().startswith(q)]
+    if not matches:
+        raise ValueError(f"no Google Group's name or address starts with {query!r}")
+    if len(matches) > 1:
+        names = ", ".join(f"{g.get('name')} <{g['email']}>" for g in matches)
+        raise ValueError(f"{query!r} matches several Google Groups: {names}")
+    return matches[0]
+
+
 def group_exists(dir_service, gemail: str) -> bool:
     """Return True if gemail already exists as a Google Group. Read-only —
     safe to call from a dry run."""

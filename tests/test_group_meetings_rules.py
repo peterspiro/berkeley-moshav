@@ -709,10 +709,11 @@ def test_zoom_user_numbers_cover_room_users():
     from util.zoom_utils import ROOM_USERS
     script = (RULES.parent / "group_meetings.gs").read_text()
     numbers = script.split("const ZOOM_USER_NUMBERS = {", 1)[1].split("};", 1)[0]
-    for user in ROOM_USERS:
+    # In order, as zoom_user_label() numbers them.
+    for number, user in enumerate(ROOM_USERS, 1):
         local, domain = user.split("@")
         const = "DOMAIN" if domain == DOMAIN else "URBAN_MOSHAV_DOMAIN"
-        assert f"[`{local}@${{{const}}}`]:" in numbers
+        assert f"[`{local}@${{{const}}}`]: '{number}'," in numbers
 
 
 MIN = 60 * 1000

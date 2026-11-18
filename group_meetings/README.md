@@ -8,7 +8,7 @@ Apps Script that looks after every group's Google calendar (the calendars
     the location; link, meeting ID, passcode, and which Zoom user owns the
     room (its number, `1` for `circle-zoom-hosts@`, `2` for
     `berkeley@` (at urbanmoshav.org), or `3` for `community-zoom-hosts@`
-    (the community calendars' rooms), and its name in Zoom, so anyone looking at
+    (the community calendars' rooms, and a few groups'), and its name in Zoom, so anyone looking at
     the all-events calendar can tell which meetings can't overlap) in the
     description, with a
     line linking the "BM Meetings FAQ" just above them, unless the
@@ -98,8 +98,9 @@ is handled like a group's, except that:
   group is greeted ("Community Meetings admins"), and there's no option to
   move a room to the second Zoom user. Its room is under
   `community-zoom-hosts@` (Zoom user 3), so it clashes
-  only with other community calendars' meetings, or ones scheduled directly
-  in Zoom under that user;
+  only with meetings in that user's other rooms (other community calendars'
+  and the few groups' moved there), or ones scheduled directly in Zoom
+  under that user;
 - an invitation copy's email speaks of the calendar, not a group.
 
 A community calendar's events also invite the addresses on its footer's
