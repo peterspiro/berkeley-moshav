@@ -27,7 +27,9 @@ Their main job is keeping these things linked together and consistent:
 - Each group's **Google calendar**, owned by `admin@` and
   shared with the group's Google Group so its members can add meetings, and
   its permanent **Zoom meeting room**, owned by the
-  `circle-zoom-hosts@` Zoom user. A room's link never
+  `circle-zoom-hosts@` Zoom user, or, for a few groups whose
+  meetings would otherwise clash with others', by `berkeley@` or
+  `community-zoom-hosts@` (see `move_zoom_room.py`). A room's link never
   changes, and meetings in it can run with no host present. There's also one "All Berkeley
   Moshav Events" calendar for every meeting, which everyone can view.
 - **Community calendars**, for community-wide events (such as community
@@ -268,8 +270,10 @@ screenshots go to `debug/` (git-ignored).
 
 ### Changing the host key
 
-All the group rooms share one host key: the
-`circle-zoom-hosts@` Zoom user's. It's given privately to each group's facilitators, so they can
+The group rooms under `circle-zoom-hosts@` share one host key: that
+Zoom user's. (A room moved to another Zoom user takes that user's host key
+instead; `move_zoom_room.py` reminds you to give it to the group's
+facilitators.) It's given privately to each group's facilitators, so they can
 claim host in their group's room. Change it only when it has leaked or a
 facilitator who knows it shouldn't any more, since every facilitator in every
 group then needs the new one. It's changed by hand, not by a script: sign in
@@ -472,8 +476,9 @@ status line as "calendar (members can view, not edit)".
   offered for moving, because the group's calendar already existed, it says
   so and suggests `-m`/`--move-events`),
   then asks of each one in turn whether to use it as the room, ignore it, or
-  delete it. Only a no-fixed-time meeting of `circle-zoom-hosts@` or
-  `berkeley@` (the second Zoom user, at urbanmoshav.org) can be used, since Zoom
+  delete it. Only a no-fixed-time meeting of `circle-zoom-hosts@`,
+  `berkeley@` (the second Zoom user, at urbanmoshav.org), or
+  `community-zoom-hosts@` can be used, since Zoom
   can't change a meeting's type; choosing a second one to use
   asks to confirm the switch, and what to do with the first. Nothing changes
   until the end, when it shows what it will do and, if it will delete any
@@ -524,6 +529,27 @@ status line as "calendar (members can view, not edit)".
 - **`reset_zoom_room.py`** gives a group's Zoom room a new passcode, and so a
   new link, both of which it writes into the group's footer, for when a link has
   leaked.
+- **`move_zoom_room.py`** moves a group's Zoom room to another Zoom user, to
+  keep its meetings from clashing with others' (a Zoom user can run only one
+  meeting at a time). It lists every Zoom user a group's room may be under
+  (`ROOM_USERS` in `util/zoom_utils.py`: `circle-zoom-hosts@`, the default,
+  `berkeley@`, and `community-zoom-hosts@`), the room's current one
+  included, and under each, the conflicts the room's meetings would have
+  there in the next 8 weeks: overlaps, or gaps of less than 15 minutes, with
+  meetings in that user's other rooms or scheduled in Zoom under it, as
+  `group_meetings` checks them. It also lists any conflicts between the
+  room's own meetings, which no move fixes. Then it asks which user to move
+  the room to (Enter, or the current user, changes nothing; `-u N` picks
+  without asking, and `-n`/`--dry-run` only lists). It asks Zoom to schedule
+  the room for the new user, which keeps its meeting ID and link; if Zoom
+  refuses (it can, unless the users have scheduling privilege for each
+  other) or the room hasn't moved, it prints how to move it in Zoom's web
+  portal and waits while that's done. If the link changed anyway, it writes
+  the new one into the footer. Then it reminds you that the group's
+  facilitators need the new user's host key. Within the hour,
+  `group_meetings` names the new Zoom user in the group's events. A
+  community calendar's room can't be moved: it stays under
+  `community-zoom-hosts@`.
 - **`audit_group_memberships.py`** is a read-only report of where a group's
   Gather membership, Drive permissions, and Google Group membership disagree,
   plus setup problems and anyone else with access to its Drive item.
@@ -633,9 +659,11 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
   is handled like a group's, except that its events invite the audience,
   not the admin group, and get no FAQ line; their reminders go to the
   audience, with replies to the admin group; and its clash emails go to
-  the admin groups, naming the calendars, without the option of moving a
-  room to another Zoom user (all community rooms are under
-  `community-zoom-hosts@`, Zoom user 3, so they clash only with each other).
+  the admin groups, naming the calendars. A community calendar's room isn't
+  moved to another Zoom user (all community rooms are under
+  `community-zoom-hosts@`, Zoom user 3, so they clash only with each other
+  and with the few groups' rooms moved there), but when one clashes with a
+  group's meeting, moving the group's room is offered.
   An event that's only a copy of someone's invitation gets its organizer an
   email asking them to create it on the group calendar instead. Each group
   gets a reminder email before each of its meetings: 24 hours before, unless
@@ -648,7 +676,8 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
   Technology Circle), listing their options: moving one meeting to another
   time (with a link to the all-events calendar for finding a free time),
   holding one on a personal or work Zoom account, and, where a group's room
-  could help, having it moved to the second Zoom user. On every other
+  could help, having it moved to another of our Zoom users
+  (`move_zoom_room.py`). On every other
   calendar `admin@` owns (its primary, which is the shared community calendar,
   and any others; re-read hourly), each event the calendar organizes gets the
   all-events calendar as a guest, with no email; invitation copies there are
@@ -792,6 +821,9 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
   calendars, and copying them to its calendar or deleting them
 - **`zoom_utils.py`**: the Zoom API, the standard room settings, and which
   Zoom users own rooms
+- **`zoom_conflicts.py`**: the meetings `group_meetings` checks for
+  overlaps, and which would clash with a room's under each Zoom user (for
+  `move_zoom_room.py`)
 - **`credentials.py`**: reading `~/.gather`, `zoom_credentials`, and the
   Airtable token
 - **`airtable.py`**: Airtable's API: a base's tables and fields, and its

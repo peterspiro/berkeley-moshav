@@ -70,8 +70,9 @@ are; this note keeps the reasoning and the remaining work.
   clashing with others' (see "Open decisions"). Both are `ROOM_USERS` in
   `util/zoom_utils.py`.
 - A third licensed Zoom user, `community-zoom-hosts@`,
-  hosts the community-wide meetings (see "Community calendars"). It isn't
-  one of `ROOM_USERS`: group rooms aren't moved to it.
+  hosts the community-wide meetings (see "Community calendars"). It was
+  first kept out of `ROOM_USERS`, but is now one of them: a few groups'
+  rooms are under it, to keep their meetings from clashing.
 - Zoom is reached through a Server-to-Server OAuth app ("Berkeley Moshav Admin
   Scripts"). Its credentials are the project's, not a person's, so they live
   in the repo's git-ignored `zoom_credentials` file (Python) and the Apps

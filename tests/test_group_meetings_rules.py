@@ -564,8 +564,8 @@ class TestOverlapMessage:
             "at a time, so the second meeting won't be able to start while the first is "
             "still going.\n\n"
             "Your options are:\n"
-            "- Request the Tech Circle to move one of your two groups' Zoom rooms to our "
-            "second Zoom user account.  This may or may not be possible, depending on your "
+            "- Request the Tech Circle to move one of your two groups' Zoom rooms to another "
+            "of our Zoom user accounts.  This may or may not be possible, depending on your "
             "meeting schedule.\n"
             "- Hold one of these meetings on a personal or work Zoom account instead: "
             "replace the Zoom link in its calendar event with that account's link, and "
@@ -610,8 +610,8 @@ class TestOverlapMessage:
         assert msg["body"].startswith("Hi Technology Circle and Finance Circle,\n")
         assert '  - "Board training" (a meeting scheduled in our Zoom account), 60-120' \
             in msg["body"]
-        assert ("- Request the Tech Circle to move the Finance Circle's Zoom room to our "
-                "second Zoom user account.") in msg["body"]
+        assert ("- Request the Tech Circle to move the Finance Circle's Zoom room to "
+                "another of our Zoom user accounts.") in msg["body"]
         assert ("for the Finance Circle meeting, replace the Zoom link in its calendar event "
                 "with that account's link") in msg["body"]
         assert ("for the other meeting, schedule it on that account and delete it from our "
@@ -627,8 +627,8 @@ class TestOverlapMessage:
         body = msg["body"]
         assert body.startswith("Hi Technology Circle,\n")
         assert "Request the Tech Circle" not in body
-        assert ("- Move the Technology Circle's Zoom room to our second Zoom user "
-                "account.") in body
+        assert ("- Move the Technology Circle's Zoom room to another of our Zoom user "
+                "accounts.") in body
         assert "Agree between you" not in body
         assert ("- Move one of them to another time. The Technology Circle meeting can be "
                 "moved on the Technology Circle calendar; the other meeting can be moved "
@@ -652,7 +652,7 @@ class TestOverlapMessage:
         msg = message(zoom_meeting("A", 0, 60), zoom_meeting("B", 30, 90))
         assert msg["to"] == ["alerts@x.org"] and msg["cc"] == []
         assert msg["body"].startswith("Hi Technology Circle,\n")
-        assert "second Zoom user account" not in msg["body"]
+        assert "another of our Zoom user accounts" not in msg["body"]
         assert ("- Hold one of these meetings on a personal or work Zoom account instead: "
                 "schedule it on that account and delete it from our Zoom account.") in msg["body"]
         assert "- Move one of them to another time in Zoom." in msg["body"]
@@ -709,10 +709,11 @@ def test_zoom_user_numbers_cover_room_users():
     from util.zoom_utils import ROOM_USERS
     script = (RULES.parent / "group_meetings.gs").read_text()
     numbers = script.split("const ZOOM_USER_NUMBERS = {", 1)[1].split("};", 1)[0]
-    for user in ROOM_USERS:
+    # In order, as zoom_user_label() numbers them.
+    for number, user in enumerate(ROOM_USERS, 1):
         local, domain = user.split("@")
         const = "DOMAIN" if domain == DOMAIN else "URBAN_MOSHAV_DOMAIN"
-        assert f"[`{local}@${{{const}}}`]:" in numbers
+        assert f"[`{local}@${{{const}}}`]: '{number}'," in numbers
 
 
 MIN = 60 * 1000
@@ -991,7 +992,7 @@ class TestCommunityOverlapMessage:
                                       "These two meetings are only 10 minutes apart:")
         assert ("- Move one of them to another time on the Community Meetings calendar, "
                 "leaving at least 15 minutes between them.") in msg["body"]
-        assert "second Zoom user" not in msg["body"]
+        assert "another of our Zoom user accounts" not in msg["body"]
 
     def test_community_and_zoom_meeting(self):
         msg = message(community_meeting("Community meeting", "Community Meetings", 0, 90),
@@ -999,11 +1000,28 @@ class TestCommunityOverlapMessage:
         assert msg["to"] == ["community-admins@x.org", "alerts@x.org"]
         body = msg["body"]
         assert body.startswith("Hi Technology Circle and Community Meetings admins,")
-        assert "second Zoom user" not in body
+        assert "another of our Zoom user accounts" not in body
         assert ("for the Community Meetings meeting, replace the Zoom link") in body
         assert ("The Community Meetings meeting can be moved on the Community Meetings "
                 "calendar; the other meeting can be moved in Zoom.") in body
 
+
+    def test_community_and_group_offers_moving_the_groups_room(self):
+        msg = message(community_meeting("Community meeting", "Community Meetings", 0, 90),
+                      group_meeting("Garden meeting", "Garden Circle", 60, 120))
+        assert msg["to"] == ["community-admins@x.org", "garden@x.org"]
+        assert ("- Request the Tech Circle to move the Garden Circle's Zoom room to another "
+                "of our Zoom user accounts.") in msg["body"]
+        assert "Community Meetings admins's" not in msg["body"]
+
+    def test_community_and_joint_group_meeting(self):
+        joint = group_meeting("Joint", "Garden Circle", 60, 120)
+        joint["groups"].append("tea@x.org")
+        joint["names"].append("Tea Club")
+        msg = message(community_meeting("Community meeting", "Community Meetings", 0, 90),
+                      joint)
+        assert ("- Request the Tech Circle to move one of the groups' Zoom rooms to "
+                "another of our Zoom user accounts.") in msg["body"]
 
 class TestNoZoomMarker:
     @pytest.mark.parametrize("event", [

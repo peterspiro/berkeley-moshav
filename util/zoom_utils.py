@@ -7,8 +7,9 @@ util/credentials.py and README.md). Every
 group room is a recurring meeting with no fixed time (type 3), so its link
 never changes and members only ever click it. New rooms are made under
 ROOMS_USER; a room can be moved (transferred in Zoom, keeping its link) to
-another of ROOM_USERS, to keep its meetings from clashing with others'.
-Community-wide calendars' rooms are under COMMUNITY_ROOMS_USER instead.
+another of ROOM_USERS, to keep its meetings from clashing with others'
+(move_zoom_room.py). Community-wide calendars' rooms are under
+COMMUNITY_ROOMS_USER, which can also own a few groups' rooms.
 
 Room settings (ROOM_SETTINGS) let a meeting run with no host present:
 participants can join before the host at any time, there's no waiting room
@@ -35,17 +36,20 @@ TOKEN_URL = "https://zoom.us/oauth/token"
 # repo (which is public) for a scraper to pick up.
 URBAN_MOSHAV_DOMAIN = "urbanmoshav.org"
 
-# The licensed Zoom user that new group rooms are made under, and every
-# licensed user that may own one (a Zoom user can run one meeting at a time).
-ROOMS_USER = f"circle-zoom-hosts@{DOMAIN}"
-ROOM_USERS = (ROOMS_USER, f"berkeley@{URBAN_MOSHAV_DOMAIN}")
-
 # The licensed Zoom user that owns every community-wide calendar's room
 # (one per calendar, so each calendar's recordings can be told apart).
-# Group rooms are never moved to it, so community-wide meetings only clash
-# with each other.
 COMMUNITY_ROOMS_USER = f"community-zoom-hosts@{DOMAIN}"
 COMMUNITY_ROOM_USERS = (COMMUNITY_ROOMS_USER,)
+
+# The licensed Zoom user that new group rooms are made under, and every
+# licensed user that may own one (a Zoom user can run one meeting at a
+# time, so a group whose meetings clash with others' can have its room
+# moved to another). COMMUNITY_ROOMS_USER is one of them: a few groups'
+# rooms are under it, so their meetings clash only with community-wide
+# meetings and each other. In the order of the users' numbers, "Zoom user
+# 1" to "3" (ZOOM_USER_NUMBERS in group_meetings/group_meetings.gs).
+ROOMS_USER = f"circle-zoom-hosts@{DOMAIN}"
+ROOM_USERS = (ROOMS_USER, f"berkeley@{URBAN_MOSHAV_DOMAIN}", COMMUNITY_ROOMS_USER)
 
 ROOM_TOPIC_SUFFIX = " Meeting Room"
 # A community-wide calendar's room is "<Calendar> Zoom Room" instead.
@@ -90,6 +94,15 @@ def room_settings_differences(meeting: dict, topic: str) -> dict:
     if settings:
         body["settings"] = settings
     return body
+
+
+def zoom_user_label(email: str) -> str:
+    """"Zoom user 2, <email>" for one of ROOM_USERS (numbered as event
+    descriptions number them), else the email alone."""
+    email = email.lower()
+    if email in ROOM_USERS:
+        return f"Zoom user {ROOM_USERS.index(email) + 1}, {email}"
+    return email
 
 
 def new_passcode() -> str:
@@ -163,6 +176,13 @@ class ZoomClient:
         resp = self._request("PATCH", f"/meetings/{meeting_id}", json=body)
         if resp.status_code == 404:
             raise ZoomError(f"Zoom meeting {meeting_id} not found")
+
+    def move_meeting(self, meeting_id: str, user: str) -> None:
+        """Ask Zoom to make user the meeting's host (Update Meeting's
+        schedule_for). Zoom may refuse (error 1110, "Not assigned
+        scheduler") unless the users have scheduling privilege for each
+        other; check the result with get_meeting()'s host_email."""
+        self.update_meeting(meeting_id, {"schedule_for": user})
 
     def list_users(self) -> list[dict]:
         """Every active user in the account ({"id", "email", ...})."""

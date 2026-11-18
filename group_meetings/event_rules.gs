@@ -415,10 +415,11 @@ function otherOwnedCalendars(items, account, skipIds) {
  *     Circle are asked to agree which moves (if the group is the Technology
  *     Circle, it's greeted once and asked to move one);
  *   - two Zoom meetings: the Technology Circle is asked to move one.
- * Each email lists the options: moving a group's room to another Zoom user
- * (unless both meetings are one group's or neither is, or one is a
- * community-wide calendar's), holding one meeting on a personal or work
- * Zoom account, and moving one to another time.
+ * Each email lists the options: moving a group's room to another of our
+ * Zoom users (unless both meetings are one group's, or neither is a
+ * group's; a community-wide calendar's room isn't moved, but a group's that
+ * clashes with one can be), holding one meeting on a personal or work Zoom
+ * account, and moving one to another time.
  *
  * A community-wide calendar's meeting (community: true) names its admin
  * group in names ("Community Meetings admins", greeted) and its calendar
@@ -443,9 +444,13 @@ function overlapMessage(c, opts) {
 
   const findTime = `To find a free time, check the All Berkeley Moshav Events calendar, ` +
     `which shows every group's meetings:\n${opts.allEventsUrl}`;
-  const moveRoom = rooms => community ? null : `- Request the Tech Circle to move ${rooms} ` +
-    `to our second Zoom user account.  This may or may not be possible, depending on your ` +
-    `meeting schedule.`;
+  // The groups whose rooms could move: not a community-wide calendar's.
+  const movable = [...new Set([c.a, c.b].filter(m => (m.groups || []).length && !m.community)
+    .flatMap(m => m.names || []))];
+  const toAnotherUser = `to another of our Zoom user accounts.  This may or may not be ` +
+    `possible, depending on your meeting schedule.`;
+  const moveRoom = rooms => movable.length
+    ? `- Request the Tech Circle to move ${rooms} ${toAnotherUser}` : null;
   const ownAccount = how => `- Hold one of these meetings on a personal or work Zoom ` +
     `account instead: ${how}.`;
   const onCalendar = `replace the Zoom link in its calendar event with that account's ` +
@@ -471,9 +476,7 @@ function overlapMessage(c, opts) {
     const where = cals.length === 1 ? `the ${cals[0]} calendar` : `its ${groupCalendar}`;
     const room = names.length === 1 ? `the ${names[0]}'s Zoom room` : "one of the groups' Zoom rooms";
     options = [
-      others.length ? moveRoom(room)
-        : `- Move ${room} to our second Zoom user account.  This may or may not be ` +
-          `possible, depending on your meeting schedule.`,
+      others.length ? moveRoom(room) : movable.length ? `- Move ${room} ${toAnotherUser}` : null,
       ownAccount(`for the ${group} meeting, ${onCalendar}; for the other meeting, ${inZoom}`),
       `- ${others.length ? 'Agree between you which meeting moves' : 'Move one of them'} ` +
         `to another time${spacing}. The ${group} ` +
@@ -491,7 +494,10 @@ function overlapMessage(c, opts) {
     to = groupEmails; cc = [opts.alertEmail];
     greeting = joinNames(names);
     options = [
-      moveRoom(`one of your ${names.length === 2 ? 'two ' : ''}groups' Zoom rooms`),
+      moveRoom(community
+        ? (movable.length === 1 ? `the ${movable[0]}'s Zoom room`
+          : "one of the groups' Zoom rooms")
+        : `one of your ${names.length === 2 ? 'two ' : ''}groups' Zoom rooms`),
       ownAccount(onCalendar),
       `- Agree between you to move one of these meetings, and change its time on its ` +
         `${groupCalendar}${spacing}. ${findTime}`,
