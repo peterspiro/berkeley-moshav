@@ -266,6 +266,21 @@ function meetingIdFromUrl(url) {
   return m ? m[1] : null;
 }
 
+// Where "+ New meeting" puts the meeting on date ('yyyy-MM-dd'), given a
+// doc's meeting tabs ([{title, built, ...}], built false for a tab with no
+// meeting in it yet): {existing: tab} if a tab already has its date; else
+// {later, previous}: how many meeting tabs are dated after it (so go before
+// it, as they're newest first), and the newest built tab dated before it,
+// whose minutes it links and whose Action Items Recap it carries over (or
+// null).
+function newMeetingPlan(tabs, date) {
+  const existing = tabs.find(t => t.title === date);
+  if (existing) return {existing};
+  const sorted = tabs.slice().sort((a, b) => b.title.localeCompare(a.title));
+  const later = sorted.filter(t => t.title > date).length;
+  return {later, previous: sorted.slice(later).find(t => t.built) || null};
+}
+
 // The links in a group's footer that a circle's agenda doc and the Circle
 // Structure use: {name, gatherUrl, gatherId, driveItemId, calendarId,
 // zoomUrl}, each null if absent. Only the auto-managed block is read.

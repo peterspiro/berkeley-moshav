@@ -62,6 +62,39 @@ function addItem(docId, meetingId) {
   return {done: true, title: 'Item added', messages};
 }
 
+// The rest of startNewMeeting, once it's found the meeting to add (event,
+// on date at startText) and where its tab goes (index, after the tab of
+// previous, the meeting before it, or null): adds the tab, and keeps what
+// finishNewMeeting needs.
+function addMeetingTab(docId, circle, {event, following, date, startText, index, previous}) {
+  const start = new Date(event.start.dateTime);
+  const end = new Date(event.end.dateTime);
+  const details = {
+    date,
+    start: startText,
+    hours: formatHours((end - start) / 60000),
+    place: circle.zoomUrl,
+    circleEmail: circle.email,
+    circleName: circle.name,
+    attendees: circleMemberNames(circle),
+    next: following ? Utilities.formatDate(new Date(following.start.dateTime), TIME_ZONE,
+      'EEE yyyy-MM-dd, h:mm a') : 'not on the calendar yet',
+  };
+  if (previous) {
+    details.previousTabId = previous.tabId;
+    details.previousUrl = tabUrl(docId, details.previousTabId);
+  }
+
+  const reply = Docs.Documents.batchUpdate({requests: [{addDocumentTab: {
+    tabProperties: {title: details.date, index},
+  }}]}, docId);
+  details.tabId = reply.replies[0].addDocumentTab.tabProperties.tabId;
+  details.docId = docId;
+  const key = 'newMeeting:' + Utilities.getUuid();
+  CacheService.getScriptCache().put(key, JSON.stringify(details), PENDING_MEETING_SECONDS);
+  return {pending: key, date: details.date};
+}
+
 // Gives each bulleted or numbered paragraph in a meeting's table the
 // indents of its nesting level (see listIndents), as Docs gives a nested
 // one its list's own, wider, indent. The attendance checklist, outside the
@@ -441,19 +474,21 @@ function roleHolderIn(content, role, definitions) {
 }
 
 // The first of the two runs that add the circle's next meeting: the first
-// timed event on the circle's calendar after the day of the newest meeting
-// in the doc (or after now, if there's none), so clicking again adds the
-// one after. Adds the meeting's tab, and keeps what the
-// second run needs for PENDING_MEETING_SECONDS; returns {pending: key} for
-// finishNewMeeting, or a result saying why it didn't.
+// timed event on the circle's calendar that hasn't ended (one under way
+// counts). Only that one: if the doc already has a tab with its date, it
+// adds nothing and says so, so the meeting after can only be added once
+// it's over. Adds the meeting's tab (among the meeting tabs, by date), and
+// keeps what the second run needs for PENDING_MEETING_SECONDS; returns
+// {pending: key} for finishNewMeeting, or a result saying why it didn't.
 //
 // The meeting's date, start, and length come from the event; its Place is
 // the circle's Zoom room; its attendance list is the circle's members; its
 // Administrative matters link the previous meeting's tab (its minutes) and
 // give the event after as the next meeting; and the
 // previous meeting's Action Items Recap is copied to its Action Items
-// Accountability. The Circle Info tab's Roles dropdowns get the members as
-// their choices (see updateRoleDropdowns).
+// Accountability (the previous meeting is the newest one dated before it:
+// see newMeetingPlan). The Circle Info tab's Roles dropdowns get the
+// members as their choices (see updateRoleDropdowns).
 function startNewMeeting(docId) {
   const circle = circleForDoc(docId);
   if (!circle) {
@@ -466,49 +501,48 @@ function startNewMeeting(docId) {
       circle.name + ' has no calendar yet; ask the Technology Circle to set one up.']};
   }
 
-  const api = Docs.Documents.get(docId, {includeTabsContent: true});
-  const meetingTabs = api.tabs.filter(t => MEETING_TAB_TITLE_RE.test(t.tabProperties.title))
-    .sort((a, b) => b.tabProperties.title.localeCompare(a.tabProperties.title));
-  const newest = meetingTabs[0];
-  const newestDate = newest ? newest.tabProperties.title : null;
-  // Meeting tabs go after the others (Circle, Backlog), newest first.
-  const firstMeetingIndex = api.tabs.length - meetingTabs.length;
-
-  const after = newestDate
-    ? new Date(Utilities.parseDate(newestDate, TIME_ZONE, 'yyyy-MM-dd').getTime() + 24 * 3600 * 1000)
-    : new Date();
-  const [event, following] = nextEvents(circle, after, 2);
+  // The calendar's events are those ending after now, so one under way is
+  // the next meeting.
+  const [event, following] = nextEvents(circle, new Date(), 2);
   if (!event) {
     return {done: false, title: 'No meeting to add', messages: [
-      'There\'s no meeting on ' + circle.name + '\'s calendar after ' +
-      (newestDate || 'today') + '. Add it to the calendar first.']};
+      'There\'s no meeting coming up on ' + circle.name + '\'s calendar. ' +
+      'Add it to the calendar first.']};
   }
   const start = new Date(event.start.dateTime);
-  const end = new Date(event.end.dateTime);
-  const details = {
-    date: Utilities.formatDate(start, TIME_ZONE, 'yyyy-MM-dd'),
-    start: Utilities.formatDate(start, TIME_ZONE, 'h:mm a'),
-    hours: formatHours((end - start) / 60000),
-    place: circle.zoomUrl,
-    circleEmail: circle.email,
-    circleName: circle.name,
-    attendees: circleMemberNames(circle),
-    next: following ? Utilities.formatDate(new Date(following.start.dateTime), TIME_ZONE,
-      'EEE yyyy-MM-dd, h:mm a') : 'not on the calendar yet',
-  };
-  if (newest) {
-    details.previousTabId = newest.tabProperties.tabId;
-    details.previousUrl = tabUrl(docId, details.previousTabId);
-  }
+  const date = Utilities.formatDate(start, TIME_ZONE, 'yyyy-MM-dd');
+  const startText = Utilities.formatDate(start, TIME_ZONE, 'h:mm a');
 
-  const reply = Docs.Documents.batchUpdate({requests: [{addDocumentTab: {
-    tabProperties: {title: details.date, index: firstMeetingIndex},
-  }}]}, docId);
-  details.tabId = reply.replies[0].addDocumentTab.tabProperties.tabId;
-  details.docId = docId;
-  const key = 'newMeeting:' + Utilities.getUuid();
-  CacheService.getScriptCache().put(key, JSON.stringify(details), PENDING_MEETING_SECONDS);
-  return {pending: key, date: details.date};
+  // Two clicks at once mustn't both add the tab: the second waits for the
+  // first, then finds its tab. (The user lock, not the script lock, which
+  // buildNewCircleDocs holds while it builds docs.)
+  const lock = LockService.getUserLock();
+  if (!lock.tryLock(15000)) {
+    return {done: false, title: 'Meeting not added', messages: [
+      'Another change was being made, so the meeting wasn\'t added. Please try again in a ' +
+      'minute.']};
+  }
+  try {
+    const api = Docs.Documents.get(docId, {includeTabsContent: true});
+    const meetingTabs = api.tabs.filter(t => MEETING_TAB_TITLE_RE.test(t.tabProperties.title))
+      .map(t => ({title: t.tabProperties.title, tabId: t.tabProperties.tabId,
+        built: (t.documentTab.body.content || []).some(se => se.table)}));
+    const plan = newMeetingPlan(meetingTabs, date);
+    if (plan.existing) {
+      return {done: false, title: 'Meeting already added', messages: plan.existing.built
+        ? ['The next meeting, on ' + date + ' at ' + startText + ', is already in the tab ' +
+          'titled ' + date + '. The meeting after it can be added once it\'s over.']
+        : ['The next meeting, on ' + date + ', is being added, or adding it didn\'t finish: ' +
+          'its tab, titled ' + date + ', is empty. If it\'s still empty in a minute, delete ' +
+          'it, and click "+ New meeting" again.']};
+    }
+    // Meeting tabs go after the others (Circle, Backlog), newest first.
+    const index = api.tabs.length - meetingTabs.length + plan.later;
+    return addMeetingTab(docId, circle, {event, following, date, startText, index,
+      previous: plan.previous});
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function tabUrl(docId, tabId) {
