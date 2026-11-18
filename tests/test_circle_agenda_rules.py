@@ -398,3 +398,38 @@ class TestListIndents:
             pytest.approx({"start": 5, "end": 9, "firstLine": 23.76, "indentStart": 37.44}),
             pytest.approx({"start": 9, "end": 12, "firstLine": 5.76, "indentStart": 19.44}),
         ]
+
+
+class TestNewMeetingPlan:
+    @staticmethod
+    def plan(tabs, date):
+        return js(f"newMeetingPlan({json.dumps(tabs)}, {json.dumps(date)})")
+
+    def test_first_meeting_has_no_previous(self):
+        assert self.plan([], "2026-11-24") == {"later": 0, "previous": None}
+
+    def test_previous_is_the_newest_before_it(self):
+        tabs = [{"title": "2026-11-10", "built": True}, {"title": "2026-11-17", "built": True}]
+        result = self.plan(tabs, "2026-11-24")
+        assert result["later"] == 0
+        assert result["previous"]["title"] == "2026-11-17"
+
+    def test_meeting_already_added(self):
+        tabs = [{"title": "2026-11-24", "built": True}, {"title": "2026-11-17", "built": True}]
+        assert self.plan(tabs, "2026-11-24") == {"existing": {"title": "2026-11-24", "built": True}}
+
+    def test_empty_tab_for_its_date_counts_as_added(self):
+        tabs = [{"title": "2026-11-24", "built": False}]
+        assert self.plan(tabs, "2026-11-24")["existing"]["built"] is False
+
+    def test_goes_after_later_meetings(self):
+        # Added ahead of time, before "+ New meeting" added only the next one.
+        tabs = [{"title": "2026-12-08", "built": True}, {"title": "2026-12-01", "built": True},
+                {"title": "2026-11-17", "built": True}]
+        result = self.plan(tabs, "2026-11-24")
+        assert result["later"] == 2
+        assert result["previous"]["title"] == "2026-11-17"
+
+    def test_previous_skips_an_empty_tab(self):
+        tabs = [{"title": "2026-11-17", "built": False}, {"title": "2026-11-10", "built": True}]
+        assert self.plan(tabs, "2026-11-24")["previous"]["title"] == "2026-11-10"

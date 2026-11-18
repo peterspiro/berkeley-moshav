@@ -52,8 +52,8 @@ don't reach docs already built, and will take their own scripts (see
   then one tab per meeting, newest first. A new doc has no meetings.
 - **New meeting**: "+ New meeting" adds a meeting in a tab of its own,
   titled with its date, after the Circle Info and Backlog tabs. Its date, start time, and total duration come from
-  the next event on the circle's calendar that isn't in the doc yet, and can
-  then be edited. Its Place is the circle's Zoom room, its Minutes a link to
+  the next event on the circle's calendar (the first that hasn't ended), and
+  can then be edited; if the doc already has it, nothing is added. Its Place is the circle's Zoom room, its Minutes a link to
   the previous meeting's tab, and its Next meeting the following calendar
   event.
   The previous meeting's Action Items Recap, a bulleted list, becomes its

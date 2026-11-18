@@ -90,9 +90,13 @@ The links:
 - **+ New meeting**, under "Create a new meeting" at the top of the first
   tab ("Circle Info"), adds the
   circle's next meeting in a tab of its own, titled with its date, after
-  the Circle Info and Backlog tabs (newest first): the first timed event on the
-  circle's calendar after the day of the newest meeting in the doc (or
-  after now, if there's none), so clicking again adds the one after. Its
+  the Circle Info and Backlog tabs (newest first): the next meeting on the
+  circle's calendar, the first timed event that hasn't ended (one under
+  way counts). It adds only that one: if the doc already has a tab with
+  its date, the page says so and nothing is added, so the meeting after
+  can be added once it's over. (A meeting moved on the calendar after its
+  tab was added gets a new tab, unless its tab is first moved too: change
+  its date chip and click ↻ Update times.) Its
   date, start time, and length come from the event, in the line above its
   table; Place links the circle's Zoom room; Attendance lists the circle's
   members, unchecked, in columns of up to four, beside Facilitator and
@@ -102,7 +106,8 @@ The links:
   `update_groups.py` writes on each run, or else
   as Google names them); its agenda has one 5-minute topic; its
   Administrative matters list gives the next event as the next meeting
-  and links "Minutes of last meeting" to the previous meeting's tab; and
+  and links "Minutes of last meeting" to the previous meeting's tab (the
+  newest meeting dated before it); and
   the items of the previous meeting's
   Action Items Recap (a bulleted list) become the checklist of its Action
   Items Accountability (their text only). The meetings that are over
