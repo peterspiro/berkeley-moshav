@@ -58,30 +58,14 @@ function doGet(e) {
     return page({done: false, title: 'Not a circle agenda doc',
       messages: ['These links work only in a circle\'s agenda doc.']});
   }
-  const lock = LockService.getScriptLock();
-  lock.waitLock(30000);
-  try {
-    const result = action.run(p.doc, p.meeting);
-    return result.pending ? pendingPage(result) : page(result);
-  } catch (err) {
-    return page({done: false, title: 'Something went wrong', messages: [err.message]});
-  } finally {
-    lock.releaseLock();
-  }
+  const result = runLocked(() => action.run(p.doc, p.meeting));
+  return result.pending ? pendingPage(result) : page(result);
 }
 
 // The second run of adding a meeting, called from pendingPage's script:
 // the HTML of the page saying how it went.
 function finishNewMeetingPage(key) {
-  const lock = LockService.getScriptLock();
-  lock.waitLock(30000);
-  try {
-    return pageHtml(finishNewMeeting(key));
-  } catch (err) {
-    return pageHtml({done: false, title: 'Something went wrong', messages: [err.message]});
-  } finally {
-    lock.releaseLock();
-  }
+  return pageHtml(runLocked(() => finishNewMeeting(key)));
 }
 
 // Whether the app may change a doc: a circle agenda doc (labelled built;
@@ -125,6 +109,26 @@ function pendingPage(result) {
     '"</p>"; })' +
     '.finishNewMeetingPage(' + JSON.stringify(result.pending) + ');</script>';
   return HtmlService.createHtmlOutput(html).setTitle('Circle agenda');
+}
+
+// What run returns, run while no other click is being handled, or a result
+// saying something went wrong. It takes the user lock, not the script lock:
+// buildNewCircleDocs and syncCircleStructureGroups hold the script lock for
+// minutes while they go through every agenda doc, and a click mustn't wait
+// for them (a doc's own edits and theirs don't clash, as members' don't).
+function runLocked(run) {
+  const lock = LockService.getUserLock();
+  if (!lock.tryLock(20000)) {
+    return {done: false, title: 'Busy', messages: [
+      'Another change was being made, so this one wasn\'t. Please try again in a minute.']};
+  }
+  try {
+    return run();
+  } catch (err) {
+    return {done: false, title: 'Something went wrong', messages: [err.message]};
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function tryAddItem() {
