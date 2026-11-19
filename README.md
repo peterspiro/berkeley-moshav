@@ -286,7 +286,9 @@ changes the envelope recipient to theirs, for recognized and
 non-recognized addresses alike. The admins' rules go at the top of the
 list, above the catch-all rule for All recipients (which acts only on
 non-recognized addresses), so each address's own rule comes first; Gmail
-puts a new rule at the bottom, so move it up after saving it. Each account's recovery email is also the
+puts a new rule at the bottom, so after saving it, click **Reorder** on it
+and enter 1 to move it to the top. (Entering the catch-all's position puts
+it one below that, still under the catch-all.) Each account's recovery email is also the
 person's own address, and its recovery phone their phone.
 
 `add_super_admin.py` sets up such an account for a Gather member, except
