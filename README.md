@@ -207,7 +207,8 @@ playwright install chromium
   enable the Drive, Admin SDK (Directory), Groups Settings, Google
   Calendar, Gmail, and Google Docs APIs (Gmail sends the email telling a
   group about its new calendar; Docs makes the maintenance tracker's
-  start-here Doc pageless). On first run, a script prints a sign-in URL; open it signed
+  start-here Doc pageless), and, for `add_super_admin.py`, the Enterprise
+  License Manager (Licensing) API. On first run, a script prints a sign-in URL; open it signed
   in as `admin@`, which owns the group calendars (the
   scripts that make calendars refuse to run as anyone else). The sign-in is
   saved to `~/.google_setup_token.pkl`; delete that file to sign in as a
@@ -267,6 +268,46 @@ Run scripts from the repo root, e.g. `python add_new_group.py ...` or
 `python archive/data_import/parse_households.py ...`. Every script
 supports `-h` for its options, and most support `-n`/`--dry-run`. Logs and
 screenshots go to `debug/` (git-ignored).
+
+### Admin accounts
+
+`admin@` is a shared account, the one the scripts and Apps Scripts run as,
+and nobody reads its mail directly. Its mail, filtered (leaving out calendar
+replies, for example), is forwarded to the `admin-forwarding@` Google Group,
+whose members are the community's super admins.
+
+Each super admin also has an account of their own in the Workspace: a
+**Cloud Identity Free** user (no Gmail mailbox, so no Workspace license),
+which is a super admin and a member of `admin-forwarding@`. Since the
+account has no mailbox, a rule in the Admin console (Apps → Google
+Workspace → Gmail → **Default routing**) sends its mail to the person's own
+address: a single-recipient rule matching the account's address that
+changes the envelope recipient to theirs, for recognized and
+non-recognized addresses alike. The admins' rules go at the top of the
+list, above the catch-all rule for All recipients (which acts only on
+non-recognized addresses), so each address's own rule comes first; Gmail
+puts a new rule at the bottom, so after saving it, click **Reorder** on it
+and enter 1 to move it to the top. (Entering the catch-all's position puts
+it one below that, still under the catch-all.) Each account's recovery email is also the
+person's own address, and its recovery phone their phone.
+
+`add_super_admin.py` sets up such an account for a Gather member, except
+for the routing rule, which it tells you how to add: Google has no API for
+routing rules. The new admin gets in like this:
+
+1. The script prints the account's temporary password; give it to them
+   yourself (in person, or by phone or text), not by email. It also opens
+   a draft email to their own address saying how to sign in, without the
+   password.
+2. They sign in at admin.google.com with the new address and that
+   password, in a private browser window so their own Google account isn't
+   in the way, and choose a new password.
+3. They set up 2-Step Verification.
+
+A super admin can't reset a forgotten password by email unless super-admin
+account recovery is turned on (Security → Account recovery), so if they
+lose theirs, another super admin resets it (Users → the account → Reset
+password) and gives them the new one the same way.
 
 ### Changing the host key
 
@@ -564,6 +605,22 @@ status line as "calendar (members can view, not edit)".
   `[Members]` link, and the rows under them, are listed and skipped.
 - **`change_group_email_alias.py`** gives a group's Google Group a new, usually
   shorter, address and moves the Gather group's email list over to it.
+- **`add_super_admin.py`** makes a Gather member a super admin of the
+  Workspace with an account of their own (see "Admin accounts" under
+  "Setup"). It lists the adults in the directory (`-m` narrows the list to
+  names containing it) and asks which one. Then it creates the account,
+  named after their first name (`-a` picks another name), as a Cloud
+  Identity Free user with a temporary password to change at the first
+  sign-in, their own address (from Gather, or `-e`) as its recovery email,
+  their Gather phone as its recovery phone, and their Gather ID; makes it a
+  super admin; removes any Workspace license Google gave it automatically
+  (`-k` keeps it); and adds it to `admin-forwarding@`. It prints the
+  Default routing rule to add in the Admin console, and where to move it in
+  the list, waits while you add it,
+  and then prints the temporary password and opens a draft email to the
+  member saying how to sign in. Run again for a member, it skips what's
+  done, only updating an existing account's recovery email and phone; it
+  stops if the address is someone else's.
 - **`maintenance_base.py`** keeps the maintenance tracker's Airtable base in
   step with `maintenance_tracker/base/schema.json`: `diff` shows what the base lacks,
   `apply` creates the missing tables and fields and adds missing options to
@@ -835,6 +892,9 @@ All are deployed to Google with [`clasp`](https://github.com/google/clasp)
   including formulas, lookups, and rollups, and select options)
 - **`member_names.py`**: members' short names by email address, from the Gather
   directory, written to `admin@`'s Drive for the circle agenda docs
+- **`super_admins.py`**: choosing the member for `add_super_admin.py`, and
+  what their account is made with (recovery phone, temporary password, the
+  routing rule's settings, the email to them)
 - **`circle_agenda_docs.py`**: creating a circle's or working group's agenda
   doc, empty and labelled for the `circle_agendas` Apps Script to build
 
