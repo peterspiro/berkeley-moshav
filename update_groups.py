@@ -119,7 +119,6 @@ Usage:
 
 import argparse
 import functools
-import os
 import re
 import sys
 from collections.abc import Callable
@@ -133,6 +132,7 @@ from util.calendar_event_moves import EventMover
 from util.credentials import load_credentials, load_zoom_credentials
 from util.folder_matching import find_matching_folders
 from util.gather_utils import (
+    GATHER_BASE_URL,
     _fetch_group_detail,
     close_log,
     configure,
@@ -1483,21 +1483,8 @@ def cli():
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
-        "-u", "--base-url", default="https://berkeley-moshav.gather.coop",
-        help="Gather base URL",
-    )
-    parser.add_argument(
         "-n", "--dry-run", action="store_true",
         help="Log what would change without changing anything",
-    )
-    parser.add_argument(
-        "-c", "--credentials", default=str(DEFAULT_CLIENT_SECRETS_PATH),
-        help="Path to OAuth client secrets JSON (for the Drive folder-ID fallback search) "
-             f"(default: {DEFAULT_CLIENT_SECRETS_PATH})",
-    )
-    parser.add_argument(
-        "-d", "--drive-id", default=DEFAULT_DRIVE_ID,
-        help="Shared Drive ID to search when a folder's ID can't be found any other way",
     )
     parser.add_argument(
         "-g", "--group", metavar="PREFIX",
@@ -1565,15 +1552,15 @@ def cli():
         if answer not in ("y", "yes"):
             sys.exit("Stopped; nothing was changed.")
 
-    if not os.path.exists(args.credentials):
+    if not DEFAULT_CLIENT_SECRETS_PATH.exists():
         sys.exit(
-            f"Error: credentials file not found: {args.credentials}\n"
+            f"Error: credentials file not found: {DEFAULT_CLIENT_SECRETS_PATH}\n"
             "Download a Desktop OAuth 2.0 client JSON from Google Cloud Console."
         )
 
     email, password = load_credentials()
-    main(args.base_url, email, password, args.dry_run, args.credentials, args.drive_id,
-         args.group, args.move_events, args.announce_calendar, args.share_all_events,
+    main(GATHER_BASE_URL, email, password, args.dry_run, str(DEFAULT_CLIENT_SECRETS_PATH),
+         DEFAULT_DRIVE_ID, args.group, args.move_events, args.announce_calendar, args.share_all_events,
          args.full_calendar_name, args.email_draft, args.agenda_docs, also_invite)
 
 

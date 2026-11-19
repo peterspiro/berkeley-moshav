@@ -57,7 +57,6 @@ Usage:
 
 import argparse
 import functools
-import os
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -75,6 +74,7 @@ from update_groups import (
 )
 from util.credentials import load_credentials
 from util.gather_utils import (
+    GATHER_BASE_URL,
     GatherUser,
     _fetch_group_detail,
     close_log,
@@ -590,28 +590,16 @@ def cli():
         help="Leave this address out of the comparison (repeatable) — e.g. the "
              "account groups_drive_sync.gs runs as, which it never removes",
     )
-    parser.add_argument(
-        "-u", "--base-url", default="https://berkeley-moshav.gather.coop",
-        help="Gather base URL",
-    )
-    parser.add_argument(
-        "-c", "--credentials", default=str(DEFAULT_CLIENT_SECRETS_PATH),
-        help="Path to OAuth client secrets JSON",
-    )
-    parser.add_argument(
-        "-d", "--drive-id", default=DEFAULT_DRIVE_ID,
-        help="Shared Drive ID to search when a folder's ID can't be found any other way",
-    )
     args = parser.parse_args()
 
-    if not os.path.exists(args.credentials):
+    if not DEFAULT_CLIENT_SECRETS_PATH.exists():
         sys.exit(
-            f"Error: credentials file not found: {args.credentials}\n"
+            f"Error: credentials file not found: {DEFAULT_CLIENT_SECRETS_PATH}\n"
             "Download a Desktop OAuth 2.0 client JSON from Google Cloud Console."
         )
 
     email, password = load_credentials()
-    main(args.base_url, email, password, args.credentials, args.drive_id,
+    main(GATHER_BASE_URL, email, password, str(DEFAULT_CLIENT_SECRETS_PATH), DEFAULT_DRIVE_ID,
          args.group, args.ignore)
 
 

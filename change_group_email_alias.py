@@ -36,7 +36,6 @@ Usage:
 """
 
 import argparse
-import os
 import sys
 from pathlib import Path
 
@@ -45,6 +44,7 @@ from playwright.sync_api import sync_playwright
 
 from util.credentials import load_credentials
 from util.gather_utils import (
+    GATHER_BASE_URL,
     _fetch_group_detail,
     close_log,
     configure,
@@ -205,28 +205,20 @@ def cli():
              "Default: the current address with its recognized suffix truncated.",
     )
     parser.add_argument(
-        "-u", "--base-url", default="https://berkeley-moshav.gather.coop",
-        help="Gather base URL",
-    )
-    parser.add_argument(
         "-n", "--dry-run", action="store_true",
         help="Validate and report what would change, without changing anything",
     )
-    parser.add_argument(
-        "-c", "--credentials", default=str(DEFAULT_CLIENT_SECRETS_PATH),
-        help=f"Path to OAuth client secrets JSON (default: {DEFAULT_CLIENT_SECRETS_PATH})",
-    )
     args = parser.parse_args()
 
-    if not os.path.exists(args.credentials):
+    if not DEFAULT_CLIENT_SECRETS_PATH.exists():
         sys.exit(
-            f"Error: credentials file not found: {args.credentials}\n"
+            f"Error: credentials file not found: {DEFAULT_CLIENT_SECRETS_PATH}\n"
             "Download a Desktop OAuth 2.0 client JSON from Google Cloud Console."
         )
 
     email, password = load_credentials()
-    main(args.local_part, args.new_alias, args.base_url, email, password,
-         args.dry_run, args.credentials)
+    main(args.local_part, args.new_alias, GATHER_BASE_URL, email, password,
+         args.dry_run, str(DEFAULT_CLIENT_SECRETS_PATH))
 
 
 if __name__ == "__main__":

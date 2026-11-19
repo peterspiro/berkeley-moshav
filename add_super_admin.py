@@ -44,14 +44,13 @@ import argparse
 import sys
 import time
 from datetime import date
-from pathlib import Path
 
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from playwright.sync_api import sync_playwright
 
 from util.credentials import load_credentials
-from util.gather_utils import (GatherUser, close_log, fetch_all_gather_users, init_log,
+from util.gather_utils import (GATHER_BASE_URL, GatherUser, close_log, fetch_all_gather_users, init_log,
                                launch_browser, log, login)
 from util.google_group_utils import (DEFAULT_CLIENT_SECRETS_PATH, DOMAIN, SCOPES,
                                      get_credentials, list_group_members)
@@ -61,7 +60,6 @@ from util.super_admins import (FORWARDING_GROUP, WORKSPACE_PRODUCT, candidates,
                                personal_address, recovery_changes, recovery_phone,
                                routing_rule_steps, temporary_password, welcome_email)
 
-BASE_URL = "https://berkeley-moshav.gather.coop"
 ADMIN_SCOPES = SCOPES + [
     "https://www.googleapis.com/auth/admin.directory.user",
     "https://www.googleapis.com/auth/apps.licensing",
@@ -77,8 +75,8 @@ def fetch_users() -> list[GatherUser]:
         browser = launch_browser(pw)
         page = browser.new_page()
         try:
-            login(page, BASE_URL, email, password)
-            return fetch_all_gather_users(page, BASE_URL)
+            login(page, GATHER_BASE_URL, email, password)
+            return fetch_all_gather_users(page, GATHER_BASE_URL)
         except RuntimeError as e:
             log("ERROR", "login", str(e))
             sys.exit(f"Error: couldn't log in to Gather: {e}")
@@ -113,7 +111,7 @@ def get_account(dir_service, address: str) -> dict | None:
 
 
 def ensure_account(dir_service, user: GatherUser, address: str, recovery_email: str,
-                   phone: str, org_unit: str, dry_run: bool) -> tuple[dict, str]:
+                   phone: str, dry_run: bool) -> tuple[dict, str]:
     """Create the member's account, or bring an existing one's recovery
     email and phone up to date. Returns (account, temporary password, or ""
     if the account existed)."""
@@ -123,7 +121,7 @@ def ensure_account(dir_service, user: GatherUser, address: str, recovery_email: 
         print(f"{'Would create' if dry_run else 'Creating'} {address} for {user.full_name}.")
         if dry_run:
             return {"primaryEmail": address, "isAdmin": False}, password
-        body = new_user_body(user, address, password, recovery_email, phone, org_unit)
+        body = new_user_body(user, address, password, recovery_email, phone)
         try:
             return dir_service.users().insert(body=body).execute(), password
         except HttpError as e:
@@ -216,17 +214,13 @@ def main():
                         help="the new account's name, before the @ (default: the member's first name)")
     parser.add_argument("-e", "--personal-email",
                         help="the member's own address, if not the one in Gather")
-    parser.add_argument("-o", "--org-unit", default="/",
-                        help="the organizational unit for a new account (default: the top one)")
     parser.add_argument("-k", "--keep-license", action="store_true",
                         help="don't remove a Workspace license Google gives the account")
     parser.add_argument("-n", "--dry-run", action="store_true", help="change nothing")
-    parser.add_argument("-c", "--client-secrets", default=str(DEFAULT_CLIENT_SECRETS_PATH),
-                        help="OAuth client secrets file (default: client_secret.json)")
     args = parser.parse_args()
 
-    if not Path(args.client_secrets).exists():
-        sys.exit(f"Error: {args.client_secrets} not found (see README.md, Setup).")
+    if not DEFAULT_CLIENT_SECRETS_PATH.exists():
+        sys.exit(f"Error: {DEFAULT_CLIENT_SECRETS_PATH} not found (see README.md, Setup).")
 
     user = choose_member(candidates(fetch_users(), date.today(), args.member))
     personal = args.personal_email or personal_address(user)
@@ -242,12 +236,12 @@ def main():
         sys.exit("Error: give the account's name with -a.")
     address = f"{local}@{DOMAIN}"
 
-    creds = get_credentials(args.client_secrets, ADMIN_SCOPES)
+    creds = get_credentials(str(DEFAULT_CLIENT_SECRETS_PATH), ADMIN_SCOPES)
     dir_service = build("admin", "directory_v1", credentials=creds)
     licensing = build("licensing", "v1", credentials=creds)
 
     account, password = ensure_account(dir_service, user, address, personal, phone,
-                                       args.org_unit, args.dry_run)
+                                       args.dry_run)
     ensure_super_admin(dir_service, account, args.dry_run)
     if not args.keep_license:
         remove_workspace_licenses(licensing, account, bool(password), args.dry_run)

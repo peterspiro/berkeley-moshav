@@ -203,7 +203,7 @@ playwright install chromium
   password = secret
   ```
 - **Google APIs**: create a Desktop OAuth 2.0 client in Google Cloud Console,
-  save its JSON as `client_secret.json` in the repo root (or pass `-c`), and
+  save its JSON as `client_secret.json` in the repo root, and
   enable the Drive, Admin SDK (Directory), Groups Settings, Google
   Calendar, Gmail, and Google Docs APIs (Gmail sends the email telling a
   group about its new calendar; Docs makes the maintenance tracker's

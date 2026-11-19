@@ -196,14 +196,14 @@ def test_routing_rule_and_welcome_email():
 def test_creates_a_new_account():
     d = FakeDirectory()
     account, password = asa.ensure_account(d, _user(), ADDRESS, "jo@example.org",
-                                           "+15105550123", "/", dry_run=False)
+                                           "+15105550123", dry_run=False)
     assert password and d.writes[0][0] == "insert"
     assert d.writes[0][1]["password"] == password
 
 
 def test_dry_run_creates_nothing():
     d = FakeDirectory()
-    account, password = asa.ensure_account(d, _user(), ADDRESS, "jo@example.org", "", "/", True)
+    account, password = asa.ensure_account(d, _user(), ADDRESS, "jo@example.org", "", True)
     assert d.writes == [] and password
     asa.ensure_super_admin(d, account, True)
     asa.remove_workspace_licenses(FakeLicensing(), account, True, True)
@@ -215,7 +215,7 @@ def test_existing_account_of_the_member_only_updates_recovery():
     existing = new_user_body(_user(), ADDRESS, "old", "old@example.org", "+15105550123")
     d = FakeDirectory([existing])
     account, password = asa.ensure_account(d, _user(), ADDRESS, "jo@example.org",
-                                           "+15105550123", "/", False)
+                                           "+15105550123", False)
     assert password == ""
     assert d.writes == [("patch", ADDRESS, {"recoveryEmail": "jo@example.org"})]
 
@@ -223,7 +223,7 @@ def test_existing_account_of_the_member_only_updates_recovery():
 def test_someone_elses_account_stops():
     d = FakeDirectory([{"primaryEmail": ADDRESS}])
     with pytest.raises(SystemExit):
-        asa.ensure_account(d, _user(), ADDRESS, "jo@example.org", "", "/", False)
+        asa.ensure_account(d, _user(), ADDRESS, "jo@example.org", "", False)
     assert d.writes == []
 
 

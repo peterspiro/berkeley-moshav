@@ -181,8 +181,6 @@ def main() -> None:
                         help="print what would be written, and change nothing")
     parser.add_argument("--real", action="store_true",
                         help=f"read {REAL_BASE!r} instead of {TEST_BASE!r}")
-    parser.add_argument("-c", "--credentials", default=str(DEFAULT_CLIENT_SECRETS_PATH),
-                        help="the Google OAuth client file (default: client_secret.json)")
     args = parser.parse_args()
 
     source = SOURCE.read_text()
@@ -210,7 +208,7 @@ def main() -> None:
     from googleapiclient.http import MediaInMemoryUpload
     from util.google_group_utils import get_credentials
 
-    credentials = get_credentials(args.credentials)
+    credentials = get_credentials(str(DEFAULT_CLIENT_SECRETS_PATH))
     drive = build("drive", "v3", credentials=credentials)
     try:
         doc = find_doc(drive)

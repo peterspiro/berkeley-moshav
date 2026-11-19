@@ -119,7 +119,6 @@ Usage:
 """
 
 import argparse
-import os
 import re
 import sys
 from enum import Enum
@@ -141,6 +140,7 @@ from util.circle_agenda_docs import (
 from util.circle_structure_placements import add_placements, check_parent_kind
 from util.credentials import load_credentials, load_zoom_credentials
 from util.gather_utils import (
+    GATHER_BASE_URL,
     _fetch_group_detail,
     close_log,
     configure,
@@ -840,10 +840,6 @@ def cli():
              "can't be combined with --alias.",
     )
     parser.add_argument(
-        "-u", "--base-url", default="https://berkeley-moshav.gather.coop",
-        help="Gather base URL",
-    )
-    parser.add_argument(
         "-n", "--dry-run", action="store_true",
         help="Validate and report what would be created, without creating anything",
     )
@@ -857,14 +853,6 @@ def cli():
         "-E", "--no-email", action="store_true",
         help="Don't open the welcome message to the new list as a draft (e.g. on "
              "an --idempotent re-run after the first run's message was sent)",
-    )
-    parser.add_argument(
-        "-c", "--credentials", default=str(DEFAULT_CLIENT_SECRETS_PATH),
-        help=f"Path to OAuth client secrets JSON (default: {DEFAULT_CLIENT_SECRETS_PATH})",
-    )
-    parser.add_argument(
-        "-d", "--drive-id", default=DEFAULT_DRIVE_ID,
-        help="Shared Drive ID to create the new folder in",
     )
     parser.add_argument(
         "--agenda-doc", action="store_true",
@@ -929,16 +917,17 @@ def cli():
             f"({args.alias!r}) — the domain is always @{DOMAIN}."
         )
 
-    if not os.path.exists(args.credentials):
+    if not DEFAULT_CLIENT_SECRETS_PATH.exists():
         sys.exit(
-            f"Error: credentials file not found: {args.credentials}\n"
+            f"Error: credentials file not found: {DEFAULT_CLIENT_SECRETS_PATH}\n"
             "Download a Desktop OAuth 2.0 client JSON from Google Cloud Console."
         )
 
     email, password = load_credentials()
     main(
-        group_type, name, args.parent_circle, args.manager, args.base_url, email,
-        password, args.dry_run, args.credentials, args.drive_id, alias=args.alias,
+        group_type, name, args.parent_circle, args.manager, GATHER_BASE_URL, email,
+        password, args.dry_run, str(DEFAULT_CLIENT_SECRETS_PATH), DEFAULT_DRIVE_ID,
+        alias=args.alias,
         short_address=args.short_address, idempotent=args.idempotent, send_email=not args.no_email,
         agenda_doc=args.agenda_doc, audience_override=args.audience, no_zoom=args.no_zoom,
         also_invite=also_invite,

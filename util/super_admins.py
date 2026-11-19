@@ -99,14 +99,14 @@ def gather_id_of(account: dict) -> str:
 
 
 def new_user_body(user: GatherUser, address: str, password: str,
-                  recovery_email: str, phone: str, org_unit: str = "/") -> dict:
+                  recovery_email: str, phone: str) -> dict:
     """The Directory API body that creates the member's account."""
     body = {
         "primaryEmail": address,
         "name": {"givenName": user.first_name, "familyName": user.last_name or user.first_name},
         "password": password,
         "changePasswordAtNextLogin": True,
-        "orgUnitPath": org_unit,
+        "orgUnitPath": "/",
         "externalIds": [{"type": "custom", "customType": GATHER_ID_TYPE, "value": user.user_id}],
     }
     body.update(recovery_fields(recovery_email, phone))
