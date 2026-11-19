@@ -187,9 +187,10 @@ def remove_workspace_licenses(licensing, account: dict, created: bool, dry_run: 
                 licensing.licenseAssignments().delete(
                     productId=lic["productId"], skuId=lic["skuId"], userId=address).execute()
     except HttpError as e:
-        print(f"Warning: couldn't check {address}'s licenses ({e.resp.status}). In the Admin "
-              f"console, check it has no Google Workspace license (Users → {address} → Licenses), "
-              f"and that the Licensing API is enabled.")
+        print(f"Warning: couldn't check {address}'s licenses ({e.resp.status}: {e._get_reason()}).\n"
+              f"  In the Admin console, check it has no Google Workspace license (Users → "
+              f"{address} → Licenses). To let the script check, enable the Enterprise License "
+              f"Manager API in the Google Cloud project of client_secret.json.")
         return
     if not licenses:
         print(f"{address} has no Workspace license.")

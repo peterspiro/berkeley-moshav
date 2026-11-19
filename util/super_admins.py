@@ -141,7 +141,8 @@ def routing_rule_steps(address: str, personal: str) -> list[str]:
         "     Modify message → Envelope recipient → Change envelope recipient,",
         f"     Replace recipient: {personal}",
         "  3. Options: Perform this action on non-recognized and recognized addresses.",
-        f"  Description: \"{address} to personal email\". Save.",
+        "  Save. The new rule goes to the bottom of the list: move it up, beside the",
+        "  other admins' rules, so that it's above the rule for All recipients.",
     ]
 
 

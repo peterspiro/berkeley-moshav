@@ -283,7 +283,10 @@ account has no mailbox, a rule in the Admin console (Apps → Google
 Workspace → Gmail → **Default routing**) sends its mail to the person's own
 address: a single-recipient rule matching the account's address that
 changes the envelope recipient to theirs, for recognized and
-non-recognized addresses alike. Each account's recovery email is also the
+non-recognized addresses alike. The admins' rules go at the top of the
+list, above the catch-all rule for All recipients (which acts only on
+non-recognized addresses), so each address's own rule comes first; Gmail
+puts a new rule at the bottom, so move it up after saving it. Each account's recovery email is also the
 person's own address, and its recovery phone their phone.
 
 `add_super_admin.py` sets up such an account for a Gather member, except
@@ -610,7 +613,8 @@ status line as "calendar (members can view, not edit)".
   their Gather phone as its recovery phone, and their Gather ID; makes it a
   super admin; removes any Workspace license Google gave it automatically
   (`-k` keeps it); and adds it to `admin-forwarding@`. It prints the
-  Default routing rule to add in the Admin console, waits while you add it,
+  Default routing rule to add in the Admin console, and where to move it in
+  the list, waits while you add it,
   and then prints the temporary password and opens a draft email to the
   member saying how to sign in. Run again for a member, it skips what's
   done, only updating an existing account's recovery email and phone; it

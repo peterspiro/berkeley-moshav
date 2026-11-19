@@ -186,6 +186,7 @@ def test_recovery_changes():
 def test_routing_rule_and_welcome_email():
     steps = "\n".join(routing_rule_steps(ADDRESS, "jo@example.org"))
     assert "Single recipient" in steps and "Replace recipient: jo@example.org" in steps
+    assert "above the rule for All recipients" in steps and "Description" not in steps
     subject, body = welcome_email(_user(), ADDRESS)
     assert ADDRESS in body and "temporary password separately" in body
 
