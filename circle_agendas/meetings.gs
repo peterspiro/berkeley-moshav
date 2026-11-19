@@ -513,36 +513,25 @@ function startNewMeeting(docId) {
   const date = Utilities.formatDate(start, TIME_ZONE, 'yyyy-MM-dd');
   const startText = Utilities.formatDate(start, TIME_ZONE, 'h:mm a');
 
-  // Two clicks at once mustn't both add the tab: the second waits for the
-  // first, then finds its tab. (The user lock, not the script lock, which
-  // buildNewCircleDocs holds while it builds docs.)
-  const lock = LockService.getUserLock();
-  if (!lock.tryLock(15000)) {
-    return {done: false, title: 'Meeting not added', messages: [
-      'Another change was being made, so the meeting wasn\'t added. Please try again in a ' +
-      'minute.']};
+  // (Two clicks at once can't both add the tab: the web app's runLocked
+  // handles one click at a time, so the second finds the first's tab.)
+  const api = Docs.Documents.get(docId, {includeTabsContent: true});
+  const meetingTabs = api.tabs.filter(t => MEETING_TAB_TITLE_RE.test(t.tabProperties.title))
+    .map(t => ({title: t.tabProperties.title, tabId: t.tabProperties.tabId,
+      built: (t.documentTab.body.content || []).some(se => se.table)}));
+  const plan = newMeetingPlan(meetingTabs, date);
+  if (plan.existing) {
+    return {done: false, title: 'Meeting already added', messages: plan.existing.built
+      ? ['The next meeting, on ' + date + ' at ' + startText + ', is already in the tab ' +
+        'titled ' + date + '. The meeting after it can be added once it\'s over.']
+      : ['The next meeting, on ' + date + ', is being added, or adding it didn\'t finish: ' +
+        'its tab, titled ' + date + ', is empty. If it\'s still empty in a minute, delete ' +
+        'it, and click "+ New meeting" again.']};
   }
-  try {
-    const api = Docs.Documents.get(docId, {includeTabsContent: true});
-    const meetingTabs = api.tabs.filter(t => MEETING_TAB_TITLE_RE.test(t.tabProperties.title))
-      .map(t => ({title: t.tabProperties.title, tabId: t.tabProperties.tabId,
-        built: (t.documentTab.body.content || []).some(se => se.table)}));
-    const plan = newMeetingPlan(meetingTabs, date);
-    if (plan.existing) {
-      return {done: false, title: 'Meeting already added', messages: plan.existing.built
-        ? ['The next meeting, on ' + date + ' at ' + startText + ', is already in the tab ' +
-          'titled ' + date + '. The meeting after it can be added once it\'s over.']
-        : ['The next meeting, on ' + date + ', is being added, or adding it didn\'t finish: ' +
-          'its tab, titled ' + date + ', is empty. If it\'s still empty in a minute, delete ' +
-          'it, and click "+ New meeting" again.']};
-    }
-    // Meeting tabs go after the others (Circle, Backlog), newest first.
-    const index = api.tabs.length - meetingTabs.length + plan.later;
-    return addMeetingTab(docId, circle, {event, following, date, startText, index,
-      previous: plan.previous});
-  } finally {
-    lock.releaseLock();
-  }
+  // Meeting tabs go after the others (Circle, Backlog), newest first.
+  const index = api.tabs.length - meetingTabs.length + plan.later;
+  return addMeetingTab(docId, circle, {event, following, date, startText, index,
+    previous: plan.previous});
 }
 
 function tabUrl(docId, tabId) {
