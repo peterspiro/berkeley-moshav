@@ -157,14 +157,26 @@ def done_with(event, ctx):
     return {**event, **change["patch"]} if change else event
 
 
+BLOCK_END = "(Added automatically from the group's Zoom room.)"
+
+
 class TestMeetingsFaq:
-    def test_added_above_zoom_block(self):
+    def test_added_below_zoom_block(self):
         desc = patch({"description": "Agenda"}, CTX_FAQ)["patch"]["description"]
-        assert desc.startswith(f"Agenda\n\n{FAQ_LINE}\n\nJoin Zoom meeting: ")
+        assert desc.startswith("Agenda\n\nJoin Zoom meeting: ")
+        assert desc.endswith(f"{BLOCK_END}\n\n{FAQ_LINE}")
 
     def test_empty_description(self):
         desc = patch({}, CTX_FAQ)["patch"]["description"]
-        assert desc.startswith(f"{FAQ_LINE}\n\nJoin Zoom meeting: ")
+        assert desc.startswith("Join Zoom meeting: ")
+        assert desc.endswith(f"{BLOCK_END}\n\n{FAQ_LINE}")
+
+    def test_line_above_block_moved_below(self):
+        """An event from before the order changed: FAQ line above the block."""
+        new = done_with({"description": "Agenda"}, CTX_FAQ)["description"]
+        block = new[len("Agenda\n\n"):-len(f"\n\n{FAQ_LINE}")]
+        old = f"Agenda\n\n{FAQ_LINE}\n\n{block}"
+        assert patch({"description": old}, CTX_FAQ)["patch"]["description"] == new
 
     def test_second_pass_changes_nothing(self):
         assert patch(done_with({"description": "Agenda"}, CTX_FAQ), CTX_FAQ) is None
@@ -176,11 +188,19 @@ class TestMeetingsFaq:
 
     def test_html_description(self):
         desc = patch({"description": "<b>Agenda</b>"}, CTX_FAQ)["patch"]["description"]
-        assert desc.startswith(f"<b>Agenda</b><br><br>{FAQ_LINE}<br><br>Join Zoom meeting: ")
+        assert desc.startswith("<b>Agenda</b><br><br>Join Zoom meeting: ")
+        assert desc.endswith(f"{BLOCK_END}<br><br>{FAQ_LINE}")
+
+    def test_html_line_above_block_moved_below(self):
+        new = done_with({"description": "<b>Agenda</b>"}, CTX_FAQ)["description"]
+        block = new[len("<b>Agenda</b><br><br>"):-len(f"<br><br>{FAQ_LINE}")]
+        linked = f'Questions about joining? See the BM Meetings FAQ: <a href="{FAQ}">{FAQ}</a>'
+        old = f"<b>Agenda</b><br><br>{linked}<br><br>{block}"
+        assert patch({"description": old}, CTX_FAQ)["patch"]["description"] == new
 
     def test_deleted_line_is_added_back(self):
         event = done_with({"description": "Agenda"}, CTX_FAQ)
-        event["description"] = event["description"].replace(f"{FAQ_LINE}\n\n", "")
+        event["description"] = event["description"].replace(f"\n\n{FAQ_LINE}", "")
         assert FAQ_LINE in patch(event, CTX_FAQ)["patch"]["description"]
 
     def test_room_link_change_keeps_faq_in_place(self):
@@ -188,7 +208,7 @@ class TestMeetingsFaq:
         new = {**CTX_FAQ, "zoomUrl": "https://us06web.zoom.us/j/81234567890?pwd=NEW"}
         desc = patch(event, new)["patch"]["description"]
         assert desc.count(FAQ_LINE) == 1
-        assert desc.index(FAQ_LINE) < desc.index("Join Zoom meeting")
+        assert desc.endswith(f"{BLOCK_END}\n\n{FAQ_LINE}")
 
     def test_not_added_without_zoom_room(self):
         for event in ({"summary": "Walk [no zoom]"},
@@ -202,9 +222,44 @@ class TestAgendaLink:
     LINE = f"Agenda and minutes: {AGENDA}"
     CTX = {**CTX_FAQ, "agendaUrl": AGENDA}
 
-    def test_added_above_faq_line(self):
+    def test_order_zoom_agenda_faq(self):
         desc = patch({"description": "Notes"}, self.CTX)["patch"]["description"]
-        assert desc.startswith(f"Notes\n\n{self.LINE}\n\n{FAQ_LINE}\n\nJoin Zoom meeting: ")
+        assert desc.startswith("Notes\n\nJoin Zoom meeting: ")
+        assert desc.endswith(f"{BLOCK_END}\n\n{self.LINE}\n\n{FAQ_LINE}")
+
+    def test_old_order_moved(self):
+        """An event from before the order changed: agenda and FAQ lines above
+        the block. They move below it, and nothing else changes."""
+        new = done_with({"description": "Notes"}, self.CTX)["description"]
+        block = new[len("Notes\n\n"):-len(f"\n\n{self.LINE}\n\n{FAQ_LINE}")]
+        old = f"Notes\n\n{self.LINE}\n\n{FAQ_LINE}\n\n{block}"
+        assert patch({"description": old}, self.CTX)["patch"]["description"] == new
+        assert "description" not in patch({"description": new}, self.CTX)["patch"]
+
+    def test_old_order_with_old_doc_moved_and_relinked(self):
+        old_ctx = {**CTX_FAQ, "agendaUrl": self.OLD}
+        new = done_with({"description": "Notes"}, self.CTX)["description"]
+        old = done_with({"description": "Notes"}, old_ctx)["description"]
+        assert patch({"description": old}, self.CTX)["patch"]["description"] == new
+
+    def test_text_on_agenda_line_kept_in_place(self):
+        event = {"description": f"Notes\n{self.LINE} [remind 1 day]\nMore"}
+        desc = patch(event, self.CTX)["patch"]["description"]
+        assert desc.startswith("Notes\n[remind 1 day]\nMore\n\nJoin Zoom meeting: ")
+        assert desc.endswith(f"{BLOCK_END}\n\n{self.LINE}\n\n{FAQ_LINE}")
+
+    def test_text_typed_below_old_lines_stays_above_block(self):
+        new = done_with({"description": "Notes"}, self.CTX)["description"]
+        block = new[len("Notes\n\n"):-len(f"\n\n{self.LINE}\n\n{FAQ_LINE}")]
+        old = f"Notes\n\n{block}\n\n{self.LINE}\n\n{FAQ_LINE}\n\nBring snacks"
+        desc = patch({"description": old}, self.CTX)["patch"]["description"]
+        assert desc == f"Notes\n\nBring snacks\n\n{block}\n\n{self.LINE}\n\n{FAQ_LINE}"
+
+    def test_own_links_elsewhere_left_alone(self):
+        event = {"description": f"Notes: {self.AGENDA}\nHelp: {FAQ}"}
+        desc = patch(event, self.CTX)["patch"]["description"]
+        assert desc.startswith(f"Notes: {self.AGENDA}\nHelp: {FAQ}\n\nJoin Zoom meeting: ")
+        assert "Agenda and minutes:" not in desc and "BM Meetings FAQ" not in desc
 
     def test_added_once(self):
         assert patch(done_with({"description": "Notes"}, self.CTX), self.CTX) is None

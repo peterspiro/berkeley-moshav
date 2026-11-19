@@ -50,12 +50,17 @@ const ZOOM_USER_RE = /Zoom user: (.+?) \(meetings with the same Zoom user/;
 const FAQ_TEXT = 'Questions about joining? See the BM Meetings FAQ:';
 const AGENDA_TEXT = 'Agenda and minutes:';
 const GOOGLE_DOC_ID_RE = /\/document\/d\/([\w-]+)/;
-// The rest of an "Agenda and minutes:" line, up to its line break or the
-// end of its HTML element.
-const AGENDA_LINE_RE = /(Agenda and minutes:)((?:(?!\n|<br\s*\/?>|<\/(?:p|div|li)>).)*)/gi;
+// The rest of a line, up to its line break or the end of its HTML element.
+const LINE_REST_SRC = String.raw`((?:(?!\n|<br\s*\/?>|<\/(?:p|div|li)>).)*)`;
+// Line breaks, as plain text or HTML.
+const LINE_BREAKS_SRC = String.raw`((?:\n|<br\s*\/?>)*)`;
+// An "Agenda and minutes:" line, from its label.
+const AGENDA_LINE_RE = new RegExp(String.raw`(Agenda and minutes:)` + LINE_REST_SRC, 'gi');
 // The same, with the line breaks before it.
-const AGENDA_LINE_WITH_BREAKS_RE =
-  new RegExp(String.raw`((?:\n|<br\s*\/?>)*)` + AGENDA_LINE_RE.source, 'gi');
+const AGENDA_LINE_WITH_BREAKS_RE = new RegExp(LINE_BREAKS_SRC + AGENDA_LINE_RE.source, 'gi');
+// The FAQ line this script writes, with the line breaks before it.
+const FAQ_LINE_WITH_BREAKS_RE = new RegExp(
+  LINE_BREAKS_SRC + String.raw`(Questions about joining\? See the BM Meetings FAQ:)` + LINE_REST_SRC, 'gi');
 const LEADING_BREAKS_RE = /^(?:\s|<br\s*\/?>)+/i;
 const HTML_LINK_RE = /<a\b[^>]*>[\s\S]*?<\/a>/gi;
 // A Google Doc's address, as written in a description (bare or in a link).
@@ -132,14 +137,16 @@ function base64ToString(text) {
  *     remembered in a
  *     private extended property, so a changed room link replaces it.
  *     Such an event also gets a line linking the meetings FAQ
- *     (ctx.faqUrl), just above the block, unless the description already
- *     links that document anywhere, and loses any "Zoom link to follow"
- *     line.
+ *     (ctx.faqUrl) at the end, below the block and the agenda line, unless
+ *     the rest of the description links that document, and loses any
+ *     "Zoom link to follow" line.
  *   - Agenda: a line linking the group's agenda doc (ctx.agendaUrl), just
- *     above the FAQ line (or, without Zoom details, at the end), unless the
- *     description already links that doc anywhere; an "Agenda and minutes:"
+ *     below the Zoom block (or, without Zoom details, at the end), unless
+ *     the rest of the description links that doc; an "Agenda and minutes:"
  *     line linking another doc (the group's previous one) is relinked
- *     instead. A group with no agenda doc (agendaUrl null) loses its
+ *     instead. With Zoom details, the agenda and FAQ lines are rewritten
+ *     below the block on every pass, so lines written above it (as they
+ *     were before) move down. A group with no agenda doc (agendaUrl null) loses its
  *     "Agenda and minutes:" lines that link its last one (staleAgendaUrl),
  *     since that doc was trashed or deleted; lines linking any other doc
  *     are kept.
@@ -164,24 +171,27 @@ function computeEventPatch(event, ctx) {
     }
 
     const br = /<[a-z][^>]*>/i.test(description) ? '<br>' : '\n';
-    let text = removeToFollowLines(description.replace(ZOOM_BLOCK_RE, '')).replace(/\s+$/, '');
-    if (ctx.agendaUrl) text = relinkAgendaLines(text, ctx.agendaUrl);
-    else if (ctx.staleAgendaUrl) text = removeAgendaLines(text, ctx.staleAgendaUrl);
-    if (ctx.agendaUrl && !linksDocument(text, ctx.agendaUrl)) {
-      const agenda = `${AGENDA_TEXT} ${ctx.agendaUrl}`;
-      text = text ? `${text}${br}${br}${agenda}` : agenda;
+    // The event's own text: without the block, and without the agenda and
+    // FAQ lines, which are written again below the block.
+    let text = removeToFollowLines(description.replace(ZOOM_BLOCK_RE, ''));
+    if (ctx.agendaUrl) {
+      text = removeLabelledLines(relinkAgendaLines(text, ctx.agendaUrl),
+                                 AGENDA_LINE_WITH_BREAKS_RE, ctx.agendaUrl);
+    } else if (ctx.staleAgendaUrl) {
+      text = removeLabelledLines(text, AGENDA_LINE_WITH_BREAKS_RE, ctx.staleAgendaUrl);
     }
-    if (ctx.faqUrl && !linksDocument(text, ctx.faqUrl)) {
-      const faq = `${FAQ_TEXT} ${ctx.faqUrl}`;
-      text = text ? `${text}${br}${br}${faq}` : faq;
-    }
+    if (ctx.faqUrl) text = removeLabelledLines(text, FAQ_LINE_WITH_BREAKS_RE, ctx.faqUrl);
+    text = text.replace(/\s+$/, '');
     let zoomUser = ctx.zoomUser;
     if (zoomUser === undefined) {
       const old = (description.match(ZOOM_BLOCK_RE) || [''])[0].match(ZOOM_USER_RE);
       zoomUser = old ? old[1] : null;
     }
-    const block = zoomBlock(Object.assign({}, ctx, { zoomUser }), br);
-    const desired = text ? `${text}${br}${br}${block}` : block;
+    const parts = text ? [text] : [];
+    parts.push(zoomBlock(Object.assign({}, ctx, { zoomUser }), br));
+    if (ctx.agendaUrl && !linksDocument(text, ctx.agendaUrl)) parts.push(`${AGENDA_TEXT} ${ctx.agendaUrl}`);
+    if (ctx.faqUrl && !linksDocument(text, ctx.faqUrl)) parts.push(`${FAQ_TEXT} ${ctx.faqUrl}`);
+    const desired = parts.join(br + br);
     if (desired !== description) patch.description = desired;
 
     if (stamped !== ctx.zoomUrl) {
@@ -198,7 +208,7 @@ function computeEventPatch(event, ctx) {
       patch.description = relinked;
     }
   } else if (ctx.staleAgendaUrl) {
-    const removed = removeAgendaLines(description, ctx.staleAgendaUrl);
+    const removed = removeLabelledLines(description, AGENDA_LINE_WITH_BREAKS_RE, ctx.staleAgendaUrl);
     if (removed !== description) patch.description = removed;
   }
 
@@ -726,13 +736,14 @@ function reminderTiming(startMs, createdMs, lead, nowMs, graceMs) {
   return nowMs < due + graceMs ? 'due' : 'missed';
 }
 
-/** text without the links to the doc at docUrl on its "Agenda and
- * minutes:" lines, and their label. A line left with nothing else on it is
- * removed, with the line breaks before it (or, for a line at the start,
- * after it); anything else typed on the line, such as "[no zoom]", is kept. */
-function removeAgendaLines(text, docUrl) {
+/** text without the links to the doc at docUrl on its lines that lineRe
+ * matches (AGENDA_LINE_WITH_BREAKS_RE or FAQ_LINE_WITH_BREAKS_RE), and
+ * their label. A line left with nothing else on it is removed, with the
+ * line breaks before it (or, for a line at the start, after it); anything
+ * else typed on the line, such as "[no zoom]", is kept. */
+function removeLabelledLines(text, lineRe, docUrl) {
   let atStart = false;
-  const out = (text || '').replace(AGENDA_LINE_WITH_BREAKS_RE, (line, breaks, label, rest, offset) => {
+  const out = (text || '').replace(lineRe, (line, breaks, label, rest, offset) => {
     if (!linksDocument(rest, docUrl)) return line;
     const left = rest
       .replace(HTML_LINK_RE, a => (linksDocument(a, docUrl) ? '' : a))

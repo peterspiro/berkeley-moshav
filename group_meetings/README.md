@@ -11,17 +11,18 @@ Apps Script that looks after every group's Google calendar (the calendars
     (the community calendars' rooms, and a few groups'), and its name in Zoom, so anyone looking at
     the all-events calendar can tell which meetings can't overlap) in the
     description, with a
-    line linking the "BM Meetings FAQ" just above them, unless the
-    description already links it; a "Zoom link to follow" line in the
+    line linking the "BM Meetings FAQ" at the end, below them (and below
+    the agenda line), unless the rest of the description links it; a
+    "Zoom link to follow" line in the
     description is removed), and the group's Google Group and the "All
     Berkeley Moshav Events" calendar as guests. The group's members get an
     invitation; adding the room details or the all-events calendar sends no
     email. Events marked `[no zoom]`, or with another Zoom or Meet link typed
     in, keep their own link and get no FAQ line.
   - and, if the group has a circle agenda doc (see `../circle_agendas/`),
-    an "Agenda and minutes:" line linking it, just above the FAQ line (or
-    at the end, for an event without Zoom details), unless the description
-    already links the doc; if the group's doc is replaced, the line is
+    an "Agenda and minutes:" line linking it, just below the Zoom details
+    (or at the end, for an event without them), unless the rest of the
+    description links the doc; if the group's doc is replaced, the line is
     relinked to the new one rather than repeated. If the doc is trashed or
     deleted (and the group has no other), the link and its label are removed
     from the line, and the line too if nothing else is on it. The doc is found by the label the Python scripts
