@@ -7,6 +7,8 @@ body: no Reply-To, HTML, or attachments. It's sent from whatever account
 the mail program uses.
 """
 
+import subprocess
+import sys
 import webbrowser
 from urllib.parse import quote
 
@@ -23,5 +25,15 @@ def mailto_url(to: str, subject: str, body: str) -> str:
 
 def open_draft(to: str, subject: str, body: str) -> bool:
     """Open the draft in the default mail program. Returns False if no
-    program could be opened."""
-    return webbrowser.open(mailto_url(to, subject, body))
+    program could be opened.
+
+    On a Mac it uses `open`, which gives the link to the app chosen for
+    mailto: links: Python's webbrowser (since 3.13) gives every link that
+    isn't http(s) to the default browser, which may do nothing with it."""
+    url = mailto_url(to, subject, body)
+    if sys.platform == "darwin":
+        try:
+            return subprocess.run(["open", url], capture_output=True).returncode == 0
+        except OSError:
+            return False
+    return webbrowser.open(url)
