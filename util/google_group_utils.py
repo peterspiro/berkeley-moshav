@@ -71,8 +71,12 @@ class _AuthUrlFormatter:
         self._stream.flush()
 
 
-def get_credentials(client_secrets_file: str):
+def get_credentials(client_secrets_file: str, scopes: list[str] = SCOPES):
     """Return OAuth2 credentials, refreshing or re-running the flow as needed.
+
+    `scopes` is SCOPES unless a script needs more (add_super_admin.py's
+    ADMIN_SCOPES); the saved sign-in keeps them, and serves the scripts that
+    need fewer.
 
     If the cached token was issued for a narrower scope set than SCOPES
     currently requires (e.g. after adding a new API scope to this file),
@@ -83,13 +87,13 @@ def get_credentials(client_secrets_file: str):
     if TOKEN_PATH.exists():
         with open(TOKEN_PATH, "rb") as f:
             creds = pickle.load(f)
-        if creds and set(SCOPES) - set(creds.scopes or []):
+        if creds and set(scopes) - set(creds.scopes or []):
             creds = None
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
         else:
-            flow = InstalledAppFlow.from_client_secrets_file(client_secrets_file, SCOPES)
+            flow = InstalledAppFlow.from_client_secrets_file(client_secrets_file, scopes)
             with contextlib.redirect_stdout(_AuthUrlFormatter(sys.stdout)):
                 creds = flow.run_local_server(port=0, open_browser=False)
         with open(TOKEN_PATH, "wb") as f:
