@@ -202,10 +202,10 @@ agenda doc, built from code rather than copied from a template doc
 ## Future work
 
 **Rollout**
-- Run `update_groups.py -a` (first with `-n`) to
+- Run `update_groups.py -d` (first with `-n`) to
   give every circle and working group its doc. Once the layout is
   settled, consider making docs the default in both scripts rather than
-  opt-in (`-a` / `--agenda-doc`).
+  opt-in (`-d` / `--agenda-doc(s)`).
 - From then on, bump `LAYOUT_VERSION` (`circle_agendas/circle_docs.gs`)
   with every change to the Circle Info or Backlog tabs, so update scripts
   can tell which docs need it. Every doc built so far is version 1,

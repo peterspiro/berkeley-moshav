@@ -436,7 +436,7 @@ status line as "calendar (members can view, not edit)".
   Circle Structure, by writing the parent to "Circle structure
   placements.json" in `admin@`'s My Drive for the `circle_agendas` Apps
   Script, which adds the group to the sheet from its footer within the hour; with
-  `--agenda-doc`, for a circle or working group, creates its agenda doc,
+  `-d`/`--agenda-doc`, for a circle or working group, creates its agenda doc,
   for the `circle_agendas` Apps Script to build; and opens a welcome email to the new list as a draft in
   your mail program. With `-t a` (`--type admin`), it makes a community
   calendar's admin group instead (Gather type "Squad";
@@ -494,7 +494,7 @@ status line as "calendar (members can view, not edit)".
   and has a button that does nothing for members; members add a calendar
   from the link in the group's footer.
 
-  With `-a`/`--agenda-docs` (with `-g`, for that group alone), it also gives
+  With `-d`/`--agenda-docs` (with `-g`, for that group alone), it also gives
   every circle and working group (not everybody groups) that has a Drive item and an email list an agenda doc,
   "<Group> Agenda", created empty in its Drive item and labelled for the
   `circle_agendas` Apps Script to build within minutes; a group that has

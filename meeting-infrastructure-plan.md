@@ -216,7 +216,7 @@ their own social events.
   forgotten tag sends an event out without Zoom details.)
 - **No agenda docs for now.** An admin group that later has one will need a
   doc of its own format, not the circle agenda doc (which has the Circle
-  Structure rows), so `update_groups.py -a` leaves them out.
+  Structure rows), so `update_groups.py -d` leaves them out.
 - **Not in the Circle Structure.** The `circle_agendas` Apps Script leaves
   out a group whose folder is in "Meeting Admin", without a warning.
 - **Clashes.** A Zoom user hosts one meeting at a time, so community-wide

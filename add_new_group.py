@@ -797,33 +797,38 @@ def cli():
         description="Create a new Drive folder, Google Group, and Gather group, "
                     "all linked together, and put it under its parent in the Circle Structure.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        add_help=False,
     )
-    parser.add_argument(
+    required = parser.add_argument_group("required arguments")
+    optional = parser.add_argument_group("optional arguments")
+    admin = parser.add_argument_group("admin-group options (with --type=admin)")
+    optional.add_argument("-h", "--help", action="help", help="Show this help message and exit")
+    required.add_argument(
         "-N", "--name", nargs="+", required=True,
         help="Name of the folder and the groups (multiple words are joined "
              "with spaces, so quotes aren't needed)",
     )
-    parser.add_argument(
-        "-t", "--type", type=GroupType.parse, default=None,
-        help="Group type — 'c'/'circle', 'w'/'working group', 'b'/'club', or 'a'/'admin' "
-             "(a community-wide calendar's admin group, its calendar named without "
-             "'Admins'). Only required if the name doesn't end with a type suffix "
-             "('Circle'/'Working Group'/'Club'/'Admins'), from which it's otherwise inferred.",
-    )
-    parser.add_argument(
-        "-p", "--parent-circle", default=None,
-        help="A prefix uniquely identifying the parent's Gather group: a circle, or, "
-             "for a working group, a circle or working group (required unless --type=club "
-             "or admin)",
-    )
-    parser.add_argument(
+    required.add_argument(
         "-m", "--manager", required=True,
         help="A prefix of a community member's first name, last name, or email "
              "that uniquely identifies them. They're added to the new Gather "
              "group as a manager (and thus given Content-manager access to the "
              "Drive folder when it's linked).",
     )
-    parser.add_argument(
+    optional.add_argument(
+        "-t", "--type", type=GroupType.parse, default=None,
+        help="Group type — 'c'/'circle', 'w'/'working group', 'b'/'club', or 'a'/'admin' "
+             "(a community-wide calendar's admin group, its calendar named without "
+             "'Admins'). Only required if the name doesn't end with a type suffix "
+             "('Circle'/'Working Group'/'Club'/'Admins'), from which it's otherwise inferred.",
+    )
+    optional.add_argument(
+        "-p", "--parent-circle", default=None,
+        help="A prefix uniquely identifying the parent's Gather group: a circle, or, "
+             "for a working group, a circle or working group (required unless --type=club "
+             "or admin)",
+    )
+    optional.add_argument(
         "-a", "--alias", default=None,
         help=f"A shorter alias's local part (without the @{DOMAIN} domain). The "
              "Google Group is still created at its full-name address; this alias "
@@ -831,7 +836,7 @@ def cli():
              "list is set to the alias — same effect as running "
              "change_group_email_alias.py afterward.",
     )
-    parser.add_argument(
+    optional.add_argument(
         "-s", "--short-address", action="store_true",
         help="Make the Google Group's primary address the name without its "
              "'Circle'/'Working Group' suffix (e.g. landscape@ rather than "
@@ -839,43 +844,43 @@ def cli():
              "Gather group's mailing list uses the short address. Not for clubs; "
              "can't be combined with --alias.",
     )
-    parser.add_argument(
+    optional.add_argument(
         "-n", "--dry-run", action="store_true",
         help="Validate and report what would be created, without creating anything",
     )
-    parser.add_argument(
+    optional.add_argument(
         "-i", "--idempotent", action="store_true",
         help="Reuse any artifacts (Drive folder, Google Group, Gather group, "
              "alias, folder link, hierarchy entry) that already exist instead "
              "of aborting — lets a re-run finish after a partial failure.",
     )
-    parser.add_argument(
+    optional.add_argument(
         "-E", "--no-email", action="store_true",
         help="Don't open the welcome message to the new list as a draft (e.g. on "
              "an --idempotent re-run after the first run's message was sent)",
     )
-    parser.add_argument(
-        "--agenda-doc", action="store_true",
+    optional.add_argument(
+        "-d", "--agenda-doc", action="store_true",
         help="For a circle or working group, also create its agenda doc, for the "
              "circle_agendas Apps Script to build",
     )
-    parser.add_argument(
+    admin.add_argument(
         "-A", "--audience", metavar="ADDRESS", default=None,
-        help="For an admin group, the Google Group its calendar's events invite and its "
+        help="The Google Group the calendar's events invite and its "
              f"reminders go to, instead of {COMMUNITY_CALENDAR_AUDIENCE} (say, a small "
              "group, to try a community calendar out without emailing everyone); its "
              f"address, or just the part before @{DOMAIN}",
     )
-    parser.add_argument(
+    admin.add_argument(
         "-z", "--no-zoom", action="store_true",
-        help="For an admin group, give its calendar no Zoom room, for a calendar of "
+        help="Give the calendar no Zoom room, for a calendar of "
              "in-person events: its footer says \"Zoom meeting: none\", so the scripts never "
              "make one, and its events get no Zoom details",
     )
-    parser.add_argument(
+    admin.add_argument(
         "-I", "--also-invite", metavar="ADDRESSES", action="append", default=None,
-        help="For an admin group, more addresses (any domain; just the name for "
-             f"@{DOMAIN}) that every event on its calendar invites along with its "
+        help="More addresses (any domain; just the name for "
+             f"@{DOMAIN}) that every event on the calendar invites along with its "
              "audience, but doesn't remind; separate several with commas, or give the "
              "option again",
     )

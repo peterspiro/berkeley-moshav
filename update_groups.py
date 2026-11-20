@@ -64,7 +64,7 @@ excluding hidden groups:
       in the signed-in account's My Drive, for the circle agenda docs'
       attendance lists and Presenter choices (see util/member_names.py and
       circle_agendas/circles.gs). In a -g run too.
-  0g. With -a/--agenda-docs, gives every circle and working group (not
+  0g. With -d/--agenda-docs, gives every circle and working group (not
       everybody groups) with a Drive item and an email list an agenda doc,
       created empty in its Drive item and labelled for the circle_agendas
       Apps Script to build (see util/circle_agenda_docs.py). A group that
@@ -1481,52 +1481,56 @@ def cli():
         description="Sync Google Drive folders, Groups, calendars, Zoom rooms, and agenda "
                     "docs with the current /groups list",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        add_help=False,
     )
-    parser.add_argument(
+    optional = parser.add_argument_group("optional arguments")
+    one_group = parser.add_argument_group("options for one group (with -g)")
+    optional.add_argument("-h", "--help", action="help", help="Show this help message and exit")
+    optional.add_argument(
         "-n", "--dry-run", action="store_true",
         help="Log what would change without changing anything",
     )
-    parser.add_argument(
+    optional.add_argument(
         "-g", "--group", metavar="PREFIX",
         help="Process only the Gather group whose name starts with this prefix "
              "(case-insensitive; must match exactly one group)",
     )
-    parser.add_argument(
+    optional.add_argument(
         "-m", "--move-events", action="store_true",
         help="For each group, offer to copy its meetings from other calendars to its own "
              "calendar and delete them there (always offered for a newly created calendar)",
     )
-    parser.add_argument(
-        "--share-all-events", action="store_true",
-        help="With -g, also share the all-events calendar with the everybody groups, as a "
-             "full run does (reads every group from Gather to find them)",
-    )
-    parser.add_argument(
+    optional.add_argument(
         "--announce-calendar", action="store_true",
         help="Email each group's list about its calendar and Zoom room even if the calendar "
              "already existed (always sent for a newly created calendar); use with -g",
     )
-    parser.add_argument(
-        "-e", "--email-draft", action="store_true",
-        help="With -g, open the email about the group's calendar and Zoom room as a draft in "
-             "your mail program, for you to review and send, instead of sending it from "
-             "admin@ (it's plain text, with no Reply-To)",
-    )
-    parser.add_argument(
-        "-f", "--full-calendar-name", action="store_true",
-        help="With -g, name the group's calendar by its full name, ending with its type "
-             "(\"Technology Circle\", \"Garden Working Group\"), creating or renaming it "
-             "so; later runs leave that name as it is",
-    )
-    parser.add_argument(
-        "-a", "--agenda-docs", action="store_true",
+    optional.add_argument(
+        "-d", "--agenda-docs", action="store_true",
         help="Give each circle and working group without one an agenda doc, for the "
              "circle_agendas Apps Script to build (with -g, just that group)",
     )
-    parser.add_argument(
+    one_group.add_argument(
+        "--share-all-events", action="store_true",
+        help="Also share the all-events calendar with the everybody groups, as a "
+             "full run does (reads every group from Gather to find them)",
+    )
+    one_group.add_argument(
+        "-e", "--email-draft", action="store_true",
+        help="Open the email about the group's calendar and Zoom room as a draft in "
+             "your mail program, for you to review and send, instead of sending it from "
+             "admin@ (it's plain text, with no Reply-To)",
+    )
+    one_group.add_argument(
+        "-f", "--full-calendar-name", action="store_true",
+        help="Name the group's calendar by its full name, ending with its type "
+             "(\"Technology Circle\", \"Garden Working Group\"), creating or renaming it "
+             "so; later runs leave that name as it is",
+    )
+    one_group.add_argument(
         "-I", "--also-invite", metavar="ADDRESSES", action="append", default=None,
-        help="With -g, for a community calendar's admin group: replace the more addresses "
-             "(any domain; just the name for @berkeleymoshav.org) that every event on its "
+        help="For a community calendar's admin group: replace the more addresses "
+             f"(any domain; just the name for @{DOMAIN}) that every event on its "
              "calendar invites along with its audience, but doesn't remind; separate "
              "several with commas, or give the option again; 'none' removes them. Its "
              "upcoming events are rechecked within the hour",
