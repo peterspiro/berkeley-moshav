@@ -800,6 +800,7 @@ def cli():
         add_help=False,
     )
     required = parser.add_argument_group("required arguments")
+    sometimes = parser.add_argument_group("arguments required in some cases")
     optional = parser.add_argument_group("optional arguments")
     admin = parser.add_argument_group("admin-group options (with --type=admin)")
     optional.add_argument("-h", "--help", action="help", help="Show this help message and exit")
@@ -815,14 +816,14 @@ def cli():
              "group as a manager (and thus given Content-manager access to the "
              "Drive folder when it's linked).",
     )
-    optional.add_argument(
+    sometimes.add_argument(
         "-t", "--type", type=GroupType.parse, default=None,
         help="Group type — 'c'/'circle', 'w'/'working group', 'b'/'club', or 'a'/'admin' "
              "(a community-wide calendar's admin group, its calendar named without "
              "'Admins'). Only required if the name doesn't end with a type suffix "
              "('Circle'/'Working Group'/'Club'/'Admins'), from which it's otherwise inferred.",
     )
-    optional.add_argument(
+    sometimes.add_argument(
         "-p", "--parent-circle", default=None,
         help="A prefix uniquely identifying the parent's Gather group: a circle, or, "
              "for a working group, a circle or working group (required unless --type=club "
