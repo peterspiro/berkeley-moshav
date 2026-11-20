@@ -49,8 +49,8 @@ Steps:
      util/google_group_footer.py) — this is what groups_drive_sync.gs reads
      to sync membership, so no Apps Script redeploy is needed for a new
      group to start syncing.
-  7b. With --agenda-doc, for a circle or working group, create its agenda
-     doc, empty and labelled for the circle_agendas Apps Script to build
+  7b. For a circle or working group, unless --no-agenda-doc, create its
+     agenda doc, empty and labelled for the circle_agendas Apps Script to build
      (see util/circle_agenda_docs.py).
   8. Add the manager to the Google Group directly, so the list reaches
      them right away rather than after groups_drive_sync.gs's next run.
@@ -404,7 +404,7 @@ def main(
     short_address: bool = False,
     idempotent: bool = False,
     send_email: bool = True,
-    agenda_doc: bool = False,
+    agenda_doc: bool = True,
     audience_override: str | None = None,
     no_zoom: bool = False,
     also_invite: list[str] | None = None,
@@ -747,7 +747,7 @@ def main(
                 print(f"ERROR: couldn't write its parent for the Circle Structure ({e}); ask "
                       f"the Coordinating Circle to put it under '{parent_group.name}'.")
 
-        # ── With --agenda-doc, give it an agenda doc, for the Apps Script to build ─
+        # ── Give it an agenda doc, for the Apps Script to build ───────────────────
         if agenda_doc and kind in AGENDA_KINDS:
             try:
                 ensure_agenda_doc(drive_service, gemail, gdisplay, folder_id, dry_run=False)
@@ -860,9 +860,9 @@ def cli():
              "an --idempotent re-run after the first run's message was sent)",
     )
     optional.add_argument(
-        "-d", "--agenda-doc", action="store_true",
-        help="For a circle or working group, also create its agenda doc, for the "
-             "circle_agendas Apps Script to build",
+        "--no-agenda-doc", action="store_true",
+        help="For a circle or working group, don't create its agenda doc (by default, "
+             "it's created for the circle_agendas Apps Script to build)",
     )
     admin.add_argument(
         "-A", "--audience", metavar="ADDRESS", default=None,
@@ -934,7 +934,7 @@ def cli():
         password, args.dry_run, str(DEFAULT_CLIENT_SECRETS_PATH), DEFAULT_DRIVE_ID,
         alias=args.alias,
         short_address=args.short_address, idempotent=args.idempotent, send_email=not args.no_email,
-        agenda_doc=args.agenda_doc, audience_override=args.audience, no_zoom=args.no_zoom,
+        agenda_doc=not args.no_agenda_doc, audience_override=args.audience, no_zoom=args.no_zoom,
         also_invite=also_invite,
     )
 

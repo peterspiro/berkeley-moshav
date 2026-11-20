@@ -64,7 +64,7 @@ excluding hidden groups:
       in the signed-in account's My Drive, for the circle agenda docs'
       attendance lists and Presenter choices (see util/member_names.py and
       circle_agendas/circles.gs). In a -g run too.
-  0g. With -d/--agenda-docs, gives every circle and working group (not
+  0g. With -a/--agenda-docs, gives every circle and working group (not
       everybody groups) with a Drive item and an email list an agenda doc,
       created empty in its Drive item and labelled for the circle_agendas
       Apps Script to build (see util/circle_agenda_docs.py). A group that
@@ -1503,10 +1503,11 @@ def cli():
     optional.add_argument(
         "--announce-calendar", action="store_true",
         help="Email each group's list about its calendar and Zoom room even if the calendar "
-             "already existed (always sent for a newly created calendar); use with -g",
+             "already existed (always sent for a newly created calendar). With -g, just "
+             "that group's; without it, asks first, since that emails every group",
     )
     optional.add_argument(
-        "-d", "--agenda-docs", action="store_true",
+        "-a", "--agenda-docs", action="store_true",
         help="Give each circle and working group without one an agenda doc, for the "
              "circle_agendas Apps Script to build (with -g, just that group)",
     )

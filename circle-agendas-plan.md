@@ -157,9 +157,8 @@ Each circle and working group (not clubs or everybody groups) gets an
 agenda doc, built from code rather than copied from a template doc
 (a copy's links would still point at the original):
 
-- `update_groups.py --agenda-docs` and
-  `add_new_group.py --agenda-doc` (opt-in until the layout is settled)
-  create "<Group> Agenda",
+- `update_groups.py --agenda-docs` (opt-in) and `add_new_group.py`
+  (unless `--no-agenda-doc`) create "<Group> Agenda",
   empty, in the group's Drive item, labelled with Drive file properties
   (hidden from users): the group's address, its parent's name in the
   Circle Structure (the Gather wiki page listing every circle, under its
@@ -202,10 +201,10 @@ agenda doc, built from code rather than copied from a template doc
 ## Future work
 
 **Rollout**
-- Run `update_groups.py -d` (first with `-n`) to
-  give every circle and working group its doc. Once the layout is
-  settled, consider making docs the default in both scripts rather than
-  opt-in (`-d` / `--agenda-doc(s)`).
+- Run `update_groups.py -a` (first with `-n`) to
+  give every circle and working group its doc. `add_new_group.py` now
+  makes one by default; once the layout is settled, consider making
+  `update_groups.py` do so too, rather than with `-a`.
 - From then on, bump `LAYOUT_VERSION` (`circle_agendas/circle_docs.gs`)
   with every change to the Circle Info or Backlog tabs, so update scripts
   can tell which docs need it. Every doc built so far is version 1,

@@ -208,7 +208,8 @@ web app read it (and the groups' footers) afresh.
 
 Each circle and working group gets an agenda doc, "<Group> Agenda", in its
 Drive folder. `update_groups.py --agenda-docs`
-(with `-g`, for one group) and `add_new_group.py --agenda-doc` create it
+(with `-g`, for one group) and `add_new_group.py` (unless
+`--no-agenda-doc`) create it
 empty and label it in Drive with the group's
 address and "new" (`util/circle_agenda_docs.py`).
 **`buildNewCircleDocs`** builds every doc so labelled, as
