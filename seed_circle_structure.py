@@ -29,7 +29,6 @@ Usage:
 """
 
 import argparse
-import os
 import sys
 from pathlib import Path
 
@@ -38,7 +37,7 @@ from playwright.sync_api import sync_playwright
 
 from util.circle_structure_placements import PLACEMENTS_FILE, add_placements
 from util.credentials import load_credentials
-from util.gather_utils import close_log, configure, init_log, launch_browser, log, login
+from util.gather_utils import GATHER_BASE_URL, close_log, configure, init_log, launch_browser, log, login
 from util.google_group_utils import DEFAULT_CLIENT_SECRETS_PATH, get_credentials
 from util.hierarchy_wiki import HierarchyNode, fetch_hierarchy_page_content, iter_nodes, parse_hierarchy
 from util.meeting_rooms import check_calendar_owner
@@ -106,16 +105,12 @@ def cli():
                     "the Circle Structure sheet",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument("-u", "--base-url", default="https://berkeley-moshav.gather.coop",
-                        help="Gather base URL")
     parser.add_argument("-n", "--dry-run", action="store_true",
                         help="Show what would be written without writing it")
-    parser.add_argument("-c", "--credentials", default=str(DEFAULT_CLIENT_SECRETS_PATH),
-                        help="Path to OAuth client secrets JSON")
     args = parser.parse_args()
-    if not os.path.exists(args.credentials):
-        sys.exit(f"Error: credentials file not found: {args.credentials}")
-    main(args.base_url, args.dry_run, args.credentials)
+    if not DEFAULT_CLIENT_SECRETS_PATH.exists():
+        sys.exit(f"Error: credentials file not found: {DEFAULT_CLIENT_SECRETS_PATH}")
+    main(GATHER_BASE_URL, args.dry_run, str(DEFAULT_CLIENT_SECRETS_PATH))
 
 
 if __name__ == "__main__":

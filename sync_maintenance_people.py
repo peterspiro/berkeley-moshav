@@ -43,7 +43,7 @@ from playwright.sync_api import sync_playwright
 from maintenance_base import REAL_BASE, TEST_BASE
 from util.airtable import Airtable, AirtableError
 from util.credentials import load_airtable_token, load_credentials
-from util.gather_utils import close_log, fetch_all_gather_users, init_log, launch_browser, log, login
+from util.gather_utils import GATHER_BASE_URL, close_log, fetch_all_gather_users, init_log, launch_browser, log, login
 from util.maintenance_people import KEY, changes, other_names, people_rows
 
 
@@ -85,8 +85,6 @@ def main(argv=None) -> None:
                         help=f"work on {REAL_BASE!r} instead of {TEST_BASE!r}")
     parser.add_argument("-n", "--dry-run", action="store_true",
                         help="show what would change, and change nothing")
-    parser.add_argument("-u", "--base-url", default="https://berkeley-moshav.gather.coop",
-                        help="Gather base URL")
     args = parser.parse_args(argv)
 
     base_name = REAL_BASE if args.real else TEST_BASE
@@ -94,7 +92,7 @@ def main(argv=None) -> None:
         client = Airtable(load_airtable_token())
         base = client.find_base(base_name)
         print(f"Base: {base_name}")
-        users = fetch_users(args.base_url.rstrip("/"))
+        users = fetch_users(GATHER_BASE_URL)
         sync(client, base, users, args.dry_run, date.today())
     except AirtableError as e:
         sys.exit(f"Error: {e}")

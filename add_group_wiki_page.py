@@ -26,6 +26,7 @@ from playwright.sync_api import sync_playwright
 
 from util.credentials import load_credentials
 from util.gather_utils import (
+    GATHER_BASE_URL,
     close_log,
     configure,
     fetch_all_gather_groups,
@@ -101,16 +102,12 @@ def cli():
         help="A unique prefix of the target group's name (case-insensitive)",
     )
     parser.add_argument(
-        "-u", "--base-url", default="https://berkeley-moshav.gather.coop",
-        help="Gather base URL",
-    )
-    parser.add_argument(
         "-n", "--dry-run", action="store_true",
         help="Report what would change without creating the page",
     )
     args = parser.parse_args()
 
-    main(args.prefix, args.base_url, args.dry_run)
+    main(args.prefix, GATHER_BASE_URL, args.dry_run)
 
 
 if __name__ == "__main__":

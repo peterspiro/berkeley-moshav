@@ -119,7 +119,6 @@ Usage:
 
 import argparse
 import functools
-import os
 import re
 import sys
 from collections.abc import Callable
@@ -133,6 +132,7 @@ from util.calendar_event_moves import EventMover
 from util.credentials import load_credentials, load_zoom_credentials
 from util.folder_matching import find_matching_folders
 from util.gather_utils import (
+    GATHER_BASE_URL,
     _fetch_group_detail,
     close_log,
     configure,
@@ -1481,65 +1481,57 @@ def cli():
         description="Sync Google Drive folders, Groups, calendars, Zoom rooms, and agenda "
                     "docs with the current /groups list",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        add_help=False,
     )
-    parser.add_argument(
-        "-u", "--base-url", default="https://berkeley-moshav.gather.coop",
-        help="Gather base URL",
-    )
-    parser.add_argument(
+    optional = parser.add_argument_group("optional arguments")
+    one_group = parser.add_argument_group("options for one group (with -g)")
+    optional.add_argument("-h", "--help", action="help", help="Show this help message and exit")
+    optional.add_argument(
         "-n", "--dry-run", action="store_true",
         help="Log what would change without changing anything",
     )
-    parser.add_argument(
-        "-c", "--credentials", default=str(DEFAULT_CLIENT_SECRETS_PATH),
-        help="Path to OAuth client secrets JSON (for the Drive folder-ID fallback search) "
-             f"(default: {DEFAULT_CLIENT_SECRETS_PATH})",
-    )
-    parser.add_argument(
-        "-d", "--drive-id", default=DEFAULT_DRIVE_ID,
-        help="Shared Drive ID to search when a folder's ID can't be found any other way",
-    )
-    parser.add_argument(
+    optional.add_argument(
         "-g", "--group", metavar="PREFIX",
         help="Process only the Gather group whose name starts with this prefix "
              "(case-insensitive; must match exactly one group)",
     )
-    parser.add_argument(
+    optional.add_argument(
         "-m", "--move-events", action="store_true",
         help="For each group, offer to copy its meetings from other calendars to its own "
              "calendar and delete them there (always offered for a newly created calendar)",
     )
-    parser.add_argument(
-        "--share-all-events", action="store_true",
-        help="With -g, also share the all-events calendar with the everybody groups, as a "
-             "full run does (reads every group from Gather to find them)",
-    )
-    parser.add_argument(
+    optional.add_argument(
         "--announce-calendar", action="store_true",
         help="Email each group's list about its calendar and Zoom room even if the calendar "
-             "already existed (always sent for a newly created calendar); use with -g",
+             "already existed (always sent for a newly created calendar). With -g, just "
+             "that group's; without it, asks first, since that emails every group",
     )
-    parser.add_argument(
-        "-e", "--email-draft", action="store_true",
-        help="With -g, open the email about the group's calendar and Zoom room as a draft in "
-             "your mail program, for you to review and send, instead of sending it from "
-             "admin@ (it's plain text, with no Reply-To)",
-    )
-    parser.add_argument(
-        "-f", "--full-calendar-name", action="store_true",
-        help="With -g, name the group's calendar by its full name, ending with its type "
-             "(\"Technology Circle\", \"Garden Working Group\"), creating or renaming it "
-             "so; later runs leave that name as it is",
-    )
-    parser.add_argument(
+    optional.add_argument(
         "-a", "--agenda-docs", action="store_true",
         help="Give each circle and working group without one an agenda doc, for the "
              "circle_agendas Apps Script to build (with -g, just that group)",
     )
-    parser.add_argument(
+    one_group.add_argument(
+        "--share-all-events", action="store_true",
+        help="Also share the all-events calendar with the everybody groups, as a "
+             "full run does (reads every group from Gather to find them)",
+    )
+    one_group.add_argument(
+        "-e", "--email-draft", action="store_true",
+        help="Open the email about the group's calendar and Zoom room as a draft in "
+             "your mail program, for you to review and send, instead of sending it from "
+             "admin@ (it's plain text, with no Reply-To)",
+    )
+    one_group.add_argument(
+        "-f", "--full-calendar-name", action="store_true",
+        help="Name the group's calendar by its full name, ending with its type "
+             "(\"Technology Circle\", \"Garden Working Group\"), creating or renaming it "
+             "so; later runs leave that name as it is",
+    )
+    one_group.add_argument(
         "-I", "--also-invite", metavar="ADDRESSES", action="append", default=None,
-        help="With -g, for a community calendar's admin group: replace the more addresses "
-             "(any domain; just the name for @berkeleymoshav.org) that every event on its "
+        help="For a community calendar's admin group: replace the more addresses "
+             f"(any domain; just the name for @{DOMAIN}) that every event on its "
              "calendar invites along with its audience, but doesn't remind; separate "
              "several with commas, or give the option again; 'none' removes them. Its "
              "upcoming events are rechecked within the hour",
@@ -1565,15 +1557,15 @@ def cli():
         if answer not in ("y", "yes"):
             sys.exit("Stopped; nothing was changed.")
 
-    if not os.path.exists(args.credentials):
+    if not DEFAULT_CLIENT_SECRETS_PATH.exists():
         sys.exit(
-            f"Error: credentials file not found: {args.credentials}\n"
+            f"Error: credentials file not found: {DEFAULT_CLIENT_SECRETS_PATH}\n"
             "Download a Desktop OAuth 2.0 client JSON from Google Cloud Console."
         )
 
     email, password = load_credentials()
-    main(args.base_url, email, password, args.dry_run, args.credentials, args.drive_id,
-         args.group, args.move_events, args.announce_calendar, args.share_all_events,
+    main(GATHER_BASE_URL, email, password, args.dry_run, str(DEFAULT_CLIENT_SECRETS_PATH),
+         DEFAULT_DRIVE_ID, args.group, args.move_events, args.announce_calendar, args.share_all_events,
          args.full_calendar_name, args.email_draft, args.agenda_docs, also_invite)
 
 

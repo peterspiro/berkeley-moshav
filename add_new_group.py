@@ -49,8 +49,8 @@ Steps:
      util/google_group_footer.py) — this is what groups_drive_sync.gs reads
      to sync membership, so no Apps Script redeploy is needed for a new
      group to start syncing.
-  7b. With --agenda-doc, for a circle or working group, create its agenda
-     doc, empty and labelled for the circle_agendas Apps Script to build
+  7b. For a circle or working group, unless --no-agenda-doc, create its
+     agenda doc, empty and labelled for the circle_agendas Apps Script to build
      (see util/circle_agenda_docs.py).
   8. Add the manager to the Google Group directly, so the list reaches
      them right away rather than after groups_drive_sync.gs's next run.
@@ -119,7 +119,6 @@ Usage:
 """
 
 import argparse
-import os
 import re
 import sys
 from enum import Enum
@@ -141,6 +140,7 @@ from util.circle_agenda_docs import (
 from util.circle_structure_placements import add_placements, check_parent_kind
 from util.credentials import load_credentials, load_zoom_credentials
 from util.gather_utils import (
+    GATHER_BASE_URL,
     _fetch_group_detail,
     close_log,
     configure,
@@ -404,7 +404,7 @@ def main(
     short_address: bool = False,
     idempotent: bool = False,
     send_email: bool = True,
-    agenda_doc: bool = False,
+    agenda_doc: bool = True,
     audience_override: str | None = None,
     no_zoom: bool = False,
     also_invite: list[str] | None = None,
@@ -747,7 +747,7 @@ def main(
                 print(f"ERROR: couldn't write its parent for the Circle Structure ({e}); ask "
                       f"the Coordinating Circle to put it under '{parent_group.name}'.")
 
-        # ── With --agenda-doc, give it an agenda doc, for the Apps Script to build ─
+        # ── Give it an agenda doc, for the Apps Script to build ───────────────────
         if agenda_doc and kind in AGENDA_KINDS:
             try:
                 ensure_agenda_doc(drive_service, gemail, gdisplay, folder_id, dry_run=False)
@@ -797,33 +797,39 @@ def cli():
         description="Create a new Drive folder, Google Group, and Gather group, "
                     "all linked together, and put it under its parent in the Circle Structure.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        add_help=False,
     )
-    parser.add_argument(
+    required = parser.add_argument_group("required arguments")
+    sometimes = parser.add_argument_group("arguments required in some cases")
+    optional = parser.add_argument_group("optional arguments")
+    admin = parser.add_argument_group("admin-group options (with --type=admin)")
+    optional.add_argument("-h", "--help", action="help", help="Show this help message and exit")
+    required.add_argument(
         "-N", "--name", nargs="+", required=True,
         help="Name of the folder and the groups (multiple words are joined "
              "with spaces, so quotes aren't needed)",
     )
-    parser.add_argument(
-        "-t", "--type", type=GroupType.parse, default=None,
-        help="Group type — 'c'/'circle', 'w'/'working group', 'b'/'club', or 'a'/'admin' "
-             "(a community-wide calendar's admin group, its calendar named without "
-             "'Admins'). Only required if the name doesn't end with a type suffix "
-             "('Circle'/'Working Group'/'Club'/'Admins'), from which it's otherwise inferred.",
-    )
-    parser.add_argument(
-        "-p", "--parent-circle", default=None,
-        help="A prefix uniquely identifying the parent's Gather group: a circle, or, "
-             "for a working group, a circle or working group (required unless --type=club "
-             "or admin)",
-    )
-    parser.add_argument(
+    required.add_argument(
         "-m", "--manager", required=True,
         help="A prefix of a community member's first name, last name, or email "
              "that uniquely identifies them. They're added to the new Gather "
              "group as a manager (and thus given Content-manager access to the "
              "Drive folder when it's linked).",
     )
-    parser.add_argument(
+    sometimes.add_argument(
+        "-t", "--type", type=GroupType.parse, default=None,
+        help="Group type — 'c'/'circle', 'w'/'working group', 'b'/'club', or 'a'/'admin' "
+             "(a community-wide calendar's admin group, its calendar named without "
+             "'Admins'). Only required if the name doesn't end with a type suffix "
+             "('Circle'/'Working Group'/'Club'/'Admins'), from which it's otherwise inferred.",
+    )
+    sometimes.add_argument(
+        "-p", "--parent-circle", default=None,
+        help="A prefix uniquely identifying the parent's Gather group: a circle, or, "
+             "for a working group, a circle or working group (required unless --type=club "
+             "or admin)",
+    )
+    optional.add_argument(
         "-a", "--alias", default=None,
         help=f"A shorter alias's local part (without the @{DOMAIN} domain). The "
              "Google Group is still created at its full-name address; this alias "
@@ -831,7 +837,7 @@ def cli():
              "list is set to the alias — same effect as running "
              "change_group_email_alias.py afterward.",
     )
-    parser.add_argument(
+    optional.add_argument(
         "-s", "--short-address", action="store_true",
         help="Make the Google Group's primary address the name without its "
              "'Circle'/'Working Group' suffix (e.g. landscape@ rather than "
@@ -839,55 +845,43 @@ def cli():
              "Gather group's mailing list uses the short address. Not for clubs; "
              "can't be combined with --alias.",
     )
-    parser.add_argument(
-        "-u", "--base-url", default="https://berkeley-moshav.gather.coop",
-        help="Gather base URL",
-    )
-    parser.add_argument(
+    optional.add_argument(
         "-n", "--dry-run", action="store_true",
         help="Validate and report what would be created, without creating anything",
     )
-    parser.add_argument(
+    optional.add_argument(
         "-i", "--idempotent", action="store_true",
         help="Reuse any artifacts (Drive folder, Google Group, Gather group, "
              "alias, folder link, hierarchy entry) that already exist instead "
              "of aborting — lets a re-run finish after a partial failure.",
     )
-    parser.add_argument(
+    optional.add_argument(
         "-E", "--no-email", action="store_true",
         help="Don't open the welcome message to the new list as a draft (e.g. on "
              "an --idempotent re-run after the first run's message was sent)",
     )
-    parser.add_argument(
-        "-c", "--credentials", default=str(DEFAULT_CLIENT_SECRETS_PATH),
-        help=f"Path to OAuth client secrets JSON (default: {DEFAULT_CLIENT_SECRETS_PATH})",
+    optional.add_argument(
+        "--no-agenda-doc", action="store_true",
+        help="For a circle or working group, don't create its agenda doc (by default, "
+             "it's created for the circle_agendas Apps Script to build)",
     )
-    parser.add_argument(
-        "-d", "--drive-id", default=DEFAULT_DRIVE_ID,
-        help="Shared Drive ID to create the new folder in",
-    )
-    parser.add_argument(
-        "--agenda-doc", action="store_true",
-        help="For a circle or working group, also create its agenda doc, for the "
-             "circle_agendas Apps Script to build",
-    )
-    parser.add_argument(
+    admin.add_argument(
         "-A", "--audience", metavar="ADDRESS", default=None,
-        help="For an admin group, the Google Group its calendar's events invite and its "
+        help="The Google Group the calendar's events invite and its "
              f"reminders go to, instead of {COMMUNITY_CALENDAR_AUDIENCE} (say, a small "
              "group, to try a community calendar out without emailing everyone); its "
              f"address, or just the part before @{DOMAIN}",
     )
-    parser.add_argument(
+    admin.add_argument(
         "-z", "--no-zoom", action="store_true",
-        help="For an admin group, give its calendar no Zoom room, for a calendar of "
+        help="Give the calendar no Zoom room, for a calendar of "
              "in-person events: its footer says \"Zoom meeting: none\", so the scripts never "
              "make one, and its events get no Zoom details",
     )
-    parser.add_argument(
+    admin.add_argument(
         "-I", "--also-invite", metavar="ADDRESSES", action="append", default=None,
-        help="For an admin group, more addresses (any domain; just the name for "
-             f"@{DOMAIN}) that every event on its calendar invites along with its "
+        help="More addresses (any domain; just the name for "
+             f"@{DOMAIN}) that every event on the calendar invites along with its "
              "audience, but doesn't remind; separate several with commas, or give the "
              "option again",
     )
@@ -929,18 +923,19 @@ def cli():
             f"({args.alias!r}) — the domain is always @{DOMAIN}."
         )
 
-    if not os.path.exists(args.credentials):
+    if not DEFAULT_CLIENT_SECRETS_PATH.exists():
         sys.exit(
-            f"Error: credentials file not found: {args.credentials}\n"
+            f"Error: credentials file not found: {DEFAULT_CLIENT_SECRETS_PATH}\n"
             "Download a Desktop OAuth 2.0 client JSON from Google Cloud Console."
         )
 
     email, password = load_credentials()
     main(
-        group_type, name, args.parent_circle, args.manager, args.base_url, email,
-        password, args.dry_run, args.credentials, args.drive_id, alias=args.alias,
+        group_type, name, args.parent_circle, args.manager, GATHER_BASE_URL, email,
+        password, args.dry_run, str(DEFAULT_CLIENT_SECRETS_PATH), DEFAULT_DRIVE_ID,
+        alias=args.alias,
         short_address=args.short_address, idempotent=args.idempotent, send_email=not args.no_email,
-        agenda_doc=args.agenda_doc, audience_override=args.audience, no_zoom=args.no_zoom,
+        agenda_doc=not args.no_agenda_doc, audience_override=args.audience, no_zoom=args.no_zoom,
         also_invite=also_invite,
     )
 

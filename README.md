@@ -203,7 +203,7 @@ playwright install chromium
   password = secret
   ```
 - **Google APIs**: create a Desktop OAuth 2.0 client in Google Cloud Console,
-  save its JSON as `client_secret.json` in the repo root (or pass `-c`), and
+  save its JSON as `client_secret.json` in the repo root, and
   enable the Drive, Admin SDK (Directory), Groups Settings, Google
   Calendar, Gmail, and Google Docs APIs (Gmail sends the email telling a
   group about its new calendar; Docs makes the maintenance tracker's
@@ -435,9 +435,9 @@ status line as "calendar (members can view, not edit)".
   (`-p`, a circle, or for a working group a circle or working group) in the
   Circle Structure, by writing the parent to "Circle structure
   placements.json" in `admin@`'s My Drive for the `circle_agendas` Apps
-  Script, which adds the group to the sheet from its footer within the hour; with
-  `--agenda-doc`, for a circle or working group, creates its agenda doc,
-  for the `circle_agendas` Apps Script to build; and opens a welcome email to the new list as a draft in
+  Script, which adds the group to the sheet from its footer within the hour;
+  for a circle or working group, creates its agenda doc (unless
+  `--no-agenda-doc`), for the `circle_agendas` Apps Script to build; and opens a welcome email to the new list as a draft in
   your mail program. With `-t a` (`--type admin`), it makes a community
   calendar's admin group instead (Gather type "Squad";
   `-N Community Meetings -t a -m Dana`, or a name ending in "Admins"): its

@@ -28,6 +28,7 @@ from playwright.sync_api import Browser, BrowserContext, Page, sync_playwright
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 
+GATHER_BASE_URL = "https://berkeley-moshav.gather.coop"
 _log_file: Path = Path("debug/gather_log.csv")
 _screenshot_dir: Path = Path("debug/gather_screenshots")
 

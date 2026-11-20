@@ -25,7 +25,6 @@ Usage:
 """
 
 import argparse
-import os
 import sys
 from pathlib import Path
 
@@ -112,17 +111,13 @@ def cli():
         "-n", "--dry-run", action="store_true",
         help="Report what would change without changing anything",
     )
-    parser.add_argument(
-        "-c", "--credentials", default=str(DEFAULT_CLIENT_SECRETS_PATH),
-        help="Path to OAuth client secrets JSON",
-    )
     args = parser.parse_args()
-    if not os.path.exists(args.credentials):
+    if not DEFAULT_CLIENT_SECRETS_PATH.exists():
         sys.exit(
-            f"Error: credentials file not found: {args.credentials}\n"
+            f"Error: credentials file not found: {DEFAULT_CLIENT_SECRETS_PATH}\n"
             "Download a Desktop OAuth 2.0 client JSON from Google Cloud Console."
         )
-    main(args.group, args.dry_run, args.credentials)
+    main(args.group, args.dry_run, str(DEFAULT_CLIENT_SECRETS_PATH))
 
 
 if __name__ == "__main__":
