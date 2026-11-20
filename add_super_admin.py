@@ -15,27 +15,24 @@ contains -m, if given) and asks which one. Then, for that member:
      If the account exists already and is theirs, it only brings the
      recovery email and phone up to date.
   2. Makes the account a super admin.
-  3. Removes any Google Workspace license Google gave the account
-     automatically, so it stays a Cloud Identity Free user (-k keeps it).
-  4. Adds the account to admin-forwarding@, which gets the filtered copies
+  3. Adds the account to admin-forwarding@, which gets the filtered copies
      of admin@'s mail.
-  5. Prints the Default routing rule to add in the Admin console, which
+  4. Prints the Default routing rule to add in the Admin console, which
      sends the account's mail to the member's own address: Google has no
      API for routing rules. It waits while you add it.
-  6. Asks you to check, in the Admin console, that admin@ is still the
+  5. Asks you to check, in the Admin console, that admin@ is still the
      primary admin: once, making a new super admin also made it the
      primary admin, and there's no API to read or set the primary admin.
      It waits while you check.
-  7. Prints the temporary password, to give the member yourself (in person,
+  6. Prints the temporary password, to give the member yourself (in person,
      or by phone or text), and opens a draft email to their own address
      telling them how to sign in, which leaves the password out.
 
 Running it again for the same member is safe: each step that's done
 already is skipped (it never changes the password of an existing account).
 
-Requires Google API access, signed in as admin@ (see update_groups.py),
-with the Licensing API enabled too; it asks you to sign in again the first
-time, for permission to manage users. Also requires your Gather login in
+Requires Google API access, signed in as admin@ (see update_groups.py);
+it asks you to sign in again the first time, for permission to manage users. Also requires your Gather login in
 ~/.gather.
 
 Usage:
@@ -46,7 +43,6 @@ Usage:
 
 import argparse
 import sys
-import time
 from datetime import date
 
 from googleapiclient.discovery import build
@@ -59,17 +55,14 @@ from util.gather_utils import (GATHER_BASE_URL, GatherUser, close_log, fetch_all
 from util.google_group_utils import (DEFAULT_CLIENT_SECRETS_PATH, DOMAIN, SCOPES,
                                      get_credentials, list_group_members)
 from util.mail_draft import open_draft
-from util.super_admins import (FORWARDING_GROUP, WORKSPACE_PRODUCT, candidates,
+from util.super_admins import (FORWARDING_GROUP, candidates,
                                default_local_part, gather_id_of, new_user_body,
                                personal_address, primary_admin_steps, recovery_changes,
                                recovery_phone, routing_rule_steps, temporary_password, welcome_email)
 
 ADMIN_SCOPES = SCOPES + [
     "https://www.googleapis.com/auth/admin.directory.user",
-    "https://www.googleapis.com/auth/apps.licensing",
 ]
-# How long Google may take to give a new account a license automatically.
-LICENSE_WAIT_SECONDS = 10
 
 
 def fetch_users() -> list[GatherUser]:
@@ -157,47 +150,6 @@ def ensure_super_admin(dir_service, account: dict, dry_run: bool) -> None:
         dir_service.users().makeAdmin(userKey=address, body={"status": True}).execute()
 
 
-def workspace_licenses(licensing, customer_id: str, address: str) -> list[dict]:
-    """The Workspace licenses assigned to `address`."""
-    found, token = [], None
-    while True:
-        resp = licensing.licenseAssignments().listForProduct(
-            productId=WORKSPACE_PRODUCT, customerId=customer_id, maxResults=1000, pageToken=token,
-        ).execute()
-        found += [a for a in resp.get("items", []) if a.get("userId", "").lower() == address.lower()]
-        token = resp.get("nextPageToken")
-        if not token:
-            return found
-
-
-def remove_workspace_licenses(licensing, account: dict, created: bool, dry_run: bool,
-                              wait: float = LICENSE_WAIT_SECONDS) -> None:
-    """Remove any Workspace license from the account, leaving it a Cloud
-    Identity Free user."""
-    address = account["primaryEmail"]
-    if not account.get("customerId"):  # an account a dry run would create
-        print(f"Would remove any Workspace license Google gives {address}.")
-        return
-    if created:
-        time.sleep(wait)
-    try:
-        licenses = workspace_licenses(licensing, account["customerId"], address)
-        for lic in licenses:
-            print(f"{'Would remove' if dry_run else 'Removing'} its license "
-                  f"{lic.get('skuName') or lic['skuId']}.")
-            if not dry_run:
-                licensing.licenseAssignments().delete(
-                    productId=lic["productId"], skuId=lic["skuId"], userId=address).execute()
-    except HttpError as e:
-        print(f"Warning: couldn't check {address}'s licenses ({e.resp.status}: {e._get_reason()}).\n"
-              f"  In the Admin console, check it has no Google Workspace license (Users → "
-              f"{address} → Licenses). To let the script check, enable the Enterprise License "
-              f"Manager API in the Google Cloud project of client_secret.json.")
-        return
-    if not licenses:
-        print(f"{address} has no Workspace license.")
-
-
 def ensure_forwarding_member(dir_service, address: str, dry_run: bool) -> None:
     members = {m["email"].lower() for m in list_group_members(dir_service, FORWARDING_GROUP)}
     if address.lower() in members:
@@ -218,8 +170,6 @@ def main():
                         help="the new account's name, before the @ (default: the member's first name)")
     parser.add_argument("-e", "--personal-email",
                         help="the member's own address, if not the one in Gather")
-    parser.add_argument("-k", "--keep-license", action="store_true",
-                        help="don't remove a Workspace license Google gives the account")
     parser.add_argument("-n", "--dry-run", action="store_true", help="change nothing")
     args = parser.parse_args()
 
@@ -242,13 +192,10 @@ def main():
 
     creds = get_credentials(str(DEFAULT_CLIENT_SECRETS_PATH), ADMIN_SCOPES)
     dir_service = build("admin", "directory_v1", credentials=creds)
-    licensing = build("licensing", "v1", credentials=creds)
 
     account, password = ensure_account(dir_service, user, address, personal, phone,
                                        args.dry_run)
     ensure_super_admin(dir_service, account, args.dry_run)
-    if not args.keep_license:
-        remove_workspace_licenses(licensing, account, bool(password), args.dry_run)
     ensure_forwarding_member(dir_service, address, args.dry_run)
 
     print(f"\nIf there's no Default routing rule for {address} yet, add one:")

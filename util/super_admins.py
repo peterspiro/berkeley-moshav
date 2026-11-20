@@ -22,9 +22,6 @@ FORWARDING_GROUP = f"admin-forwarding@{DOMAIN}"
 # whose account an address is.
 GATHER_ID_TYPE = "gather_id"
 ADMIN_CONSOLE_URL = "https://admin.google.com"
-# Workspace licenses a new user may be given automatically; without one,
-# the user is a Cloud Identity Free user.
-WORKSPACE_PRODUCT = "Google-Apps"
 # Left out of temporary passwords: easy to misread or mistype.
 _PASSWORD_ALPHABET = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 

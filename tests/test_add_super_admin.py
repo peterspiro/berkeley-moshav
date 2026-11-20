@@ -1,5 +1,5 @@
 """Tests for add_super_admin.py and util/super_admins.py, with made-up
-members and fake Directory and Licensing services."""
+members and a fake Directory service."""
 
 from datetime import date
 
@@ -89,26 +89,6 @@ class _Members:
             self.d.writes.append(("member", groupKey, body["email"]))
             self.d.forwarding.append(body["email"])
         return _Call(fn)
-
-
-class FakeLicensing:
-    def __init__(self, items=(), fail=False):
-        self.items = list(items)
-        self.fail = fail
-        self.deleted = []
-
-    def licenseAssignments(self):
-        return self
-
-    def listForProduct(self, productId, customerId, maxResults, pageToken):
-        def fn():
-            if self.fail:
-                raise _err(403)
-            return {"items": [i for i in self.items if i["productId"] == productId]}
-        return _Call(fn)
-
-    def delete(self, productId, skuId, userId):
-        return _Call(lambda: self.deleted.append((productId, skuId, userId)))
 
 
 # ── Choosing the member ──────────────────────────────────────────────────────
@@ -212,7 +192,6 @@ def test_dry_run_creates_nothing():
     account, password = asa.ensure_account(d, _user(), ADDRESS, "jo@example.org", "", True)
     assert d.writes == [] and password
     asa.ensure_super_admin(d, account, True)
-    asa.remove_workspace_licenses(FakeLicensing(), account, True, True)
     asa.ensure_forwarding_member(d, ADDRESS, True)
     assert d.writes == []
 
@@ -238,22 +217,6 @@ def test_makes_super_admin_once():
     asa.ensure_super_admin(d, d.accounts[ADDRESS], False)
     asa.ensure_super_admin(d, d.accounts[ADDRESS], False)
     assert d.writes == [("makeAdmin", ADDRESS)]
-
-
-def test_removes_only_the_accounts_workspace_license():
-    lic = FakeLicensing([
-        {"productId": "Google-Apps", "skuId": "S1", "userId": ADDRESS},
-        {"productId": "Google-Apps", "skuId": "S1", "userId": f"other@{DOMAIN}"},
-    ])
-    asa.remove_workspace_licenses(lic, {"primaryEmail": ADDRESS, "customerId": "C0"},
-                                  created=True, dry_run=False, wait=0)
-    assert lic.deleted == [("Google-Apps", "S1", ADDRESS)]
-
-
-def test_license_check_failure_warns(capsys):
-    asa.remove_workspace_licenses(FakeLicensing(fail=True),
-                                  {"primaryEmail": ADDRESS, "customerId": "C0"}, False, False)
-    assert "Warning" in capsys.readouterr().out
 
 
 def test_adds_to_forwarding_group_once():

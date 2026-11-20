@@ -207,8 +207,7 @@ playwright install chromium
   enable the Drive, Admin SDK (Directory), Groups Settings, Google
   Calendar, Gmail, and Google Docs APIs (Gmail sends the email telling a
   group about its new calendar; Docs makes the maintenance tracker's
-  start-here Doc pageless), and, for `add_super_admin.py`, the Enterprise
-  License Manager (Licensing) API. On first run, a script prints a sign-in URL; open it signed
+  start-here Doc pageless). On first run, a script prints a sign-in URL; open it signed
   in as `admin@`, which owns the group calendars (the
   scripts that make calendars refuse to run as anyone else). The sign-in is
   saved to `~/.google_setup_token.pkl`; delete that file to sign in as a
@@ -619,8 +618,7 @@ status line as "calendar (members can view, not edit)".
   Identity Free user with a temporary password to change at the first
   sign-in, their own address (from Gather, or `-e`) as its recovery email,
   their Gather phone as its recovery phone, and their Gather ID; makes it a
-  super admin; removes any Workspace license Google gave it automatically
-  (`-k` keeps it); and adds it to `admin-forwarding@`. It prints the
+  super admin; and adds it to `admin-forwarding@`. It prints the
   Default routing rule to add in the Admin console, and where to move it in
   the list, and waits while you add it; asks you to check that `admin@` is
   still the primary admin, and change it back if not, since making a super
