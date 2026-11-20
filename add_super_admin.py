@@ -22,7 +22,11 @@ contains -m, if given) and asks which one. Then, for that member:
   5. Prints the Default routing rule to add in the Admin console, which
      sends the account's mail to the member's own address: Google has no
      API for routing rules. It waits while you add it.
-  6. Prints the temporary password, to give the member yourself (in person,
+  6. Asks you to check, in the Admin console, that admin@ is still the
+     primary admin: once, making a new super admin also made it the
+     primary admin, and there's no API to read or set the primary admin.
+     It waits while you check.
+  7. Prints the temporary password, to give the member yourself (in person,
      or by phone or text), and opens a draft email to their own address
      telling them how to sign in, which leaves the password out.
 
@@ -57,8 +61,8 @@ from util.google_group_utils import (DEFAULT_CLIENT_SECRETS_PATH, DOMAIN, SCOPES
 from util.mail_draft import open_draft
 from util.super_admins import (FORWARDING_GROUP, WORKSPACE_PRODUCT, candidates,
                                default_local_part, gather_id_of, new_user_body,
-                               personal_address, recovery_changes, recovery_phone,
-                               routing_rule_steps, temporary_password, welcome_email)
+                               personal_address, primary_admin_steps, recovery_changes,
+                               recovery_phone, routing_rule_steps, temporary_password, welcome_email)
 
 ADMIN_SCOPES = SCOPES + [
     "https://www.googleapis.com/auth/admin.directory.user",
@@ -249,9 +253,14 @@ def main():
 
     print(f"\nIf there's no Default routing rule for {address} yet, add one:")
     print("\n".join(routing_rule_steps(address, personal)))
+    if not args.dry_run:
+        input("Press Enter once the rule is saved (or if it was there already): ")
+
+    print("\nCheck the primary admin:")
+    print("\n".join(primary_admin_steps()))
     if args.dry_run:
         return
-    input("Press Enter once the rule is saved (or if it was there already): ")
+    input("Press Enter once admin@ is the primary admin: ")
 
     subject, body = welcome_email(user, address)
     if password:

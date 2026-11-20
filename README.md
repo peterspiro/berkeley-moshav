@@ -293,7 +293,13 @@ person's own address, and its recovery phone their phone.
 
 `add_super_admin.py` sets up such an account for a Gather member, except
 for the routing rule, which it tells you how to add: Google has no API for
-routing rules. The new admin gets in like this:
+routing rules. It also asks you to check that `admin@` is still the
+primary admin (Account → Account settings → Profile → Primary admin), and
+to change it back if it isn't: once, the primary admin changed to the new
+account about a minute after it was made a super admin. Google doesn't
+document this, and has no API to read or set the primary admin, so the
+script can't check it itself.
+The new admin gets in like this:
 
 1. The script prints the account's temporary password; give it to them
    yourself (in person, or by phone or text), not by email. It also opens
@@ -616,9 +622,10 @@ status line as "calendar (members can view, not edit)".
   super admin; removes any Workspace license Google gave it automatically
   (`-k` keeps it); and adds it to `admin-forwarding@`. It prints the
   Default routing rule to add in the Admin console, and where to move it in
-  the list, waits while you add it,
-  and then prints the temporary password and opens a draft email to the
-  member saying how to sign in. Run again for a member, it skips what's
+  the list, and waits while you add it; asks you to check that `admin@` is
+  still the primary admin, and change it back if not, since making a super
+  admin once changed it; and then prints the temporary password and opens a
+  draft email to the member saying how to sign in. Run again for a member, it skips what's
   done, only updating an existing account's recovery email and phone; it
   stops if the address is someone else's.
 - **`maintenance_base.py`** keeps the maintenance tracker's Airtable base in

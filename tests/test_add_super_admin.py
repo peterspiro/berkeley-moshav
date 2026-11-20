@@ -11,8 +11,9 @@ import add_super_admin as asa
 from util.gather_utils import GatherUser
 from util.google_group_utils import DOMAIN
 from util.super_admins import (FORWARDING_GROUP, candidates, default_local_part, gather_id_of,
-                               new_user_body, personal_address, recovery_changes, recovery_phone,
-                               routing_rule_steps, temporary_password, welcome_email)
+                               new_user_body, personal_address, primary_admin_steps,
+                               recovery_changes, recovery_phone, routing_rule_steps,
+                               temporary_password, welcome_email)
 
 TODAY = date(2026, 6, 1)
 ADDRESS = f"jose@{DOMAIN}"
@@ -189,6 +190,11 @@ def test_routing_rule_and_welcome_email():
     assert "enter 1 to move it to the top" in steps and "Description" not in steps
     subject, body = welcome_email(_user(), ADDRESS)
     assert ADDRESS in body and "temporary password separately" in body
+
+
+def test_primary_admin_steps():
+    steps = "\n".join(primary_admin_steps())
+    assert "Account settings" in steps and "Primary admin" in steps and "admin@" in steps
 
 
 # ── The Google steps ────────────────────────────────────────────────────────

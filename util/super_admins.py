@@ -123,6 +123,18 @@ def recovery_fields(recovery_email: str, phone: str) -> dict:
     return fields
 
 
+def primary_admin_steps() -> list[str]:
+    """How to check that admin@ is still the Workspace's primary admin.
+    Making the new account a super admin once also made it the primary
+    admin, and there's no API to read or set the primary admin."""
+    return [
+        f"In the Admin console ({ADMIN_CONSOLE_URL}), go to Account → Account settings →",
+        "Profile, and check that the Primary admin is still admin@. Making a new super",
+        "admin has been known to make it the primary admin instead. If it has, change",
+        "the Primary admin back to admin@ and save.",
+    ]
+
+
 def recovery_changes(account: dict, recovery_email: str, phone: str) -> dict:
     """The recovery fields an existing account needs changed."""
     return {k: v for k, v in recovery_fields(recovery_email, phone).items()
