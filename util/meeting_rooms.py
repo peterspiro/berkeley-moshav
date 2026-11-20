@@ -40,6 +40,8 @@ from dataclasses import dataclass, field
 from typing import NamedTuple
 from zoneinfo import ZoneInfo
 
+from googleapiclient.errors import HttpError
+
 from util.folder_matching import find_matching_names
 from util.gather_utils import log
 from util.google_group_footer import (
@@ -108,8 +110,20 @@ def signed_in_calendar_account(calendar_service) -> str:
 
 
 def check_calendar_owner(calendar_service) -> None:
-    """Exit unless the Google sign-in is CALENDAR_OWNER's."""
-    account = signed_in_calendar_account(calendar_service)
+    """Exit unless the Google sign-in is CALENDAR_OWNER's. An account with
+    no Google Calendar (such as a Cloud Identity Free one) can't read its
+    primary calendar, so it's told the same thing, without its address."""
+    try:
+        account = signed_in_calendar_account(calendar_service)
+    except HttpError as err:
+        if b"notACalendarUser" not in (err.content or b""):
+            raise
+        raise SystemExit(
+            f"Error: the account signed in to Google has no Google Calendar, but group "
+            f"calendars are owned by {CALENDAR_OWNER}.\nDelete {TOKEN_PATH} and run again, "
+            f"opening the sign-in link in a browser signed in as {CALENDAR_OWNER}.\n"
+            f"(client_secret.json doesn't choose the account: the sign-in does.)"
+        ) from None
     if account.lower() != CALENDAR_OWNER:
         raise SystemExit(
             f"Error: signed in to Google as {account}, but group calendars are owned by "

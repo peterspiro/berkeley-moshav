@@ -211,7 +211,10 @@ playwright install chromium
   in as `admin@`, which owns the group calendars (the
   scripts that make calendars refuse to run as anyone else). The sign-in is
   saved to `~/.google_setup_token.pkl`; delete that file to sign in as a
-  different account. A script that needs a scope the saved sign-in lacks asks
+  different account. `client_secret.json` only identifies the app, so
+  another admin who runs these scripts also signs in as `admin@`: their
+  own account, especially one without Google Calendar (Cloud Identity
+  Free), is refused. A script that needs a scope the saved sign-in lacks asks
   you to sign in again.
 - **Zoom API**: in the Zoom App Marketplace, create a **Server-to-Server
   OAuth** app (Develop → Build App), signed in as the account owner or as an
