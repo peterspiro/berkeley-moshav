@@ -132,7 +132,7 @@ function allTabs(doc) {
 
 // A tab's dropdowns' lists of choices, by ID (each tab has its own).
 function dropdownDefinitions(docId, tabId) {
-  const tab = Docs.Documents.get(docId, {includeTabsContent: true}).tabs
+  const tab = apiDoc(docId, {includeTabsContent: true}).tabs
     .find(t => t.tabProperties.tabId === tabId);
   return (tab && tab.documentTab.dropdownDefinitions) || {};
 }
@@ -210,7 +210,7 @@ function finishNewMeeting(key) {
 
 // A doc's first tab, from the Docs API: {content, dropdownDefinitions}.
 function firstApiTab(docId) {
-  const tab = Docs.Documents.get(docId, {includeTabsContent: true}).tabs[0].documentTab;
+  const tab = apiDoc(docId, {includeTabsContent: true}).tabs[0].documentTab;
   return {content: tab.body.content || [], dropdownDefinitions: tab.dropdownDefinitions || {}};
 }
 
@@ -249,7 +249,7 @@ function linksRowIndex(table) {
 // Retitles a meeting's tab with the date in its date chip, if they differ;
 // returns the new title, or null.
 function matchTabTitleToDate(docId, tabId) {
-  const tab = Docs.Documents.get(docId, {includeTabsContent: true}).tabs
+  const tab = apiDoc(docId, {includeTabsContent: true}).tabs
     .find(t => t.tabProperties.tabId === tabId);
   if (!tab) return null;
   let date = null;
@@ -387,7 +387,7 @@ function recapItems(table) {
 function refreshAnnounceLink(docId, meetingId, tabId) {
   const circle = circleForDoc(docId);
   if (!circle) return;
-  const tab = Docs.Documents.get(docId, {includeTabsContent: true}).tabs
+  const tab = apiDoc(docId, {includeTabsContent: true}).tabs
     .find(t => t.tabProperties.tabId === tabId);
   if (!tab) return;
   const content = tab.documentTab.body.content;
@@ -515,7 +515,7 @@ function startNewMeeting(docId) {
 
   // (Two clicks at once can't both add the tab: the web app's runLocked
   // handles one click at a time, so the second finds the first's tab.)
-  const api = Docs.Documents.get(docId, {includeTabsContent: true});
+  const api = apiDoc(docId, {includeTabsContent: true});
   const meetingTabs = api.tabs.filter(t => MEETING_TAB_TITLE_RE.test(t.tabProperties.title))
     .map(t => ({title: t.tabProperties.title, tabId: t.tabProperties.tabId,
       built: (t.documentTab.body.content || []).some(se => se.table)}));

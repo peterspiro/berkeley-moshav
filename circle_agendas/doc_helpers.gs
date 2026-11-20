@@ -8,6 +8,14 @@
  * UNSUPPORTED elements, while the API shows them as `dropdown`.
  */
 
+// How many times apiDoc reads a doc before giving up, and the errors it
+// tries again after: ones from Google's side that pass, such as "Empty
+// response", which reading a doc of many tabs just after DocumentApp has
+// saved it can give.
+const DOC_READ_ATTEMPTS = 3;
+const TEMPORARY_API_ERROR_RE =
+  /empty response|internal error|backend error|service (is currently )?unavailable|timed out|try again later/i;
+
 function addLeafCounts(el, counts) {
   const type = String(el.getType());
   if (el.getNumChildren) {
@@ -22,6 +30,20 @@ function apiCellText(cell) {
   let text = '';
   walkParagraphs(cell.content, para => { text += paraText(para); });
   return text;
+}
+
+// A doc from the Docs API (Docs.Documents.get, with options if given),
+// read again, after a pause, if reading it fails in a way that passes (see
+// TEMPORARY_API_ERROR_RE).
+function apiDoc(docId, options) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return options ? Docs.Documents.get(docId, options) : Docs.Documents.get(docId);
+    } catch (e) {
+      if (attempt >= DOC_READ_ATTEMPTS || !TEMPORARY_API_ERROR_RE.test(e.message)) throw e;
+      Utilities.sleep(1000 * attempt);
+    }
+  }
 }
 
 // A date chip's date, 'yyyy-MM-dd': from its text, if it can be read
@@ -75,7 +97,7 @@ function describeStructure(docId) {
 
   const kinds = {};
   const examples = {};
-  walkParagraphs(Docs.Documents.get(docId).body.content, para => {
+  walkParagraphs(apiDoc(docId).body.content, para => {
     for (const pe of para.elements || []) {
       for (const k of Object.keys(pe)) {
         if (k === 'startIndex' || k === 'endIndex') continue;

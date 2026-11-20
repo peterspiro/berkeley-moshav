@@ -311,7 +311,10 @@ The Docs API part of building (`replaceTokens`) reads the doc's positions
 and changes the doc at them. A read just after DocumentApp has saved the doc
 can return an older version, whose positions are wrong for the new one, so
 the changes are made only to the version read, and if the doc has moved on,
-it's read again. (Before that, writing the Circle Structure's Sub-Circles
+it's read again. Every Docs API read of a doc goes through `apiDoc`
+(`doc_helpers.gs`), which reads it again, up to three times in all, when
+the read fails in a way that passes, such as "Empty response": that once
+left a new meeting's tab half built, its checkboxes still tokens. (Before that, writing the Circle Structure's Sub-Circles
 bullets this way deleted 8 characters of some docs' Roles labels, and
 bulleted them. **`repairRoleLabelsInCircleDocs`**, run in the editor, puts
 back each role label that has a bullet in it, in every built doc, and logs

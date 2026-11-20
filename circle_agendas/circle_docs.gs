@@ -254,7 +254,7 @@ function circleOfDoc(docId, email) {
 // dropdown's list and choice, each list's choices, and each Term ends
 // chip's properties. For tryUpdateRoles.
 function describeRoles(docId) {
-  const tab = Docs.Documents.get(docId, {includeTabsContent: true}).tabs[0];
+  const tab = apiDoc(docId, {includeTabsContent: true}).tabs[0];
   const content = tab.documentTab.body.content;
   const definitions = tab.documentTab.dropdownDefinitions || {};
   const lines = ['Name dropdowns:'];
@@ -634,7 +634,7 @@ function tryUpgradeRolesOnCopy() {
 // read than that everyone left).
 function updateRoleDropdowns(docId, names) {
   if (!names.length) return false;
-  const tab = Docs.Documents.get(docId, {includeTabsContent: true}).tabs[0];
+  const tab = apiDoc(docId, {includeTabsContent: true}).tabs[0];
   const definitions = tab.documentTab.dropdownDefinitions || {};
   // The options each list's dropdowns show, by the list's ID.
   const selected = {};
@@ -784,7 +784,7 @@ function upgradeRoleOrderInCircleDocs() {
 // nothing, if the doc has no Roles table or its Roles already have
 // dropdowns.
 function upgradeRoles(docId, names) {
-  const tab = Docs.Documents.get(docId, {includeTabsContent: true}).tabs[0];
+  const tab = apiDoc(docId, {includeTabsContent: true}).tabs[0];
   if ((tab.documentTab.dropdownDefinitions || {})[ROLES_DROPDOWN_ID]) {
     throw new Error('its Roles already have dropdowns');
   }

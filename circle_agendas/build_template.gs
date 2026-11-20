@@ -224,7 +224,7 @@ function apiMeetingId(se) {
 // A tab's Docs API content, and its ID for requests (undefined for the
 // first tab, which requests without one apply to).
 function apiTab(docId, tabId) {
-  const tabs = Docs.Documents.get(docId, {includeTabsContent: true}).tabs;
+  const tabs = apiDoc(docId, {includeTabsContent: true}).tabs;
   const tab = tabId ? tabs.find(t => t.tabProperties.tabId === tabId) : tabs[0];
   if (!tab) throw new Error('No tab ' + tabId);
   return {content: tab.documentTab.body.content, tabId: tabId || undefined};
@@ -324,7 +324,7 @@ function clearDoc(docId) {
   body.getChild(0).asParagraph().setHeading(DocumentApp.ParagraphHeading.NORMAL);
   doc.saveAndClose();
 
-  const api = Docs.Documents.get(docId, {includeTabsContent: true});
+  const api = apiDoc(docId, {includeTabsContent: true});
   const first = api.tabs[0].documentTab;
   const requests = [
     ...api.tabs.slice(1).map(tab => ({deleteTab: {tabId: tab.tabProperties.tabId}})),
@@ -403,7 +403,7 @@ function finishMeeting(docId, meetingId, tabId) {
 }
 
 function finishWithApi(docId, members) {
-  const firstTabId = Docs.Documents.get(docId, {includeTabsContent: true}).tabs[0].tabProperties.tabId;
+  const firstTabId = apiDoc(docId, {includeTabsContent: true}).tabs[0].tabProperties.tabId;
   Docs.Documents.batchUpdate({requests: [
     roleDropdownRequest(ROLES_DROPDOWN_ID, roleChoices(members, []), firstTabId),
     {updateDocumentStyle: {
@@ -635,7 +635,7 @@ function previewTemplate() {
 
 function replaceTokens(docId, tabId) {
   for (let attempt = 1; ; attempt++) {
-    const doc = Docs.Documents.get(docId, {includeTabsContent: true});
+    const doc = apiDoc(docId, {includeTabsContent: true});
     const tab = tabId ? doc.tabs.find(t => t.tabProperties.tabId === tabId) : doc.tabs[0];
     if (!tab) throw new Error('No tab ' + tabId);
     const requests = [];

@@ -274,7 +274,7 @@ function applyStructure() {
 // gives each item its level's narrow indents (listIndents) and
 // STRUCTURE_ITEM_SPACING below it.
 function bulletStructureDoc(docId) {
-  const paragraphs = () => Docs.Documents.get(docId).body.content.filter(se => se.paragraph);
+  const paragraphs = () => apiDoc(docId).body.content.filter(se => se.paragraph);
   const runs = [];
   let run = null;
   for (const se of paragraphs()) {
