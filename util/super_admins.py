@@ -22,9 +22,6 @@ FORWARDING_GROUP = f"admin-forwarding@{DOMAIN}"
 # whose account an address is.
 GATHER_ID_TYPE = "gather_id"
 ADMIN_CONSOLE_URL = "https://admin.google.com"
-# Workspace licenses a new user may be given automatically; without one,
-# the user is a Cloud Identity Free user.
-WORKSPACE_PRODUCT = "Google-Apps"
 # Left out of temporary passwords: easy to misread or mistype.
 _PASSWORD_ALPHABET = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 
@@ -121,6 +118,18 @@ def recovery_fields(recovery_email: str, phone: str) -> dict:
     if phone:
         fields["recoveryPhone"] = phone
     return fields
+
+
+def primary_admin_steps() -> list[str]:
+    """How to check that admin@ is still the Workspace's primary admin.
+    Making the new account a super admin once also made it the primary
+    admin, and there's no API to read or set the primary admin."""
+    return [
+        f"In the Admin console ({ADMIN_CONSOLE_URL}), go to Account → Account settings →",
+        "Profile, and check that the Primary admin is still admin@. Making a new super",
+        "admin has been known to make it the primary admin instead. If it has, change",
+        "the Primary admin back to admin@ and save.",
+    ]
 
 
 def recovery_changes(account: dict, recovery_email: str, phone: str) -> dict:

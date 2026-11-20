@@ -207,8 +207,7 @@ playwright install chromium
   enable the Drive, Admin SDK (Directory), Groups Settings, Google
   Calendar, Gmail, and Google Docs APIs (Gmail sends the email telling a
   group about its new calendar; Docs makes the maintenance tracker's
-  start-here Doc pageless), and, for `add_super_admin.py`, the Enterprise
-  License Manager (Licensing) API. On first run, a script prints a sign-in URL; open it signed
+  start-here Doc pageless). On first run, a script prints a sign-in URL; open it signed
   in as `admin@`, which owns the group calendars (the
   scripts that make calendars refuse to run as anyone else). The sign-in is
   saved to `~/.google_setup_token.pkl`; delete that file to sign in as a
@@ -293,7 +292,13 @@ person's own address, and its recovery phone their phone.
 
 `add_super_admin.py` sets up such an account for a Gather member, except
 for the routing rule, which it tells you how to add: Google has no API for
-routing rules. The new admin gets in like this:
+routing rules. It also asks you to check that `admin@` is still the
+primary admin (Account → Account settings → Profile → Primary admin), and
+to change it back if it isn't: once, the primary admin changed to the new
+account about a minute after it was made a super admin. Google doesn't
+document this, and has no API to read or set the primary admin, so the
+script can't check it itself.
+The new admin gets in like this:
 
 1. The script prints the account's temporary password; give it to them
    yourself (in person, or by phone or text), not by email. It also opens
@@ -613,12 +618,12 @@ status line as "calendar (members can view, not edit)".
   Identity Free user with a temporary password to change at the first
   sign-in, their own address (from Gather, or `-e`) as its recovery email,
   their Gather phone as its recovery phone, and their Gather ID; makes it a
-  super admin; removes any Workspace license Google gave it automatically
-  (`-k` keeps it); and adds it to `admin-forwarding@`. It prints the
+  super admin; and adds it to `admin-forwarding@`. It prints the
   Default routing rule to add in the Admin console, and where to move it in
-  the list, waits while you add it,
-  and then prints the temporary password and opens a draft email to the
-  member saying how to sign in. Run again for a member, it skips what's
+  the list, and waits while you add it; asks you to check that `admin@` is
+  still the primary admin, and change it back if not, since making a super
+  admin once changed it; and then prints the temporary password and opens a
+  draft email to the member saying how to sign in. Run again for a member, it skips what's
   done, only updating an existing account's recovery email and phone; it
   stops if the address is someone else's.
 - **`maintenance_base.py`** keeps the maintenance tracker's Airtable base in
