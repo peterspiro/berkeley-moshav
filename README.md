@@ -230,8 +230,9 @@ A new admin needs only the first.
    admin sends you should come privately (in a password manager, say, not
    by email).
    - `client_secret.json`, the Google app: you can make your own. In the
-     private window, open Google Cloud Console, then the OAuth client
-     (APIs & Services → Credentials), click **Add secret**, and download
+     private window, open Google Cloud Console, choose the project
+     **Google-Gather Integration**, then open the OAuth client (APIs &
+     Services → Credentials), click **Add secret**, and download
      the JSON. A client can have several secrets, so the other admins'
      keep working, and each can be deleted on its own. (Or another admin
      sends you theirs: it's the least sensitive of the three, since it
@@ -270,12 +271,28 @@ screenshots go to `debug/` (git-ignored).
 These were done once, and are redone only to replace an app or token.
 Their credential files are what each admin gets in step 4 above.
 
-- **Google APIs**: in Google Cloud Console, create a Desktop OAuth 2.0
-  client, and save its JSON as `client_secret.json`. Enable the Drive,
-  Admin SDK (Directory), Groups Settings, Google Calendar, Gmail, and
-  Google Docs APIs (Gmail sends the email telling a group about its new
+- **Google APIs**: the scripts' Google app is a Desktop OAuth 2.0 client
+  in the Google Cloud project **Google-Gather Integration**, and its JSON
+  is `client_secret.json`. The project also has the Drive, Admin SDK
+  (Directory), Groups Settings, Google Calendar, Gmail, and Google Docs
+  APIs enabled (Gmail sends the email telling a group about its new
   calendar; Docs makes the maintenance tracker's start-here Doc
-  pageless).
+  pageless). To set it up again, create a project, enable those APIs,
+  and create the client.
+
+  Google asks two things of a script before it acts. Which app is
+  asking: Google takes requests only from an app registered in a Cloud
+  project, where the APIs it calls are enabled, and `client_secret.json`
+  names it. And which account it acts as: the sign-in (each admin's step
+  5), where an account allows the app to act as it, with that account's
+  access and no more. The saved sign-in is the two together, so neither
+  works alone: the file reaches nothing without a sign-in, and a sign-in
+  needs the app to ask for it. The account is always `admin@`, which owns
+  the group calendars; the file never chooses it.
+
+  The Apps Script projects don't use any of this: they're set to the
+  "Default" Google Cloud project, a hidden one Google makes and manages
+  for each, and ask for access in the Apps Script editor themselves.
 - **Zoom API**: in the Zoom App Marketplace, create a **Server-to-Server
   OAuth** app (Develop → Build App), signed in as the account owner or as an
   admin whose role has View and Edit for "Server-to-Server OAuth app" (Role
