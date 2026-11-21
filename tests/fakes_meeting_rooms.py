@@ -11,8 +11,14 @@ from util.zoom_utils import ROOMS_USER
 OWNER = CALENDAR_OWNER
 
 
-def _http_error(status):
-    return HttpError(httplib2.Response({"status": status}), b"")
+def _http_error(status, content=b""):
+    return HttpError(httplib2.Response({"status": status}), content)
+
+
+# What Calendar returns for an account without Google Calendar.
+NOT_A_CALENDAR_USER = (b'{"error": {"code": 403, "message": "The user must be signed up for '
+                       b'Google Calendar.", "errors": [{"domain": "calendar", '
+                       b'"reason": "notACalendarUser"}]}}')
 
 
 class _Call:
@@ -26,7 +32,8 @@ class _Call:
 class FakeCalendarService:
     """calendars: {id: summary}; acls: {id: [rule, ...]}; events: {calendar
     id: [event, ...]}; subscribed: {id: (summary, accessRole)} for
-    calendars on the list that the account doesn't own. Records writes."""
+    calendars on the list that the account doesn't own. primary=None is
+    an account without Google Calendar. Records writes."""
 
     def __init__(self, calendars=None, acls=None, primary=OWNER, events=None,
                  subscribed=None, instances=None):
@@ -52,6 +59,8 @@ class FakeCalendarService:
     def get(self, calendarId):
         def fn():
             if calendarId == "primary":
+                if self.primary is None:
+                    raise _http_error(403, NOT_A_CALENDAR_USER)
                 return {"id": self.primary}
             if calendarId not in self.calendars_by_id:
                 raise _http_error(404)

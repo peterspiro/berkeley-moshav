@@ -7,7 +7,9 @@ All names, IDs, and addresses are fictional.
 
 import datetime
 
+import httplib2
 import pytest
+from googleapiclient.errors import HttpError
 
 import util.meeting_rooms as mr
 from tests.fakes_meeting_rooms import OWNER, FakeCalendarService, FakeZoom, room
@@ -64,6 +66,21 @@ class TestCheckCalendarOwner:
         with pytest.raises(SystemExit) as exc:
             check_calendar_owner(FakeCalendarService(primary="someone@example.org"))
         assert OWNER in str(exc.value)
+
+    def test_account_without_calendar_exits(self):
+        with pytest.raises(SystemExit) as exc:
+            check_calendar_owner(FakeCalendarService(primary=None))
+        assert OWNER in str(exc.value)
+        assert "no Google Calendar" in str(exc.value)
+
+    def test_other_http_error_raised(self):
+        class Failing(FakeCalendarService):
+            def get(self, calendarId):
+                def fn():
+                    raise HttpError(httplib2.Response({"status": 500}), b"")
+                return type("C", (), {"execute": staticmethod(fn)})()
+        with pytest.raises(HttpError):
+            check_calendar_owner(Failing())
 
 
 class TestEnsureGroupCalendar:
