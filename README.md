@@ -218,11 +218,13 @@ A new admin needs only the first.
    as `admin@`, not as your own account: those that make calendars refuse
    to run as anyone else, because `admin@` owns the group calendars. When
    Google asks for 2-Step Verification after the password, click **Try
-   another way** and enter a backup code. Get one yourself in the Admin
-   console (Users → `admin@` → Security → 2-Step Verification → Get
-   backup verification codes), signed in as your own account in your
-   usual browser, or ask another admin for one. A code works once, and
-   getting new ones cancels the old.
+   another way** and enter a backup code. Take one from the admins'
+   shared password manager entry for `admin@` (see "Admin accounts"), and
+   delete it from the list there, since a code works once. If none are
+   left, make a new set in the Admin console (Users → `admin@` →
+   Security → 2-Step Verification → Get backup verification codes),
+   signed in as your own account in your usual browser, and replace the
+   list in the entry with it: a new set cancels the old.
 4. Get the community's shared credential files, and put them in the repo
    root (they're git-ignored), then `chmod 600` each. Any that another
    admin sends you should come privately (in a password manager, say, not
@@ -326,6 +328,20 @@ Their credential files are what each admin gets in step 4 above.
 and nobody reads its mail directly. Its mail, filtered (leaving out calendar
 replies, for example), is forwarded to the `admin-forwarding@` Google Group,
 whose members are the community's super admins.
+
+The admins keep `admin@`'s password and its current set of 2-Step
+Verification backup codes together, in one entry of a password manager
+shared only with them, not with any one person or in email. The codes
+are how an admin signs in as `admin@` (step 3 of "Each admin" under
+"Setup"), and
+the way back in if the phone or app `admin@` uses for 2-Step
+Verification is lost. Google gives ten codes at a time, each working
+once, and a new set, which any super admin can get in the Admin console
+(Users → `admin@` → Security → 2-Step Verification), cancels the old.
+So whoever uses a code deletes it from the entry; when only a few are
+left, or they may have leaked, someone makes a new set and replaces the
+list. Making a set without updating the entry leaves the other admins
+holding codes that no longer work.
 
 Each super admin also has an account of their own in the Workspace: a
 **Cloud Identity Free** user (no Gmail mailbox, so no Workspace license),
