@@ -170,7 +170,7 @@ which is public.
 
 | Property | What it is |
 |---|---|
-| `AIRTABLE_TOKEN` | A personal access token for the base, with only the scopes `data.records:read` and `data.records:write` |
+| `AIRTABLE_TOKEN` | A personal access token for the base, with only the scopes `data.records:read` and `data.records:write`, made from `admin@`'s Airtable account (a token acts as the account that made it, and stops working if that account is removed) |
 | `AIRTABLE_BASE_ID` | The base's ID: the part of its address in Airtable that starts with `app` |
 | `AIRTABLE_PLAN` | `team` once the workspace is on Airtable's Team plan. Unset, or anything else, means the Free plan (see "The Airtable plan") |
 | `CIRCLE_EMAIL` | The circle's email list: urgent requests go there, and replies to every email |

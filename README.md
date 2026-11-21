@@ -214,37 +214,29 @@ A new admin needs only the first.
    password = secret
    ```
 3. Sign in to Google as `admin@`, in a private browser window on this
-   computer, and keep the window open for steps 4 and 5. The scripts run
+   computer, and keep the window open for step 5. The scripts run
    as `admin@`, not as your own account: those that make calendars refuse
    to run as anyone else, because `admin@` owns the group calendars. When
    Google asks for 2-Step Verification after the password, click **Try
-   another way** and enter a backup code. Take one from the admins'
-   shared password manager entry for `admin@` (see "Admin accounts"), and
-   delete it from the list there, since a code works once. If none are
-   left, make a new set in the Admin console (Users → `admin@` →
-   Security → 2-Step Verification → Get backup verification codes),
-   signed in as your own account in your usual browser, and replace the
-   list in the entry with it: a new set cancels the old.
-4. Get the community's shared credential files, and put them in the repo
-   root (they're git-ignored), then `chmod 600` each. Any that another
-   admin sends you should come privately (in a password manager, say, not
-   by email).
-   - `client_secret.json`, the Google app: you can make your own. In the
-     private window, open Google Cloud Console, then the OAuth client
-     (APIs & Services → Credentials), click **Add secret**, and download
-     the JSON. A client can have several secrets, so the other admins'
-     keep working, and each can be deleted on its own. (Or another admin
-     sends you theirs: it's the least sensitive of the three, since it
-     only identifies the app, and does nothing without a sign-in as
-     `admin@`.)
-   - `zoom_credentials`, the Zoom app: from another admin. Only the
-     app's creator sees its credentials in the Zoom App Marketplace, and
-     regenerating its secret breaks every other admin's copy.
+   another way** and enter a backup code. The `admin@` password and its
+   backup codes are in one entry of the admins' **Berkeley Moshav**
+   1Password vault (see "Admin accounts"). Take a code, and delete it
+   from the list there, since a code works once. If none are left, make
+   a new set in the Admin console (Users → `admin@` → Security → 2-Step
+   Verification → Get backup verification codes), signed in as your own
+   account in your usual browser, and replace the list in the entry with
+   it: a new set cancels the old.
+4. Download the community's shared credential files from the same vault,
+   where each has an entry of its own, into the repo root (they're
+   git-ignored), then `chmod 600` each:
+   - `client_secret.json`, the Google app;
+   - `zoom_credentials`, the Zoom app;
    - `airtable_credentials`, the Airtable token, only if you'll run the
-     maintenance tracker's scripts (see "Airtable API" below): from
-     another admin. Airtable shows a token only when it's made, and
-     regenerating it breaks every other copy. A token of your own would
-     reach only the bases your own Airtable account can open.
+     maintenance tracker's scripts (see "Airtable API" below).
+
+   Don't make new ones in their place: regenerating the Zoom app's
+   secret or the Airtable token breaks every other admin's copy. ("Once,
+   for the community" below says how each was made.)
 5. Let the scripts use the `admin@` sign-in. Delete
    `~/.google_setup_token.pkl` if it's there, and run a script: it prints
    a sign-in link and waits. Open the link in the private window (the
@@ -270,12 +262,28 @@ screenshots go to `debug/` (git-ignored).
 These were done once, and are redone only to replace an app or token.
 Their credential files are what each admin gets in step 4 above.
 
-- **Google APIs**: in Google Cloud Console, create a Desktop OAuth 2.0
-  client, and save its JSON as `client_secret.json`. Enable the Drive,
-  Admin SDK (Directory), Groups Settings, Google Calendar, Gmail, and
-  Google Docs APIs (Gmail sends the email telling a group about its new
+- **Google APIs**: the scripts' Google app is a Desktop OAuth 2.0 client
+  in the Google Cloud project **Google-Gather Integration**, and its JSON
+  is `client_secret.json`. The project also has the Drive, Admin SDK
+  (Directory), Groups Settings, Google Calendar, Gmail, and Google Docs
+  APIs enabled (Gmail sends the email telling a group about its new
   calendar; Docs makes the maintenance tracker's start-here Doc
-  pageless).
+  pageless). To set it up again, create a project, enable those APIs,
+  and create the client.
+
+  Google asks two things of a script before it acts. Which app is
+  asking: Google takes requests only from an app registered in a Cloud
+  project, where the APIs it calls are enabled, and `client_secret.json`
+  names it. And which account it acts as: the sign-in (each admin's step
+  5), where an account allows the app to act as it, with that account's
+  access and no more. The saved sign-in is the two together, so neither
+  works alone: the file reaches nothing without a sign-in, and a sign-in
+  needs the app to ask for it. The account is always `admin@`, which owns
+  the group calendars; the file never chooses it.
+
+  The Apps Script projects don't use any of this: they're set to the
+  "Default" Google Cloud project, a hidden one Google makes and manages
+  for each, and ask for access in the Apps Script editor themselves.
 - **Zoom API**: in the Zoom App Marketplace, create a **Server-to-Server
   OAuth** app (Develop → Build App), signed in as the account owner or as an
   admin whose role has View and Edit for "Server-to-Server OAuth app" (Role
@@ -308,11 +316,18 @@ Their credential files are what each admin gets in step 4 above.
 - **Airtable API** (for `maintenance_base.py`,
   `sync_maintenance_people.py`, `maintenance_demo.py`, and
   `update_start_here_doc.py` only): in Airtable's
-  [Builder Hub](https://airtable.com/create/tokens), signed in as the
-  workspace's owner, create a personal access token with the scopes
+  [Builder Hub](https://airtable.com/create/tokens), signed in as
+  `admin@`'s Airtable account, which owns the workspace, create a
+  personal access token with the scopes
   `data.records:read`, `data.records:write`, `schema.bases:read`, and
   `schema.bases:write`, and access to the maintenance bases it should
-  reach. It goes in a file named `airtable_credentials`:
+  reach. A token acts as the account that made it, with no more access
+  than that account has, and stops working if that account loses access
+  or is removed; so it's made from `admin@`'s account, not a member's
+  own, and changes the scripts make show as `admin@`'s. To see which
+  account a token acts as, Airtable's `whoami` endpoint
+  (`https://api.airtable.com/v0/meta/whoami`) returns its user ID. It
+  goes in a file named `airtable_credentials`:
   ```
   token = pat...
   ```
@@ -329,13 +344,16 @@ and nobody reads its mail directly. Its mail, filtered (leaving out calendar
 replies, for example), is forwarded to the `admin-forwarding@` Google Group,
 whose members are the community's super admins.
 
-The admins keep `admin@`'s password and its current set of 2-Step
-Verification backup codes together, in one entry of a password manager
-shared only with them, not with any one person or in email. The codes
-are how an admin signs in as `admin@` (step 3 of "Each admin" under
-"Setup"), and
-the way back in if the phone or app `admin@` uses for 2-Step
-Verification is lost. Google gives ten codes at a time, each working
+The admins share credentials in a 1Password vault, **Berkeley Moshav**,
+not with any one person or in email. One entry holds `admin@`'s password
+and its current set of 2-Step Verification backup codes; others hold the
+shared credential files each admin needs to run the scripts
+(`client_secret.json`, `zoom_credentials`, and `airtable_credentials`).
+When one of those is replaced, its entry is updated too.
+
+The backup codes are how an admin signs in as `admin@` (step 3 of "Each
+admin" under "Setup"), and the way back in if the phone or app `admin@`
+uses for 2-Step Verification is lost. Google gives ten codes at a time, each working
 once, and a new set, which any super admin can get in the Admin console
 (Users → `admin@` → Security → 2-Step Verification), cancels the old.
 So whoever uses a code deletes it from the entry; when only a few are
@@ -375,7 +393,8 @@ The new admin gets in like this:
 2. They sign in at admin.google.com with the new address and that
    password, in a private browser window so their own Google account isn't
    in the way, and choose a new password.
-3. They set up 2-Step Verification.
+3. They set up 2-Step Verification, and are added to the **Berkeley
+   Moshav** 1Password vault.
 4. To run the scripts, they follow "Each admin" under "Setup", which
    signs them in to the scripts once as `admin@` (with a backup code for
    its 2-Step Verification).
