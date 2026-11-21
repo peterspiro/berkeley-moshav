@@ -325,11 +325,18 @@ Their credential files are what each admin gets in step 4 above.
 - **Airtable API** (for `maintenance_base.py`,
   `sync_maintenance_people.py`, `maintenance_demo.py`, and
   `update_start_here_doc.py` only): in Airtable's
-  [Builder Hub](https://airtable.com/create/tokens), signed in as the
-  workspace's owner, create a personal access token with the scopes
+  [Builder Hub](https://airtable.com/create/tokens), signed in as
+  `admin@`'s Airtable account, which owns the workspace, create a
+  personal access token with the scopes
   `data.records:read`, `data.records:write`, `schema.bases:read`, and
   `schema.bases:write`, and access to the maintenance bases it should
-  reach. It goes in a file named `airtable_credentials`:
+  reach. A token acts as the account that made it, with no more access
+  than that account has, and stops working if that account loses access
+  or is removed; so it's made from `admin@`'s account, not a member's
+  own, and changes the scripts make show as `admin@`'s. To see which
+  account a token acts as, Airtable's `whoami` endpoint
+  (`https://api.airtable.com/v0/meta/whoami`) returns its user ID. It
+  goes in a file named `airtable_credentials`:
   ```
   token = pat...
   ```

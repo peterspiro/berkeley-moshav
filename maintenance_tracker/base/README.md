@@ -81,8 +81,8 @@ the same formula into the field in each base.
 
 ## Setting up a base
 
-1. In Airtable, signed in as the workspace's owner, create an empty base
-   with the base's name. Delete its starting "Table 1" once the script has
+1. In Airtable, signed in as the workspace's owner (`admin@`'s Airtable
+   account), create an empty base with the base's name. Delete its starting "Table 1" once the script has
    made the others. (Duplicating a base that's already set up, in Airtable,
    may bring its views, forms, and interfaces with it, and save most of
    steps 4 to 6: check each afterwards, delete the copied requests, updates,
