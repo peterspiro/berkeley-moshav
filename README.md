@@ -191,32 +191,70 @@ ID, so a rename keeps its place.
 
 ## Setup
 
-```bash
-pip install -r requirements.txt
-playwright install chromium
-```
+Setting up has two parts: what each admin does to run the scripts on
+their own computer, and what was done once for the whole community (the
+Google, Zoom, and Airtable apps whose credentials every admin shares).
+A new admin needs only the first.
 
-- **Gather login**: put your Gather admin credentials in `~/.gather`
-  (`chmod 600`):
-  ```
-  email = you@example.com
-  password = secret
-  ```
-- **Google APIs**: create a Desktop OAuth 2.0 client in Google Cloud Console,
-  save its JSON as `client_secret.json` in the repo root, and
-  enable the Drive, Admin SDK (Directory), Groups Settings, Google
-  Calendar, Gmail, and Google Docs APIs (Gmail sends the email telling a
-  group about its new calendar; Docs makes the maintenance tracker's
-  start-here Doc pageless). On first run, a script prints a sign-in URL; open it signed
-  in as `admin@`, which owns the group calendars (the
-  scripts that make calendars refuse to run as anyone else). The sign-in is
-  saved to `~/.google_setup_token.pkl`; delete that file to sign in as a
-  different account. `client_secret.json` only identifies the app, so
-  another admin who runs these scripts also signs in as `admin@`: their
-  own account, especially one without Google Calendar (Cloud Identity
-  Free), is refused ("Admin accounts" below says how a new admin signs
-  in). A script that needs a scope the saved sign-in lacks asks you to
-  sign in again.
+### Each admin
+
+1. Clone this repo, and in its folder make a Python environment and
+   install what the scripts need:
+   ```bash
+   python3 -m venv venv
+   source venv/bin/activate
+   pip install -r requirements.txt
+   playwright install chromium
+   ```
+   Run `source venv/bin/activate` again in each new terminal before
+   running a script.
+2. Put your own Gather admin login in `~/.gather` (`chmod 600`):
+   ```
+   email = you@example.com
+   password = secret
+   ```
+3. Get the community's shared credential files from another admin, sent
+   privately (in a password manager, say, not by email), and put them in
+   the repo root (they're git-ignored), then `chmod 600` each:
+   - `client_secret.json`, the Google app;
+   - `zoom_credentials`, the Zoom app;
+   - `airtable_credentials`, the Airtable token, only if you'll run the
+     maintenance tracker's scripts (see "Airtable API" below).
+4. Sign in to Google once as `admin@`, not as your own account. The
+   scripts that make calendars refuse to run as anyone else, because
+   `admin@` owns the group calendars; `client_secret.json` only
+   identifies the app, not the account. Delete `~/.google_setup_token.pkl`
+   if it's there, and run a script: it prints a sign-in link and waits.
+   Open the link in a private browser window on the same computer (the
+   sign-in finishes at a page the script serves there), sign in as
+   `admin@`, and allow the access it asks for. For the second step, use a
+   backup code: get one in the Admin console (Users → `admin@` → Security
+   → 2-Step Verification → Get backup verification codes), or ask another
+   admin for one. A code works once, and getting new ones cancels the old.
+5. The sign-in is saved to `~/.google_setup_token.pkl`, and later runs
+   use it. It's an `admin@` sign-in that needs no password or second
+   step, so never copy or send it. Delete it only to sign in again; a
+   script that needs a scope the saved sign-in lacks asks you to sign in
+   again itself. If it may have leaked, remove the scripts' app from
+   `admin@`'s connected applications (Users → `admin@` → Security), and
+   every admin signs in again.
+
+Run scripts from the repo root, e.g. `python add_new_group.py ...` or
+`python archive/data_import/parse_households.py ...`. Every script
+supports `-h` for its options, and most support `-n`/`--dry-run`. Logs and
+screenshots go to `debug/` (git-ignored).
+
+### Once, for the community
+
+These were done once, and are redone only to replace an app or token.
+Their credential files are what each admin gets in step 3 above.
+
+- **Google APIs**: in Google Cloud Console, create a Desktop OAuth 2.0
+  client, and save its JSON as `client_secret.json`. Enable the Drive,
+  Admin SDK (Directory), Groups Settings, Google Calendar, Gmail, and
+  Google Docs APIs (Gmail sends the email telling a group about its new
+  calendar; Docs makes the maintenance tracker's start-here Doc
+  pageless).
 - **Zoom API**: in the Zoom App Marketplace, create a **Server-to-Server
   OAuth** app (Develop → Build App), signed in as the account owner or as an
   admin whose role has View and Edit for "Server-to-Server OAuth app" (Role
@@ -234,11 +272,8 @@ playwright install chromium
   | `user:read:list_users:admin` | View users | Finding every Zoom user's scheduled meetings, to offer ones matching a group's name, and to check for overlaps (`group_meetings`) |
 
   If its creator's role is later reduced, Zoom removes those scopes, so
-  transfer the app to another admin first. Put its credentials in a file
-  named `zoom_credentials` in the repo root, beside `client_secret.json`
-  (git-ignored; `chmod 600`). Unlike `~/.gather`, which holds each admin's
-  own login, these belong to the community's app and are the same for
-  everyone:
+  transfer the app to another admin first. Its credentials go in a file
+  named `zoom_credentials`:
   ```
   account_id = ...
   client_id = ...
@@ -256,8 +291,7 @@ playwright install chromium
   workspace's owner, create a personal access token with the scopes
   `data.records:read`, `data.records:write`, `schema.bases:read`, and
   `schema.bases:write`, and access to the maintenance bases it should
-  reach. Put it in a file named `airtable_credentials` in the repo root
-  (git-ignored; `chmod 600`):
+  reach. It goes in a file named `airtable_credentials`:
   ```
   token = pat...
   ```
@@ -266,11 +300,6 @@ playwright install chromium
   in a file; there, set `AIRTABLE_TOKEN=proxy-injected`, and the session's
   network puts the real token in. Base IDs aren't kept anywhere: the
   script finds a base by its name.
-
-Run scripts from the repo root, e.g. `python add_new_group.py ...` or
-`python archive/data_import/parse_households.py ...`. Every script
-supports `-h` for its options, and most support `-n`/`--dry-run`. Logs and
-screenshots go to `debug/` (git-ignored).
 
 ### Admin accounts
 
@@ -312,24 +341,9 @@ The new admin gets in like this:
    password, in a private browser window so their own Google account isn't
    in the way, and choose a new password.
 3. They set up 2-Step Verification.
-4. To run the scripts, they set up the repo as under "Setup", with their
-   own Gather login in `~/.gather`. Another admin gives them
-   `client_secret.json` and `zoom_credentials` privately (not by email),
-   and they `chmod 600` both.
-5. They sign in to the scripts once as `admin@`, not as their own
-   account: they delete `~/.google_setup_token.pkl` if it's there, run a
-   script, and open the link it prints in a private window on the same
-   computer (the sign-in finishes at a page the script serves there),
-   signed in as `admin@`. For its second step they use a backup code:
-   they can get one themselves in the Admin console (Users → `admin@` →
-   Security → 2-Step Verification → Get backup verification codes), or
-   another admin gives them one. A code works once, and getting new ones
-   cancels the old.
-6. From then on `~/.google_setup_token.pkl` is an `admin@` sign-in that
-   needs no password or second step, so they never copy or send it. If
-   it may have leaked, remove the scripts' app from `admin@`'s connected
-   applications (Users → `admin@` → Security), and everyone signs in
-   again.
+4. To run the scripts, they follow "Each admin" under "Setup", which
+   ends with signing in to the scripts once as `admin@` (a backup code
+   covers its second step).
 
 A super admin can't reset a forgotten password by email unless super-admin
 account recovery is turned on (Security → Account recovery), so if they
