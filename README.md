@@ -214,8 +214,9 @@ playwright install chromium
   different account. `client_secret.json` only identifies the app, so
   another admin who runs these scripts also signs in as `admin@`: their
   own account, especially one without Google Calendar (Cloud Identity
-  Free), is refused. A script that needs a scope the saved sign-in lacks asks
-  you to sign in again.
+  Free), is refused ("Admin accounts" below says how a new admin signs
+  in). A script that needs a scope the saved sign-in lacks asks you to
+  sign in again.
 - **Zoom API**: in the Zoom App Marketplace, create a **Server-to-Server
   OAuth** app (Develop → Build App), signed in as the account owner or as an
   admin whose role has View and Edit for "Server-to-Server OAuth app" (Role
@@ -311,6 +312,24 @@ The new admin gets in like this:
    password, in a private browser window so their own Google account isn't
    in the way, and choose a new password.
 3. They set up 2-Step Verification.
+4. To run the scripts, they set up the repo as under "Setup", with their
+   own Gather login in `~/.gather`. Another admin gives them
+   `client_secret.json` and `zoom_credentials` privately (not by email),
+   and they `chmod 600` both.
+5. They sign in to the scripts once as `admin@`, not as their own
+   account: they delete `~/.google_setup_token.pkl` if it's there, run a
+   script, and open the link it prints in a private window on the same
+   computer (the sign-in finishes at a page the script serves there),
+   signed in as `admin@`. For its second step they use a backup code:
+   they can get one themselves in the Admin console (Users → `admin@` →
+   Security → 2-Step Verification → Get backup verification codes), or
+   another admin gives them one. A code works once, and getting new ones
+   cancels the old.
+6. From then on `~/.google_setup_token.pkl` is an `admin@` sign-in that
+   needs no password or second step, so they never copy or send it. If
+   it may have leaked, remove the scripts' app from `admin@`'s connected
+   applications (Users → `admin@` → Security), and everyone signs in
+   again.
 
 A super admin can't reset a forgotten password by email unless super-admin
 account recovery is turned on (Security → Account recovery), so if they
