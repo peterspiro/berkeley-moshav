@@ -213,13 +213,26 @@ A new admin needs only the first.
    email = you@example.com
    password = secret
    ```
-3. Get the community's shared credential files from another admin, sent
-   privately (in a password manager, say, not by email), and put them in
-   the repo root (they're git-ignored), then `chmod 600` each:
-   - `client_secret.json`, the Google app;
-   - `zoom_credentials`, the Zoom app;
+3. Get the community's shared credential files, and put them in the repo
+   root (they're git-ignored), then `chmod 600` each. Any that another
+   admin sends you should come privately (in a password manager, say, not
+   by email).
+   - `client_secret.json`, the Google app: you can make your own. In
+     Google Cloud Console, signed in as an account with access to the
+     project (`admin@`), open the OAuth client (APIs & Services →
+     Credentials), click **Add secret**, and download the JSON. A client
+     can have several secrets, so the other admins' keep working, and
+     each can be deleted on its own. (Or another admin sends you theirs:
+     it's the least sensitive of the three, since it does nothing without
+     a sign-in as `admin@`.)
+   - `zoom_credentials`, the Zoom app: from another admin. Only the
+     app's creator sees its credentials in the Zoom App Marketplace, and
+     regenerating its secret breaks every other admin's copy.
    - `airtable_credentials`, the Airtable token, only if you'll run the
-     maintenance tracker's scripts (see "Airtable API" below).
+     maintenance tracker's scripts (see "Airtable API" below): from
+     another admin. Airtable shows a token only when it's made, and
+     regenerating it breaks every other copy. A token of your own would
+     reach only the bases your own Airtable account can open.
 4. Sign in to Google once as `admin@`, not as your own account. The
    scripts that make calendars refuse to run as anyone else, because
    `admin@` owns the group calendars; `client_secret.json` only
