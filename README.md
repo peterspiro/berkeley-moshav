@@ -239,14 +239,16 @@ A new admin needs only the first.
    identifies the app, not the account. Delete `~/.google_setup_token.pkl`
    if it's there, and run a script: it prints a sign-in link and waits.
    Open the link in a private browser window on the same computer (the
-   sign-in finishes at a page the script serves there), sign in as
-   `admin@`, and allow the access it asks for. For the second step, use a
-   backup code: get one in the Admin console (Users → `admin@` → Security
-   → 2-Step Verification → Get backup verification codes), or ask another
-   admin for one. A code works once, and getting new ones cancels the old.
+   sign-in finishes at a page the script serves there), and sign in as
+   `admin@`. When Google asks for 2-Step Verification after the password,
+   click **Try another way** and enter a backup code: get one in the
+   Admin console (Users → `admin@` → Security → 2-Step Verification → Get
+   backup verification codes), or ask another admin for one. A code works
+   once, and getting new ones cancels the old. Then allow the access the
+   scripts ask for.
 5. The sign-in is saved to `~/.google_setup_token.pkl`, and later runs
-   use it. It's an `admin@` sign-in that needs no password or second
-   step, so never copy or send it. Delete it only to sign in again; a
+   use it. It's an `admin@` sign-in that needs no password or 2-Step
+   Verification, so never copy or send it. Delete it only to sign in again; a
    script that needs a scope the saved sign-in lacks asks you to sign in
    again itself. If it may have leaked, remove the scripts' app from
    `admin@`'s connected applications (Users → `admin@` → Security), and
@@ -355,8 +357,8 @@ The new admin gets in like this:
    in the way, and choose a new password.
 3. They set up 2-Step Verification.
 4. To run the scripts, they follow "Each admin" under "Setup", which
-   ends with signing in to the scripts once as `admin@` (a backup code
-   covers its second step).
+   ends with signing in to the scripts once as `admin@` (with a backup
+   code for its 2-Step Verification).
 
 A super admin can't reset a forgotten password by email unless super-admin
 account recovery is turned on (Security → Account recovery), so if they
