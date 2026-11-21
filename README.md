@@ -213,18 +213,28 @@ A new admin needs only the first.
    email = you@example.com
    password = secret
    ```
-3. Get the community's shared credential files, and put them in the repo
+3. Sign in to Google as `admin@`, in a private browser window on this
+   computer, and keep the window open for steps 4 and 5. The scripts run
+   as `admin@`, not as your own account: those that make calendars refuse
+   to run as anyone else, because `admin@` owns the group calendars. When
+   Google asks for 2-Step Verification after the password, click **Try
+   another way** and enter a backup code. Get one yourself in the Admin
+   console (Users → `admin@` → Security → 2-Step Verification → Get
+   backup verification codes), signed in as your own account in your
+   usual browser, or ask another admin for one. A code works once, and
+   getting new ones cancels the old.
+4. Get the community's shared credential files, and put them in the repo
    root (they're git-ignored), then `chmod 600` each. Any that another
    admin sends you should come privately (in a password manager, say, not
    by email).
-   - `client_secret.json`, the Google app: you can make your own. In
-     Google Cloud Console, signed in as an account with access to the
-     project (`admin@`), open the OAuth client (APIs & Services →
-     Credentials), click **Add secret**, and download the JSON. A client
-     can have several secrets, so the other admins' keep working, and
-     each can be deleted on its own. (Or another admin sends you theirs:
-     it's the least sensitive of the three, since it does nothing without
-     a sign-in as `admin@`.)
+   - `client_secret.json`, the Google app: you can make your own. In the
+     private window, open Google Cloud Console, then the OAuth client
+     (APIs & Services → Credentials), click **Add secret**, and download
+     the JSON. A client can have several secrets, so the other admins'
+     keep working, and each can be deleted on its own. (Or another admin
+     sends you theirs: it's the least sensitive of the three, since it
+     only identifies the app, and does nothing without a sign-in as
+     `admin@`.)
    - `zoom_credentials`, the Zoom app: from another admin. Only the
      app's creator sees its credentials in the Zoom App Marketplace, and
      regenerating its secret breaks every other admin's copy.
@@ -233,20 +243,14 @@ A new admin needs only the first.
      another admin. Airtable shows a token only when it's made, and
      regenerating it breaks every other copy. A token of your own would
      reach only the bases your own Airtable account can open.
-4. Sign in to Google once as `admin@`, not as your own account. The
-   scripts that make calendars refuse to run as anyone else, because
-   `admin@` owns the group calendars; `client_secret.json` only
-   identifies the app, not the account. Delete `~/.google_setup_token.pkl`
-   if it's there, and run a script: it prints a sign-in link and waits.
-   Open the link in a private browser window on the same computer (the
-   sign-in finishes at a page the script serves there), and sign in as
-   `admin@`. When Google asks for 2-Step Verification after the password,
-   click **Try another way** and enter a backup code: get one in the
-   Admin console (Users → `admin@` → Security → 2-Step Verification → Get
-   backup verification codes), or ask another admin for one. A code works
-   once, and getting new ones cancels the old. Then allow the access the
-   scripts ask for.
-5. The sign-in is saved to `~/.google_setup_token.pkl`, and later runs
+5. Let the scripts use the `admin@` sign-in. Delete
+   `~/.google_setup_token.pkl` if it's there, and run a script: it prints
+   a sign-in link and waits. Open the link in the private window (the
+   sign-in finishes at a page the script serves on this computer, so it
+   must be the same one). You're already signed in, so Google doesn't
+   ask for the password or a code again: choose `admin@`, and allow the
+   access the scripts ask for. Then close the window.
+6. The sign-in is saved to `~/.google_setup_token.pkl`, and later runs
    use it. It's an `admin@` sign-in that needs no password or 2-Step
    Verification, so never copy or send it. Delete it only to sign in again; a
    script that needs a scope the saved sign-in lacks asks you to sign in
@@ -262,7 +266,7 @@ screenshots go to `debug/` (git-ignored).
 ### Once, for the community
 
 These were done once, and are redone only to replace an app or token.
-Their credential files are what each admin gets in step 3 above.
+Their credential files are what each admin gets in step 4 above.
 
 - **Google APIs**: in Google Cloud Console, create a Desktop OAuth 2.0
   client, and save its JSON as `client_secret.json`. Enable the Drive,
@@ -357,8 +361,8 @@ The new admin gets in like this:
    in the way, and choose a new password.
 3. They set up 2-Step Verification.
 4. To run the scripts, they follow "Each admin" under "Setup", which
-   ends with signing in to the scripts once as `admin@` (with a backup
-   code for its 2-Step Verification).
+   signs them in to the scripts once as `admin@` (with a backup code for
+   its 2-Step Verification).
 
 A super admin can't reset a forgotten password by email unless super-admin
 account recovery is turned on (Security → Account recovery), so if they
